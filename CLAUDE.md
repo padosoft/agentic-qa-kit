@@ -14,8 +14,8 @@
 
 Stay within these defaults unless the user explicitly approves an exception:
 
-- **Read freely** in this repo and in `../product_image_discovery_admin` (reference repo for conventions).
-- **Write only** inside this repo (`agentic-qa-kit/`). Never write outside.
+- **Read** freely within this repository.
+- **Write only** inside this repository. Never write outside.
 - **Bash:** allowed for `git`, `gh`, `bun`, `bunx`, `npm`, `npx`, `node`, `playwright`. **Forbid** without user approval: anything destructive on shared state (`git push --force`, `git reset --hard` on `main`, `gh release delete`, `rm -rf` outside `.aqa/tmp/`).
 - **GitHub:** can push branches, open PRs, comment, request reviewers, merge with `--squash --delete-branch`. **Cannot** delete branches manually outside the merge flow, cannot delete releases, cannot push to `main` directly.
 
@@ -23,7 +23,7 @@ Stay within these defaults unless the user explicitly approves an exception:
 
 If you are starting fresh on this repo:
 
-1. `Read C:\Users\lopad\Documents\DocLore\Visual Basic\Ai\agentic-qa-kit\AGENTS.md`
+1. `Read AGENTS.md` (repo root)
 2. `Read docs/PROGRESS.md` (last 100 lines)
 3. `Read docs/LESSON.md` (last 100 lines)
 4. `Bash git status && git log --oneline -10`

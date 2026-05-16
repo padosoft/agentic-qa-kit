@@ -102,7 +102,7 @@ main                              ← protected, stable, deploy-ready
    ```bash
    gh pr edit <pr-number> --add-reviewer copilot-pull-request-reviewer
    ```
-   If that fails because `gh` queries PR project items and the token lacks `read:project`, use the GraphQL workaround (documented in `product_image_discovery_admin/AGENTS.md`):
+   If that fails because `gh` queries PR project items and the token lacks `read:project`, use the GraphQL workaround (inlined below):
    ```powershell
    $query = @'
    mutation RequestReviewsByLogin($pullRequestId: ID!, $botLogins: [String!], $union: Boolean!) {

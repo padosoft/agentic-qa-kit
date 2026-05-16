@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 // Run a script across every workspace package that defines it.
-// If no workspace package defines the script, exits 0 with a notice.
-// If any workspace fails, exits with the worst non-zero exit code.
+//
+// - Picks `bun` if available, otherwise falls back to `npm` (Node 22 LTS tier-1 fallback).
+//   The picker can be overridden by `AQA_PKG_RUNNER` (one of: `bun`, `npm`).
+// - If no workspace package defines the script, exits 0 with a notice.
+// - If any workspace fails, exits with the worst non-zero exit code.
+// - Workspace patterns supported: `<dir>` and `<dir>/*`. Anything else (e.g.
+//   `<dir>/**`, brace-expanded) prints a warning and is skipped (no silent drift).
 //
 // Usage: node scripts/run-workspace-script.mjs <script-name>
 
@@ -31,9 +36,30 @@ if (workspaces.length === 0) {
   process.exit(0);
 }
 
+/** Pick the package runner. Prefers explicit env override; otherwise bun > npm. */
+function pickRunner() {
+  const override = process.env.AQA_PKG_RUNNER;
+  if (override) {
+    if (override !== 'bun' && override !== 'npm') {
+      console.error(`AQA_PKG_RUNNER must be "bun" or "npm" (got "${override}")`);
+      process.exit(2);
+    }
+    return override;
+  }
+  // `where`/`which` style probe.
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['bun'], {
+    stdio: 'ignore',
+    shell: process.platform === 'win32',
+  });
+  return probe.status === 0 ? 'bun' : 'npm';
+}
+
+const runner = pickRunner();
+const runArgs = runner === 'bun' ? ['run', script] : ['run', '--silent', script];
+
 const matched = [];
 for (const pattern of workspaces) {
-  // Only support simple "<dir>/*" or "<dir>" patterns; sufficient for our monorepo.
+  // Only support simple "<dir>" or "<dir>/*"; anything more advanced needs a real glob lib.
   if (pattern.endsWith('/*')) {
     const base = pattern.slice(0, -2);
     const baseAbs = join(root, base);
@@ -46,12 +72,16 @@ for (const pattern of workspaces) {
         matched.push({ dir: entryPath, pkgPath });
       }
     }
-  } else {
+  } else if (!pattern.includes('*') && !pattern.includes('{')) {
     const dirAbs = join(root, pattern);
     const pkgPath = join(dirAbs, 'package.json');
     if (existsSync(pkgPath)) {
       matched.push({ dir: dirAbs, pkgPath });
     }
+  } else {
+    console.warn(
+      `[run-workspace-script] WARN: workspace pattern "${pattern}" uses syntax not supported by this minimal runner (only "<dir>" and "<dir>/*"). Skipped — packages under it will NOT run "${script}". Either change the pattern or replace this script with a real glob (e.g. fast-glob/tinyglobby).`,
+    );
   }
 }
 
@@ -70,8 +100,8 @@ if (haveScript.length === 0) {
 let worst = 0;
 for (const { dir, pkgPath } of haveScript) {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  console.log(`[run-workspace-script] (${pkg.name ?? dir}) bun run ${script}`);
-  const r = spawnSync('bun', ['run', script], {
+  console.log(`[run-workspace-script] (${pkg.name ?? dir}) ${runner} ${runArgs.join(' ')}`);
+  const r = spawnSync(runner, runArgs, {
     cwd: dir,
     stdio: 'inherit',
     shell: process.platform === 'win32',

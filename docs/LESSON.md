@@ -23,7 +23,14 @@
 
 ## 2026-05-17
 
-- **PR #1 Copilot/Codex review surfaced 15 issues, all addressed in `416ba19..HEAD`. Patterns worth remembering:**
+- **PR #1 Copilot second-pass review (6 comments) surfaced patterns missed in the first pass — all addressed:**
+  - **"Hardcoded path" detection is path-string-aware, not directory-aware.** A code reviewer flagged `Read C:\Users\lopad\...` inside CLAUDE.md even though the surrounding paragraph explicitly forbade such paths. Lesson: review your own writing for the exact pattern that the rule prohibits, not just at "moved files to internal/".
+  - **Sibling-repo grants in CLAUDE.md permission profile** (`Read freely in this repo and in ../product_image_discovery_admin`) are still maintainer-local. External contributors have no such sibling. Rule: permission profile must reference only paths inside this repo.
+  - **Cross-repo citations** ("documented in sibling-repo/AGENTS.md") become dead pointers for external contributors. Inline the content or drop the citation.
+  - **Node fallback in CLI helpers is not optional.** If the package advertises Node 22 as tier-1 fallback, the helper scripts that root `bun run` commands depend on must detect runtime availability (bun > npm) instead of hardcoding `bun`. Added `AQA_PKG_RUNNER` override for explicit control.
+  - **Glob patterns silently truncated to "common cases" cause silent drift.** When `scripts/run-workspace-script.mjs` only supported `<dir>` and `<dir>/*`, an unsupported pattern (e.g. `packages/**`) would just not match — no warning. Fix: emit a clear WARN on unknown pattern shapes; users can either change the pattern or swap to a real glob lib.
+  - **Stale path references survive `git mv` if you forget to grep.** PROGRESS.md still referenced `docs/implementation-plan.md` after moving it to `docs/internal/`. Always `grep -r "<old-path>"` after a rename.
+- **PR #1 Copilot/Codex first-pass review surfaced 15 issues, all addressed in `416ba19..babdff3`. Patterns worth remembering:**
   - **Never commit maintainer-local paths** (`%USERPROFILE%`, `C:\Users\<name>`, sibling-repo references like `../foo`) into docs that AI agents and contributors must read. AGENTS.md/CLAUDE.md/RULES.md should reference **in-repo paths only**. Any out-of-repo references belong in a maintainer-private notes file.
   - **Bash `|| true` on CI gates is a silent-failure trap.** Codex flagged the Node test job and Copilot flagged the link-check + Copilot-review steps. Use `continue-on-error: true` for advisory steps (failure is visible in the job summary even if it does not break the workflow) and propagate exit codes through `set -e` + explicit `worst=$max(...)` accumulators for hard gates. Logged separately for emphasis.
   - **Placeholder npm scripts that just `echo` will silently pass once real packages exist** unless they actively run the per-workspace script. The fix is a portable Node script (`scripts/run-workspace-script.mjs`) that enumerates `package.json` files matching the workspace glob and runs the named script in each one that defines it. No `--filter` needed (avoids the "No packages matched the filter" error when workspaces are empty).

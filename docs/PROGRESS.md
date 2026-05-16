@@ -20,7 +20,7 @@
 - Copilot review automation `.github/workflows/copilot-review.yml` with gh CLI fast-path + GraphQL fallback (per AGENTS.md).
 - GitHub templates: CODEOWNERS, pull_request_template (DoD checklist), ISSUE_TEMPLATE bug/feature/security.
 - Skills `aqa-process-loop` + `aqa-self-resume` mirrored across `.agents/`, `.claude/`, `.gemini/`, `.github/skills/`.
-- Long-form docs: `docs/design/admin-panel-template.md` (full UI spec for parallel template work, 25 screens, tech stack, design tokens, wireframes), `docs/getting-started.md` (junior onboarding skeleton), `docs/ecosystem-explained.md` (concepts skeleton), `docs/adr/README.md` (ADR template + index of 10 critical ADRs), `docs/implementation-plan.md` (full enterprise blueprint copied from durable plan).
+- Long-form docs: `docs/design/admin-panel-template.md` (full UI spec for parallel template work, 25 screens, tech stack, design tokens, wireframes), `docs/getting-started.md` (junior onboarding skeleton), `docs/ecosystem-explained.md` (concepts skeleton), `docs/adr/README.md` (ADR template + index of 10 critical ADRs), `docs/internal/implementation-plan.md` (full enterprise blueprint, maintainer-internal, Italian — see English audience note at top).
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` (with 0.0.1-governance entry).
 - `README.md` rewritten enterprise-wow (badges, TOC, features, junior-friendly quick start, multi-agent matrix, architecture, roadmap, status, docs links).
 - Local gates green (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build` — placeholders while packages are empty).
