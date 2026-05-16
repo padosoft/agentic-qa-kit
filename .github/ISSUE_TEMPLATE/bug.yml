@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a defect in agentic-qa-kit
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please include enough detail for a maintainer to reproduce without follow-up questions.
+
+  - type: input
+    id: version
+    attributes:
+      label: agentic-qa-kit version
+      placeholder: "0.1.0 (or commit SHA)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Bun 1.1.x
+        - Bun 1.2.x
+        - Node 22 LTS
+        - Node 24
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / macOS 14.5 / Ubuntu 24.04 / WSL2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Concise description of the problem and the expected behaviour.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Paste relevant output. Redact secrets.
+      render: text
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have removed any secrets from logs and code snippets.
+          required: true

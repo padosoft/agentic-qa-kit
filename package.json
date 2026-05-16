@@ -1,0 +1,44 @@
+{
+  "name": "agentic-qa-kit-monorepo",
+  "version": "0.0.1",
+  "description": "Agentic QA Kit — the agentic QA operating system for software projects. Multi-agent (Claude/Codex/Gemini/Copilot), Bun-first, enterprise-ready, self-hosted.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/padosoft/agentic-qa-kit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/padosoft/agentic-qa-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/padosoft/agentic-qa-kit/issues"
+  },
+  "author": "Padosoft <info@padosoft.com>",
+  "workspaces": ["packages/*", "packs/*"],
+  "scripts": {
+    "install:all": "bun install",
+    "typecheck": "echo 'no packages yet — placeholder typecheck'",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "test": "echo 'no packages yet — placeholder test'",
+    "test:watch": "bun test --watch",
+    "build": "echo 'no packages yet — placeholder build'",
+    "clean": "echo 'nothing to clean yet'",
+    "e2e": "bunx playwright test",
+    "e2e:install": "bunx playwright install --with-deps chromium",
+    "docs:linkcheck": "bunx --bun markdown-link-check **/*.md --quiet",
+    "prepare": "true"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.10",
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "bun": ">=1.1.0",
+    "node": ">=22.0.0"
+  },
+  "packageManager": "bun@1.1.40"
+}
