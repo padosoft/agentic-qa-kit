@@ -6,13 +6,15 @@
 
 `agentic-qa-kit` (CLI: `aqa`) is the agentic QA operating system for software projects. It transforms coding agents (Claude/Codex/Gemini/Copilot) into QA engineers guided by risk maps, invariants, scenarios, probes, oracles, and replay. See `README.md` for the product pitch and `docs/ecosystem-explained.md` for the deep introduction.
 
-## Durable implementation plan
+## Implementation plan
 
-The full enterprise blueprint and execution plan lives at:
+The full enterprise blueprint and execution plan is committed in:
 
 ```text
-%USERPROFILE%\.claude\plans\qui-c-users-lopad-downloads-agentic-qa-k-ethereal-scott.md
+docs/internal/implementation-plan.md
 ```
+
+It is **maintainer-internal** (currently Italian; an English contributor-facing summary lives in `README.md` and individual ADRs). Agents and contributors should read it for the macro-task definitions and the deep design rationale.
 
 If context is missing, read in order:
 
@@ -20,7 +22,7 @@ If context is missing, read in order:
 2. `docs/LESSON.md` — accumulated lessons, gotchas, fix recipes
 3. `docs/RULES.md` — hard rules (UI/UX, code style, security, testing)
 4. `docs/adr/` — architecture decisions
-5. The durable plan above
+5. `docs/internal/implementation-plan.md` — full blueprint
 
 ## Operating rules (HARD)
 

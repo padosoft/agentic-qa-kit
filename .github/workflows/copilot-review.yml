@@ -44,21 +44,41 @@ jobs:
           PR_NODE: ${{ github.event.pull_request.node_id }}
         run: |
           set -e
-          read -r -d '' QUERY <<'EOF' || true
+          QUERY=$(cat <<'EOF'
           mutation RequestReviewsByLogin($pullRequestId: ID!, $botLogins: [String!], $union: Boolean!) {
             requestReviewsByLogin(input: {pullRequestId: $pullRequestId, botLogins: $botLogins, union: $union}) {
               clientMutationId
             }
           }
           EOF
-          gh api graphql \
-            -f query="$QUERY" \
-            -F pullRequestId="$PR_NODE" \
-            -F botLogins[]='copilot-pull-request-reviewer[bot]' \
-            -F union=true || echo "GraphQL mutation returned non-zero. Manual reviewer assignment may be required."
+          )
+          # Allow the mutation to fail (e.g. the bot is already in the list); verification below
+          # is what enforces the final state.
+          if ! gh api graphql \
+              -f query="$QUERY" \
+              -F pullRequestId="$PR_NODE" \
+              -F botLogins[]='copilot-pull-request-reviewer[bot]' \
+              -F union=true; then
+            echo "::warning::GraphQL requestReviewsByLogin returned non-zero. Verification step will decide."
+          fi
 
-      - name: Verify review request
+      - name: Verify Copilot reviewer was assigned
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers" || true
+          set -e
+          payload=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers")
+          echo "$payload"
+          if echo "$payload" | grep -qiE '"login":[[:space:]]*"copilot[^"]*"|"login":[[:space:]]*"Copilot"'; then
+            echo "Copilot reviewer assigned successfully."
+            exit 0
+          fi
+          # Either the Copilot review already completed (and is no longer "requested"), or
+          # both auto-paths failed. Check for an existing review by Copilot as a fallback signal.
+          reviews=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews")
+          if echo "$reviews" | grep -qiE '"login":[[:space:]]*"copilot'; then
+            echo "Copilot has already reviewed this PR — no action needed."
+            exit 0
+          fi
+          echo "::error::Neither gh CLI nor GraphQL fallback resulted in Copilot being assigned, and no prior Copilot review exists. Per AGENTS.md the maintainer must request Copilot review manually from the PR sidebar and re-run this workflow."
+          exit 1

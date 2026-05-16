@@ -33,11 +33,11 @@ If you are starting fresh on this repo:
 
 ## Memory & long context
 
-This repository is long-lived. Use the auto-memory system at `C:\Users\lopad\.claude\projects\C--Users-lopad-Documents-DocLore-Visual-Basic-Ai\memory\` to persist:
+This repository is long-lived. When running under Claude Code, use the auto-memory system in your local Claude project memory directory (path is environment-specific; see the Claude Code docs) to persist:
 
 - User preferences specific to this project
 - Feedback patterns ("user prefers terse PR descriptions", etc.)
 - Project facts (current macro task, blockers)
 - References (external systems used)
 
-Do **not** persist things derivable from code or git history; those belong in `docs/LESSON.md` instead.
+Do **not** persist things derivable from code or git history; those belong in `docs/LESSON.md` instead. Do **not** commit references to local maintainer paths into this repository.

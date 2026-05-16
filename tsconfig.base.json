@@ -26,5 +26,5 @@
     "incremental": true,
     "composite": false
   },
-  "exclude": ["node_modules", "dist", "build", "coverage", ".aqa", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "build", "coverage", ".aqa"]
 }

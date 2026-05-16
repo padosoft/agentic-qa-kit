@@ -18,6 +18,18 @@
       "**/test-results"
     ]
   },
+  "overrides": [
+    {
+      "include": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

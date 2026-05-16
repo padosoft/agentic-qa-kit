@@ -173,7 +173,7 @@ Capability negotiation is runtime: the kit asks the agent target what it support
 └────────────────────────────────────────────────────────────┘
 ```
 
-Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md) _(coming v0.1.0)_.
+Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md) _(stub; expanded in v0.1.0)_.
 
 ## Roadmap
 
@@ -202,9 +202,9 @@ Track progress in [`docs/PROGRESS.md`](docs/PROGRESS.md). Architectural decision
 - [`docs/adr/`](docs/adr/) — architecture decisions
 - [`docs/design/admin-panel-template.md`](docs/design/admin-panel-template.md) — admin UI spec (for parallel template work)
 - [`AGENTS.md`](AGENTS.md) — single source of truth for AI contributors
-- `docs/architecture/reference.md` — full architecture _(coming v0.1.0)_
-- `docs/security/threat-model.md` — STRIDE applied to AQA _(coming v0.1.0)_
-- `docs/methodology/agentic-qa.md` — methodology paper _(coming v0.1.0)_
+- [`docs/architecture/reference.md`](docs/architecture/reference.md) — full architecture _(stub; expanded in v0.1.0)_
+- [`docs/security/threat-model.md`](docs/security/threat-model.md) — STRIDE applied to AQA _(stub; expanded in v0.1.0)_
+- [`docs/methodology/agentic-qa.md`](docs/methodology/agentic-qa.md) — methodology paper _(stub; expanded in v0.1.0)_
 
 ## Contributing
 

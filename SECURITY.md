@@ -5,9 +5,8 @@
 | Version | Supported |
 |---|---|
 | 0.x | ✅ (pre-release; best-effort) |
-| 1.x | ✅ (planned, supported once released) |
 
-`0.0.x` releases are governance / bootstrap only and should not be used in production.
+`0.0.x` releases are governance / bootstrap only and should not be used in production. Support windows for `1.x` and later major versions will be defined when those versions ship.
 
 ## Reporting a vulnerability
 

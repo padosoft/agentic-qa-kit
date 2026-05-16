@@ -17,18 +17,18 @@
   "workspaces": ["packages/*", "packs/*"],
   "scripts": {
     "install:all": "bun install",
-    "typecheck": "echo 'no packages yet — placeholder typecheck'",
+    "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "test": "echo 'no packages yet — placeholder test'",
-    "test:watch": "bun test --watch",
-    "build": "echo 'no packages yet — placeholder build'",
-    "clean": "echo 'nothing to clean yet'",
+    "test": "node scripts/run-workspace-script.mjs test",
+    "test:watch": "node scripts/run-workspace-script.mjs test:watch",
+    "build": "node scripts/run-workspace-script.mjs build",
+    "clean": "node scripts/run-workspace-script.mjs clean",
     "e2e": "bunx playwright test",
     "e2e:install": "bunx playwright install --with-deps chromium",
     "docs:linkcheck": "bunx --bun markdown-link-check **/*.md --quiet",
-    "prepare": "true"
+    "prepare": "node -e \"\""
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

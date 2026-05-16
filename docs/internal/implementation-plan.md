@@ -1,8 +1,9 @@
 # AQA Kit — Deep Analysis & Enterprise Blueprint (self-hosted)
 
-> **Documento di riferimento:** `C:\Users\lopad\Downloads\agentic-qa-kit\analisi-iniziale.md` (~4.600 righe)
-> **Data:** 2026-05-16
-> **Autore richiesta:** Lorenzo Padovani
+> **Audience note (English):** this is a **maintainer-internal** document written in Italian by the project lead. It contains the deep design rationale and the full execution plan for `agentic-qa-kit`. English-speaking contributors and AI agents should read the `README.md`, `AGENTS.md`, `docs/RULES.md`, `docs/getting-started.md`, `docs/ecosystem-explained.md`, and `docs/adr/` for contributor-facing material. A translated English version of this plan will be split into ADRs and contributor docs over time.
+>
+> **Data:** 2026-05-16 (aggiornato 2026-05-17 con relocation in `docs/internal/`)
+> **Autore richiesta:** Lorenzo Padovani (project lead)
 > **Scope:** deep analysis critica della proposta originale, identificazione falle/gap, roadmap di enterprise readiness per deploy self-hosted on-prem/private cloud, con focus aggressivo su (a) determinismo & affidabilità e (b) scalabilità & operations. Sicurezza/compliance trattate come table-stakes enterprise non opzionali.
 
 ---

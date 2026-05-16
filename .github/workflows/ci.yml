@@ -29,9 +29,11 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Markdown link check
+        continue-on-error: true
         run: |
-          bunx --bun markdown-link-check --quiet 'docs/**/*.md' README.md AGENTS.md CLAUDE.md GEMINI.md .github/copilot-instructions.md || true
-        # warn-only at bootstrap; flip to hard-fail once docs stabilize
+          bunx --bun markdown-link-check --quiet 'docs/**/*.md' README.md AGENTS.md CLAUDE.md GEMINI.md .github/copilot-instructions.md
+        # advisory at bootstrap (continue-on-error); flip to hard-fail once docs stabilize.
+        # Failure is surfaced visibly in the job summary even though it does not fail the workflow.
 
   typecheck-lint:
     name: Typecheck + Lint
@@ -102,16 +104,23 @@ jobs:
 
       - name: Run unit tests under Node
         run: |
-          if [ -d packages ]; then
-            for pkg in packages/*/; do
-              if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then
-                echo "Testing $pkg under Node"
-                (cd "$pkg" && node --experimental-vm-modules --test --test-reporter=spec) || true
-              fi
-            done
-          else
-            echo "No packages yet — gate placeholder."
+          set -e
+          if [ ! -d packages ]; then
+            echo "No packages directory yet — gate placeholder (pass)."
+            exit 0
           fi
+          worst=0
+          for pkg in packages/*/; do
+            if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then
+              echo "::group::Testing $pkg under Node"
+              if ! (cd "$pkg" && node --experimental-vm-modules --test --test-reporter=spec); then
+                echo "::error::Node tests failed in $pkg"
+                worst=1
+              fi
+              echo "::endgroup::"
+            fi
+          done
+          exit $worst
 
   build:
     name: Build

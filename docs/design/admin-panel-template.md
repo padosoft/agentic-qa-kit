@@ -28,9 +28,17 @@
 
 ## 2. Design tokens (Tailwind 4 theme)
 
+Tailwind v4 dark variants are declared via `@custom-variant`; theme values live in a single `@theme` block, and the dark-mode override uses a `.dark`-scoped CSS variable declaration (consumed by the variant). This is the correct v4 syntax — a separate `@theme dark { ... }` block does not exist.
+
 ```css
+/* In your main CSS file (e.g. src/styles/global.css) */
+@import "tailwindcss";
+
+/* Dark mode: enable the .dark class anywhere in the tree to activate dark variants */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  /* Color — neutrals */
+  /* Color — neutrals (light defaults) */
   --color-bg-base: #f8fafc;          /* slate-50 */
   --color-bg-elevated: #ffffff;
   --color-bg-overlay: rgba(15, 23, 42, 0.4);
@@ -69,7 +77,8 @@
   --sidebar-width-collapsed: 56px;
 }
 
-@theme dark {
+/* Dark mode overrides (consumed by the .dark variant declared above) */
+.dark {
   --color-bg-base: #020617;          /* slate-950 */
   --color-bg-elevated: #0f172a;      /* slate-900 */
   --color-fg-base: #f1f5f9;
@@ -77,10 +86,11 @@
   --color-fg-subtle: #64748b;
   --color-border: #1e293b;
   --color-border-strong: #334155;
+  /* Status accents are kept identical across modes (semantic), tune only if WCAG fails. */
 }
 ```
 
-Apply with `class="dark"` on `<html>`. Use `localStorage` + system preference for initial mode.
+Toggle by adding/removing the `dark` class on `<html>`. Use `localStorage` (`theme: "light" | "dark" | "system"`) + `prefers-color-scheme` media query for initial mode.
 
 ## 3. Layout grid
 

@@ -8,9 +8,10 @@ This file is referenced by `AGENTS.md` and applies to every contributor — huma
 - **Live state:** `docs/PROGRESS.md`
 - **Lessons learned:** `docs/LESSON.md`
 - **Architecture decisions:** `docs/adr/`
-- **Durable implementation plan:** `%USERPROFILE%\.claude\plans\qui-c-users-lopad-downloads-agentic-qa-k-ethereal-scott.md`
+- **Implementation plan (in-repo, maintainer-internal, see note below):** `docs/internal/implementation-plan.md`
 - **Admin panel design spec:** `docs/design/admin-panel-template.md`
-- **Reference repo for conventions:** `../product_image_discovery_admin` (Laravel+React equivalent already in production)
+
+> Maintainers may keep additional non-public planning artefacts outside the repository. Anything authoritative for contributors **must** be checked into this repository under `docs/`.
 
 ## Implementation defaults
 
