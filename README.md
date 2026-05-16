@@ -7,7 +7,7 @@
 **Turn any repository into an agentic QA lab. Works with Claude · Codex · Gemini · Copilot. Bun-first. Enterprise-ready.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Bun](https://img.shields.io/badge/runtime-bun%20%E2%89%A5%201.1-black)](https://bun.sh)
+[![Bun](https://img.shields.io/badge/runtime-bun%20%E2%89%A5%201.3-black)](https://bun.sh)
 [![Node](https://img.shields.io/badge/runtime-node%2022%20LTS-339933)](https://nodejs.org)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)](https://www.typescriptlang.org/)
 [![CI](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml)

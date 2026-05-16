@@ -23,6 +23,14 @@
 
 ## 2026-05-17
 
+- **PR #1 Copilot third-pass review (6 comments) — addressed:**
+  - **`bunx`/`npx` in package.json `scripts` field breaks the Node-22 fallback** the same way `bun run` did. Wrapping in `scripts/run-tool.mjs` (auto-detects bunx vs npx; honors `AQA_PKG_RUNNER` override) keeps the user-facing contract working everywhere.
+  - **CI is a controlled environment, package.json is the contributor contract.** CI may legitimately call `bunx` because the workflow installs Bun explicitly via `oven-sh/setup-bun@v2`. But a contributor on Node-only must be able to `npm run e2e` etc. without first installing Bun. Don't conflate the two.
+  - **Unquoted glob arguments in package.json scripts are expanded by the shell, not the tool.** `markdown-link-check **/*.md` becomes `markdown-link-check README.md AGENTS.md` (no recursion) on default bash/Windows cmd. Always quote the pattern (`'**/*.md'`) so the tool receives the literal pattern and recurses correctly.
+  - **`engines.bun` and `packageManager` must be consistent.** Pinning `bun@1.3.11` in packageManager while declaring `bun >= 1.1.0` in engines is internally contradictory: corepack-aware tooling will refuse to use an older Bun even though engines claims it is supported. Raised engines floor to `1.3.0` to match the pin and the lockfile.
+  - **SECURITY.md should not advertise tools that don't exist on the minimum supported version.** `bun audit` landed in newer Bun releases; if `engines.bun >= 1.3.0`, that's fine and worth stating explicitly.
+  - **Double-parsing JSON in scripts is wasteful and creates TOCTOU race risk.** Cache the parsed `package.json` on the entry object instead of reading it twice (filter + execute).
+  - **Always validate the shape of free-form `package.json` fields.** `workspaces` can be an array, an object with a `packages` array, or (mistakenly) a string. A defensive `Array.isArray(...)` check + a clear error beats an iteration over string characters.
 - **PR #1 Copilot second-pass review (6 comments) surfaced patterns missed in the first pass — all addressed:**
   - **"Hardcoded path" detection is path-string-aware, not directory-aware.** A code reviewer flagged `Read C:\Users\lopad\...` inside CLAUDE.md even though the surrounding paragraph explicitly forbade such paths. Lesson: review your own writing for the exact pattern that the rule prohibits, not just at "moved files to internal/".
   - **Sibling-repo grants in CLAUDE.md permission profile** (`Read freely in this repo and in ../product_image_discovery_admin`) are still maintainer-local. External contributors have no such sibling. Rule: permission profile must reference only paths inside this repo.

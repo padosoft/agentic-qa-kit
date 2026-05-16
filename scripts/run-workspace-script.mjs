@@ -27,9 +27,19 @@ if (!existsSync(rootPkgPath)) {
   process.exit(2);
 }
 const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
-const workspaces = Array.isArray(rootPkg.workspaces)
-  ? rootPkg.workspaces
-  : (rootPkg.workspaces?.packages ?? []);
+let workspaces;
+if (Array.isArray(rootPkg.workspaces)) {
+  workspaces = rootPkg.workspaces;
+} else if (rootPkg.workspaces && Array.isArray(rootPkg.workspaces.packages)) {
+  workspaces = rootPkg.workspaces.packages;
+} else if (rootPkg.workspaces === undefined) {
+  workspaces = [];
+} else {
+  console.error(
+    `[run-workspace-script] package.json "workspaces" field has unsupported shape; expected an array or an object with a "packages" array. Got: ${JSON.stringify(rootPkg.workspaces)}`,
+  );
+  process.exit(2);
+}
 
 if (workspaces.length === 0) {
   console.log(`[run-workspace-script] no workspaces declared — nothing to run for "${script}".`);
@@ -57,6 +67,10 @@ function pickRunner() {
 const runner = pickRunner();
 const runArgs = runner === 'bun' ? ['run', script] : ['run', '--silent', script];
 
+function loadPkg(pkgPath) {
+  return JSON.parse(readFileSync(pkgPath, 'utf8'));
+}
+
 const matched = [];
 for (const pattern of workspaces) {
   // Only support simple "<dir>" or "<dir>/*"; anything more advanced needs a real glob lib.
@@ -69,14 +83,14 @@ for (const pattern of workspaces) {
       if (!statSync(entryPath).isDirectory()) continue;
       const pkgPath = join(entryPath, 'package.json');
       if (existsSync(pkgPath)) {
-        matched.push({ dir: entryPath, pkgPath });
+        matched.push({ dir: entryPath, pkgPath, pkg: loadPkg(pkgPath) });
       }
     }
   } else if (!pattern.includes('*') && !pattern.includes('{')) {
     const dirAbs = join(root, pattern);
     const pkgPath = join(dirAbs, 'package.json');
     if (existsSync(pkgPath)) {
-      matched.push({ dir: dirAbs, pkgPath });
+      matched.push({ dir: dirAbs, pkgPath, pkg: loadPkg(pkgPath) });
     }
   } else {
     console.warn(
@@ -85,10 +99,9 @@ for (const pattern of workspaces) {
   }
 }
 
-const haveScript = matched.filter(({ pkgPath }) => {
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  return pkg.scripts && typeof pkg.scripts[script] === 'string';
-});
+const haveScript = matched.filter(
+  ({ pkg }) => pkg.scripts && typeof pkg.scripts[script] === 'string',
+);
 
 if (haveScript.length === 0) {
   console.log(
@@ -98,8 +111,7 @@ if (haveScript.length === 0) {
 }
 
 let worst = 0;
-for (const { dir, pkgPath } of haveScript) {
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+for (const { dir, pkg } of haveScript) {
   console.log(`[run-workspace-script] (${pkg.name ?? dir}) ${runner} ${runArgs.join(' ')}`);
   const r = spawnSync(runner, runArgs, {
     cwd: dir,
