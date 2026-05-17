@@ -121,6 +121,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build all workspaces topologically
+        # The downstream packages' pretest hook compiles against the upstream
+        # packages' dist/. Build once up front in topological order so each
+        # package's pretest sees a fresh dist for everything it imports.
+        if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
+        run: bun run build
+
       - name: Run unit tests under Node
         env:
           AQA_PKG_RUNNER: npm
