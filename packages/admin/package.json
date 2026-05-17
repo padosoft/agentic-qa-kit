@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "vite",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/router.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/router.test.ts test/audit.test.ts test/cluster.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo','node_modules/.vite']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {

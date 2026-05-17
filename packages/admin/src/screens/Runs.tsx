@@ -1,13 +1,20 @@
+import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '../components/Badge.tsx';
 import { Card } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_RUNS } from '../data/mock.ts';
+import { fetchRuns, isLive } from '../data/api.ts';
 
 export function RunsScreen() {
+  const { data: runs = [] } = useQuery({ queryKey: ['runs'], queryFn: fetchRuns });
   return (
     <>
-      <PageHeader title="Runs" subtitle="Every run with status, duration, findings, cost." />
+      <PageHeader
+        title="Runs"
+        subtitle="Every run with status, duration, findings, cost. Click an ID to drill in."
+        actions={isLive() ? <Badge tone="success">live</Badge> : <Badge tone="ai">mock</Badge>}
+      />
       <Card>
         <table className="w-full text-sm">
           <thead style={{ background: 'var(--color-bg-base)' }}>
@@ -22,9 +29,14 @@ export function RunsScreen() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_RUNS.map((r) => (
+            {runs.map((r) => (
               <tr key={r.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <td className="px-3 py-2 font-mono text-xs">{r.id}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  {/* biome-ignore lint/suspicious/noExplicitAny: dynamic to */}
+                  <Link to={`/runs/${r.id}` as any} className="hover:underline">
+                    {r.id}
+                  </Link>
+                </td>
                 <td className="px-3 py-2">{r.profile}</td>
                 <td className="px-3 py-2" style={{ color: 'var(--color-fg-muted)' }}>
                   {formatDistanceToNow(new Date(r.started_at), { addSuffix: true })}
