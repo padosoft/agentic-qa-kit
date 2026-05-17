@@ -15,12 +15,27 @@ import {
   Scenario,
 } from '../dist/index.js';
 
+// Fixture filename convention:
+//   valid/<schema>.json                       — e.g. scenario.json
+//   valid/<schema>--<variant>.json            — e.g. profile--release-gate.json
+//   invalid/<schema>--<reason>.json           — e.g. finding--verified-no-determinism.json
+//
+// The schema key is everything before the first "--" (or the full stem if no
+// "--" is present), with ".json" stripped. This is unambiguous regardless of
+// how many dashes or dots the description contains.
+function schemaKeyFromFile(filename: string): string {
+  const stem = filename.replace(/\.json$/, '');
+  const idx = stem.indexOf('--');
+  return idx === -1 ? stem : stem.slice(0, idx);
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, '..', 'fixtures');
 
 const validators = {
   project: Project.Project,
   profile: Profile.Profile,
+  'profiles-file': Profile.ProfilesFile,
   'risk-map': RiskMap.RiskMap,
   scenario: Scenario.Scenario,
   finding: Finding.Finding,
@@ -39,7 +54,7 @@ describe('valid fixtures', () => {
   const validDir = join(fixturesDir, 'valid');
   const files = readdirSync(validDir).filter((f) => f.endsWith('.json'));
   for (const file of files) {
-    const name = file.replace(/\.json$/, '') as keyof typeof validators;
+    const name = schemaKeyFromFile(file) as keyof typeof validators;
     it(`${file} parses as ${name}`, () => {
       const data = JSON.parse(readFileSync(join(validDir, file), 'utf8'));
       const validator = validators[name];
@@ -64,7 +79,7 @@ describe('invalid fixtures', () => {
   const invalidDir = join(fixturesDir, 'invalid');
   const files = readdirSync(invalidDir).filter((f) => f.endsWith('.json'));
   for (const file of files) {
-    const name = file.replace(/^[^.]+\./, '').replace(/\.json$/, '') as keyof typeof validators;
+    const name = schemaKeyFromFile(file) as keyof typeof validators;
     it(`${file} rejects on ${name}`, () => {
       const data = JSON.parse(readFileSync(join(invalidDir, file), 'utf8'));
       const validator = validators[name];

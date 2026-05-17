@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SemVer, Slug, Url } from './common.js';
+import { SemVer, Sha256, Slug, Url } from './common.js';
 
 export const PackAppliesWhen = z
   .object({
@@ -30,7 +30,7 @@ export const PackManifest = z.object({
   signing: z
     .object({
       sigstore_bundle: z.string().optional(),
-      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sha256: Sha256,
     })
     .optional(),
 });

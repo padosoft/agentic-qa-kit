@@ -85,11 +85,6 @@
                     "statement": {
                       "type": "string",
                       "minLength": 8
-                    },
-                    "must_hold": {
-                      "type": "boolean",
-                      "const": true,
-                      "default": true
                     }
                   },
                   "required": [

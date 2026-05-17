@@ -73,25 +73,16 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run unit tests (per-package, via package script)
+      - name: Build all workspaces (tests import the built dist/)
         if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
-        run: |
-          set -e
-          worst=0
-          for pkg in packages/*/; do
-            if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then
-              echo "::group::Testing $pkg under Bun"
-              # Invoke each package's "test" script via Bun. The script's pretest
-              # hook ensures `dist/` exists before tests run, so the same test
-              # entrypoint works under both Bun and Node.
-              if ! (cd "$pkg" && bun run --silent test); then
-                echo "::error::Bun tests failed in $pkg"
-                worst=1
-              fi
-              echo "::endgroup::"
-            fi
-          done
-          exit $worst
+        run: bun run build
+
+      - name: Run unit tests
+        if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
+        # Bun's test runner discovers test/*.test.ts across the workspace and
+        # executes them via the Bun runtime (node:test API is bun-compatible).
+        # Running build first guarantees dist/index.js exists for test imports.
+        run: bun test --coverage
 
       - name: Skip notice
         if: ${{ hashFiles('packages/**/*.test.ts') == '' }}

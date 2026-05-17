@@ -88,7 +88,8 @@
           "pattern": "^[a-z0-9][a-z0-9-]*$"
         },
         "finding_id": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^AQA-\\d{4}-\\d{4,}$"
         },
         "payload": {
           "type": "object",

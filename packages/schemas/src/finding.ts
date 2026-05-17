@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ExecutionMode, IsoDateTime, Severity, Slug, Status } from './common.js';
+import { ExecutionMode, FindingId, IsoDateTime, Severity, Slug, Status } from './common.js';
 
 export const ReproLevel = z.object({
   deterministic: z.boolean(),
@@ -32,7 +32,7 @@ export type ConfidenceComponents = z.infer<typeof ConfidenceComponents>;
 export const Finding = z
   .object({
     schema_version: z.literal('1'),
-    id: z.string().regex(/^AQA-\d{4}-\d{4,}$/, 'finding id must match AQA-YYYY-NNNN'),
+    id: FindingId,
     run_id: Slug,
     scenario_id: Slug,
     risk_id: Slug,
@@ -48,7 +48,7 @@ export const Finding = z
     verification_floor: VerificationFloor,
     evidence: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
-    duplicate_of: z.string().optional(),
+    duplicate_of: FindingId.optional(),
   })
   .superRefine((v, ctx) => {
     const floor = v.reproducibility[v.verification_floor];

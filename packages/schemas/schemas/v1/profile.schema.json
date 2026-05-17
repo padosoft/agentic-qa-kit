@@ -48,13 +48,11 @@
         },
         "budget_minutes": {
           "type": "integer",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         },
         "parallelism": {
           "type": "integer",
-          "exclusiveMinimum": true,
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "maximum": 64,
           "default": 1
         },

@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/validators.test.ts",
-    "clean": "node -e \"const fs=require('node:fs');for (const p of ['dist','.tsbuildinfo']) try{fs.rmSync(p,{recursive:true,force:true})}catch{}\""
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
     "zod": "^3.23.8"

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoDateTime, Sha256, Slug } from './common.js';
+import { FindingId, IsoDateTime, Sha256, Slug } from './common.js';
 
 export const EventKind = z.enum([
   'run_started',
@@ -34,7 +34,7 @@ export const Event = z.object({
     model: z.string().optional(),
   }),
   scenario_id: Slug.optional(),
-  finding_id: z.string().optional(),
+  finding_id: FindingId.optional(),
   payload: z.record(z.string(), z.unknown()).default({}),
 });
 export type Event = z.infer<typeof Event>;

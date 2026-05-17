@@ -18,7 +18,6 @@ export type RiskCategory = z.infer<typeof RiskCategory>;
 export const Invariant = z.object({
   id: Slug,
   statement: z.string().min(8),
-  must_hold: z.literal(true).default(true),
 });
 export type Invariant = z.infer<typeof Invariant>;
 

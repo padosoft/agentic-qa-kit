@@ -76,8 +76,7 @@
               },
               "timeout_ms": {
                 "type": "integer",
-                "exclusiveMinimum": true,
-                "minimum": 0,
+                "exclusiveMinimum": 0,
                 "maximum": 600000,
                 "default": 30000
               }
@@ -163,8 +162,7 @@
               },
               "timeout_ms": {
                 "type": "integer",
-                "exclusiveMinimum": true,
-                "minimum": 0,
+                "exclusiveMinimum": 0,
                 "maximum": 600000,
                 "default": 30000
               }
