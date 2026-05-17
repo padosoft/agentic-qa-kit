@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a new feature or improvement
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is the user-facing problem this solves? Avoid jumping to a solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work, from the user's perspective?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you consider? Why is this better?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - CLI
+        - Pack
+        - Agent adapter (Claude/Codex/Gemini/Copilot)
+        - Runner / scenarios / probes / oracles
+        - Replay / reports
+        - Admin panel
+        - Server / cloud
+        - Schemas
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues / discussions and this is not already proposed.
+          required: true

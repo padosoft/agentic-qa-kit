@@ -1,0 +1,21 @@
+# CODEOWNERS for agentic-qa-kit
+# Lines later in the file take precedence.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Default ownership
+* @padosoft/maintainers
+
+# Process docs — change requires explicit maintainer review
+/AGENTS.md          @padosoft/maintainers
+/CLAUDE.md          @padosoft/maintainers
+/GEMINI.md          @padosoft/maintainers
+/.github/copilot-instructions.md @padosoft/maintainers
+/docs/RULES.md      @padosoft/maintainers
+/docs/adr/          @padosoft/maintainers
+
+# Security-sensitive surfaces
+/SECURITY.md        @padosoft/maintainers
+/.github/workflows/ @padosoft/maintainers
+
+# Packs marketplace (when added)
+/packs/             @padosoft/maintainers

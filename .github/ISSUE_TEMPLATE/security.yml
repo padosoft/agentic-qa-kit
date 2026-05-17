@@ -1,0 +1,40 @@
+name: Security advisory (PUBLIC — non-sensitive only)
+description: Report a non-sensitive security concern publicly. For sensitive issues, use the private disclosure channel in SECURITY.md.
+labels: [security, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **STOP.** If this report involves a real vulnerability that could be exploited, **do not file it here**. Use the private channel described in `SECURITY.md` (email or GitHub Security Advisories).
+        >
+        > Use this template only for hardening suggestions, missing best-practices, or already-public CVEs in dependencies.
+
+  - type: textarea
+    id: concern
+    attributes:
+      label: Concern
+      description: Describe the security concern.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential impact
+      description: Who is affected and how?
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested mitigation
+      description: How would you fix it?
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmations
+      options:
+        - label: This issue is non-sensitive and safe to discuss publicly.
+          required: true
+        - label: For sensitive vulnerabilities, I will use the private channel in SECURITY.md instead.
+          required: true

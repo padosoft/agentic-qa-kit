@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'task/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    name: Meta (workflow lint + link check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Markdown link check
+        continue-on-error: true
+        run: |
+          bunx --bun markdown-link-check --quiet 'docs/**/*.md' README.md AGENTS.md CLAUDE.md GEMINI.md .github/copilot-instructions.md
+        # advisory at bootstrap (continue-on-error); flip to hard-fail once docs stabilize.
+        # Failure is surfaced visibly in the job summary even though it does not fail the workflow.
+
+  typecheck-lint:
+    name: Typecheck + Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: bun run lint
+
+      - name: Typecheck (all workspaces)
+        run: bun run typecheck
+        if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
+
+  test-unit:
+    name: Unit tests (Bun)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [typecheck-lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run unit tests
+        run: bun test --coverage
+        if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
+
+      - name: Skip notice
+        if: ${{ hashFiles('packages/**/*.test.ts') == '' }}
+        run: echo "No tests yet — gate placeholder."
+
+  test-unit-node:
+    name: Unit tests (Node 22 LTS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [typecheck-lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup Bun (for monorepo manager only)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run unit tests under Node
+        run: |
+          set -e
+          if [ ! -d packages ]; then
+            echo "No packages directory yet — gate placeholder (pass)."
+            exit 0
+          fi
+          worst=0
+          for pkg in packages/*/; do
+            if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then
+              echo "::group::Testing $pkg under Node"
+              if ! (cd "$pkg" && node --experimental-vm-modules --test --test-reporter=spec); then
+                echo "::error::Node tests failed in $pkg"
+                worst=1
+              fi
+              echo "::endgroup::"
+            fi
+          done
+          exit $worst
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [typecheck-lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build (all workspaces)
+        run: |
+          if [ -d packages ]; then
+            bun run build
+          else
+            echo "No packages yet — gate placeholder."
+          fi
+
+  e2e:
+    name: E2E (Playwright, admin UI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: |
+          if [ -d packages/admin ]; then
+            bunx playwright install --with-deps chromium
+          else
+            echo "No admin package yet — skipping browser install."
+          fi
+
+      - name: Run Playwright
+        run: |
+          if [ -d packages/admin ]; then
+            bunx playwright test --reporter=line
+          else
+            echo "No admin package yet — gate placeholder."
+          fi
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

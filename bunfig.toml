@@ -1,0 +1,15 @@
+# Bun configuration for the agentic-qa-kit monorepo.
+# https://bun.sh/docs/runtime/bunfig
+
+[install]
+production = false
+optional = true
+dev = true
+peer = true
+exact = false
+
+[test]
+coverage = false
+
+[run]
+shell = "system"

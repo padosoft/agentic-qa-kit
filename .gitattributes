@@ -1,0 +1,38 @@
+# Auto-normalize line endings
+* text=auto eol=lf
+
+# Force LF for these
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+
+# Treat as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.zip binary
+
+# Hide vendored / generated from diffs
+bun.lockb -diff
+package-lock.json -diff
+yarn.lock -diff
+pnpm-lock.yaml -diff
+
+# Linguist overrides for GitHub stats
+docs/* linguist-documentation
+examples/* linguist-documentation
