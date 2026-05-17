@@ -3,18 +3,13 @@
 // Honors AQA_PKG_RUNNER=bun|npm to force a choice.
 //
 // Exits with the tool's exit code; on signal termination, exits with 128 + signo
-// (POSIX convention).
+// (POSIX convention). On spawnSync launch failure (e.g. ENOENT, EACCES) prints
+// the underlying error message before exiting 1.
 //
 // Usage: node scripts/run-tool.mjs <tool> [args...]
 
 import { spawnSync } from 'node:child_process';
-import { constants as osConstants } from 'node:os';
-
-const SIGNAL_TO_EXIT = (signal) => {
-  const signo = osConstants.signals?.[signal];
-  return typeof signo === 'number' ? 128 + signo : 1;
-};
-const IS_WIN = process.platform === 'win32';
+import { SHELL_FOR_NATIVE, pickRunner, signalToExit } from './_pick-runner.mjs';
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -22,33 +17,18 @@ if (args.length === 0) {
   process.exit(2);
 }
 
-// Probe the canonical `bun` binary (same as scripts/run-workspace-script.mjs), then
-// derive the executor name. A system can have `bun` without `bunx` or vice versa on
-// custom installs; agreeing on the canonical binary keeps the two scripts in sync.
-function pickRunner() {
-  const raw = process.env.AQA_PKG_RUNNER;
-  if (raw !== undefined) {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized === 'bun') return 'bunx';
-    if (normalized === 'npm') return 'npx';
-    console.error(`AQA_PKG_RUNNER must be "bun" or "npm" (got "${raw}")`);
-    process.exit(2);
-  }
-  const probe = spawnSync(IS_WIN ? 'where' : 'which', ['bun'], {
-    stdio: 'ignore',
-    shell: IS_WIN,
-  });
-  return probe.status === 0 ? 'bunx' : 'npx';
-}
-
-const runner = pickRunner();
-console.log(`[run-tool] ${runner} ${args.join(' ')}`);
-const r = spawnSync(runner, args, {
+const { exec } = pickRunner();
+console.log(`[run-tool] ${exec} ${args.join(' ')}`);
+const r = spawnSync(exec, args, {
   stdio: 'inherit',
-  shell: IS_WIN,
+  shell: SHELL_FOR_NATIVE,
 });
+if (r.error) {
+  console.error(`[run-tool] failed to launch "${exec}": ${r.error.message}`);
+  process.exit(1);
+}
 if (r.signal) {
   console.error(`[run-tool] child terminated by signal ${r.signal}`);
-  process.exit(SIGNAL_TO_EXIT(r.signal));
+  process.exit(signalToExit(r.signal));
 }
 process.exit(r.status ?? 1);

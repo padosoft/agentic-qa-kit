@@ -6,26 +6,23 @@
 // - If no workspace package defines the script, exits 0 with a notice.
 // - If any workspace fails, exits with the worst non-zero exit code; on signal
 //   termination, exits with 128 + signo and stops dispatching further work.
+// - On spawnSync launch failure (e.g. ENOENT for the runner) prints the underlying
+//   error message before exiting 1.
 // - Workspace patterns supported: `<dir>`, `<dir>/*`, and bare `*`. Anything else
-//   (e.g. `<dir>/**`, brace-expanded, `foo*`) prints a warning and is skipped.
+//   (e.g. `<dir>/**`, brace-expanded, `foo*`, `?`, `[ab]`) is detected and warned;
+//   `!path` negations are refused with exit 2 because silently skipping them produces
+//   wrong execution lists.
+// - Bare `*` excludes well-known non-workspace dirs (node_modules, dist, build,
+//   coverage, .git, .aqa, .cache, dotfiles) to mirror tsconfig/biome ignore lists.
+// - Workspace iteration order is deterministic (alphabetical absolute path) for
+//   reproducible logs across platforms.
 //
 // Usage: node scripts/run-workspace-script.mjs <script-name>
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { constants as osConstants } from 'node:os';
 import { join } from 'node:path';
-
-const SIGNAL_TO_EXIT = (signal) => {
-  // POSIX convention: 128 + signal number. `os.constants.signals` covers any signal
-  // Node knows about (SIGKILL=9 → 137, SIGSEGV=11 → 139, SIGABRT=6 → 134, SIGPIPE=13
-  // → 141, etc.). Falls back to 1 if Node has no number for the name.
-  const signo = osConstants.signals?.[signal];
-  return typeof signo === 'number' ? 128 + signo : 1;
-};
-
-const IS_WIN = process.platform === 'win32';
-const SHELL_FOR_NATIVE = IS_WIN; // Windows needs shell:true for .cmd / .ps1 shims.
+import { SHELL_FOR_NATIVE, pickRunner, signalToExit } from './_pick-runner.mjs';
 
 const script = process.argv[2];
 if (!script) {
@@ -59,57 +56,6 @@ if (workspaces.length === 0) {
   process.exit(0);
 }
 
-/** Pick the package runner. Prefers explicit env override; otherwise bun > npm. */
-function pickRunner() {
-  const raw = process.env.AQA_PKG_RUNNER;
-  if (raw !== undefined) {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized !== 'bun' && normalized !== 'npm') {
-      console.error(`AQA_PKG_RUNNER must be "bun" or "npm" (got "${raw}")`);
-      process.exit(2);
-    }
-    return normalized;
-  }
-  const probe = spawnSync(IS_WIN ? 'where' : 'which', ['bun'], {
-    stdio: 'ignore',
-    shell: SHELL_FOR_NATIVE,
-  });
-  return probe.status === 0 ? 'bun' : 'npm';
-}
-
-const runner = pickRunner();
-const runArgs = runner === 'bun' ? ['run', script] : ['run', '--silent', script];
-
-function loadPkg(pkgPath) {
-  return JSON.parse(readFileSync(pkgPath, 'utf8'));
-}
-
-function safeStat(p) {
-  try {
-    return statSync(p);
-  } catch {
-    return null;
-  }
-}
-
-function collectPackagesUnder(baseAbs) {
-  /** @type {Array<{dir:string, pkgPath:string, pkg:any}>} */
-  const out = [];
-  if (!existsSync(baseAbs)) return out;
-  const st = safeStat(baseAbs);
-  if (!st || !st.isDirectory()) return out;
-  for (const entry of readdirSync(baseAbs)) {
-    const entryPath = join(baseAbs, entry);
-    const entryStat = safeStat(entryPath);
-    if (!entryStat || !entryStat.isDirectory()) continue;
-    const pkgPath = join(entryPath, 'package.json');
-    if (existsSync(pkgPath)) {
-      out.push({ dir: entryPath, pkgPath, pkg: loadPkg(pkgPath) });
-    }
-  }
-  return out;
-}
-
 // Validate each workspace entry is a string up front, so any later glob check fails
 // with a clear diagnostic instead of a generic `pattern.startsWith is not a function`.
 for (let i = 0; i < workspaces.length; i++) {
@@ -134,6 +80,53 @@ for (const pattern of workspaces) {
 }
 
 const GLOB_CHARS = /[*?[\]{}!]/;
+const BARE_STAR_EXCLUDE = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+  '.git',
+  '.aqa',
+  '.cache',
+  '.next',
+  '.nuxt',
+  'playwright-report',
+  'test-results',
+]);
+
+const { runner, exec: _exec } = pickRunner();
+const runArgs = [runner === 'bun' ? 'run' : 'run', '--silent', script];
+
+function loadPkg(pkgPath) {
+  return JSON.parse(readFileSync(pkgPath, 'utf8'));
+}
+
+function safeStat(p) {
+  try {
+    return statSync(p);
+  } catch {
+    return null;
+  }
+}
+
+function collectPackagesUnder(baseAbs, { excludeBareStar = false } = {}) {
+  /** @type {Array<{dir:string, pkgPath:string, pkg:any}>} */
+  const out = [];
+  if (!existsSync(baseAbs)) return out;
+  const st = safeStat(baseAbs);
+  if (!st || !st.isDirectory()) return out;
+  for (const entry of readdirSync(baseAbs)) {
+    if (excludeBareStar && (entry.startsWith('.') || BARE_STAR_EXCLUDE.has(entry))) continue;
+    const entryPath = join(baseAbs, entry);
+    const entryStat = safeStat(entryPath);
+    if (!entryStat || !entryStat.isDirectory()) continue;
+    const pkgPath = join(entryPath, 'package.json');
+    if (existsSync(pkgPath)) {
+      out.push({ dir: entryPath, pkgPath, pkg: loadPkg(pkgPath) });
+    }
+  }
+  return out;
+}
 
 const matched = [];
 const seenDirs = new Set();
@@ -146,7 +139,7 @@ function tryAdd(entry) {
 for (const pattern of workspaces) {
   // Supported: "<dir>", "<dir>/*", and bare "*".
   if (pattern === '*') {
-    for (const e of collectPackagesUnder(root)) tryAdd(e);
+    for (const e of collectPackagesUnder(root, { excludeBareStar: true })) tryAdd(e);
   } else if (pattern.endsWith('/*')) {
     const base = pattern.slice(0, -2);
     for (const e of collectPackagesUnder(join(root, base))) tryAdd(e);
@@ -162,6 +155,9 @@ for (const pattern of workspaces) {
     );
   }
 }
+
+// Deterministic order (alphabetical absolute dir) so CI logs are reproducible.
+matched.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
 
 const haveScript = matched.filter(
   ({ pkg }) => pkg.scripts && typeof pkg.scripts[script] === 'string',
@@ -182,9 +178,13 @@ for (const { dir, pkg } of haveScript) {
     stdio: 'inherit',
     shell: SHELL_FOR_NATIVE,
   });
+  if (r.error) {
+    console.error(`[run-workspace-script] failed to launch "${runner}": ${r.error.message}`);
+    process.exit(1);
+  }
   if (r.signal) {
     console.error(`[run-workspace-script] child terminated by signal ${r.signal}; aborting loop.`);
-    process.exit(SIGNAL_TO_EXIT(r.signal));
+    process.exit(signalToExit(r.signal));
   }
   if (r.status !== 0) {
     worst = Math.max(worst, r.status ?? 1);

@@ -23,6 +23,13 @@
 
 ## 2026-05-17
 
+- **PR #1 Copilot seventh-pass review (6 comments) — addressed; this round is mostly hardening of `scripts/`. After 7 iterations and 47 inline comments addressed, Copilot now finds genuine edge cases (spawn ENOENT, readdirSync non-determinism) but Task 0's scope is fundamentally complete. Merging soon, with any future hardening tracked as a follow-up:**
+  - **`spawnSync` launch failures populate `r.error`, not `r.status`.** Both wrapper scripts now check `r.error` first and print `r.error.message` before exiting 1, instead of silently exiting with a bare 1. Critical for diagnosing "is `bun` on PATH?" failures in CI.
+  - **`readdirSync` ordering is filesystem-dependent.** Sorting `matched` alphabetically by absolute dir before iteration keeps CI logs reproducible across Linux/macOS/Windows.
+  - **Bare `*` workspace pattern enumerates everything at root** including `node_modules`, `dist`, `.git`, `.aqa`. Added a `BARE_STAR_EXCLUDE` set (mirrors tsconfig/biome ignore lists) + dotfile filter so a stale `dist/package.json` doesn't accidentally become a workspace.
+  - **DRY: extracted `pickRunner` + `signalToExit` into `scripts/_pick-runner.mjs`** so the two scripts stay aligned automatically (no more "keep these in sync" comments to maintain).
+  - **Asymmetric `bun run` vs `npm run --silent` flag pair was inconsistent.** Standardized on `--silent` for both (Bun supports it too) so CI logs look the same across the Bun and Node 22 fallback matrix.
+  - **Lesson re iteration count:** Copilot will keep finding nits indefinitely on any non-trivial script. After 7 passes and ~47 comments addressed, the marginal value drops below the cost of another iteration. Stopping criterion for future PRs: address all P0/P1, address all P2 that are objectively bugs, defer P3 nits to a "follow-up hardening" issue rather than blocking the macro task.
 - **PR #1 Copilot sixth-pass review (3 comments) — addressed:**
   - **Glob detection regex must cover all glob metachars**, not just `*` and `{`. `?`, `[`, `]`, `!` are equally valid globs and were silently classified as "literal directory" (then skipped because no dir matched). Replaced ad-hoc `includes` checks with a single regex `/[*?[\]{}!]/`.
   - **`os.constants.signals[name]` gives Node's full signal→number map** (SIGKILL=9 → 137, SIGSEGV=11 → 139, SIGABRT=6 → 134, etc.). Better than a hand-maintained subset that loses diagnostic info on uncommon terminations.
