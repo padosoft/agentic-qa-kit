@@ -1,20 +1,31 @@
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Badge } from '../components/Badge.tsx';
 import { Breadcrumb } from '../components/Breadcrumb.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_PACKS } from '../data/mock.ts';
+import { fetchPacks } from '../data/api.ts';
 
 export function PackDetailScreen() {
   const { packSlug } = useParams({ strict: false }) as { packSlug: string };
   const slug = decodeURIComponent(packSlug);
-  const p = MOCK_PACKS.find((x) => x.slug === slug);
+  const { data: packs = [], isLoading } = useQuery({ queryKey: ['packs'], queryFn: fetchPacks });
+  const p = packs.find((x) => x.slug === slug);
+
+  if (isLoading) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Packs', to: '/packs' }, { label: slug }]} />
+        <PageHeader title={`Pack ${slug}`} subtitle="Loading…" />
+      </>
+    );
+  }
 
   if (!p) {
     return (
       <>
         <Breadcrumb items={[{ label: 'Packs', to: '/packs' }, { label: slug }]} />
-        <PageHeader title={`Pack ${slug}`} subtitle="Not found." />
+        <PageHeader title={`Pack ${slug}`} subtitle="Not found in current data source." />
       </>
     );
   }

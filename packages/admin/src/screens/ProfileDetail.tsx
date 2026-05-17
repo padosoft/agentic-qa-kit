@@ -1,19 +1,33 @@
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Badge } from '../components/Badge.tsx';
 import { Breadcrumb } from '../components/Breadcrumb.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_PROFILES } from '../data/mock.ts';
+import { fetchProfiles } from '../data/api.ts';
 
 export function ProfileDetailScreen() {
   const { profileName } = useParams({ strict: false }) as { profileName: string };
-  const p = MOCK_PROFILES.find((x) => x.name === profileName);
+  const { data: profiles = [], isLoading } = useQuery({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+  });
+  const p = profiles.find((x) => x.name === profileName);
+
+  if (isLoading) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Profiles', to: '/profiles' }, { label: profileName }]} />
+        <PageHeader title={`Profile ${profileName}`} subtitle="Loading…" />
+      </>
+    );
+  }
 
   if (!p) {
     return (
       <>
         <Breadcrumb items={[{ label: 'Profiles', to: '/profiles' }, { label: profileName }]} />
-        <PageHeader title={`Profile ${profileName}`} subtitle="Not found." />
+        <PageHeader title={`Profile ${profileName}`} subtitle="Not found in current data source." />
       </>
     );
   }

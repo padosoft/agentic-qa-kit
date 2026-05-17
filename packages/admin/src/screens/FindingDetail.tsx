@@ -1,19 +1,33 @@
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Badge, severityTone } from '../components/Badge.tsx';
 import { Breadcrumb } from '../components/Breadcrumb.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_FINDINGS } from '../data/mock.ts';
+import { fetchFindings } from '../data/api.ts';
 
 export function FindingDetailScreen() {
   const { findingId } = useParams({ strict: false }) as { findingId: string };
-  const f = MOCK_FINDINGS.find((x) => x.id === findingId);
+  const { data: findings = [], isLoading } = useQuery({
+    queryKey: ['findings'],
+    queryFn: fetchFindings,
+  });
+  const f = findings.find((x) => x.id === findingId);
+
+  if (isLoading) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Findings', to: '/findings' }, { label: findingId }]} />
+        <PageHeader title={`Finding ${findingId}`} subtitle="Loading…" />
+      </>
+    );
+  }
 
   if (!f) {
     return (
       <>
         <Breadcrumb items={[{ label: 'Findings', to: '/findings' }, { label: findingId }]} />
-        <PageHeader title={`Finding ${findingId}`} subtitle="Not found." />
+        <PageHeader title={`Finding ${findingId}`} subtitle="Not found in current data source." />
       </>
     );
   }

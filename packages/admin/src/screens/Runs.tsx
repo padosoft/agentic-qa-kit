@@ -7,7 +7,7 @@ import { PageHeader } from '../components/PageHeader.tsx';
 import { fetchRuns, isLive } from '../data/api.ts';
 
 export function RunsScreen() {
-  const { data: runs = [] } = useQuery({ queryKey: ['runs'], queryFn: fetchRuns });
+  const { data: runs = [], error, isError } = useQuery({ queryKey: ['runs'], queryFn: fetchRuns });
   return (
     <>
       <PageHeader
@@ -15,6 +15,14 @@ export function RunsScreen() {
         subtitle="Every run with status, duration, findings, cost. Click an ID to drill in."
         actions={isLive() ? <Badge tone="success">live</Badge> : <Badge tone="ai">mock</Badge>}
       />
+      {isError && (
+        <Card>
+          <div className="px-4 py-3 text-sm" style={{ color: 'var(--color-status-danger)' }}>
+            Live fetch failed: {(error as Error).message}. Check that the server URL is reachable
+            and that you are authenticated.
+          </div>
+        </Card>
+      )}
       <Card>
         <table className="w-full text-sm">
           <thead style={{ background: 'var(--color-bg-base)' }}>

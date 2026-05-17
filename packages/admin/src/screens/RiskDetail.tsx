@@ -1,20 +1,35 @@
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Badge, severityTone } from '../components/Badge.tsx';
 import { Breadcrumb } from '../components/Breadcrumb.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_FINDINGS, MOCK_RISKS } from '../data/mock.ts';
+import { fetchFindings, fetchRisks } from '../data/api.ts';
 
 export function RiskDetailScreen() {
   const { riskId } = useParams({ strict: false }) as { riskId: string };
-  const r = MOCK_RISKS.find((x) => x.id === riskId);
-  const findings = MOCK_FINDINGS.filter((f) => f.risk_id === riskId);
+  const { data: risks = [], isLoading } = useQuery({ queryKey: ['risks'], queryFn: fetchRisks });
+  const { data: allFindings = [] } = useQuery({
+    queryKey: ['findings'],
+    queryFn: fetchFindings,
+  });
+  const r = risks.find((x) => x.id === riskId);
+  const findings = allFindings.filter((f) => f.risk_id === riskId);
+
+  if (isLoading) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Risk map', to: '/risk-map' }, { label: riskId }]} />
+        <PageHeader title={`Risk ${riskId}`} subtitle="Loading…" />
+      </>
+    );
+  }
 
   if (!r) {
     return (
       <>
         <Breadcrumb items={[{ label: 'Risk map', to: '/risk-map' }, { label: riskId }]} />
-        <PageHeader title={`Risk ${riskId}`} subtitle="Not found." />
+        <PageHeader title={`Risk ${riskId}`} subtitle="Not found in current data source." />
       </>
     );
   }

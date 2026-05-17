@@ -1,20 +1,38 @@
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Badge, severityTone } from '../components/Badge.tsx';
 import { Breadcrumb } from '../components/Breadcrumb.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_FINDINGS, MOCK_RUNS } from '../data/mock.ts';
+import { fetchFindings, fetchRuns } from '../data/api.ts';
 
 export function RunDetailScreen() {
   const { runId } = useParams({ strict: false }) as { runId: string };
-  const run = MOCK_RUNS.find((r) => r.id === runId);
-  const findings = MOCK_FINDINGS.filter((f) => f.run_id === runId);
+  const { data: runs = [], isLoading: runsLoading } = useQuery({
+    queryKey: ['runs'],
+    queryFn: fetchRuns,
+  });
+  const { data: allFindings = [] } = useQuery({
+    queryKey: ['findings'],
+    queryFn: fetchFindings,
+  });
+  const run = runs.find((r) => r.id === runId);
+  const findings = allFindings.filter((f) => f.run_id === runId);
+
+  if (runsLoading) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Runs', to: '/runs' }, { label: runId }]} />
+        <PageHeader title={`Run ${runId}`} subtitle="Loading…" />
+      </>
+    );
+  }
 
   if (!run) {
     return (
       <>
         <Breadcrumb items={[{ label: 'Runs', to: '/runs' }, { label: runId }]} />
-        <PageHeader title={`Run ${runId}`} subtitle="Not found." />
+        <PageHeader title={`Run ${runId}`} subtitle="Not found in current data source." />
       </>
     );
   }
