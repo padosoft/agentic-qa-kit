@@ -42,14 +42,16 @@ export const Run = z
     profile: Slug,
     execution_mode: ExecutionMode,
     config_snapshot: ConfigSnapshot,
-    totals: z.object({
-      scenarios: z.number().int().nonnegative().default(0),
-      findings: z.number().int().nonnegative().default(0),
-      probes: z.number().int().nonnegative().default(0),
-      llm_tokens_in: z.number().int().nonnegative().default(0),
-      llm_tokens_out: z.number().int().nonnegative().default(0),
-      llm_cost_usd: z.number().nonnegative().default(0),
-    }),
+    totals: z
+      .object({
+        scenarios: z.number().int().nonnegative().default(0),
+        findings: z.number().int().nonnegative().default(0),
+        probes: z.number().int().nonnegative().default(0),
+        llm_tokens_in: z.number().int().nonnegative().default(0),
+        llm_tokens_out: z.number().int().nonnegative().default(0),
+        llm_cost_usd: z.number().nonnegative().default(0),
+      })
+      .strict(), // align with JSON Schema's additionalProperties:false
     artifact_dir: z.string(),
   })
   .superRefine((v, ctx) => {

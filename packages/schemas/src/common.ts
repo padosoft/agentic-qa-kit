@@ -13,9 +13,10 @@ export const SemVer = z
   .string()
   .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/, 'invalid semver');
 
-// Lowercase only: regex flags do not survive emission to JSON Schema, so the
-// Zod and JSON-Schema validators stay equivalent only if the pattern itself is
-// case-insensitive by construction. Uppercase identifiers should be rejected.
+// Lowercase only, no flag-dependent matching: regex flags do not survive
+// emission to JSON Schema, so the Zod and JSON-Schema validators stay
+// equivalent only if the pattern explicitly enumerates the accepted charset.
+// Uppercase identifiers are rejected by both.
 // No trailing dashes, no consecutive dashes — safe to use as a path segment,
 // URL fragment, or anchor without normalisation.
 const SlugPattern = /^[a-z0-9](?:-?[a-z0-9])*$/;

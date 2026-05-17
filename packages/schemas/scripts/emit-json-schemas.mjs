@@ -6,17 +6,26 @@
  * Zod schemas are the source of truth. JSON Schemas are generated artifacts,
  * useful for editors (YAML/JSON LSP), third-party validators, and language ports.
  *
- * Two post-emit transforms keep the output Draft 2020-12 compliant:
+ * Post-emit transforms keep the output Draft 2020-12 compliant and mirror the
+ * cross-field invariants the Zod superRefine layer enforces:
  *
- *   1. zod-to-json-schema still emits Draft-4-style `exclusiveMinimum: true`
- *      and `exclusiveMaximum: true` next to `minimum`/`maximum`. In Draft
- *      2020-12 these keywords must be numbers. We rewrite them in place.
+ *   1. fixExclusiveBounds — rewrite Draft-4-style `exclusiveMinimum: true` /
+ *      `exclusiveMaximum: true` into the Draft 2020-12 numeric form.
+ *   2. patchFindingVerifiedGating — encode "status='verified' ⇒
+ *      reproducibility[verification_floor].deterministic === true" as
+ *      `allOf` of `if/then` clauses, one per verification_floor.
+ *   3. patchRunTerminalGating — encode "terminal state ⇒ finished_at required"
+ *      and "non-terminal state ⇒ finished_at forbidden".
  *
- *   2. Zod's `superRefine` cannot be expressed in JSON Schema, so the
- *      "verified ⇒ deterministic floor" gating on Finding would be silently
- *      dropped. We add an explicit `allOf` of `if/then` clauses for each
- *      `verification_floor` value, so consumers validating findings via the
- *      shipped JSON Schema get the same gating as the Zod validator.
+ * Known limitation: a handful of remaining superRefines (ReproLevel
+ * successes-vs-attempts, ProfilesFile key-vs-name, Finding.duplicate_of
+ * self-reference and status='duplicate'-requires-duplicate_of, Run's
+ * finished_at >= started_at cross-field comparison) are intentionally NOT
+ * mirrored to JSON Schema. They require either complex if/then nests or
+ * cross-field comparisons that JSON Schema cannot express natively.
+ * Consumers validating via the shipped JSON Schema must therefore re-check
+ * these invariants at the application layer; consumers validating via Zod
+ * get them for free. Tracked as a follow-up enhancement (see PROGRESS.md).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
