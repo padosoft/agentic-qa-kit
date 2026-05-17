@@ -38,6 +38,13 @@
         "yaml": "^2.6.0",
       },
     },
+    "packages/reporter": {
+      "name": "@aqa/reporter",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packages/runner": {
       "name": "@aqa/runner",
       "version": "0.0.1",
@@ -92,6 +99,8 @@
     "@aqa/pack-security": ["@aqa/pack-security@workspace:packs/security"],
 
     "@aqa/pack-web-ui": ["@aqa/pack-web-ui@workspace:packs/web-ui"],
+
+    "@aqa/reporter": ["@aqa/reporter@workspace:packages/reporter"],
 
     "@aqa/runner": ["@aqa/runner@workspace:packages/runner"],
 

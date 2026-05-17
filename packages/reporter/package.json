@@ -1,0 +1,20 @@
+{
+  "name": "@aqa/reporter",
+  "version": "0.0.1",
+  "description": "Reporters and replay artifact generators for agentic-qa-kit runs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/reporters.test.ts test/replay.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": { "@aqa/schemas": "workspace:*" },
+  "publishConfig": { "access": "public" }
+}
