@@ -1,12 +1,11 @@
-# Default values for agentic-qa-kit Helm chart (v0.6 scaffold).
+# Default values for agentic-qa-kit Helm chart (v1.1).
 #
-# All non-trivial knobs are documented inline. Runner pool, ingress, and
-# NetworkPolicy land in v1.0 — settings for them are intentionally absent.
+# All non-trivial knobs are documented inline.
 
 server:
   image:
     repository: ghcr.io/padosoft/agentic-qa-kit-server
-    tag: "0.6.0"
+    tag: "1.1.0"
     pullPolicy: IfNotPresent
   replicaCount: 1
   resources:
@@ -16,10 +15,51 @@ server:
   # production; in-cluster default is an emptyDir for the scaffold).
   auditLogPath: /var/lib/aqa/events.jsonl
 
+runner:
+  image:
+    repository: ghcr.io/padosoft/agentic-qa-kit-runner
+    tag: "1.1.0"
+    pullPolicy: IfNotPresent
+  # StatefulSet — stable identity + per-runner PVC for deterministic fixtures.
+  replicaCount: 2
+  storage:
+    size: 5Gi
+    storageClassName: ""
+  resources:
+    requests: { cpu: "500m", memory: "512Mi" }
+    limits:   { cpu: "2000m", memory: "2Gi" }
+
+ingress:
+  enabled: false
+  className: ""
+  host: "aqa.example.com"
+  tls:
+    enabled: false
+    secretName: ""
+  annotations: {}
+
+networkPolicy:
+  # When enabled, locks down pod-to-pod traffic:
+  #   - server: ingress only from ingress controller + runner pods
+  #   - runner: egress to server + Postgres + DNS only (no internet by default)
+  enabled: true
+  # Extra egress CIDRs the runner is allowed to reach (e.g. the QA target).
+  runnerExtraEgressCidrs: []
+
 postgres:
-  # v0.6: bring-your-own Postgres URL. Subchart lands in v1.0.
+  # Two modes:
+  #   - subchart.enabled=true  → in-cluster Postgres (dev / PoC only)
+  #   - url / urlSecretRef     → bring-your-own managed Postgres (prod)
+  subchart:
+    enabled: false
+    image: "postgres:16-alpine"
+    storage: "10Gi"
+    storageClassName: ""
+    auth:
+      database: "aqa"
+      username: "aqa"
+      password: "change-me" # set via --set or secret in production
   url: ""
-  # Optional secret name — overrides `url` if both set.
   urlSecretRef: ""
 
 # Cost governance hard cap (Task 11). Server refuses to start with budget=0.

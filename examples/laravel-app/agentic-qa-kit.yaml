@@ -1,0 +1,16 @@
+schema_version: "1"
+project: example-laravel-app
+target:
+  url: "http://localhost:8000/api"
+  type: api
+profiles:
+  - api-core
+  - security
+packs:
+  - "@aqa/pack-core@1"
+  - "@aqa/pack-api-core@1"
+  - "@aqa/pack-security@1"
+notes: |
+  Demonstrates that AQA is target-language agnostic: probes are HTTP,
+  oracles are declarative, the runner does not care that the server is
+  PHP/Laravel rather than Bun or Node.

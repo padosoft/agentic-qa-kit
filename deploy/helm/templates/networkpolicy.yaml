@@ -1,0 +1,71 @@
+{{- if .Values.networkPolicy.enabled }}
+# Server: allow ingress from runner pods + (optionally) ingress controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-server
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "aqa.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: runner
+      ports:
+        - protocol: TCP
+          port: 8080
+    {{- if .Values.ingress.enabled }}
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+    {{- end }}
+---
+# Runner: deny all egress by default; allow DNS + server + extra CIDRs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-runner
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runner
+  policyTypes: ["Egress"]
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Server pod
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aqa.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 8080
+    {{- if .Values.networkPolicy.runnerExtraEgressCidrs }}
+    # Operator-provided QA target CIDRs
+    - to:
+      {{- range .Values.networkPolicy.runnerExtraEgressCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+      {{- end }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-runner
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner
+spec:
+  serviceName: {{ .Release.Name }}-runner-headless
+  replicas: {{ .Values.runner.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runner
+  template:
+    metadata:
+      labels:
+        {{- include "aqa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: runner
+    spec:
+      containers:
+        - name: runner
+          image: "{{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}"
+          imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
+          env:
+            - name: AQA_SERVER_URL
+              value: "http://{{ .Release.Name }}-server:8080"
+            - name: AQA_DETERMINISM_LEVEL
+              value: {{ .Values.determinism.level | quote }}
+            - name: AQA_RUNNER_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            {{- toYaml .Values.runner.resources | nindent 12 }}
+          volumeMounts:
+            - name: fixtures
+              mountPath: /var/lib/aqa/fixtures
+  volumeClaimTemplates:
+    - metadata:
+        name: fixtures
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.runner.storage.size }}
+        {{- if .Values.runner.storage.storageClassName }}
+        storageClassName: {{ .Values.runner.storage.storageClassName | quote }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-runner-headless
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner
+spec:
+  clusterIP: None
+  selector:
+    {{- include "aqa.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: runner

@@ -1,0 +1,23 @@
+schema_version: "1"
+project: example-nextjs-saas
+target:
+  url: "http://localhost:3000"
+  type: web
+profiles:
+  - web-ui
+  - api-core
+packs:
+  - "@aqa/pack-core@1"
+  - "@aqa/pack-web-ui@1"
+  - "@aqa/pack-api-core@1"
+  - "@aqa/pack-security@1"
+risks:
+  - id: r-session-cookie-flags
+    category: auth
+    title: "Session cookie must be HttpOnly + SameSite=Lax + Secure"
+    severity: high
+    likelihood: possible
+    invariants:
+      - "Set-Cookie on /api/auth/login includes HttpOnly, SameSite=Lax, Secure"
+    owners: ["@maintainers"]
+    tags: ["owasp:a07"]

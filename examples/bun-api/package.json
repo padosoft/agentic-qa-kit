@@ -1,0 +1,13 @@
+{
+  "name": "example-bun-api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  }
+}

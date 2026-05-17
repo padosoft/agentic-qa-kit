@@ -1,0 +1,12 @@
+schema_version: "1"
+project: example-bun-api
+target:
+  url: "http://localhost:3000"
+  type: api
+profiles:
+  - api-core
+  - security
+packs:
+  - "@aqa/pack-core@1"
+  - "@aqa/pack-api-core@1"
+  - "@aqa/pack-security@1"

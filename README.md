@@ -11,7 +11,8 @@
 [![Node](https://img.shields.io/badge/runtime-node%2022%20LTS-339933)](https://nodejs.org)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)](https://www.typescriptlang.org/)
 [![CI](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml)
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#status)
+[![Release](https://img.shields.io/github/v/release/padosoft/agentic-qa-kit?display_name=tag&sort=semver)](https://github.com/padosoft/agentic-qa-kit/releases)
+[![Status: GA](https://img.shields.io/badge/status-GA%20%E2%80%A2%20v1.0-2ea44f)](#status)
 [![Works with Claude · Codex · Gemini · Copilot](https://img.shields.io/badge/works%20with-Claude%20%E2%80%A2%20Codex%20%E2%80%A2%20Gemini%20%E2%80%A2%20Copilot-blueviolet)](#multi-agent)
 
 > _Not a test runner. An **operating system** for agentic QA._
@@ -71,7 +72,7 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 
 ## Quick start (junior-friendly)
 
-> **Status note:** this section is a **preview of the v0.1.0 experience**. The `aqa` binary, the `agentic-qa-kit` npm package, and the commands below (`aqa init`, `aqa run`, `aqa replay`, `aqa install-agent-files`, etc.) are not yet published — the repo is in `v0.0.x` bootstrap and only governance + scaffolding are in place. Trying to `bun add -d agentic-qa-kit` today will fail. Detailed walk-through (also a preview) lives in [`docs/getting-started.md`](docs/getting-started.md).
+> **Status note:** the kit reached **v1.0 GA** (24-task roadmap complete) and is now at **v1.1**. The 18 workspace packages (`@aqa/schemas`, `@aqa/kit`, `@aqa/runner`, `@aqa/reporter`, `@aqa/server`, `@aqa/admin`, `@aqa/compliance`, `@aqa/methodology`, …) ship from this monorepo. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
 
 <details>
 <summary><strong>Preview the v0.1.0 quick start</strong> (click to expand)</summary>
@@ -196,13 +197,23 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v0.4.x` | Admin editing | Scenario Studio, AI-generation with review workflow |
 | `v0.5.x` | Multi-team | Server + runner fleet, findings dedup, bug→fix→verify-fix loop |
 | `v0.6.x` | Methodology rigor | STRIDE/FMEA/OWASP integration, oracle ensemble, judge calibration |
-| `v1.0` | GA enterprise | Pen test, SOC2 readiness, reference customers |
+| `v1.0` | **GA enterprise — shipped** | SOC2/ISO controls catalog, `aqa-audit-verify` CLI, pen-test scope doc |
+| `v1.1` | **Polish — shipped** | Banner, full Helm chart (runner StatefulSet, Ingress, NetworkPolicy, Postgres subchart), 3 example targets (Bun, Next.js, Laravel) |
 
 ## Status
 
-**Pre-alpha (`v0.0.x`).** The kit is in active foundation work. Do **not** use in production yet. Public APIs may change without notice until `v0.1.0`.
+**GA (`v1.0` shipped, `v1.1` current).** The full 24-task roadmap is closed:
+schemas, CLI (`@aqa/kit`), 5 baseline packs, multi-agent adapters
+(Claude/Codex/Gemini/Copilot), runner with hash-chained audit, reporter
+with 3-level replay, admin panel, server + runner fleet, on-prem LLM
+adapters, SSO/RBAC, Postgres backend, pack signing + scanning,
+container sandbox, cost governance, findings dedup + clustering,
+STRIDE/FMEA/OWASP methodology layer, Helm chart + Terraform + air-gap
+installer, SOC2/ISO controls catalog + `aqa-audit-verify` CLI.
 
-Track progress in [`docs/PROGRESS.md`](docs/PROGRESS.md). Architectural decisions in [`docs/adr/`](docs/adr/).
+Release notes per tag: [Releases page](https://github.com/padosoft/agentic-qa-kit/releases).
+Live state: [`docs/PROGRESS.md`](docs/PROGRESS.md). Architectural
+decisions: [`docs/adr/`](docs/adr/).
 
 ## Documentation
 
