@@ -82,6 +82,11 @@ jobs:
         # Bun's test runner discovers test/*.test.ts across the workspace and
         # executes them via the Bun runtime (node:test API is bun-compatible).
         # Running build first guarantees dist/index.js exists for test imports.
+        #
+        # By design this job validates only the Bun execution path: the same
+        # test files run under plain Node 22 (with --experimental-strip-types)
+        # in the separate "Unit tests (Node 22 LTS)" job, so both runtimes are
+        # gated independently.
         run: bun test --coverage
 
       - name: Skip notice

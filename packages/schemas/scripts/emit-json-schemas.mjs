@@ -55,10 +55,18 @@ function fixExclusiveBounds(node) {
   for (const bound of ['exclusiveMinimum', 'exclusiveMaximum']) {
     if (node[bound] === true) {
       const sibling = bound === 'exclusiveMinimum' ? 'minimum' : 'maximum';
-      if (typeof node[sibling] === 'number') {
-        node[bound] = node[sibling];
-        delete node[sibling];
+      if (typeof node[sibling] !== 'number') {
+        // Strict failure: Draft 2020-12 requires `exclusiveMinimum`/`exclusiveMaximum`
+        // to be a number. We cannot silently leave the Draft-4 boolean form in place
+        // without producing an invalid schema. Fail the build so the developer
+        // either pins `zod-to-json-schema` to a known-good version or extends this
+        // function to handle the unexpected emission shape.
+        throw new Error(
+          `[emit-json-schemas] cannot fix ${bound}: expected numeric sibling "${sibling}", got ${JSON.stringify(node[sibling])}`,
+        );
       }
+      node[bound] = node[sibling];
+      delete node[sibling];
     } else if (node[bound] === false) {
       delete node[bound];
     }
@@ -120,6 +128,9 @@ for (const { file, exportName, schemaName } of modules) {
   });
   fixExclusiveBounds(json);
   if (schemaName === 'finding') patchFindingVerifiedGating(json);
+  // Declare the dialect explicitly so consumers that default to an older draft
+  // (e.g. ajv without the 2020-12 plugin) cannot silently mis-validate.
+  json.$schema = 'https://json-schema.org/draft/2020-12/schema';
   const out = join(outDir, `${schemaName}.schema.json`);
   writeFileSync(out, `${JSON.stringify(json, null, 2)}\n`, 'utf8');
   emitted += 1;

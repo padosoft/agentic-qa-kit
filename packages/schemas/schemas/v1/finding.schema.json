@@ -15,7 +15,7 @@
         "run_id": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 64,
+          "maxLength": 256,
           "pattern": "^[a-z0-9][a-z0-9-]*$"
         },
         "scenario_id": {
@@ -379,5 +379,6 @@
         ]
       }
     }
-  ]
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

@@ -1,14 +1,40 @@
 import { z } from 'zod';
-import { ExecutionMode, FindingId, IsoDateTime, Severity, Slug, Status } from './common.js';
+import {
+  ExecutionMode,
+  FindingId,
+  IsoDateTime,
+  LongSlug,
+  Severity,
+  Slug,
+  Status,
+} from './common.js';
 
-export const ReproLevel = z.object({
-  deterministic: z.boolean(),
-  attempts: z.number().int().nonnegative(),
-  successes: z.number().int().nonnegative(),
-  artifact_path: z.string().optional(),
-  seed: z.string().optional(),
-  model_pinned: z.string().optional(),
-});
+export const ReproLevel = z
+  .object({
+    deterministic: z.boolean(),
+    attempts: z.number().int().nonnegative(),
+    successes: z.number().int().nonnegative(),
+    artifact_path: z.string().optional(),
+    seed: z.string().optional(),
+    model_pinned: z.string().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.successes > v.attempts) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['successes'],
+        message: 'successes cannot exceed attempts',
+      });
+    }
+    if (v.deterministic && (v.attempts < 1 || v.successes !== v.attempts)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['deterministic'],
+        message:
+          'deterministic=true requires attempts >= 1 and successes === attempts (every retry must succeed)',
+      });
+    }
+  });
 export type ReproLevel = z.infer<typeof ReproLevel>;
 
 export const Reproducibility = z.object({
@@ -33,7 +59,7 @@ export const Finding = z
   .object({
     schema_version: z.literal('1'),
     id: FindingId,
-    run_id: Slug,
+    run_id: LongSlug,
     scenario_id: Slug,
     risk_id: Slug,
     title: z.string().min(4).max(200),

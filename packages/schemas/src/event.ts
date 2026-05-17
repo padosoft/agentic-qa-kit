@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FindingId, IsoDateTime, Sha256, Slug } from './common.js';
+import { FindingId, IsoDateTime, LongSlug, Sha256, Slug } from './common.js';
 
 export const EventKind = z.enum([
   'run_started',
@@ -26,7 +26,7 @@ export const Event = z.object({
   prev_hash: Sha256.nullable(),
   hash: Sha256,
   ts: IsoDateTime,
-  run_id: Slug,
+  run_id: LongSlug,
   kind: EventKind,
   actor: z.object({
     type: z.enum(['orchestrator', 'agent', 'system']),

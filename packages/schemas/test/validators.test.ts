@@ -75,17 +75,40 @@ describe('valid fixtures', () => {
   }
 });
 
+// For each invalid fixture, declare the field path that MUST appear among
+// the Zod issue paths. This prevents a fixture from silently passing the
+// "rejects" test for the wrong reason after a schema regression.
+const invalidExpectations: Record<string, string[]> = {
+  'event--bad-hash.json': ['hash'],
+  'finding--verified-no-determinism.json': ['reproducibility', 'bug_level'],
+  'pack-manifest--bad-semver.json': ['version'],
+  'profile--bad-execution-mode.json': ['execution_mode'],
+  'project--missing-stack.json': ['stack'],
+  'risk-map--empty-risks.json': ['risks'],
+  'run--bad-state.json': ['state'],
+  'scenario--no-oracles.json': ['oracles'],
+};
+
 describe('invalid fixtures', () => {
   const invalidDir = join(fixturesDir, 'invalid');
   const files = readdirSync(invalidDir).filter((f) => f.endsWith('.json'));
   for (const file of files) {
     const name = schemaKeyFromFile(file) as keyof typeof validators;
-    it(`${file} rejects on ${name}`, () => {
+    it(`${file} rejects on ${name} at expected path`, () => {
       const data = JSON.parse(readFileSync(join(invalidDir, file), 'utf8'));
       const validator = validators[name];
       assert.ok(validator, `validator missing for ${name}`);
       const result = validator.safeParse(data);
       assert.equal(result.success, false);
+      if (result.success) return;
+      const expected = invalidExpectations[file];
+      assert.ok(expected, `no error-path expectation declared for ${file}`);
+      const expectedKey = expected.join('.');
+      const actualPaths = result.error.issues.map((i) => i.path.join('.'));
+      assert.ok(
+        actualPaths.some((p) => p === expectedKey || p.startsWith(`${expectedKey}.`)),
+        `expected error on path "${expectedKey}", got: ${JSON.stringify(actualPaths)}`,
+      );
     });
   }
 });

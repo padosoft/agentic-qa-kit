@@ -28,9 +28,20 @@
 
 ## Install
 
-```bash
-bun add @aqa/schemas
-```
+> **Workspace-internal at this stage.** `@aqa/schemas` is part of the
+> `agentic-qa-kit` monorepo and not yet published to npm. Until the v0.1.0
+> release, consume it via the workspace:
+>
+> ```jsonc
+> // package.json (consumer inside this monorepo)
+> "dependencies": { "@aqa/schemas": "workspace:*" }
+> ```
+>
+> After the first npm publish, this will become:
+>
+> ```bash
+> bun add @aqa/schemas
+> ```
 
 ## Usage
 
