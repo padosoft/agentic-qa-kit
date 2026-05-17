@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-llm-agent
+risks:
+  - id: r-prompt-injection
+    category: agentic
+    title: Untrusted input redirects the agent to a different goal
+    severity: critical
+    likelihood: likely
+    invariants:
+      - id: inv-no-instruction-following
+        statement: Instructions embedded in user-provided content do not change the agent's declared goal.
+  - id: r-tool-misuse
+    category: agentic
+    title: Agent picks the wrong tool for a borderline request
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-tool-rationale
+        statement: Every tool invocation is preceded by a rationale that names the goal it serves.
+  - id: r-handoff-loss
+    category: integration
+    title: Hand-off between agents loses session state
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-handoff-state
+        statement: After handoff, the receiving agent has access to the same context the originator had.

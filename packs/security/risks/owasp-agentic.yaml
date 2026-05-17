@@ -1,0 +1,30 @@
+schema_version: "1"
+project: pack-security
+risks:
+  - id: r-agentic-prompt-injection
+    category: agentic
+    title: Agentic A01 Prompt Injection
+    severity: critical
+    likelihood: likely
+    invariants:
+      - id: inv-agentic-no-injection
+        statement: Embedded instructions in tool outputs do not override the system prompt.
+    tags: [owasp-agentic:a01]
+  - id: r-agentic-tool-abuse
+    category: agentic
+    title: Agentic A02 Tool / Function Abuse
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-agentic-tool-bound
+        statement: Tools called by the agent are bounded by an explicit per-tool capability budget.
+    tags: [owasp-agentic:a02]
+  - id: r-agentic-data-exfil
+    category: confidentiality
+    title: Agentic A03 Data Exfiltration via Tool Calls
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-agentic-no-exfil
+        statement: Outbound network targets for tool calls are restricted to an allow-list.
+    tags: [owasp-agentic:a03]

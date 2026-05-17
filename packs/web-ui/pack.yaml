@@ -1,0 +1,13 @@
+schema_version: "1"
+name: pack-web-ui
+version: 0.1.0
+description: "Web UI baseline pack — login redirect safelist and form-state-on-refresh scenarios. Navigation and accessibility scenarios land in a follow-up."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  sut_type: [web]
+templates: []
+scenarios: [scenarios/login.yaml, scenarios/form-refresh.yaml]
+risks: [risks/web-ui.yaml]
+oracles: []
+probes: []

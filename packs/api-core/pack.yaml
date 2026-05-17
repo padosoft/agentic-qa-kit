@@ -1,0 +1,19 @@
+schema_version: "1"
+name: pack-api-core
+version: 0.1.0
+description: "Baseline API pack — auth, idempotency, pagination, rate-limit, contract scenarios."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  sut_type: [api]
+  framework: [hono, express, fastify, koa, nestjs]
+templates: []
+scenarios:
+  - scenarios/idempotency.yaml
+  - scenarios/auth-token-replay.yaml
+risks:
+  - risks/api.yaml
+oracles:
+  - oracles/http_status.yaml
+probes:
+  - probes/invalid_payload.yaml

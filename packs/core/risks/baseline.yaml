@@ -1,0 +1,19 @@
+schema_version: "1"
+project: pack-core
+risks:
+  - id: r-uncaught-exceptions
+    category: availability
+    title: Unhandled exception surfaces as a 500
+    severity: medium
+    likelihood: likely
+    invariants:
+      - id: inv-no-uncaught-500
+        statement: User-facing requests never return a stack trace in the response body.
+  - id: r-input-trust
+    category: integrity
+    title: Input validation is bypassed for at least one endpoint
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-input-validated
+        statement: Every endpoint accepting a JSON body rejects malformed payloads with 4xx.

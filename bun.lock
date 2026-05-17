@@ -23,6 +23,14 @@
         "yaml": "^2.6.0",
       },
     },
+    "packages/pack-loader": {
+      "name": "@aqa/pack-loader",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+        "yaml": "^2.6.0",
+      },
+    },
     "packages/schemas": {
       "name": "@aqa/schemas",
       "version": "0.0.1",
@@ -33,9 +41,41 @@
         "zod-to-json-schema": "^3.23.5",
       },
     },
+    "packs/api-core": {
+      "name": "@aqa/pack-api-core",
+      "version": "0.1.0",
+    },
+    "packs/core": {
+      "name": "@aqa/pack-core",
+      "version": "0.1.0",
+    },
+    "packs/llm-agent": {
+      "name": "@aqa/pack-llm-agent",
+      "version": "0.1.0",
+    },
+    "packs/security": {
+      "name": "@aqa/pack-security",
+      "version": "0.1.0",
+    },
+    "packs/web-ui": {
+      "name": "@aqa/pack-web-ui",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
+
+    "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
+
+    "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
+
+    "@aqa/pack-llm-agent": ["@aqa/pack-llm-agent@workspace:packs/llm-agent"],
+
+    "@aqa/pack-loader": ["@aqa/pack-loader@workspace:packages/pack-loader"],
+
+    "@aqa/pack-security": ["@aqa/pack-security@workspace:packs/security"],
+
+    "@aqa/pack-web-ui": ["@aqa/pack-web-ui@workspace:packs/web-ui"],
 
     "@aqa/schemas": ["@aqa/schemas@workspace:packages/schemas"],
 

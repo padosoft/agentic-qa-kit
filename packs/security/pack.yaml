@@ -1,0 +1,13 @@
+schema_version: "1"
+name: pack-security
+version: 0.1.0
+description: "OWASP Top 10 (web — A01–A05/A07–A10; A06 lands in v0.1.1) + OWASP Agentic Top 10 (subset — A01–A03; remaining items land in v0.1.1) as seed risks."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [security, release-gate]
+templates: []
+scenarios: []
+risks: [risks/owasp-top-10.yaml, risks/owasp-agentic.yaml]
+oracles: []
+probes: []

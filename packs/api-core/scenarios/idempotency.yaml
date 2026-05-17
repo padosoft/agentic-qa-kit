@@ -1,0 +1,19 @@
+schema_version: "1"
+id: scn-idempotency
+title: Repeating a POST with the same Idempotency-Key must not create a duplicate
+risk_refs: [r-idempotency]
+invariant_refs: [inv-idempotent-post]
+preconditions:
+  - "user authenticated"
+steps:
+  - id: probe-post-1
+    kind: http
+    with: { method: "POST", url: "/items", body: { name: "x" }, headers: { "Idempotency-Key": "abc-123" } }
+  - id: probe-post-2
+    kind: http
+    with: { method: "POST", url: "/items", body: { name: "x" }, headers: { "Idempotency-Key": "abc-123" } }
+oracles:
+  - id: o-same-id
+    kind: response_contains
+    with: { jsonpath: "$.id", equals: "@probe-post-1.body.id" }
+tags: [api, idempotency]

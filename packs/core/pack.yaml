@@ -1,0 +1,16 @@
+schema_version: "1"
+name: pack-core
+version: 0.1.0
+description: "Baseline pack — testing.md template and risk-map seeds (uncaught-exceptions, input-trust). Installed in every project."
+author: Padosoft
+license: Apache-2.0
+homepage: https://github.com/padosoft/agentic-qa-kit
+applies_when: {}
+templates:
+  - templates/testing.md.tpl
+  - templates/risk-map.yaml.tpl
+scenarios: []
+risks:
+  - risks/baseline.yaml
+oracles: []
+probes: []

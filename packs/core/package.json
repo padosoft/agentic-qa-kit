@@ -1,0 +1,8 @@
+{
+  "name": "@aqa/pack-core",
+  "version": "0.1.0",
+  "description": "Baseline pack for agentic-qa-kit — installed in every project.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": ["pack.yaml", "templates", "scenarios", "risks", "oracles", "probes", "README.md"]
+}

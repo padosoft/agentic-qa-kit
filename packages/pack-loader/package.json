@@ -1,0 +1,25 @@
+{
+  "name": "@aqa/pack-loader",
+  "version": "0.0.1",
+  "description": "Pack loader for agentic-qa-kit: discovers packs, validates manifests, and evaluates applies_when predicates.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/loader.test.ts test/applies-when.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": {
+    "@aqa/schemas": "workspace:*",
+    "yaml": "^2.6.0"
+  },
+  "publishConfig": { "access": "public" }
+}

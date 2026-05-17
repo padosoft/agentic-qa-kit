@@ -1,0 +1,17 @@
+schema_version: "1"
+id: scn-token-replay
+title: Old token must be rejected within 60s of rotation
+risk_refs: [r-token-replay]
+invariant_refs: [inv-token-rotation]
+steps:
+  - id: probe-rotate
+    kind: http
+    with: { method: "POST", url: "/auth/rotate" }
+  - id: probe-use-old
+    kind: http
+    with: { method: "GET", url: "/me", auth: "${OLD_TOKEN}" }
+oracles:
+  - id: o-401
+    kind: http_status
+    with: { expected: 401 }
+tags: [api, auth]
