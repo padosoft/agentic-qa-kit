@@ -48,6 +48,13 @@
         "zod": "^3.25.28",
       },
     },
+    "packages/clustering": {
+      "name": "@aqa/clustering",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packages/cost": {
       "name": "@aqa/cost",
       "version": "0.0.1",
@@ -122,6 +129,15 @@
         "zod-to-json-schema": "^3.23.5",
       },
     },
+    "packages/server": {
+      "name": "@aqa/server",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/auth": "workspace:*",
+        "@aqa/schemas": "workspace:*",
+        "@aqa/store": "workspace:*",
+      },
+    },
     "packages/store": {
       "name": "@aqa/store",
       "version": "0.0.1",
@@ -159,6 +175,8 @@
 
     "@aqa/auth": ["@aqa/auth@workspace:packages/auth"],
 
+    "@aqa/clustering": ["@aqa/clustering@workspace:packages/clustering"],
+
     "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
 
     "@aqa/generator": ["@aqa/generator@workspace:packages/generator"],
@@ -188,6 +206,8 @@
     "@aqa/sandbox": ["@aqa/sandbox@workspace:packages/sandbox"],
 
     "@aqa/schemas": ["@aqa/schemas@workspace:packages/schemas"],
+
+    "@aqa/server": ["@aqa/server@workspace:packages/server"],
 
     "@aqa/store": ["@aqa/store@workspace:packages/store"],
 

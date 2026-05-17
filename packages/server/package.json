@@ -1,0 +1,24 @@
+{
+  "name": "@aqa/server",
+  "version": "0.0.1",
+  "description": "Multi-team API server for agentic-qa-kit: REST + runner-fleet dispatch.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/api.test.ts test/runner-queue.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": {
+    "@aqa/schemas": "workspace:*",
+    "@aqa/store": "workspace:*",
+    "@aqa/auth": "workspace:*"
+  },
+  "publishConfig": { "access": "public" }
+}
