@@ -1,0 +1,77 @@
+{{- if .Values.postgres.subchart.enabled }}
+# In-cluster Postgres — dev / PoC only. For production use a managed Postgres
+# and set `postgres.url` or `postgres.urlSecretRef` instead.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+type: Opaque
+stringData:
+  POSTGRES_DB: {{ .Values.postgres.subchart.auth.database | quote }}
+  POSTGRES_USER: {{ .Values.postgres.subchart.auth.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.subchart.auth.password | quote }}
+  url: "postgres://{{ .Values.postgres.subchart.auth.username }}:{{ .Values.postgres.subchart.auth.password }}@{{ .Release.Name }}-postgres:5432/{{ .Values.postgres.subchart.auth.database }}"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "aqa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.subchart.image | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-postgres
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.subchart.storage }}
+        {{- if .Values.postgres.subchart.storageClassName }}
+        storageClassName: {{ .Values.postgres.subchart.storageClassName | quote }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "aqa.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  ports:
+    - port: 5432
+      name: postgres
+{{- end }}

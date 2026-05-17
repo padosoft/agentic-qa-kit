@@ -28,7 +28,13 @@ spec:
               value: {{ .Values.determinism.level | quote }}
             - name: AQA_MONTHLY_BUDGET_USD
               value: {{ .Values.cost.monthlyBudgetUsd | quote }}
-            {{- if .Values.postgres.urlSecretRef }}
+            {{- if .Values.postgres.subchart.enabled }}
+            - name: AQA_POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            {{- else if .Values.postgres.urlSecretRef }}
             - name: AQA_POSTGRES_URL
               valueFrom:
                 secretKeyRef:
