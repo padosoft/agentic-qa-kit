@@ -98,8 +98,9 @@ const doctor = runDoctor({ root: process.cwd() });
 const validation = runValidate({ root: process.cwd() });
 ```
 
-Every command is a pure function — no I/O beyond what's explicit in the result. Easy to unit-test
-without a TTY.
+Each command is exposed as a single function with explicit options. They do touch disk (writes for
+`runInit`, reads for `runValidate`/`runDoctor`/`profileRepo`), but only against the `root` you pass
+in — easy to unit-test against a temp directory, no TTY required.
 
 ## Development
 

@@ -192,10 +192,12 @@ function visit(entry) {
   const name = entry.pkg.name ?? entry.dir;
   if (visited.has(name)) return;
   if (visiting.has(name)) {
-    // Cycle detected — fall back to the current alphabetical order for the
-    // remaining nodes; surface a warning so it can be investigated.
+    // Cycle detected — break the recursion at this node so the rest of the
+    // graph still gets sorted. The trailing append at the end of the function
+    // ensures any node we couldn't fully order ends up after its caller, which
+    // is the best we can do without re-shaping the dependency graph itself.
     console.warn(
-      `[run-workspace-script] WARN: dependency cycle involves "${name}"; running in arrival order from here.`,
+      `[run-workspace-script] WARN: dependency cycle involves "${name}"; downstream of the cycle will run before "${name}" rather than after.`,
     );
     return;
   }

@@ -51,15 +51,20 @@ ${bold('Common options')}
   --version     show CLI version
 `;
 
-async function main(): Promise<number> {
+function main(): number {
   const args = parseArgs(process.argv.slice(2));
   if (args.flags.has('version') || args.flags.has('v')) {
     console.info(VERSION);
     return 0;
   }
-  if (args.command === null || args.flags.has('help') || args.flags.has('h')) {
+  // Explicit --help / -h is a success; missing command is a usage error.
+  if (args.flags.has('help') || args.flags.has('h')) {
     console.info(HELP);
-    return args.command === null ? 1 : 0;
+    return 0;
+  }
+  if (args.command === null) {
+    console.info(HELP);
+    return 1;
   }
   const cwd = process.cwd();
   switch (args.command) {
@@ -69,7 +74,7 @@ async function main(): Promise<number> {
       if (args.positionals[0] !== undefined) initOpts.projectName = args.positionals[0];
       if (args.flags.has('force')) initOpts.overwrite = true;
       if (args.flags.has('dry-run')) initOpts.dryRun = true;
-      const result = await runInit(initOpts);
+      const result = runInit(initOpts);
       console.info(
         dim(`runtime=${result.profile.runtime} framework=${result.profile.framework ?? 'none'}`),
       );
@@ -114,10 +119,9 @@ async function main(): Promise<number> {
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err: unknown) => {
-    console.error(red('aqa: unhandled error'), err);
-    process.exit(2);
-  },
-);
+try {
+  process.exit(main());
+} catch (err) {
+  console.error(red('aqa: unhandled error'), err);
+  process.exit(2);
+}

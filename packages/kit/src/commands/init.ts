@@ -103,9 +103,12 @@ const PROFILES_YAML = yamlStringify({
   },
 });
 
-export async function runInit(opts: InitOptions): Promise<InitResult> {
+export function runInit(opts: InitOptions): InitResult {
   const profile = profileRepo(opts.root);
-  const name = opts.projectName ?? deriveName(opts.root);
+  // Always slugify, whether the user supplied a name or we derived one from the
+  // path. The schema's `Project.name` is a strict Slug and would reject anything
+  // with uppercase, spaces, or punctuation otherwise.
+  const name = slugify(opts.projectName ?? lastPathSegment(opts.root));
   const writeOpts = { overwrite: opts.overwrite, dryRun: opts.dryRun };
   const targets: Array<[string, string]> = [
     [join(opts.root, '.aqa', 'project.yaml'), projectYaml(name, profile)],
@@ -120,11 +123,14 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
   return { profile, files };
 }
 
-function deriveName(root: string): string {
+function lastPathSegment(root: string): string {
   const parts = root.replace(/[\\/]+$/, '').split(/[\\/]/);
-  const last = parts[parts.length - 1] ?? 'project';
+  return parts[parts.length - 1] ?? 'project';
+}
+
+function slugify(raw: string): string {
   return (
-    last
+    raw
       .toLowerCase()
       .replace(/[^a-z0-9-]+/g, '-')
       .replace(/-{2,}/g, '-')

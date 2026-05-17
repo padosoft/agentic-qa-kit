@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FRAMEWORK_SIGNALS: Array<{ pkg: string; name: string }> = [
@@ -84,8 +84,14 @@ function fileExists(path: string): boolean {
 }
 
 function detectRuntime(root: string): ProjectProfile['runtime'] {
-  if (fileExists(join(root, 'bunfig.toml')) || fileExists(join(root, 'bun.lock'))) return 'bun';
-  if (fileExists(join(root, 'deno.json')) || fileExists(join(root, 'deno.jsonc'))) return 'deno';
+  // Deno's config files are an explicit signal; preferring them over a coincidental
+  // `package.json` (Deno projects commonly keep one for tooling) gets the
+  // classification right. Bun's signals (bunfig.toml / bun.lock) are equally explicit
+  // and take precedence over a Node project that also happens to have those files.
+  const hasDeno = fileExists(join(root, 'deno.json')) || fileExists(join(root, 'deno.jsonc'));
+  const hasBun = fileExists(join(root, 'bunfig.toml')) || fileExists(join(root, 'bun.lock'));
+  if (hasBun) return 'bun';
+  if (hasDeno) return 'deno';
   if (fileExists(join(root, 'package.json'))) return 'node';
   return 'unknown';
 }
@@ -131,24 +137,14 @@ function detectSutType(root: string, pkg: PackageJsonLike | null): ProjectProfil
 
 export function profileRepo(root: string): ProjectProfile {
   const pkg = readPackageJson(root);
-  const framework = detectByDeps(pkg, FRAMEWORK_SIGNALS)[0] ?? (pkg ? null : null);
   return {
     runtime: detectRuntime(root),
     package_manager: detectPackageManager(root),
-    framework: framework ?? null,
+    framework: detectByDeps(pkg, FRAMEWORK_SIGNALS)[0] ?? null,
     db: detectByDeps(pkg, DB_SIGNALS),
     llm: detectByDeps(pkg, LLM_SIGNALS),
     test_runner: detectByDeps(pkg, TEST_RUNNER_SIGNALS)[0] ?? null,
     sut_type: detectSutType(root, pkg),
-    has_aqa: hasAqaDir(root),
+    has_aqa: fileExists(join(root, '.aqa')),
   };
-}
-
-function hasAqaDir(root: string): boolean {
-  try {
-    const entries = readdirSync(root);
-    return entries.includes('.aqa');
-  } catch {
-    return false;
-  }
 }

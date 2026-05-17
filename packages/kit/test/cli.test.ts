@@ -24,7 +24,7 @@ describe('aqa init', () => {
       'package.json': JSON.stringify({ name: 'demo', dependencies: { hono: '^4.0.0' } }),
       'bun.lock': '',
     });
-    const result = await runInit({ root });
+    const result = runInit({ root });
     const created = result.files.filter((f) => f.result === 'created').map((f) => f.path);
     assert.equal(created.length, 4);
     assert.ok(existsSync(join(root, '.aqa', 'project.yaml')));
@@ -38,7 +38,7 @@ describe('aqa init', () => {
       'package.json': '{}',
       '.aqa/project.yaml': 'schema_version: "1"\nname: existing\n',
     });
-    const result = await runInit({ root });
+    const result = runInit({ root });
     const skipped = result.files.find((f) => f.path.endsWith('project.yaml'));
     assert.equal(skipped?.result, 'skipped-exists');
   });
@@ -48,20 +48,20 @@ describe('aqa init', () => {
       'package.json': '{}',
       '.aqa/project.yaml': 'schema_version: "1"\nname: existing\n',
     });
-    const result = await runInit({ root, overwrite: true });
+    const result = runInit({ root, overwrite: true });
     const overwritten = result.files.find((f) => f.path.endsWith('project.yaml'));
     assert.equal(overwritten?.result, 'overwritten');
   });
 
   it('dry-run does not write to disk', async () => {
     const root = makeTempProject({ 'package.json': '{}' });
-    await runInit({ root, dryRun: true });
+    runInit({ root, dryRun: true });
     assert.equal(existsSync(join(root, '.aqa', 'project.yaml')), false);
   });
 
   it('init output validates against @aqa/schemas', async () => {
     const root = makeTempProject({ 'package.json': JSON.stringify({ name: 'demo' }) });
-    await runInit({ root });
+    runInit({ root });
     const result = runValidate({ root });
     assert.equal(result.ok, true, `validation must pass, got: ${JSON.stringify(result.issues)}`);
     assert.equal(result.checked.length, 3);
@@ -69,7 +69,7 @@ describe('aqa init', () => {
 
   it('produces a profile.runtime that matches the project signals', async () => {
     const root = makeTempProject({ 'package.json': '{}', 'deno.json': '{}' });
-    const result = await runInit({ root });
+    const result = runInit({ root });
     assert.equal(result.profile.runtime, 'deno');
     const project = yamlParse(readFileSync(join(root, '.aqa', 'project.yaml'), 'utf8')) as {
       stack: { runtime: string };
@@ -87,15 +87,19 @@ describe('aqa doctor', () => {
     assert.equal(aqaCheck?.status, 'warn');
   });
 
-  it('worst=pass after a clean aqa init', async () => {
+  it('worst=pass after a clean aqa init with full project signals', () => {
     const root = makeTempProject({
       'package.json': JSON.stringify({ name: 'demo', devDependencies: { vitest: '^1.0.0' } }),
       'bun.lock': '',
       'AGENTS.md': '# agents',
     });
-    await runInit({ root });
+    runInit({ root });
     const d = runDoctor({ root });
-    assert.notEqual(d.worst, 'fail', `doctor must not fail, got: ${JSON.stringify(d.checks)}`);
+    assert.equal(
+      d.worst,
+      'pass',
+      `doctor worst must be 'pass' on a fully-equipped fixture, got: ${JSON.stringify(d.checks)}`,
+    );
   });
 
   it('flags aqa-validate=fail when .aqa is malformed', async () => {
@@ -127,7 +131,7 @@ describe('aqa validate', () => {
 
   it('passes on the canonical aqa init output', async () => {
     const root = makeTempProject({ 'package.json': JSON.stringify({ name: 'demo' }) });
-    await runInit({ root });
+    runInit({ root });
     const r = runValidate({ root });
     assert.equal(r.ok, true);
   });

@@ -86,14 +86,15 @@ export function runDoctor(opts: DoctorOptions): DoctorResult {
     }
   }
 
+  const docsPresent = agentFilesPresent(opts.root);
   checks.push({
     id: 'docs',
     title: 'AGENTS.md / CLAUDE.md / GEMINI.md / copilot-instructions present',
-    status: agentFilesPresent(opts.root) ? 'pass' : 'warn',
-    detail: agentFilesPresent(opts.root)
+    status: docsPresent ? 'pass' : 'warn',
+    detail: docsPresent
       ? 'at least one agent instruction file found'
       : 'no agent instruction files',
-    suggestion: agentFilesPresent(opts.root)
+    suggestion: docsPresent
       ? undefined
       : 'Run `aqa install-agent-files` (Task 4) to scaffold agent-specific instructions.',
   });
