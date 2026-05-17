@@ -55,6 +55,16 @@
         "@aqa/schemas": "workspace:*",
       },
     },
+    "packages/compliance": {
+      "name": "@aqa/compliance",
+      "version": "0.0.1",
+      "bin": {
+        "aqa-audit-verify": "./dist/bin/audit-verify.js",
+      },
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packages/cost": {
       "name": "@aqa/cost",
       "version": "0.0.1",
@@ -183,6 +193,8 @@
     "@aqa/auth": ["@aqa/auth@workspace:packages/auth"],
 
     "@aqa/clustering": ["@aqa/clustering@workspace:packages/clustering"],
+
+    "@aqa/compliance": ["@aqa/compliance@workspace:packages/compliance"],
 
     "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
 

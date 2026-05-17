@@ -1,0 +1,21 @@
+{
+  "name": "@aqa/compliance",
+  "version": "0.0.1",
+  "description": "SOC2/ISO controls mapping + hash-chain audit verification for agentic-qa-kit.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "bin": { "aqa-audit-verify": "./dist/bin/audit-verify.js" },
+  "files": ["dist", "README.md", "controls"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/compliance.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": { "@aqa/schemas": "workspace:*" },
+  "publishConfig": { "access": "public" }
+}
