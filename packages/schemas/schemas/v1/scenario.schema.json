@@ -1,0 +1,202 @@
+{
+  "$ref": "#/definitions/scenario",
+  "definitions": {
+    "scenario": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 200
+        },
+        "risk_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "minItems": 1
+        },
+        "invariant_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "default": []
+        },
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "shell",
+                  "sql",
+                  "playwright",
+                  "llm_eval",
+                  "fs",
+                  "custom"
+                ]
+              },
+              "with": {
+                "type": "object",
+                "additionalProperties": {},
+                "default": {}
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "maximum": 600000,
+                "default": 30000
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "oracles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "http_status",
+                  "response_contains",
+                  "response_not_contains",
+                  "json_schema",
+                  "db_query",
+                  "semantic_llm_judge",
+                  "custom"
+                ]
+              },
+              "with": {
+                "type": "object",
+                "additionalProperties": {},
+                "default": {}
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 1
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "cleanup": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "shell",
+                  "sql",
+                  "playwright",
+                  "llm_eval",
+                  "fs",
+                  "custom"
+                ]
+              },
+              "with": {
+                "type": "object",
+                "additionalProperties": {},
+                "default": {}
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "maximum": 600000,
+                "default": 30000
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "seed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "title",
+        "risk_refs",
+        "steps",
+        "oracles"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

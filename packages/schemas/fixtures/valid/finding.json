@@ -1,0 +1,35 @@
+{
+  "schema_version": "1",
+  "id": "AQA-2026-0001",
+  "run_id": "run-2026-05-17-001",
+  "scenario_id": "scn-token-replay",
+  "risk_id": "r-auth-bypass",
+  "title": "Old token still valid 120s after rotation",
+  "summary": "Old token continues to authorize /me requests for at least 120 seconds after a successful rotation.",
+  "severity": "critical",
+  "status": "verified",
+  "execution_mode": "orchestrator",
+  "discovered_at": "2026-05-17T10:30:00Z",
+  "confidence": 0.95,
+  "confidence_components": {
+    "oracle_agreement": 1,
+    "replay_success_rate": 1
+  },
+  "reproducibility": {
+    "bug_level": {
+      "deterministic": true,
+      "attempts": 5,
+      "successes": 5,
+      "artifact_path": "replay/repro.sh"
+    },
+    "scenario_level": {
+      "deterministic": true,
+      "attempts": 5,
+      "successes": 5,
+      "seed": "0xdeadbeef"
+    }
+  },
+  "verification_floor": "bug_level",
+  "evidence": ["replay/curl-trace.txt", "logs/probe-use-old.log"],
+  "tags": ["auth", "p0"]
+}

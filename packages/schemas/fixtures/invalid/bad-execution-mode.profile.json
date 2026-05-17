@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "name": "release-gate",
+  "execution_mode": "magic",
+  "llm_budget_usd": -10
+}

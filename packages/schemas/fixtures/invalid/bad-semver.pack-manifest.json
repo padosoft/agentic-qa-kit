@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "name": "pack-broken",
+  "version": "not-semver",
+  "description": "Manifest with invalid semver.",
+  "author": "Padosoft"
+}

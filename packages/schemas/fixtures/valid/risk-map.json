@@ -1,0 +1,32 @@
+{
+  "schema_version": "1",
+  "project": "demo-api",
+  "generated_at": "2026-05-17T10:00:00Z",
+  "risks": [
+    {
+      "id": "r-auth-bypass",
+      "category": "auth",
+      "title": "Token replay after rotation",
+      "severity": "critical",
+      "likelihood": "possible",
+      "invariants": [
+        {
+          "id": "inv-token-rotation",
+          "statement": "Old tokens stop working within 60s of rotation"
+        }
+      ],
+      "owners": ["security"],
+      "tags": ["owasp:a07"]
+    },
+    {
+      "id": "r-pagination",
+      "category": "data",
+      "title": "Pagination cursor leaks rows from other tenants",
+      "severity": "high",
+      "likelihood": "unlikely",
+      "invariants": [
+        { "id": "inv-tenant-isolation", "statement": "Cursor never crosses tenant boundary" }
+      ]
+    }
+  ]
+}

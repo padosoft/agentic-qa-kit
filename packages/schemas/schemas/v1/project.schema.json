@@ -1,0 +1,118 @@
+{
+  "$ref": "#/definitions/project",
+  "definitions": {
+    "project": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "stack": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "string",
+              "enum": [
+                "bun",
+                "node",
+                "deno",
+                "python",
+                "jvm",
+                "go",
+                "ruby",
+                "php",
+                "dotnet"
+              ]
+            },
+            "framework": {
+              "type": "string"
+            },
+            "db": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "test_runner": {
+              "type": "string"
+            },
+            "package_manager": {
+              "type": "string",
+              "enum": [
+                "bun",
+                "npm",
+                "pnpm",
+                "yarn",
+                "pip",
+                "poetry",
+                "maven",
+                "gradle"
+              ]
+            }
+          },
+          "required": [
+            "runtime"
+          ],
+          "additionalProperties": false
+        },
+        "sut": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "api",
+                "web",
+                "cli",
+                "lib",
+                "agent",
+                "pipeline"
+              ]
+            },
+            "base_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "repo": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "stack",
+        "sut"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

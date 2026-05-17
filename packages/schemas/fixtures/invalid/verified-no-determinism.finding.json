@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "AQA-2026-0099",
+  "run_id": "run-1",
+  "scenario_id": "scn-1",
+  "risk_id": "r-1",
+  "title": "claimed-verified but no deterministic floor",
+  "summary": "Should be rejected: verified status requires deterministic verification floor.",
+  "severity": "high",
+  "status": "verified",
+  "execution_mode": "orchestrator",
+  "discovered_at": "2026-05-17T10:30:00Z",
+  "confidence": 0.7,
+  "verification_floor": "bug_level",
+  "reproducibility": { "bug_level": { "deterministic": false, "attempts": 3, "successes": 1 } }
+}

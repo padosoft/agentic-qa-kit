@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "id": "run-2026-05-17-001",
+  "started_at": "2026-05-17T10:00:00Z",
+  "finished_at": "2026-05-17T10:30:00Z",
+  "state": "succeeded",
+  "project": "demo-api",
+  "profile": "release-gate",
+  "execution_mode": "orchestrator",
+  "config_snapshot": {
+    "profile": "release-gate",
+    "execution_mode": "orchestrator",
+    "packs": ["core", "api", "security"],
+    "llm": {
+      "provider": "anthropic",
+      "model_id": "claude-opus-4-7",
+      "api_version": "2025-10-01"
+    },
+    "config_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "totals": {
+    "scenarios": 12,
+    "findings": 3,
+    "probes": 84,
+    "llm_tokens_in": 120000,
+    "llm_tokens_out": 8500,
+    "llm_cost_usd": 1.23
+  },
+  "artifact_dir": ".aqa/runs/run-2026-05-17-001"
+}

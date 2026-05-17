@@ -1,0 +1,5 @@
+{
+  "schema_version": "1",
+  "name": "demo-api",
+  "sut": { "type": "api" }
+}

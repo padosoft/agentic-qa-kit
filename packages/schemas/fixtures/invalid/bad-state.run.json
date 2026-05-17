@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "run-x",
+  "started_at": "2026-05-17T10:00:00Z",
+  "state": "exploded",
+  "project": "demo-api",
+  "profile": "smoke",
+  "execution_mode": "orchestrator",
+  "config_snapshot": {
+    "profile": "smoke",
+    "execution_mode": "orchestrator",
+    "config_hash": "deadbeef"
+  },
+  "totals": {},
+  "artifact_dir": ".aqa/runs/run-x"
+}

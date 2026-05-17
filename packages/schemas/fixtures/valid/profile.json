@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "name": "release-gate",
+  "execution_mode": "orchestrator",
+  "llm_usage": ["scenario_generation"],
+  "llm_budget_usd": 50,
+  "budget_minutes": 30,
+  "parallelism": 4,
+  "require_deterministic_replay": true,
+  "packs": ["core", "api", "security"],
+  "tags": ["ci", "release"]
+}

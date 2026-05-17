@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "name": "pack-api-core",
+  "version": "0.1.0",
+  "description": "Baseline API testing pack: auth, idempotency, pagination, rate-limit, contract.",
+  "author": "Padosoft",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/padosoft/agentic-qa-kit",
+  "applies_when": {
+    "sut_type": ["api"],
+    "tags_any": ["http", "rest"]
+  },
+  "templates": ["templates/scenarios/auth.yaml.eta"],
+  "scenarios": ["scenarios/idempotency.yaml"],
+  "risks": ["risks/auth.yaml"],
+  "oracles": ["oracles/http_status.yaml"],
+  "probes": ["probes/invalid_payload.yaml"]
+}
