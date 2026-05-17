@@ -1,196 +1,110 @@
-# Getting started — junior-proof onboarding
+# Getting started — 15 minutes
 
-> **Read this first if you've never touched the project.** You will be productive in 15 minutes. No prior knowledge of Bun, agentic QA, or LLM agents is assumed.
->
-> **This is a skeleton** at v0.0.1. Task 8 will turn it into a guided tour with screenshots, troubleshooting, and OS-specific notes. The structure below is final — the content of each section will grow.
+> The fastest path from a fresh checkout to a first agentic QA run.
+> Audience: a junior contributor who has never seen the kit before.
 
-## TOC
+## 0. Pre-requisites (2 min)
 
-1. [Who is this for](#1-who-is-this-for)
-2. [What you will achieve](#2-what-you-will-achieve)
-3. [Prerequisites](#3-prerequisites)
-4. [Install Bun (5 min)](#4-install-bun)
-5. [Install the kit (1 min)](#5-install-the-kit)
-6. [Initialize a project (2 min)](#6-initialize-a-project)
-7. [Run your first profile (5 min)](#7-run-your-first-profile)
-8. [Open the report](#8-open-the-report)
-9. [What's next](#9-whats-next)
-10. [Troubleshooting](#10-troubleshooting)
+| Tool         | Version       | Check command                |
+|--------------|---------------|------------------------------|
+| Bun          | ≥ 1.3.0       | `bun --version`              |
+| Node         | ≥ 22 LTS      | `node --version`             |
+| Git          | any modern    | `git --version`              |
+| GitHub CLI   | optional      | `gh --version`               |
 
----
+> Windows users: PowerShell 7+ is the supported shell. WSL also works.
 
-## 1. Who is this for
-
-You are a developer (or junior, or QA, or even non-technical curious) who wants to make a coding agent — Claude Code, Codex, Gemini CLI, GitHub Copilot — behave like a real QA engineer instead of a code-writer. You have not used `agentic-qa-kit` before. You may or may not know what "agentic QA" means. That's fine.
-
-## 2. What you will achieve
-
-In 15 minutes you will:
-
-- Install Bun (a JavaScript runtime, faster Node alternative).
-- Install `agentic-qa-kit` in a sample project (or your own).
-- Generate the AQA workspace (`.aqa/` folder).
-- Run the smoke profile — the agent will analyze the project, find risks, propose scenarios, and execute a fast check.
-- See a report with findings (real bugs or false positives, both useful).
-
-By the end you will understand the loop: **risk → invariant → scenario → probe → oracle → finding → replay**. Each of those words is defined in `docs/ecosystem-explained.md`.
-
-## 3. Prerequisites
-
-| Requirement | Why |
-|---|---|
-| A computer (Windows 10+, macOS 13+, Linux) | Run the tools |
-| Internet connection | Install Bun and dependencies |
-| A code editor (VS Code recommended) | Edit `.aqa/` files |
-| A sample project OR your own project | Target of the QA |
-| (Optional) Claude Code, Codex CLI, Gemini CLI, or GitHub Copilot CLI | To use agent mode |
-
-## 4. Install Bun
-
-> **What is Bun?** A modern JavaScript runtime, like Node but faster and bundled. We use it because `agentic-qa-kit` runs in seconds instead of minutes.
-
-### Windows (PowerShell)
-
-```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
-```
-
-After install, close and reopen PowerShell. Verify:
-
-```powershell
-bun --version
-```
-
-You should see `1.1.x` or newer.
-
-### macOS / Linux
+## 1. Install the kit in your project (3 min)
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+cd path/to/your/project
+bun add -D @aqa/kit @aqa/schemas
 ```
 
-Restart your terminal. Verify:
+> Until v0.1.0 publishes to npm, consume the kit via this monorepo's workspace:
+> `"@aqa/kit": "workspace:*"`.
 
-```bash
-bun --version
-```
-
-### Already have Node 22 LTS?
-
-You can use Node 22 instead. The kit detects your runtime and behaves the same. Stick with Node if your team has a Node-only policy.
-
-### Stuck? See [§10 Troubleshooting](#10-troubleshooting).
-
-## 5. Install the kit
-
-In your project root:
-
-```bash
-bun add -d agentic-qa-kit
-```
-
-Verify:
-
-```bash
-bunx aqa --version
-```
-
-You should see the kit version.
-
-## 6. Initialize a project
+## 2. Bootstrap `.aqa/` (1 min)
 
 ```bash
 bunx aqa init
 ```
 
-This will:
+This writes four files (non-destructive — existing files are skipped):
 
-1. Detect your stack (Bun? Node? FastAPI? Next.js? has LLM? has DB?).
-2. Create `.aqa/` with `project.yaml`, `testing.md`, `risk-map.yaml`, `profiles.yaml`.
-3. Ask which agent targets you want to install files for (Claude / Codex / Gemini / Copilot — you can pick any subset, or none).
-4. Print a summary of what was created.
+```
+.aqa/
+├── project.yaml      # project name, runtime, framework, DB, SUT type
+├── risk-map.yaml     # one starter risk; replace with the ones that matter
+├── profiles.yaml     # `smoke` and `release-gate` profiles, both orchestrator-mode
+└── testing.md        # human-readable rationale for the QA conventions
+```
 
-Open `.aqa/testing.md`. This is your **agentic QA charter** — written for the agent, so it knows how to behave on this project.
+Open each file and tailor them to your SUT. **The risk map is the heart of
+the kit — generic risks produce generic findings.**
 
-## 7. Run your first profile
+## 3. Verify the install (1 min)
 
 ```bash
-bunx aqa run --profile smoke
+bunx aqa doctor      # ✓/⚠/✗ checklist
+bunx aqa validate    # schema-check .aqa/* against @aqa/schemas (CI-safe)
 ```
 
-The smoke profile is the fast, safe, non-destructive QA pass. It executes ~10 scenarios in under 10 minutes. The agent (or the orchestrator, depending on profile mode) will:
+## 4. Install agent instruction files (2 min)
 
-- Read your `risk-map.yaml`
-- Pick the top scenarios
-- Run probes against your app (which you should have started: `bun run dev` or equivalent)
-- Evaluate oracles
-- Write findings to `.aqa/runs/<timestamp>/findings.jsonl`
+> `aqa install-agent-files` lands with the Task 4 follow-up. Until then, copy
+> the templates from `packages/adapters/src/*.ts` into your repo manually
+> (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`).
 
-## 8. Open the report
+## 5. Define one real risk (3 min)
 
-```bash
-bunx aqa report
+Replace the placeholder in `.aqa/risk-map.yaml`:
+
+```yaml
+- id: r-token-replay
+  category: auth
+  title: Tokens remain valid past rotation
+  severity: critical
+  likelihood: possible
+  invariants:
+    - id: inv-token-rotation
+      statement: Old tokens become invalid within 60 seconds of rotation.
 ```
 
-This generates `.aqa/runs/<timestamp>/summary.md` and prints a CLI summary:
+A good invariant is **one sentence**, **falsifiable**, and **independent of
+implementation**.
 
-```
-AQA Run summary
----
-Profile: smoke
-Scenarios: 10 (8 passed, 2 failed)
-Findings: 2 (1 P1, 1 P3)
-Cost (LLM): $0.42
-Duration: 4m 12s
+## 6. Run the smoke profile (3 min)
 
-Top findings:
-- AQA-2026-0001 [P1] Cross-tenant data leak (verified, replay available)
-- AQA-2026-0002 [P3] Missing rate limit on /api/search
+> Full `aqa run --profile smoke` lands with the Task 5 HTTP-probe-driver
+> follow-up. Until then, exercise the runner programmatically:
 
-See .aqa/runs/2026-05-17T10-00-00Z/summary.md for details.
-```
+```ts
+import { runScenario, EventChainWriter } from '@aqa/runner';
 
-For a finding that interests you:
-
-```bash
-bunx aqa replay AQA-2026-0001
+const events = new EventChainWriter('.aqa/runs/demo/events.jsonl');
+const result = await runScenario({
+  scenario, run_id: 'demo',
+  probeRunner: async (p) => ({ probe_id: p.id, status: 401 }), // mocked
+  events,
+});
+console.info(result.finding ? 'FAIL' : 'PASS');
 ```
 
-This will re-run the bug reproduction (curl, Playwright trace, or shell script depending on type) and report whether it still reproduces.
+The runner appends a hash-chained event log under `.aqa/runs/demo/` and emits
+a Finding when an oracle fails. That Finding is the smallest unit your CI gate
+will fail on.
 
-## 9. What's next
+## Where to go next
 
-- Read `docs/ecosystem-explained.md` to understand the methodology: risks, invariants, probes, oracles, replay levels.
-- Read `docs/RULES.md` if you want to contribute.
-- Try generating an agent-specific install:
+- **`docs/methodology/agentic-qa.md`** — the Risk × Invariant × Probe × Oracle
+  methodology, in long form.
+- **`docs/ecosystem-explained.md`** — every concept in the kit, with a worked
+  example.
+- **`docs/architecture/reference.md`** — the component map and data flow.
+- **`docs/design/admin-panel-template.md`** — the full admin UI spec.
+- **`docs/RULES.md`** — the hard rules every contribution must obey.
+- **`docs/adr/`** — architecture decisions (start with ADR-001).
 
-  ```bash
-  bunx aqa install-agent-files --targets claude,gemini
-  ```
-
-  Then open the project in Claude Code or Gemini CLI and try:
-
-  ```text
-  /aqa-riskmap
-  ```
-
-  The agent will use the installed skill to update your risk map.
-- Open the admin panel (when available, post-v0.3):
-
-  ```bash
-  bunx aqa serve &
-  bunx aqa-admin
-  ```
-
-## 10. Troubleshooting
-
-> Full troubleshooting matrix per OS will land in v0.1.0 (Task 8). For now:
-
-- **`bunx: command not found`** → Bun is not in PATH. Restart your terminal. On Windows, check that `C:\Users\<you>\.bun\bin` is in `PATH`.
-- **`aqa init` fails with "permission denied"** → Run from a directory you own; do not run from `/` or `C:\`.
-- **No findings on first run** → Normal if the project is small or the risk map is empty. Try `bunx aqa generate --packs api,llm-agent` to populate scenarios.
-- **`gh` commands fail** → You need GitHub CLI authenticated: `gh auth login`. Only needed if you want to use Copilot review automation.
-- **LLM calls fail with auth** → Set the env var your agent needs (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, etc.). The kit never bundles API keys.
-- **Anything else** → Open an issue with the bug template, paste the full output redacted of secrets.
-
-Found a doc gap? PRs welcome — please update `docs/LESSON.md` with what was unclear and how you resolved it.
+When you hit something the docs don't cover, file an issue. The kit is
+junior-friendly **on purpose**.
