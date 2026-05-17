@@ -199,20 +199,16 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: |
-          if [ -d packages/admin ]; then
-            bunx playwright install --with-deps chromium
-          else
-            echo "No admin package yet — skipping browser install."
-          fi
+        if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
+        run: bunx playwright install --with-deps chromium
 
       - name: Run Playwright
-        run: |
-          if [ -d packages/admin ]; then
-            bunx playwright test --reporter=line
-          else
-            echo "No admin package yet — gate placeholder."
-          fi
+        if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
+        run: bunx playwright test --reporter=line
+
+      - name: Skip notice
+        if: ${{ hashFiles('packages/admin/playwright.config.*') == '' }}
+        run: echo "No playwright config under packages/admin — gate placeholder."
 
       - name: Upload Playwright artifacts
         if: failure()

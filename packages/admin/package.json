@@ -1,0 +1,28 @@
+{
+  "name": "@aqa/admin",
+  "version": "0.0.1",
+  "description": "Admin panel for agentic-qa-kit — read-only viewer over .aqa/runs/*.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/router.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo','node_modules/.vite']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": {
+    "@aqa/reporter": "workspace:*",
+    "@aqa/schemas": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.1"
+  }
+}
