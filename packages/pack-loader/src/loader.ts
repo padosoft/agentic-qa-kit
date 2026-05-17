@@ -54,8 +54,9 @@ export function loadPack(packRoot: string, opts: LoadPackOptions = {}): LoadedPa
 }
 
 /**
- * Load every pack found one level below `root`. Each direct subdirectory that
- * contains a `pack.yaml` is loaded; everything else is skipped silently.
+ * Load every pack found one level below `root`. A direct subdirectory is
+ * considered a pack when it contains either `pack.yaml` (preferred) or
+ * `pack.yml`; everything else is skipped silently.
  */
 export function loadPacks(root: string, opts: LoadPackOptions = {}): LoadedPack[] {
   if (!existsSync(root)) return [];

@@ -1,5 +1,5 @@
 schema_version: "1"
-project: PLACEHOLDER
+project: pack-core
 risks:
   - id: r-uncaught-exceptions
     category: availability

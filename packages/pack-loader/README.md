@@ -5,7 +5,7 @@ Discovery + validation for `agentic-qa-kit` packs.
 ```ts
 import { loadPacks, appliesWhen } from '@aqa/pack-loader';
 
-const packs = loadPacks('./packs');                       // every pack under ./packs/*/pack.yaml
+const packs = loadPacks('./packs');                       // every pack under ./packs/*/pack.{yaml,yml}
 const installed = packs.filter((p) => appliesWhen(p.manifest, {
   runtime: 'bun', framework: 'hono', db: ['postgres'], sut_type: 'api', tags: ['ci'],
 }));

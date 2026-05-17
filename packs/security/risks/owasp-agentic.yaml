@@ -1,5 +1,5 @@
 schema_version: "1"
-project: PLACEHOLDER
+project: pack-security
 risks:
   - id: r-agentic-prompt-injection
     category: agentic
