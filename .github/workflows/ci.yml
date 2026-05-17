@@ -53,6 +53,13 @@ jobs:
       - name: Lint (Biome)
         run: bun run lint
 
+      - name: Build dependencies first
+        # Workspace packages reference each other via their published entry
+        # (dist/index.{js,d.ts}). Typecheck of a downstream package therefore
+        # needs the upstream dist to exist. Run a full build before typecheck.
+        if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
+        run: bun run build
+
       - name: Typecheck (all workspaces)
         run: bun run typecheck
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
