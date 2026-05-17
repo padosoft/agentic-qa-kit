@@ -21,6 +21,9 @@ if (args.length === 0) {
   process.exit(2);
 }
 
+// Probe the canonical `bun` binary (same as scripts/run-workspace-script.mjs), then
+// derive the executor name. A system can have `bun` without `bunx` or vice versa on
+// custom installs; agreeing on the canonical binary keeps the two scripts in sync.
 function pickRunner() {
   const raw = process.env.AQA_PKG_RUNNER;
   if (raw !== undefined) {
@@ -30,7 +33,7 @@ function pickRunner() {
     console.error(`AQA_PKG_RUNNER must be "bun" or "npm" (got "${raw}")`);
     process.exit(2);
   }
-  const probe = spawnSync(IS_WIN ? 'where' : 'which', ['bunx'], {
+  const probe = spawnSync(IS_WIN ? 'where' : 'which', ['bun'], {
     stdio: 'ignore',
     shell: IS_WIN,
   });

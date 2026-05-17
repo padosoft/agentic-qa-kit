@@ -23,6 +23,10 @@
 
 ## 2026-05-17
 
+- **PR #1 Copilot fifth-pass review (3 comments) — addressed; this iteration is the smallest and the most subtle:**
+  - **Duplicate workspace entries** (e.g. `["packages/*", "packages/foo"]`) would run the script twice on the same package. Added `seenDirs` Set dedup keyed by absolute path before `matched.push`.
+  - **Negation patterns (`!path`) have semantic meaning in Bun/npm workspaces** — they EXCLUDE entries from earlier patterns. Silently warning would produce wrong execution lists (`["packages/*", "!packages/legacy"]` would still include `legacy`). Now fail fast (`exit 2`) with a clear error.
+  - **`run-tool.mjs` and `run-workspace-script.mjs` must probe the SAME canonical binary** to stay in sync. Standardized both on probing `bun` (then derive `bunx` from it for tool invocation). A user with `bun` but no `bunx` (or vice versa) would otherwise see the two scripts disagree.
 - **PR #1 Copilot fourth-pass review (11 comments) — addressed:**
   - **Windows: `bun.cmd` shims need `shell: true` even when probing succeeded.** Probe (`where`) uses shell; the actual `spawnSync(runner, ...)` must use it too on Windows, otherwise `.cmd`/`.ps1` shims fail with ENOENT.
   - **Signal termination should propagate as `128 + signo`** (POSIX convention) — never collapse to `1`. Added `SIGNAL_TO_EXIT(signal)` helper and an explicit `r.signal` check that aborts the loop (don't run more workspaces after Ctrl-C).

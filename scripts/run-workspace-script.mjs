@@ -108,19 +108,38 @@ function collectPackagesUnder(baseAbs) {
   return out;
 }
 
+// Negation patterns (`!path`) have semantic meaning in workspaces (exclude entries
+// matched by earlier patterns). This minimal runner does not support them — silently
+// skipping would produce wrong execution lists. Fail fast instead.
+for (const pattern of workspaces) {
+  if (pattern.startsWith('!')) {
+    console.error(
+      `[run-workspace-script] negation workspace pattern "${pattern}" is not supported by this minimal runner. Workspaces like ["packages/*", "!packages/legacy"] would silently include "legacy" — refusing to proceed. Either drop the negation or replace this script with a real glob (e.g. fast-glob/tinyglobby).`,
+    );
+    process.exit(2);
+  }
+}
+
 const matched = [];
+const seenDirs = new Set();
+function tryAdd(entry) {
+  if (seenDirs.has(entry.dir)) return;
+  seenDirs.add(entry.dir);
+  matched.push(entry);
+}
+
 for (const pattern of workspaces) {
   // Supported: "<dir>", "<dir>/*", and bare "*".
   if (pattern === '*') {
-    matched.push(...collectPackagesUnder(root));
+    for (const e of collectPackagesUnder(root)) tryAdd(e);
   } else if (pattern.endsWith('/*')) {
     const base = pattern.slice(0, -2);
-    matched.push(...collectPackagesUnder(join(root, base)));
-  } else if (!pattern.includes('*') && !pattern.includes('{') && !pattern.includes('!')) {
+    for (const e of collectPackagesUnder(join(root, base))) tryAdd(e);
+  } else if (!pattern.includes('*') && !pattern.includes('{')) {
     const dirAbs = join(root, pattern);
     const pkgPath = join(dirAbs, 'package.json');
     if (existsSync(pkgPath)) {
-      matched.push({ dir: dirAbs, pkgPath, pkg: loadPkg(pkgPath) });
+      tryAdd({ dir: dirAbs, pkgPath, pkg: loadPkg(pkgPath) });
     }
   } else {
     console.warn(
