@@ -34,6 +34,13 @@
         "vite": "^6.0.1",
       },
     },
+    "packages/auth": {
+      "name": "@aqa/auth",
+      "version": "0.0.1",
+      "dependencies": {
+        "zod": "^3.25.28",
+      },
+    },
     "packages/cost": {
       "name": "@aqa/cost",
       "version": "0.0.1",
@@ -53,12 +60,23 @@
         "yaml": "^2.6.0",
       },
     },
+    "packages/llm-adapters": {
+      "name": "@aqa/llm-adapters",
+      "version": "0.0.1",
+    },
     "packages/pack-loader": {
       "name": "@aqa/pack-loader",
       "version": "0.0.1",
       "dependencies": {
         "@aqa/schemas": "workspace:*",
         "yaml": "^2.6.0",
+      },
+    },
+    "packages/pack-scanner": {
+      "name": "@aqa/pack-scanner",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
       },
     },
     "packages/reporter": {
@@ -89,6 +107,13 @@
         "zod-to-json-schema": "^3.23.5",
       },
     },
+    "packages/store": {
+      "name": "@aqa/store",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packs/api-core": {
       "name": "@aqa/pack-api-core",
       "version": "0.1.0",
@@ -115,9 +140,13 @@
 
     "@aqa/admin": ["@aqa/admin@workspace:packages/admin"],
 
+    "@aqa/auth": ["@aqa/auth@workspace:packages/auth"],
+
     "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
 
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
+
+    "@aqa/llm-adapters": ["@aqa/llm-adapters@workspace:packages/llm-adapters"],
 
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
 
@@ -126,6 +155,8 @@
     "@aqa/pack-llm-agent": ["@aqa/pack-llm-agent@workspace:packs/llm-agent"],
 
     "@aqa/pack-loader": ["@aqa/pack-loader@workspace:packages/pack-loader"],
+
+    "@aqa/pack-scanner": ["@aqa/pack-scanner@workspace:packages/pack-scanner"],
 
     "@aqa/pack-security": ["@aqa/pack-security@workspace:packs/security"],
 
@@ -138,6 +169,8 @@
     "@aqa/sandbox": ["@aqa/sandbox@workspace:packages/sandbox"],
 
     "@aqa/schemas": ["@aqa/schemas@workspace:packages/schemas"],
+
+    "@aqa/store": ["@aqa/store@workspace:packages/store"],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
