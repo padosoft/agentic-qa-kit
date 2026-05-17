@@ -53,7 +53,7 @@ Out of scope (file as regular issues):
 ## Supply chain
 
 - Pack signing (Sigstore) becomes mandatory in v0.3 (ADR-007). Until then, treat community packs as untrusted code.
-- Dependencies scanned by Dependabot / Renovate plus `bun audit` (Bun ≥ 1.3 — this matches the `engines.bun` floor declared in `package.json`) or `npm audit` for Node-only contributors.
+- Dependencies scanned by Dependabot / Renovate plus `bun audit` or `npm audit`. Our minimum supported Bun version (`engines.bun` in `package.json`) is the floor; `bun audit` is available throughout that range.
 
 ## Compliance roadmap
 

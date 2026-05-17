@@ -67,9 +67,10 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 
 ## Quick start (junior-friendly)
 
-> **Heads-up:** the CLI commands below (`aqa init`, `aqa run`, `aqa replay`, etc.) ship in `v0.1.0`. The repo is currently in `v0.0.x` bootstrap — only the governance and scaffolding are in place; the `aqa` binary is not published yet. Use this section as a preview of the v0.1.0 user experience.
->
-> Assumes zero prior knowledge of Bun or AQA. Detailed walk-through in [`docs/getting-started.md`](docs/getting-started.md).
+> **Status note:** this section is a **preview of the v0.1.0 experience**. The `aqa` binary, the `agentic-qa-kit` npm package, and the commands below (`aqa init`, `aqa run`, `aqa replay`, `aqa install-agent-files`, etc.) are not yet published — the repo is in `v0.0.x` bootstrap and only governance + scaffolding are in place. Trying to `bun add -d agentic-qa-kit` today will fail. Detailed walk-through (also a preview) lives in [`docs/getting-started.md`](docs/getting-started.md).
+
+<details>
+<summary><strong>Preview the v0.1.0 quick start</strong> (click to expand)</summary>
 
 ### 1. Install Bun
 
@@ -132,6 +133,8 @@ bunx aqa replay AQA-2026-0001
 ```
 
 Re-runs the deterministic bug reproduction (curl / Playwright / SQL) and tells you if it still reproduces. If it doesn't, the bug is fixed — closes the loop.
+
+</details>
 
 ## The mental model in 7 words
 

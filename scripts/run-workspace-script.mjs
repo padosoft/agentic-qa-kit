@@ -80,22 +80,21 @@ for (const pattern of workspaces) {
 }
 
 const GLOB_CHARS = /[*?[\]{}!]/;
+// Dotfile / dot-dir entries are already skipped by the generic `entry.startsWith('.')`
+// check inside collectPackagesUnder; this set covers only non-dot dirs that are also
+// not workspace candidates.
 const BARE_STAR_EXCLUDE = new Set([
   'node_modules',
   'dist',
   'build',
   'coverage',
-  '.git',
-  '.aqa',
-  '.cache',
-  '.next',
-  '.nuxt',
   'playwright-report',
   'test-results',
 ]);
 
-const { runner, exec: _exec } = pickRunner();
-const runArgs = [runner === 'bun' ? 'run' : 'run', '--silent', script];
+const { runner } = pickRunner();
+// Both bun and npm accept `run --silent <script>` with equivalent semantics for our use.
+const runArgs = ['run', '--silent', script];
 
 function loadPkg(pkgPath) {
   return JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -142,7 +141,13 @@ for (const pattern of workspaces) {
     for (const e of collectPackagesUnder(root, { excludeBareStar: true })) tryAdd(e);
   } else if (pattern.endsWith('/*')) {
     const base = pattern.slice(0, -2);
-    for (const e of collectPackagesUnder(join(root, base))) tryAdd(e);
+    if (base === '' || base === '.' || base === './') {
+      // `/*`, `./*`, etc. would scan the root and silently include node_modules/.git/etc.
+      // Treat it as the bare `*` form, with the safety filter.
+      for (const e of collectPackagesUnder(root, { excludeBareStar: true })) tryAdd(e);
+    } else {
+      for (const e of collectPackagesUnder(join(root, base))) tryAdd(e);
+    }
   } else if (!GLOB_CHARS.test(pattern)) {
     const dirAbs = join(root, pattern);
     const pkgPath = join(dirAbs, 'package.json');
