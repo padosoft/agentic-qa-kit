@@ -34,6 +34,13 @@
         "vite": "^6.0.1",
       },
     },
+    "packages/admin-core": {
+      "name": "@aqa/admin-core",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packages/auth": {
       "name": "@aqa/auth",
       "version": "0.0.1",
@@ -45,6 +52,14 @@
       "name": "@aqa/cost",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
+    "packages/generator": {
+      "name": "@aqa/generator",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/llm-adapters": "workspace:*",
         "@aqa/schemas": "workspace:*",
       },
     },
@@ -140,9 +155,13 @@
 
     "@aqa/admin": ["@aqa/admin@workspace:packages/admin"],
 
+    "@aqa/admin-core": ["@aqa/admin-core@workspace:packages/admin-core"],
+
     "@aqa/auth": ["@aqa/auth@workspace:packages/auth"],
 
     "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
+
+    "@aqa/generator": ["@aqa/generator@workspace:packages/generator"],
 
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
 
