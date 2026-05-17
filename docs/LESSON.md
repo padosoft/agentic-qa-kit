@@ -23,6 +23,10 @@
 
 ## 2026-05-17
 
+- **PR #1 Copilot sixth-pass review (3 comments) — addressed:**
+  - **Glob detection regex must cover all glob metachars**, not just `*` and `{`. `?`, `[`, `]`, `!` are equally valid globs and were silently classified as "literal directory" (then skipped because no dir matched). Replaced ad-hoc `includes` checks with a single regex `/[*?[\]{}!]/`.
+  - **`os.constants.signals[name]` gives Node's full signal→number map** (SIGKILL=9 → 137, SIGSEGV=11 → 139, SIGABRT=6 → 134, etc.). Better than a hand-maintained subset that loses diagnostic info on uncommon terminations.
+  - **`Array.isArray(workspaces)` is necessary but not sufficient** — validate every element is a string too, otherwise a nested object/array throws `pattern.startsWith is not a function` instead of producing a clear `[run-workspace-script]` diagnostic.
 - **PR #1 Copilot fifth-pass review (3 comments) — addressed; this iteration is the smallest and the most subtle:**
   - **Duplicate workspace entries** (e.g. `["packages/*", "packages/foo"]`) would run the script twice on the same package. Added `seenDirs` Set dedup keyed by absolute path before `matched.push`.
   - **Negation patterns (`!path`) have semantic meaning in Bun/npm workspaces** — they EXCLUDE entries from earlier patterns. Silently warning would produce wrong execution lists (`["packages/*", "!packages/legacy"]` would still include `legacy`). Now fail fast (`exit 2`) with a clear error.

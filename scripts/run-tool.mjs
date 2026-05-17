@@ -8,10 +8,11 @@
 // Usage: node scripts/run-tool.mjs <tool> [args...]
 
 import { spawnSync } from 'node:child_process';
+import { constants as osConstants } from 'node:os';
 
 const SIGNAL_TO_EXIT = (signal) => {
-  const map = { SIGHUP: 129, SIGINT: 130, SIGQUIT: 131, SIGTERM: 143 };
-  return map[signal] ?? 1;
+  const signo = osConstants.signals?.[signal];
+  return typeof signo === 'number' ? 128 + signo : 1;
 };
 const IS_WIN = process.platform === 'win32';
 

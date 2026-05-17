@@ -13,13 +13,15 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { constants as osConstants } from 'node:os';
 import { join } from 'node:path';
 
 const SIGNAL_TO_EXIT = (signal) => {
-  // POSIX convention: 128 + signal number. Node exposes only signal name; map the
-  // common cases. Default to 1 when the mapping is unknown.
-  const map = { SIGHUP: 129, SIGINT: 130, SIGQUIT: 131, SIGTERM: 143 };
-  return map[signal] ?? 1;
+  // POSIX convention: 128 + signal number. `os.constants.signals` covers any signal
+  // Node knows about (SIGKILL=9 → 137, SIGSEGV=11 → 139, SIGABRT=6 → 134, SIGPIPE=13
+  // → 141, etc.). Falls back to 1 if Node has no number for the name.
+  const signo = osConstants.signals?.[signal];
+  return typeof signo === 'number' ? 128 + signo : 1;
 };
 
 const IS_WIN = process.platform === 'win32';
@@ -108,6 +110,17 @@ function collectPackagesUnder(baseAbs) {
   return out;
 }
 
+// Validate each workspace entry is a string up front, so any later glob check fails
+// with a clear diagnostic instead of a generic `pattern.startsWith is not a function`.
+for (let i = 0; i < workspaces.length; i++) {
+  if (typeof workspaces[i] !== 'string') {
+    console.error(
+      `[run-workspace-script] workspaces[${i}] is not a string: ${JSON.stringify(workspaces[i])}. Each workspaces entry must be a glob pattern string.`,
+    );
+    process.exit(2);
+  }
+}
+
 // Negation patterns (`!path`) have semantic meaning in workspaces (exclude entries
 // matched by earlier patterns). This minimal runner does not support them — silently
 // skipping would produce wrong execution lists. Fail fast instead.
@@ -119,6 +132,8 @@ for (const pattern of workspaces) {
     process.exit(2);
   }
 }
+
+const GLOB_CHARS = /[*?[\]{}!]/;
 
 const matched = [];
 const seenDirs = new Set();
@@ -135,7 +150,7 @@ for (const pattern of workspaces) {
   } else if (pattern.endsWith('/*')) {
     const base = pattern.slice(0, -2);
     for (const e of collectPackagesUnder(join(root, base))) tryAdd(e);
-  } else if (!pattern.includes('*') && !pattern.includes('{')) {
+  } else if (!GLOB_CHARS.test(pattern)) {
     const dirAbs = join(root, pattern);
     const pkgPath = join(dirAbs, 'package.json');
     if (existsSync(pkgPath)) {
