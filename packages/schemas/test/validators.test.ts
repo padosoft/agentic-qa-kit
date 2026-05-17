@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   Event,
   Finding,
@@ -11,9 +13,10 @@ import {
   Run,
   SCHEMA_VERSION,
   Scenario,
-} from '../src/index.js';
+} from '../dist/index.js';
 
-const fixturesDir = join(import.meta.dir, '..', 'fixtures');
+const here = dirname(fileURLToPath(import.meta.url));
+const fixturesDir = join(here, '..', 'fixtures');
 
 const validators = {
   project: Project.Project,
@@ -27,8 +30,8 @@ const validators = {
 } as const;
 
 describe('schema version', () => {
-  test('SCHEMA_VERSION is "1"', () => {
-    expect(SCHEMA_VERSION).toBe('1');
+  it('SCHEMA_VERSION is "1"', () => {
+    assert.equal(SCHEMA_VERSION, '1');
   });
 });
 
@@ -37,19 +40,22 @@ describe('valid fixtures', () => {
   const files = readdirSync(validDir).filter((f) => f.endsWith('.json'));
   for (const file of files) {
     const name = file.replace(/\.json$/, '') as keyof typeof validators;
-    test(`${file} parses as ${name}`, () => {
+    it(`${file} parses as ${name}`, () => {
       const data = JSON.parse(readFileSync(join(validDir, file), 'utf8'));
       const validator = validators[name];
-      expect(validator).toBeDefined();
+      assert.ok(validator, `validator missing for ${name}`);
       const result = validator.safeParse(data);
-      if (!result.success) {
-        throw new Error(
-          `expected ${file} to be valid, got: ${JSON.stringify(result.error.issues, null, 2)}`,
-        );
-      }
+      assert.ok(
+        result.success,
+        `expected ${file} to be valid, got: ${JSON.stringify(
+          result.success ? null : result.error.issues,
+          null,
+          2,
+        )}`,
+      );
       const roundTrip = JSON.parse(JSON.stringify(result.data));
       const second = validator.safeParse(roundTrip);
-      expect(second.success).toBe(true);
+      assert.equal(second.success, true);
     });
   }
 });
@@ -59,12 +65,12 @@ describe('invalid fixtures', () => {
   const files = readdirSync(invalidDir).filter((f) => f.endsWith('.json'));
   for (const file of files) {
     const name = file.replace(/^[^.]+\./, '').replace(/\.json$/, '') as keyof typeof validators;
-    test(`${file} rejects on ${name}`, () => {
+    it(`${file} rejects on ${name}`, () => {
       const data = JSON.parse(readFileSync(join(invalidDir, file), 'utf8'));
       const validator = validators[name];
-      expect(validator).toBeDefined();
+      assert.ok(validator, `validator missing for ${name}`);
       const result = validator.safeParse(data);
-      expect(result.success).toBe(false);
+      assert.equal(result.success, false);
     });
   }
 });
@@ -85,30 +91,30 @@ describe('Finding.status=verified gating', () => {
     verification_floor: 'bug_level' as const,
   };
 
-  test('rejects status=verified without deterministic floor', () => {
+  it('rejects status=verified without deterministic floor', () => {
     const f = Finding.Finding.safeParse({
       ...baseValid,
       status: 'verified',
       reproducibility: { bug_level: { deterministic: false, attempts: 3, successes: 0 } },
     });
-    expect(f.success).toBe(false);
+    assert.equal(f.success, false);
   });
 
-  test('accepts status=verified with deterministic floor', () => {
+  it('accepts status=verified with deterministic floor', () => {
     const f = Finding.Finding.safeParse({
       ...baseValid,
       status: 'verified',
       reproducibility: { bug_level: { deterministic: true, attempts: 3, successes: 3 } },
     });
-    expect(f.success).toBe(true);
+    assert.equal(f.success, true);
   });
 
-  test('accepts status=draft regardless of floor', () => {
+  it('accepts status=draft regardless of floor', () => {
     const f = Finding.Finding.safeParse({
       ...baseValid,
       status: 'draft',
       reproducibility: {},
     });
-    expect(f.success).toBe(true);
+    assert.equal(f.success, true);
   });
 });

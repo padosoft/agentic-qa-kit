@@ -19,7 +19,8 @@
     "build": "tsc -p tsconfig.json && node scripts/emit-json-schemas.mjs",
     "build:schemas": "node scripts/emit-json-schemas.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/validators.test.ts",
     "clean": "node -e \"const fs=require('node:fs');for (const p of ['dist','.tsbuildinfo']) try{fs.rmSync(p,{recursive:true,force:true})}catch{}\""
   },
   "dependencies": {

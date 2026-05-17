@@ -103,6 +103,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run unit tests under Node
+        env:
+          AQA_PKG_RUNNER: npm
         run: |
           set -e
           if [ ! -d packages ]; then
@@ -113,7 +115,11 @@ jobs:
           for pkg in packages/*/; do
             if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then
               echo "::group::Testing $pkg under Node"
-              if ! (cd "$pkg" && node --experimental-vm-modules --test --test-reporter=spec); then
+              # Each package's "test" script is the canonical entrypoint: it builds the
+              # package (pretest hook) and runs node --test against the result. We run
+              # it via npm so the Node 22 fallback gate exercises Node-only execution
+              # of both the build and the tests — not Bun's runtime.
+              if ! (cd "$pkg" && npm run --silent test); then
                 echo "::error::Node tests failed in $pkg"
                 worst=1
               fi
