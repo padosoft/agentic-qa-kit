@@ -164,6 +164,51 @@ for (const pattern of workspaces) {
 // Deterministic order (alphabetical absolute dir) so CI logs are reproducible.
 matched.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
 
+// Topological order on intra-workspace deps. Some scripts (e.g. `build`,
+// `typecheck`) require upstream packages to have their dist/ ready before the
+// downstream package can compile. Without this, the alphabetical order would
+// build `@aqa/kit` before `@aqa/schemas` and break tsc resolution.
+const nameToEntry = new Map();
+for (const e of matched) {
+  if (e.pkg && typeof e.pkg.name === 'string') nameToEntry.set(e.pkg.name, e);
+}
+function intraDeps(pkg) {
+  const all = {
+    ...(pkg.dependencies ?? {}),
+    ...(pkg.devDependencies ?? {}),
+    ...(pkg.peerDependencies ?? {}),
+  };
+  const deps = [];
+  for (const name of Object.keys(all)) {
+    if (nameToEntry.has(name)) deps.push(name);
+  }
+  return deps;
+}
+const visited = new Set();
+const visiting = new Set();
+const sorted = [];
+function visit(entry) {
+  if (!entry || !entry.pkg) return;
+  const name = entry.pkg.name ?? entry.dir;
+  if (visited.has(name)) return;
+  if (visiting.has(name)) {
+    // Cycle detected — fall back to the current alphabetical order for the
+    // remaining nodes; surface a warning so it can be investigated.
+    console.warn(
+      `[run-workspace-script] WARN: dependency cycle involves "${name}"; running in arrival order from here.`,
+    );
+    return;
+  }
+  visiting.add(name);
+  for (const depName of intraDeps(entry.pkg)) visit(nameToEntry.get(depName));
+  visiting.delete(name);
+  visited.add(name);
+  sorted.push(entry);
+}
+for (const e of matched) visit(e);
+matched.length = 0;
+matched.push(...sorted);
+
 const haveScript = matched.filter(
   ({ pkg }) => pkg.scripts && typeof pkg.scripts[script] === 'string',
 );
