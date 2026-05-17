@@ -164,6 +164,53 @@ for (const pattern of workspaces) {
 // Deterministic order (alphabetical absolute dir) so CI logs are reproducible.
 matched.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
 
+// Topological order on intra-workspace deps. Some scripts (e.g. `build`,
+// `typecheck`) require upstream packages to have their dist/ ready before the
+// downstream package can compile. Without this, the alphabetical order would
+// build `@aqa/kit` before `@aqa/schemas` and break tsc resolution.
+const nameToEntry = new Map();
+for (const e of matched) {
+  if (e.pkg && typeof e.pkg.name === 'string') nameToEntry.set(e.pkg.name, e);
+}
+function intraDeps(pkg) {
+  const all = {
+    ...(pkg.dependencies ?? {}),
+    ...(pkg.devDependencies ?? {}),
+    ...(pkg.peerDependencies ?? {}),
+  };
+  const deps = [];
+  for (const name of Object.keys(all)) {
+    if (nameToEntry.has(name)) deps.push(name);
+  }
+  return deps;
+}
+const visited = new Set();
+const visiting = new Set();
+const sorted = [];
+function visit(entry) {
+  if (!entry || !entry.pkg) return;
+  const name = entry.pkg.name ?? entry.dir;
+  if (visited.has(name)) return;
+  if (visiting.has(name)) {
+    // Cycle detected — break the recursion at this node so the rest of the
+    // graph still gets sorted. The trailing append at the end of the function
+    // ensures any node we couldn't fully order ends up after its caller, which
+    // is the best we can do without re-shaping the dependency graph itself.
+    console.warn(
+      `[run-workspace-script] WARN: dependency cycle involves "${name}"; downstream of the cycle will run before "${name}" rather than after.`,
+    );
+    return;
+  }
+  visiting.add(name);
+  for (const depName of intraDeps(entry.pkg)) visit(nameToEntry.get(depName));
+  visiting.delete(name);
+  visited.add(name);
+  sorted.push(entry);
+}
+for (const e of matched) visit(e);
+matched.length = 0;
+matched.push(...sorted);
+
 const haveScript = matched.filter(
   ({ pkg }) => pkg.scripts && typeof pkg.scripts[script] === 'string',
 );

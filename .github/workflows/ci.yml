@@ -53,6 +53,13 @@ jobs:
       - name: Lint (Biome)
         run: bun run lint
 
+      - name: Build dependencies first
+        # Workspace packages reference each other via their published entry
+        # (dist/index.{js,d.ts}). Typecheck of a downstream package therefore
+        # needs the upstream dist to exist. Run a full build before typecheck.
+        if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
+        run: bun run build
+
       - name: Typecheck (all workspaces)
         run: bun run typecheck
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
@@ -113,6 +120,13 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Build all workspaces topologically
+        # The downstream packages' pretest hook compiles against the upstream
+        # packages' dist/. Build once up front in topological order so each
+        # package's pretest sees a fresh dist for everything it imports.
+        if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
+        run: bun run build
 
       - name: Run unit tests under Node
         env:
