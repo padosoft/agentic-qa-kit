@@ -1,0 +1,14 @@
+schema_version: "1"
+id: scn-login-redirect-safelist
+title: Post-login redirect must be on the same-origin allow-list
+risk_refs: [r-auth-flow]
+invariant_refs: [inv-redirect-safelist]
+steps:
+  - id: probe-login-with-evil-redirect
+    kind: playwright
+    with: { script: "tests/playwright/login-with-redirect.spec.ts", args: { redirect: "https://attacker.example" } }
+oracles:
+  - id: o-not-redirected
+    kind: response_not_contains
+    with: { in: "url", value: "attacker.example" }
+tags: [web, auth]

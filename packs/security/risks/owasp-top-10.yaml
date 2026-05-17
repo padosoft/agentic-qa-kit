@@ -1,0 +1,84 @@
+schema_version: "1"
+project: PLACEHOLDER
+risks:
+  - id: r-owasp-a01-bac
+    category: auth
+    title: A01 Broken Access Control
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-bac
+        statement: Privileged endpoints reject sessions that lack the required role.
+    tags: [owasp:a01]
+  - id: r-owasp-a02-cryptofail
+    category: confidentiality
+    title: A02 Cryptographic Failures
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-crypto
+        statement: All credentials in transit are encrypted; no PII is logged at rest unencrypted.
+    tags: [owasp:a02]
+  - id: r-owasp-a03-injection
+    category: integrity
+    title: A03 Injection
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-injection
+        statement: Every parameterised query rejects shell/SQL/CRLF metacharacters in untrusted inputs.
+    tags: [owasp:a03]
+  - id: r-owasp-a04-insecure-design
+    category: business_logic
+    title: A04 Insecure Design
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-design
+        statement: Critical business flows have an associated threat model and abuse-case scenarios.
+    tags: [owasp:a04]
+  - id: r-owasp-a05-misconfig
+    category: integration
+    title: A05 Security Misconfiguration
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-misconfig
+        statement: Production deployments disable verbose error pages and default credentials.
+    tags: [owasp:a05]
+  - id: r-owasp-a07-authn
+    category: auth
+    title: A07 Identification and Authentication Failures
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-authn
+        statement: Repeated failed logins lock the account within the documented budget.
+    tags: [owasp:a07]
+  - id: r-owasp-a08-integrity
+    category: integrity
+    title: A08 Software and Data Integrity Failures
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-supply-chain
+        statement: All third-party deps are signed/lockfile-verified at install time.
+    tags: [owasp:a08]
+  - id: r-owasp-a09-logging
+    category: compliance
+    title: A09 Security Logging and Monitoring Failures
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-logging
+        statement: Auth and privilege-changes emit immutable audit events with actor and target.
+    tags: [owasp:a09]
+  - id: r-owasp-a10-ssrf
+    category: confidentiality
+    title: A10 Server-Side Request Forgery
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-ssrf
+        statement: Outbound requests built from user input go through a same-network allowlist.
+    tags: [owasp:a10]

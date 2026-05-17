@@ -1,0 +1,5 @@
+id: o-http-status
+kind: http_status
+description: "Assert the response status code equals the expected value."
+inputs:
+  expected: "Integer status code, e.g. 200, 401, 429."

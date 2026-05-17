@@ -1,0 +1,35 @@
+schema_version: "1"
+project: PLACEHOLDER
+risks:
+  - id: r-token-replay
+    category: auth
+    title: Tokens remain valid past rotation/revocation
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-token-rotation
+        statement: Old tokens become invalid within 60s of rotation.
+  - id: r-idempotency
+    category: integrity
+    title: Repeated POST creates duplicate resources
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-idempotent-post
+        statement: Resending the same Idempotency-Key returns the same resource (no duplicate).
+  - id: r-pagination-leak
+    category: confidentiality
+    title: Pagination leaks rows from another tenant
+    severity: critical
+    likelihood: unlikely
+    invariants:
+      - id: inv-tenant-isolation
+        statement: Cursor never returns rows whose tenant_id differs from the caller.
+  - id: r-rate-limit
+    category: availability
+    title: Rate limit is enforced for unauthenticated endpoints
+    severity: medium
+    likelihood: likely
+    invariants:
+      - id: inv-rate-limited
+        statement: After N requests in T seconds, the endpoint returns 429.

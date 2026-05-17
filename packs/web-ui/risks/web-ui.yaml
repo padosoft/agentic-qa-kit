@@ -1,0 +1,27 @@
+schema_version: "1"
+project: PLACEHOLDER
+risks:
+  - id: r-form-loss
+    category: ui_ux
+    title: Form data lost on refresh / back navigation
+    severity: medium
+    likelihood: likely
+    invariants:
+      - id: inv-form-preserved
+        statement: A form's in-progress state is preserved across refresh and back-navigation.
+  - id: r-double-submit
+    category: integrity
+    title: Double-click submit creates duplicate state
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-no-double-submit
+        statement: Two clicks within 300ms produce a single backend mutation.
+  - id: r-auth-flow
+    category: auth
+    title: Login redirects to an attacker-controlled URL
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-redirect-safelist
+        statement: Post-login redirect targets are restricted to a same-origin allow-list.

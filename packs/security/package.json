@@ -1,0 +1,8 @@
+{
+  "name": "@aqa/pack-security",
+  "version": "0.1.0",
+  "description": "OWASP Top 10 + Agentic Top 10 baseline pack for agentic-qa-kit.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": ["pack.yaml", "templates", "scenarios", "risks", "oracles", "probes", "README.md"]
+}

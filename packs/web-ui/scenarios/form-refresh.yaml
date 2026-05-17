@@ -1,0 +1,14 @@
+schema_version: "1"
+id: scn-form-state-survives-refresh
+title: An in-progress form's state must survive a page refresh
+risk_refs: [r-form-loss]
+invariant_refs: [inv-form-preserved]
+steps:
+  - id: probe-fill
+    kind: playwright
+    with: { script: "tests/playwright/fill-and-refresh.spec.ts" }
+oracles:
+  - id: o-state-preserved
+    kind: response_contains
+    with: { in: "page", value: "{{expected_text}}" }
+tags: [web, ux]

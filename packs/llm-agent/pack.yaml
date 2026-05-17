@@ -1,0 +1,13 @@
+schema_version: "1"
+name: pack-llm-agent
+version: 0.1.0
+description: "LLM agent baseline pack — tool selection, prompt injection, handoff invariants."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  sut_type: [agent]
+templates: []
+scenarios: [scenarios/prompt-injection.yaml]
+risks: [risks/llm-agent.yaml]
+oracles: []
+probes: []
