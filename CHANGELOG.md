@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-17
+
+### Added — knowledge consolidation (Task 9)
+
+- `docs/LESSON.md` — v0.1.0 retrospective entries: workspace topology, dual-runtime testing, pre-build before typecheck, generated-artifact ignore, JSON-Schema `if/then` lint trap, Copilot review stopping criterion, slug regex flag survival, hash chain invariant, determinism gating placement.
+- `docs/RULES.md` — added "Workspace topology rules" and "Determinism + audit rules" sections so the v0.1.0 patterns become enforceable conventions.
+- Test runner default in `RULES.md` updated from `bun:test`/Vitest to `node:test` + `assert/strict` import-from-`dist/` (single source, runs identically under Bun and Node 22).
+
 ## [0.1.0] — 2026-05-17
 
 ### Added — v0.1.0 milestone
@@ -59,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`.
 - `README.md` rewritten with enterprise badges, TOC, features, quick start.
 
-[Unreleased]: https://github.com/padosoft/agentic-qa-kit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/padosoft/agentic-qa-kit/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/padosoft/agentic-qa-kit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/padosoft/agentic-qa-kit/compare/v0.0.1-governance...v0.1.0
 [0.0.1-governance]: https://github.com/padosoft/agentic-qa-kit/releases/tag/v0.0.1-governance

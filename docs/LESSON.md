@@ -21,6 +21,42 @@
 - Topic / context — what was learned + why it matters. Reference files/commits when useful.
 ```
 
+## 2026-05-17 (v0.1.0 retrospective — patterns to remember across the whole milestone)
+
+- **Workspace topology requires topological build order.** A pure alphabetical
+  iteration breaks the build because downstream consumers (`@aqa/kit` → `@aqa/schemas`)
+  must see the upstream `dist/` before their own `tsc` runs. The fix lives in
+  `scripts/run-workspace-script.mjs` (DFS sort by intra-workspace deps). Any new
+  package must declare its workspace deps in `dependencies`/`devDependencies` so
+  the sort sees them.
+- **Same test file, two runtimes.** `node:test` + `import assert from 'node:assert/strict'`
+  + import-from-`dist/` is the only combination that runs identically under
+  `bun test` and under `node --experimental-strip-types --test`. Avoid `bun:test`
+  for cross-runtime packages.
+- **CI pre-build before typecheck / Node-test / Bun-test.** Workspace consumers
+  point their `main`/`types` at `dist/`. Until `dist/` exists, downstream `tsc`
+  cannot resolve the workspace import. `bun run build` once up front in every
+  relevant CI job is the simplest fix.
+- **Generated artifacts (`schemas/v1/*.schema.json`) belong in `biome.json.files.ignore`.**
+  Without this, every `bun run build` re-emits files biome wants to reformat, making
+  lint/build non-idempotent.
+- **`if/then` in JSON Schema is a `noThenProperty` lint trip.** Add a one-line
+  biome-ignore comment; bracket-notation workarounds trip `useLiteralKeys` instead.
+- **Copilot review settles around iteration 3-4 on non-trivial PRs.** Pass 1 catches
+  P0 cross-platform issues, pass 2 catches P1/P2 correctness, passes 3-4 surface
+  P3 hardening + stale repeats. Stopping criterion: merge after pass with stale
+  repeats dominating, file remaining nits as a follow-up issue.
+- **Slug regex flags do not survive JSON Schema emission.** Pattern must enumerate
+  the accepted charset (no `/i`). Tighten patterns to `^[a-z0-9](?:-?[a-z0-9])*$`
+  to also reject trailing/consecutive dashes — safe as path segment / URL fragment.
+- **Hash-chained audit log invariant.** `hash = sha256(prev_hash ‖ canonical(rest_of_event))`
+  with sorted keys; first event's `prev_hash = null`. Test the chain end-to-end by
+  re-hashing every entry — otherwise tampering goes undetected.
+- **Determinism gating belongs on the schema, not the runtime.** Putting
+  `status='verified' ⇒ deterministic floor` on `Finding`'s `superRefine` (Zod) +
+  mirroring it as `allOf: [if/then]` in the emitted JSON Schema means every layer
+  (orchestrator, agent, third-party validator) enforces the same rule.
+
 ## 2026-05-17 (Task 1 / PR #2)
 
 - **Zod superRefine does not survive `zodToJsonSchema` emission** — custom refinements are silently dropped from the generated JSON Schema. For consumers validating via the shipped JSON Schema (LSP, third-party validators, language ports), any rule expressed via `superRefine` simply doesn't exist. Mitigation: post-emit patch the JSON Schema with explicit `allOf` of `if/then` clauses for the critical invariants (Finding's verified-gating, Run's terminal-state gating). For cross-field comparisons that JSON Schema cannot express (`finished_at >= started_at`), document the gap in a top-level `$comment` and accept that the JSON-Schema layer is strictly weaker than the Zod layer.

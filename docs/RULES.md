@@ -22,7 +22,7 @@ This file is referenced by `AGENTS.md` and applies to every contributor — huma
 | Language | TypeScript strict | `"strict": true`, `"noUncheckedIndexedAccess": true`, ESM only |
 | Monorepo | Bun workspaces | `packages/*` for code, `packs/*` for content packs |
 | Lint/format | Biome | Single root config |
-| Test unit | `bun:test` and Vitest | Coverage ≥ 80% on new code |
+| Test unit | `node:test` + `assert/strict`, import-from-`dist/` | Runs identically under Bun and Node 22 (`--experimental-strip-types`). Coverage ≥ 80% on new code. |
 | Test e2e UI | Playwright | Chromium minimum |
 | HTTP server | Hono | For `agentic-qa-kit-server` |
 | Local state | SQLite (`bun:sqlite` or `better-sqlite3`) | Behind a `StoreProvider` interface |
@@ -119,3 +119,29 @@ Body should explain **why**, not what (the diff shows the what). PRs that change
 - Squash-merge on PR close. Linear history on `main`.
 - Tag only after a macro task is fully merged and validated.
 - Never force-push to `main`. Force-push on feature branches only if no other contributor is reviewing.
+
+## Workspace topology rules (added v0.1.1)
+
+- Every package's `package.json` must declare its intra-workspace deps in
+  `dependencies`/`devDependencies`. The `run-workspace-script.mjs` topo-sort
+  reads these to order `build`/`typecheck`/`test`.
+- Tests live as `node:test` + `assert/strict` modules and import the package
+  under test from `../dist/*.js`. The package's `pretest` hook runs `tsc` so
+  `dist/` is always fresh before `node --test` reads it.
+- Generated artifacts (e.g. `packages/*/schemas/v1/*.schema.json`,
+  `packages/*/dist/`) are in `biome.json.files.ignore` so the build remains
+  idempotent.
+- Workspace consumers reference packages by their canonical entry
+  (`./dist/index.js` + `./dist/index.d.ts`). At typecheck time, downstream
+  packages need the upstream `dist/` to exist — CI builds workspaces
+  topologically before any typecheck/test step.
+
+## Determinism + audit rules (added v0.1.1)
+
+- Every Finding declares a `verification_floor` and the matching
+  `reproducibility[floor]` must be `deterministic === true` before
+  `status: 'verified'` is legal. Enforced by `@aqa/schemas`.
+- Every run writes a hash-chained `events.jsonl`. Test the chain end-to-end
+  by re-hashing on read — never trust the file as-is.
+- `release-gate` profiles must use `execution_mode: 'orchestrator'`. `agent`
+  mode is dev-only.
