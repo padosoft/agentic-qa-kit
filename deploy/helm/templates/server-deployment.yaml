@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-server
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "aqa.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      containers:
+        - name: server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          env:
+            - name: AQA_AUDIT_LOG_PATH
+              value: {{ .Values.server.auditLogPath | quote }}
+            - name: AQA_DETERMINISM_LEVEL
+              value: {{ .Values.determinism.level | quote }}
+            - name: AQA_MONTHLY_BUDGET_USD
+              value: {{ .Values.cost.monthlyBudgetUsd | quote }}
+            {{- if .Values.postgres.urlSecretRef }}
+            - name: AQA_POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            {{- else if .Values.postgres.url }}
+            - name: AQA_POSTGRES_URL
+              value: {{ .Values.postgres.url | quote }}
+            {{- end }}
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: audit-log
+              mountPath: /var/lib/aqa
+      volumes:
+        - name: audit-log
+          emptyDir: {}

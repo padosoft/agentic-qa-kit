@@ -1,0 +1,32 @@
+# Default values for agentic-qa-kit Helm chart (v0.6 scaffold).
+#
+# All non-trivial knobs are documented inline. Runner pool, ingress, and
+# NetworkPolicy land in v1.0 — settings for them are intentionally absent.
+
+server:
+  image:
+    repository: ghcr.io/padosoft/agentic-qa-kit-server
+    tag: "0.6.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests: { cpu: "200m", memory: "256Mi" }
+    limits:   { cpu: "1000m", memory: "1Gi" }
+  # Hash-chained audit log path (v0.2 contract — must be a writable volume in
+  # production; in-cluster default is an emptyDir for the scaffold).
+  auditLogPath: /var/lib/aqa/events.jsonl
+
+postgres:
+  # v0.6: bring-your-own Postgres URL. Subchart lands in v1.0.
+  url: ""
+  # Optional secret name — overrides `url` if both set.
+  urlSecretRef: ""
+
+# Cost governance hard cap (Task 11). Server refuses to start with budget=0.
+cost:
+  monthlyBudgetUsd: 100
+
+# Feature flags echoing the determinism contract (Task 10). These exist so
+# operators can pin behavior across replicas.
+determinism:
+  level: "L1" # L1 = same-deps, L2 = same-fixtures, L3 = same-bytes
