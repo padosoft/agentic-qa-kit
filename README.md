@@ -67,6 +67,8 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 
 ## Quick start (junior-friendly)
 
+> **Heads-up:** the CLI commands below (`aqa init`, `aqa run`, `aqa replay`, etc.) ship in `v0.1.0`. The repo is currently in `v0.0.x` bootstrap — only the governance and scaffolding are in place; the `aqa` binary is not published yet. Use this section as a preview of the v0.1.0 user experience.
+>
 > Assumes zero prior knowledge of Bun or AQA. Detailed walk-through in [`docs/getting-started.md`](docs/getting-started.md).
 
 ### 1. Install Bun
@@ -152,25 +154,26 @@ Capability negotiation is runtime: the kit asks the agent target what it support
 
 ## Architecture at a glance
 
-```
-┌──── Local mode (single dev / CI) ─────────────────────────┐
-│  bunx aqa CLI                                             │
-│   ├── engine + runner (sandboxed)                         │
-│   ├── packs (core, api, web-ui, llm-agent, security, ...) │
-│   ├── adapters (Claude/Codex/Gemini/Copilot)              │
-│   └── .aqa/  (project state, runs, findings, replay)      │
-└────────────────────────────────────────────────────────────┘
+```text
++- Local mode (single dev / CI) -----------------------------+
+|  bunx aqa CLI                                              |
+|   |- engine + runner (sandboxed)                           |
+|   |- packs (core, api, web-ui, llm-agent, security, ...)   |
+|   |- adapters (Claude/Codex/Gemini/Copilot)                |
+|   `- .aqa/  (project state, runs, findings, replay)        |
++------------------------------------------------------------+
 
-┌──── Self-hosted (multi-team, post v0.3) ──────────────────┐
-│  Control Plane (HA)                                       │
-│   ├── agentic-qa-kit-server (Hono+Bun OR Express+Node)    │
-│   ├── agentic-qa-kit-admin (React)                        │
-│   ├── Postgres HA · Redis/NATS · S3-compat · Vault · OIDC │
-│   └── OTel Collector + Prometheus + Tempo + Loki          │
-│         ▲ mTLS + OIDC                                      │
-│  ── Runners (per-team / CI shared / dev laptop) ──         │
-│     execute scenarios next to the code                    │
-└────────────────────────────────────────────────────────────┘
++- Self-hosted (multi-team, post v0.3) ----------------------+
+|  Control Plane (HA)                                        |
+|   |- agentic-qa-kit-server (Hono+Bun or Express+Node)      |
+|   |- agentic-qa-kit-admin (React)                          |
+|   |- Postgres HA . Redis/NATS . S3-compat . Vault . OIDC   |
+|   `- OTel Collector + Prometheus + Tempo + Loki            |
+|                                                            |
+|  Runners (per-team / CI shared / dev laptop)               |
+|   - mTLS + OIDC to the control plane                       |
+|   - execute scenarios next to the code (code never leaves) |
++------------------------------------------------------------+
 ```
 
 Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md) _(stub; expanded in v0.1.0)_.

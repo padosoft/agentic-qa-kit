@@ -23,6 +23,17 @@
 
 ## 2026-05-17
 
+- **PR #1 Copilot fourth-pass review (11 comments) — addressed:**
+  - **Windows: `bun.cmd` shims need `shell: true` even when probing succeeded.** Probe (`where`) uses shell; the actual `spawnSync(runner, ...)` must use it too on Windows, otherwise `.cmd`/`.ps1` shims fail with ENOENT.
+  - **Signal termination should propagate as `128 + signo`** (POSIX convention) — never collapse to `1`. Added `SIGNAL_TO_EXIT(signal)` helper and an explicit `r.signal` check that aborts the loop (don't run more workspaces after Ctrl-C).
+  - **`statSync` throws on broken symlinks / TOCTOU.** A single broken symlink under `packages/` would crash every gate. Wrapped in `safeStat()` that returns `null` on any failure; the iteration then just skips the entry.
+  - **Bare `*` workspace pattern is conventional npm**, not an exotic glob. Added explicit support for `*` (iterate root subdirectories) alongside `<dir>/*` and `<dir>`. Reserved the warning for genuinely-unsupported syntaxes (`foo*`, `{a,b}`, `!(legacy)`, `**`).
+  - **`AQA_PKG_RUNNER` parsing must be defensive** — trim + lowercase before equality, error early on anything non-empty that isn't `bun|npm`. Whitespace and case variants ("BUN", " bun") were silently falling through.
+  - **`verbatimModuleSyntax: true` + `esModuleInterop: true` + `allowSyntheticDefaultImports: true` is internally inconsistent.** With `verbatim`, the emit preserves source verbatim, so the interop flags are misleading. Removed both — TypeScript will now enforce explicit `import type` for type-only specifiers and explicit `import pkg = require('pkg')` (or namespace form) for CJS deps under NodeNext.
+  - **SECURITY.md private-disclosure URL must be a markdown link**, not inline code, so it is clickable.
+  - **README quick-start that references unreleased commands needs an explicit version gate.** Added a "heads-up" note that the CLI ships in v0.1.0.
+  - **ASCII box-drawing characters render unpredictably across browsers / terminals.** Replaced unicode box chars (`┌─│└`) with plain ASCII (`+- |`) for the architecture diagram to avoid alignment drift.
+  - **`bun audit` floor reference must point at a concrete `engines.bun` value** (not a vague "matches our floor"). Made the cross-reference explicit in SECURITY.md.
 - **PR #1 Copilot third-pass review (6 comments) — addressed:**
   - **`bunx`/`npx` in package.json `scripts` field breaks the Node-22 fallback** the same way `bun run` did. Wrapping in `scripts/run-tool.mjs` (auto-detects bunx vs npx; honors `AQA_PKG_RUNNER` override) keeps the user-facing contract working everywhere.
   - **CI is a controlled environment, package.json is the contributor contract.** CI may legitimately call `bunx` because the workflow installs Bun explicitly via `oven-sh/setup-bun@v2`. But a contributor on Node-only must be able to `npm run e2e` etc. without first installing Bun. Don't conflate the two.

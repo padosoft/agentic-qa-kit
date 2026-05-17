@@ -15,8 +15,7 @@
 Use one of these channels:
 
 1. **GitHub Security Advisories (preferred):**
-   `https://github.com/padosoft/agentic-qa-kit/security/advisories/new`
-   This creates a private advisory only maintainers can see.
+   [Report a vulnerability privately](https://github.com/padosoft/agentic-qa-kit/security/advisories/new) — creates a private advisory only maintainers can see.
 
 2. **Email:** `security@padosoft.com` with subject `[agentic-qa-kit] <short description>`.
    PGP key: published on the maintainers' Keybase / public key servers (link to be added when v0.1.0 ships).
@@ -54,7 +53,7 @@ Out of scope (file as regular issues):
 ## Supply chain
 
 - Pack signing (Sigstore) becomes mandatory in v0.3 (ADR-007). Until then, treat community packs as untrusted code.
-- Dependencies scanned by Dependabot / Renovate plus `bun audit` (Bun ≥ 1.3, which matches our `engines.bun` floor) or `npm audit` for Node-only contributors.
+- Dependencies scanned by Dependabot / Renovate plus `bun audit` (Bun ≥ 1.3 — this matches the `engines.bun` floor declared in `package.json`) or `npm audit` for Node-only contributors.
 
 ## Compliance roadmap
 
