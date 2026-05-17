@@ -9,3 +9,4 @@ export {
   type OracleResult,
 } from './oracles.js';
 export { runScenario, type ScenarioRunResult } from './run.js';
+export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

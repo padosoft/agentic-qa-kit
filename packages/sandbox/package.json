@@ -1,24 +1,20 @@
 {
-  "name": "@aqa/runner",
+  "name": "@aqa/sandbox",
   "version": "0.0.1",
-  "description": "Orchestrator runner for agentic-qa-kit: scenario execution loop, hash-chained audit log, findings writer.",
+  "description": "Sandbox abstraction for agentic-qa-kit — process/container isolation, per-tool-call budget.",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
-  },
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/lifecycle.test.ts test/events.test.ts test/oracles.test.ts test/run.test.ts test/replay.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/sandbox.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
-  "dependencies": {
-    "@aqa/schemas": "workspace:*"
-  },
+  "dependencies": {},
   "publishConfig": { "access": "public" }
 }

@@ -34,6 +34,13 @@
         "vite": "^6.0.1",
       },
     },
+    "packages/cost": {
+      "name": "@aqa/cost",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+      },
+    },
     "packages/kit": {
       "name": "@aqa/kit",
       "version": "0.0.1",
@@ -67,6 +74,10 @@
       "dependencies": {
         "@aqa/schemas": "workspace:*",
       },
+    },
+    "packages/sandbox": {
+      "name": "@aqa/sandbox",
+      "version": "0.0.1",
     },
     "packages/schemas": {
       "name": "@aqa/schemas",
@@ -104,6 +115,8 @@
 
     "@aqa/admin": ["@aqa/admin@workspace:packages/admin"],
 
+    "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
+
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
 
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
@@ -121,6 +134,8 @@
     "@aqa/reporter": ["@aqa/reporter@workspace:packages/reporter"],
 
     "@aqa/runner": ["@aqa/runner@workspace:packages/runner"],
+
+    "@aqa/sandbox": ["@aqa/sandbox@workspace:packages/sandbox"],
 
     "@aqa/schemas": ["@aqa/schemas@workspace:packages/schemas"],
 
