@@ -21,8 +21,9 @@ const rootRoute = createRootRoute({
   ),
 });
 
-const make = (path: string, component: () => React.JSX.Element) =>
-  createRoute({ getParentRoute: () => rootRoute, path, component });
+function make<P extends string>(path: P, component: () => React.JSX.Element) {
+  return createRoute({ getParentRoute: () => rootRoute, path, component });
+}
 
 const indexRoute = make('/', DashboardScreen);
 const runsRoute = make('/runs', RunsScreen);
