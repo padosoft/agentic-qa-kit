@@ -1,0 +1,21 @@
+apiVersion: v2
+name: agentic-qa-kit
+description: |
+  Helm chart for the agentic-qa-kit server + runner fleet. v0.6 scaffold —
+  ships server Deployment template only. Runner pool StatefulSet, ingress,
+  NetworkPolicy, and Postgres subchart land in v1.0.
+type: application
+version: 0.6.0
+appVersion: "0.6.0"
+keywords:
+  - agentic
+  - qa
+  - security
+  - stride
+  - fmea
+home: https://github.com/padosoft/agentic-qa-kit
+sources:
+  - https://github.com/padosoft/agentic-qa-kit
+maintainers:
+  - name: padosoft
+    email: lorenzo.padovani@padosoft.com
