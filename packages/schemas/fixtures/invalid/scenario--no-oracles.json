@@ -1,0 +1,8 @@
+{
+  "schema_version": "1",
+  "id": "scn-x",
+  "title": "scenario without oracles",
+  "risk_refs": ["r-1"],
+  "steps": [{ "id": "p1", "kind": "http", "with": {} }],
+  "oracles": []
+}

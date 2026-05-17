@@ -1,0 +1,114 @@
+{
+  "$ref": "#/definitions/event",
+  "definitions": {
+    "event": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "run_started",
+            "run_finished",
+            "scenario_started",
+            "scenario_finished",
+            "probe_executed",
+            "oracle_evaluated",
+            "finding_emitted",
+            "budget_exceeded",
+            "sandbox_violation",
+            "llm_call",
+            "tool_call",
+            "replay_started",
+            "replay_finished",
+            "error",
+            "info"
+          ]
+        },
+        "actor": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "orchestrator",
+                "agent",
+                "system"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "finding_id": {
+          "type": "string",
+          "pattern": "^AQA-\\d{4}-\\d{4,}$"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": {},
+          "default": {}
+        }
+      },
+      "required": [
+        "schema_version",
+        "seq",
+        "prev_hash",
+        "hash",
+        "ts",
+        "run_id",
+        "kind",
+        "actor"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

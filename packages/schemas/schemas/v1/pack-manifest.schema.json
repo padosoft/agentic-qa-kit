@@ -1,0 +1,142 @@
+{
+  "$ref": "#/definitions/pack-manifest",
+  "definitions": {
+    "pack-manifest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "author": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string",
+          "default": "Apache-2.0"
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri"
+        },
+        "applies_when": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "framework": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "db": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sut_type": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tags_any": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tags_all": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "oracles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "probes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "signing": {
+          "type": "object",
+          "properties": {
+            "sigstore_bundle": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "version",
+        "description",
+        "author"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

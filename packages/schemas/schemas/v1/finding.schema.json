@@ -1,0 +1,384 @@
+{
+  "$ref": "#/definitions/finding",
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^AQA-\\d{4}-\\d{4,}$"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "risk_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 200
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "verified",
+            "rejected",
+            "duplicate",
+            "fixed"
+          ]
+        },
+        "execution_mode": {
+          "type": "string",
+          "enum": [
+            "orchestrator",
+            "agent"
+          ]
+        },
+        "discovered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confidence_components": {
+          "type": "object",
+          "properties": {
+            "oracle_agreement": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "agent_self_reported": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "judge_ensemble": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "replay_success_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "historical_fp_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "reproducibility": {
+          "type": "object",
+          "properties": {
+            "bug_level": {
+              "type": "object",
+              "properties": {
+                "deterministic": {
+                  "type": "boolean"
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "successes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "artifact_path": {
+                  "type": "string"
+                },
+                "seed": {
+                  "type": "string"
+                },
+                "model_pinned": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "deterministic",
+                "attempts",
+                "successes"
+              ],
+              "additionalProperties": false
+            },
+            "scenario_level": {
+              "type": "object",
+              "properties": {
+                "deterministic": {
+                  "type": "boolean"
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "successes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "artifact_path": {
+                  "type": "string"
+                },
+                "seed": {
+                  "type": "string"
+                },
+                "model_pinned": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "deterministic",
+                "attempts",
+                "successes"
+              ],
+              "additionalProperties": false
+            },
+            "agent_level": {
+              "type": "object",
+              "properties": {
+                "deterministic": {
+                  "type": "boolean"
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "successes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "artifact_path": {
+                  "type": "string"
+                },
+                "seed": {
+                  "type": "string"
+                },
+                "model_pinned": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "deterministic",
+                "attempts",
+                "successes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "verification_floor": {
+          "type": "string",
+          "enum": [
+            "bug_level",
+            "scenario_level",
+            "agent_level"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "duplicate_of": {
+          "type": "string",
+          "pattern": "^AQA-\\d{4}-\\d{4,}$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "run_id",
+        "scenario_id",
+        "risk_id",
+        "title",
+        "summary",
+        "severity",
+        "status",
+        "execution_mode",
+        "discovered_at",
+        "confidence",
+        "verification_floor"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "verified"
+          },
+          "verification_floor": {
+            "const": "bug_level"
+          }
+        },
+        "required": [
+          "status",
+          "verification_floor"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reproducibility": {
+            "type": "object",
+            "properties": {
+              "bug_level": {
+                "type": "object",
+                "properties": {
+                  "deterministic": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "deterministic"
+                ]
+              }
+            },
+            "required": [
+              "bug_level"
+            ]
+          }
+        },
+        "required": [
+          "reproducibility"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "verified"
+          },
+          "verification_floor": {
+            "const": "scenario_level"
+          }
+        },
+        "required": [
+          "status",
+          "verification_floor"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reproducibility": {
+            "type": "object",
+            "properties": {
+              "scenario_level": {
+                "type": "object",
+                "properties": {
+                  "deterministic": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "deterministic"
+                ]
+              }
+            },
+            "required": [
+              "scenario_level"
+            ]
+          }
+        },
+        "required": [
+          "reproducibility"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "verified"
+          },
+          "verification_floor": {
+            "const": "agent_level"
+          }
+        },
+        "required": [
+          "status",
+          "verification_floor"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reproducibility": {
+            "type": "object",
+            "properties": {
+              "agent_level": {
+                "type": "object",
+                "properties": {
+                  "deterministic": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "deterministic"
+                ]
+              }
+            },
+            "required": [
+              "agent_level"
+            ]
+          }
+        },
+        "required": [
+          "reproducibility"
+        ]
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

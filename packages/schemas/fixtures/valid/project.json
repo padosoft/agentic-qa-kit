@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "name": "demo-api",
+  "version": "0.1.0",
+  "description": "Bun-based demo SUT for AQA self-tests.",
+  "stack": {
+    "runtime": "bun",
+    "framework": "hono",
+    "db": ["postgres"],
+    "test_runner": "bun:test",
+    "package_manager": "bun"
+  },
+  "sut": {
+    "type": "api",
+    "base_url": "http://localhost:3000",
+    "repo": "github.com/padosoft/agentic-qa-kit"
+  },
+  "tags": ["demo", "internal"]
+}

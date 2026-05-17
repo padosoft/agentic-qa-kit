@@ -1,0 +1,112 @@
+{
+  "$ref": "#/definitions/profiles-file",
+  "definitions": {
+    "profiles-file": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "type": "string",
+                "const": "1"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+              },
+              "execution_mode": {
+                "type": "string",
+                "enum": [
+                  "orchestrator",
+                  "agent"
+                ]
+              },
+              "llm_usage": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "scenario_generation",
+                    "semantic_oracle",
+                    "bug_minimization",
+                    "agent_driven"
+                  ]
+                },
+                "default": []
+              },
+              "llm_budget_usd": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "budget_minutes": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "parallelism": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 64,
+                "default": 1
+              },
+              "require_deterministic_replay": {
+                "type": "boolean",
+                "default": false
+              },
+              "packs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                },
+                "default": []
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "schema_version",
+              "name",
+              "execution_mode"
+            ],
+            "additionalProperties": false
+          },
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "profiles"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

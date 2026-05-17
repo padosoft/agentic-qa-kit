@@ -1,0 +1,134 @@
+{
+  "$ref": "#/definitions/risk-map",
+  "definitions": {
+    "risk-map": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "auth",
+                  "data",
+                  "integrity",
+                  "availability",
+                  "confidentiality",
+                  "integration",
+                  "business_logic",
+                  "ui_ux",
+                  "compliance",
+                  "agentic"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "minLength": 4
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "info"
+                ]
+              },
+              "likelihood": {
+                "type": "string",
+                "enum": [
+                  "rare",
+                  "unlikely",
+                  "possible",
+                  "likely",
+                  "almost_certain"
+                ]
+              },
+              "invariants": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                    },
+                    "statement": {
+                      "type": "string",
+                      "minLength": 8
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "statement"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": []
+              },
+              "owners": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "id",
+              "category",
+              "title",
+              "severity",
+              "likelihood"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "project",
+        "risks"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

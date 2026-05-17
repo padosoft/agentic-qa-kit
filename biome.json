@@ -15,7 +15,8 @@
       ".aqa",
       "**/*.min.js",
       "**/playwright-report",
-      "**/test-results"
+      "**/test-results",
+      "packages/*/schemas/v1/**"
     ]
   },
   "overrides": [

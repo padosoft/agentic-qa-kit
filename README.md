@@ -23,6 +23,10 @@
 
 ---
 
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Agentic QA Kit — agentic QA operating system" width="100%" />
+</p>
+
 ## Table of contents
 
 - [Why this exists](#why-this-exists)
