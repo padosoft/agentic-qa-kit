@@ -3,6 +3,10 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    // tsBuildInfoFile is meaningful only with `incremental` or `composite`.
+    // Without it, every `npm test` re-runs a full type-check via the pretest
+    // hook. Incremental keeps the inner loop fast.
+    "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*"],

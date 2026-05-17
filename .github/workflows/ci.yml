@@ -123,6 +123,10 @@ jobs:
             echo "No packages directory yet — gate placeholder (pass)."
             exit 0
           fi
+          # `bun install` populated node_modules at the repo root (workspace hoisting)
+          # and inside each package, so `npm run` from a package dir resolves bins
+          # and dependencies fine without ever needing a package-lock.json. `npm`
+          # here is used purely as a script runner — no install step.
           worst=0
           for pkg in packages/*/; do
             if [ -f "$pkg/package.json" ] && grep -q '"test"' "$pkg/package.json"; then

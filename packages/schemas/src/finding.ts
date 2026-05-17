@@ -85,5 +85,19 @@ export const Finding = z
         message: `status=verified requires reproducibility.${v.verification_floor}.deterministic === true`,
       });
     }
+    if (v.duplicate_of !== undefined && v.duplicate_of === v.id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duplicate_of'],
+        message: 'duplicate_of must not equal id (a finding cannot duplicate itself)',
+      });
+    }
+    if (v.status === 'duplicate' && v.duplicate_of === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duplicate_of'],
+        message: 'status="duplicate" requires duplicate_of to be set',
+      });
+    }
   });
 export type Finding = z.infer<typeof Finding>;

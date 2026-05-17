@@ -78,6 +78,31 @@ function fixExclusiveBounds(node) {
  * Add Finding's "status=verified ⇒ reproducibility[verification_floor].deterministic"
  * gating to the JSON Schema via if/then clauses. Mirrors the Zod superRefine.
  */
+/**
+ * Mirror Run's superRefine into the JSON Schema: terminal states require
+ * `finished_at`; non-terminal states forbid it; `finished_at >= started_at`
+ * cannot be expressed in pure JSON Schema, so we surface it via description.
+ */
+function patchRunTerminalGating(schema) {
+  const terminal = ['succeeded', 'failed', 'aborted', 'budget_exceeded'];
+  const nonTerminal = ['pending', 'running'];
+  const allOf = [
+    {
+      if: { properties: { state: { enum: terminal } }, required: ['state'] },
+      // biome-ignore lint/suspicious/noThenProperty: JSON Schema's `then` keyword
+      then: { required: ['finished_at'] },
+    },
+    {
+      if: { properties: { state: { enum: nonTerminal } }, required: ['state'] },
+      // biome-ignore lint/suspicious/noThenProperty: JSON Schema's `then` keyword
+      then: { not: { required: ['finished_at'] } },
+    },
+  ];
+  schema.allOf = [...(schema.allOf ?? []), ...allOf];
+  schema.$comment =
+    'finished_at >= started_at is enforced by the Zod validator; JSON Schema cannot express the cross-field comparison.';
+}
+
 function patchFindingVerifiedGating(schema) {
   // `if`/`then`/`else` are JSON Schema 2020-12 keywords. Building the object via
   // bracket assignment avoids tripping lint rules that flag `.then` (intended to
@@ -128,6 +153,7 @@ for (const { file, exportName, schemaName } of modules) {
   });
   fixExclusiveBounds(json);
   if (schemaName === 'finding') patchFindingVerifiedGating(json);
+  if (schemaName === 'run') patchRunTerminalGating(json);
   // Declare the dialect explicitly so consumers that default to an older draft
   // (e.g. ajv without the 2020-12 plugin) cannot silently mis-validate.
   json.$schema = 'https://json-schema.org/draft/2020-12/schema';

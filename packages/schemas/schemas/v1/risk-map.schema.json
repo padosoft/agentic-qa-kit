@@ -12,7 +12,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^[a-z0-9][a-z0-9-]*$"
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
         },
         "generated_at": {
           "type": "string",
@@ -27,7 +27,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 64,
-                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
               },
               "category": {
                 "type": "string",
@@ -80,7 +80,7 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 64,
-                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                      "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
                     },
                     "statement": {
                       "type": "string",

@@ -16,7 +16,9 @@ export const SemVer = z
 // Lowercase only: regex flags do not survive emission to JSON Schema, so the
 // Zod and JSON-Schema validators stay equivalent only if the pattern itself is
 // case-insensitive by construction. Uppercase identifiers should be rejected.
-const SlugPattern = /^[a-z0-9][a-z0-9-]*$/;
+// No trailing dashes, no consecutive dashes — safe to use as a path segment,
+// URL fragment, or anchor without normalisation.
+const SlugPattern = /^[a-z0-9](?:-?[a-z0-9])*$/;
 export const Slug = z
   .string()
   .min(1)

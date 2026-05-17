@@ -23,8 +23,20 @@ export const Profile = z.object({
 });
 export type Profile = z.infer<typeof Profile>;
 
-export const ProfilesFile = z.object({
-  schema_version: z.literal('1'),
-  profiles: z.record(Slug, Profile),
-});
+export const ProfilesFile = z
+  .object({
+    schema_version: z.literal('1'),
+    profiles: z.record(Slug, Profile),
+  })
+  .superRefine((v, ctx) => {
+    for (const [key, profile] of Object.entries(v.profiles)) {
+      if (profile.name !== key) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['profiles', key, 'name'],
+          message: `profile name "${profile.name}" must match its key "${key}"`,
+        });
+      }
+    }
+  });
 export type ProfilesFile = z.infer<typeof ProfilesFile>;
