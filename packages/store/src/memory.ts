@@ -84,15 +84,24 @@ export class MemoryStore implements StoreProvider {
     const to = opts.to;
     if (from) out = out.filter((e) => e.ts >= from);
     if (to) out = out.filter((e) => e.ts <= to);
-    // Tenant filtering: Event has no top-level tenant fields; the runner
-    // injects org/project into payload when emitting tenant-scoped events.
-    // Match on payload.org / payload.project; events without these fields
-    // (legacy / global) are dropped from tenant-scoped queries.
+    // Tenant filtering: Event has no top-level tenant fields. The runner
+    // event writer does not yet inject org/project into the payload, so
+    // most events are "global" (no tenant tag). Be lenient: drop only
+    // events that carry an EXPLICITLY DIFFERENT tenant tag. Events
+    // without payload.org / payload.project pass through.
     const org = opts.org;
     const project = opts.project;
-    if (org) out = out.filter((e) => (e.payload as { org?: string }).org === org);
+    if (org) {
+      out = out.filter((e) => {
+        const tag = (e.payload as { org?: string }).org;
+        return tag === undefined || tag === org;
+      });
+    }
     if (project) {
-      out = out.filter((e) => (e.payload as { project?: string }).project === project);
+      out = out.filter((e) => {
+        const tag = (e.payload as { project?: string }).project;
+        return tag === undefined || tag === project;
+      });
     }
     out.sort((a, b) => (a.ts < b.ts ? 1 : -1));
     return typeof opts.limit === 'number' ? out.slice(0, opts.limit) : out;

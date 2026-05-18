@@ -122,8 +122,12 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('run');
+        const s = requireScope(req);
+        if ('status' in s) return s;
         const run = await ctx.store.loadRun(id);
-        if (!run) return notFound('run');
+        // Match-or-404: a cross-tenant lookup must look identical to a missing
+        // record so probing for IDs in other projects gains no information.
+        if (!run || run.project !== s.project) return notFound('run');
         return asResponse({ run } satisfies { run: Run.Run });
       },
     },
@@ -147,6 +151,10 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('run');
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const run = await ctx.store.loadRun(id);
+        if (!run || run.project !== s.project) return notFound('run');
         const events = await ctx.store.listEvents(id);
         return asResponse({ events });
       },
@@ -171,8 +179,14 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('finding');
+        const s = requireScope(req);
+        if ('status' in s) return s;
         const finding = await ctx.store.loadFinding(id);
         if (!finding) return notFound('finding');
+        // Verify the finding's run lives in the requested project; treat
+        // cross-tenant access identically to "not found".
+        const run = await ctx.store.loadRun(finding.run_id);
+        if (!run || run.project !== s.project) return notFound('finding');
         return asResponse({ finding });
       },
     },

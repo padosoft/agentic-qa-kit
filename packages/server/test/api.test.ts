@@ -46,8 +46,15 @@ describe('makeApi', () => {
   it('GET /api/runs/:id 404s when missing', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs/:id');
-    const res = await route?.handle({ headers: {}, params: { id: 'nope' } }, c);
+    const res = await route?.handle({ headers: TENANT_HEADERS, params: { id: 'nope' } }, c);
     assert.equal(res?.status, 404);
+  });
+
+  it('GET /api/runs/:id requires tenant scope', async () => {
+    const c = ctx();
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs/:id');
+    const res = await route?.handle({ headers: {}, params: { id: 'any' } }, c);
+    assert.equal(res?.status, 400);
   });
 
   it('POST /api/runs enqueues a job', async () => {
