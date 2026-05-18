@@ -25,9 +25,9 @@ describe('aqa pack new', () => {
     const root = makeTempDir();
     const result = runPackNew({ root, slug: 'pack-myapp', sutType: 'api' });
     assert.equal(result.ok, true, `pack new must succeed, got: ${JSON.stringify(result)}`);
-    assert.equal(result.packDir, join(root, 'pack-myapp'));
+    assert.equal(result.packDir, join(root, 'packs', 'pack-myapp'));
 
-    const manifestPath = join(root, 'pack-myapp', 'pack.yaml');
+    const manifestPath = join(root, 'packs', 'pack-myapp', 'pack.yaml');
     assert.ok(existsSync(manifestPath), 'pack.yaml must exist');
     const manifest = yamlParse(readFileSync(manifestPath, 'utf8')) as {
       name: string;
@@ -44,10 +44,10 @@ describe('aqa pack new', () => {
 
     // Every file referenced from the manifest exists on disk.
     for (const rel of manifest.scenarios) {
-      assert.ok(existsSync(join(root, 'pack-myapp', rel)), `scenario ${rel} must exist`);
+      assert.ok(existsSync(join(root, 'packs', 'pack-myapp', rel)), `scenario ${rel} must exist`);
     }
     for (const rel of manifest.risks) {
-      assert.ok(existsSync(join(root, 'pack-myapp', rel)), `risk ${rel} must exist`);
+      assert.ok(existsSync(join(root, 'packs', 'pack-myapp', rel)), `risk ${rel} must exist`);
     }
   });
 
@@ -69,9 +69,11 @@ describe('aqa pack new', () => {
 
   it('rejects a slug that would generate over-length scenario/risk IDs', () => {
     const root = makeTempDir();
-    // 53-char slug → `inv-<53>-starter` = 64 chars derived ID, but the Slug
-    // regex max is 64 inclusive — going one char above keeps the manifest
-    // valid while breaking the scenario file.
+    // The Slug schema caps at 64 chars inclusive. Derived IDs are
+    // `inv-<slug>-starter` (overhead 12 chars), so a 52-char slug fits
+    // exactly (64) and a 53-char slug pushes the derived ID to 65 — invalid.
+    // runPackNew's MAX_SLUG_LEN guard rejects anything over 52 to keep both
+    // the manifest *and* every derived id schema-valid.
     const longSlug = `a${'b'.repeat(52)}`; // 53 chars
     const result = runPackNew({ root, slug: longSlug, sutType: 'api' });
     assert.equal(result.ok, false);
@@ -95,10 +97,14 @@ describe('aqa pack new', () => {
     const webR = runPackNew({ root, slug: 'pack-w', sutType: 'web' });
     assert.equal(apiR.ok, true);
     assert.equal(webR.ok, true);
-    const apiManifest = yamlParse(readFileSync(join(root, 'pack-a', 'pack.yaml'), 'utf8')) as {
+    const apiManifest = yamlParse(
+      readFileSync(join(root, 'packs', 'pack-a', 'pack.yaml'), 'utf8'),
+    ) as {
       applies_when: { sut_type: string[] };
     };
-    const webManifest = yamlParse(readFileSync(join(root, 'pack-w', 'pack.yaml'), 'utf8')) as {
+    const webManifest = yamlParse(
+      readFileSync(join(root, 'packs', 'pack-w', 'pack.yaml'), 'utf8'),
+    ) as {
       applies_when: { sut_type: string[] };
     };
     assert.deepEqual(apiManifest.applies_when.sut_type, ['api']);

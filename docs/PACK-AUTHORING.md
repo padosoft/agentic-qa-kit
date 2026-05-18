@@ -18,7 +18,7 @@ my-pack/
 └── probes/*.yaml          # extra probe definitions (optional)
 ```
 
-Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it, publish to npm under your scope and consumers do `npm i @your-scope/my-pack`.
+Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it across projects, the recommended path today is publishing under the `@aqa` scope on npm (`@aqa/pack-myname`) since the default discovery scans `<project>/node_modules/@aqa/*` automatically. Non-`@aqa` scopes work too but currently require an alias install or an explicit `packsRoot` — see "How `aqa run` resolves your pack" below for the constraints.
 
 ## The manifest (`pack.yaml`)
 
@@ -105,11 +105,13 @@ tags: [api, idempotency]
 
 `steps` is an ordered list of probes. Each probe has an `id`, a `kind` (today: `http`), and a `with` payload of HTTP method/url/body/headers. The probe runner executes them in order and records the responses.
 
-`oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds:
+`oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds in `@aqa/runner.builtInOracles`:
 
-- `http_status` — assert the last probe's response status matches `expected`.
-- `response_contains` — assert any probe response body contains the value at the given path (or matches a back-reference like `@probe-post-1.body.id`).
-- `response_not_contains` — the negative.
+- `http_status` — assert the last probe's response status matches `expected` (integer). `with: { expected: 200 }`.
+- `response_contains` — substring match on every probe's serialized response body. `with: { value: "<needle>" }`. Returns pass when **any** probe's body (as `JSON.stringify`) contains the needle.
+- `response_not_contains` — the negative; pass when no probe's body contains the needle.
+
+A jsonpath form with back-references like `@probe-post-1.body.id` appears in some bundled scenarios as documentation of intent — that evaluator is **not** implemented today, so a `response_contains` step relying on it will always pass (the `value` field is undefined, and empty-string is a substring of everything). Track-or-implement jsonpath support is a follow-up; for now use the substring form.
 
 `tags` decide which profile picks the scenario up. `aqa run --profile smoke` only executes scenarios whose `tags` intersect `profile.tags` (or every scenario, if `profile.tags` is empty).
 

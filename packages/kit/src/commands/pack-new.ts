@@ -84,10 +84,14 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     );
   }
 
-  // `resolve` always returns an absolute path, even if `opts.root` was
-  // relative. Drop the now-unreachable `isAbsolute(opts.slug)` branch — the
-  // SLUG_PATTERN check above rejects any slug containing `/` or `\`.
-  const packDir = resolve(opts.root, opts.slug);
+  // Scaffold into `<root>/packs/<slug>/` (not `<root>/<slug>/`) so the
+  // pack ends up in a location `aqa run`'s `defaultPacksRoot()` actually
+  // discovers. Otherwise the user would scaffold a pack, hit `aqa run`,
+  // and see "0 scenarios" with no clue why. `resolve` always returns an
+  // absolute path even if `opts.root` was relative; the SLUG_PATTERN
+  // check above already rejects any slug containing `/` or `\`, so the
+  // prior `isAbsolute(opts.slug)` branch was unreachable.
+  const packDir = resolve(opts.root, 'packs', opts.slug);
   if (existsSync(packDir) && !opts.force) {
     return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
   }

@@ -210,6 +210,15 @@ async function main(): Promise<number> {
         return 1;
       }
       printHeader(`pack new ${slug}`);
+      // Reject flags that were passed without a value (`--sut-type` alone)
+      // rather than silently falling back to the default. Mirrors the
+      // identical guard in the `run` command.
+      for (const k of ['sut-type', 'description', 'author', 'license'] as const) {
+        if (args.flags.has(k) && !args.values.has(k)) {
+          console.error(red(`aqa pack new: --${k} requires a value`));
+          return 1;
+        }
+      }
       const sutType = args.values.get('sut-type') ?? 'api';
       const packNewOpts: Parameters<typeof runPackNew>[0] = {
         root: cwd,
@@ -217,12 +226,10 @@ async function main(): Promise<number> {
         sutType,
       };
       if (args.flags.has('force')) packNewOpts.force = true;
-      const description = args.values.get('description');
-      const author = args.values.get('author');
-      const license = args.values.get('license');
-      if (description) packNewOpts.description = description;
-      if (author) packNewOpts.author = author;
-      if (license) packNewOpts.license = license;
+      if (args.values.has('description'))
+        packNewOpts.description = args.values.get('description') ?? '';
+      if (args.values.has('author')) packNewOpts.author = args.values.get('author') ?? '';
+      if (args.values.has('license')) packNewOpts.license = args.values.get('license') ?? '';
       const result = runPackNew(packNewOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));
