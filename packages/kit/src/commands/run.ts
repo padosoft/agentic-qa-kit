@@ -41,9 +41,13 @@ export interface RunOptions {
   /** If set, makes run_id deterministic — useful for tests + replay. */
   seed?: string;
   /**
-   * Filesystem paths (absolute or relative to `root`) to scan for packs.
-   * Each path must contain a `pack.yaml` manifest. Defaults to `<root>/packs/*`
-   * when present, plus any `node_modules/@aqa/pack-*` (a follow-up).
+   * Filesystem paths (absolute or relative to `root`) to use as pack roots.
+   * Each path must contain a `pack.yaml` manifest at its root. When omitted,
+   * `defaultPacksRoot()` discovers packs in three locations (sorted within
+   * each): `<root>/packs/*`, `<root>/node_modules/@aqa/pack-*`, and the
+   * `dist/packs/*` bundled inside the running `@aqa/kit` install. Caller
+   * order is preserved; pass `packsRoot` in a stable order when relying on
+   * `--seed` for cross-environment determinism.
    */
   packsRoot?: string[];
 }
@@ -133,7 +137,10 @@ function defaultPacksRoot(projectRoot: string): string[] {
 
 function resolvePackDirs(opts: RunOptions): string[] {
   if (opts.packsRoot && opts.packsRoot.length > 0) {
-    return opts.packsRoot.map((p) => (isAbsolute(p) ? p : resolve(opts.root, p)));
+    // Sort caller-supplied paths so `--seed` determinism doesn't depend on
+    // how the caller assembled the array. Comparing absolute paths gives
+    // stable cross-platform order.
+    return opts.packsRoot.map((p) => (isAbsolute(p) ? p : resolve(opts.root, p))).sort();
   }
   return defaultPacksRoot(opts.root);
 }
@@ -276,30 +283,47 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const runId = opts.seed
     ? deterministicRunId(`${project.name}|${profileKey}|${opts.seed}`)
     : freshRunId();
-  const runDir = join(opts.root, '.aqa', 'runs', runId);
-  // Refuse to merge a fresh run into a pre-existing seeded directory — that
-  // would append a second seq=0 chain onto the same events.jsonl and break
-  // any later audit verification. Wrap the stat + readdir in try/catch so
-  // we surface a structured error instead of throwing if the path exists
-  // but is not a directory (e.g. someone touched a file at that name).
-  if (existsSync(runDir)) {
-    try {
-      const st = statSync(runDir);
-      if (!st.isDirectory()) {
-        return makeError(`run path ${runDir} exists but is not a directory`);
-      }
-      if (readdirSync(runDir).length > 0) {
+  const runsParent = join(opts.root, '.aqa', 'runs');
+  const runDir = join(runsParent, runId);
+  // Atomic-ish run directory creation: ensure the parent exists (recursive
+  // OK there — multiple `runs/` callers want that), then try a non-recursive
+  // `mkdirSync(runDir)`. If two concurrent `aqa run` processes share a
+  // deterministic runId, only the first succeeds; the second sees EEXIST
+  // and returns a structured error instead of stomping the audit chain.
+  try {
+    mkdirSync(runsParent, { recursive: true });
+  } catch (e) {
+    return makeError(
+      `cannot create runs root ${runsParent}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  try {
+    mkdirSync(runDir);
+  } catch (e) {
+    // EEXIST is the interesting case — distinguish a deterministic-seed
+    // collision (non-empty dir) from a benign "already there but empty".
+    if (existsSync(runDir)) {
+      try {
+        if (!statSync(runDir).isDirectory()) {
+          return makeError(`run path ${runDir} exists but is not a directory`);
+        }
+        if (readdirSync(runDir).length > 0) {
+          return makeError(
+            `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
+          );
+        }
+        // Empty directory left over from a previous failed run — safe to reuse.
+      } catch (statErr) {
         return makeError(
-          `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
+          `cannot stat run directory ${runDir}: ${statErr instanceof Error ? statErr.message : String(statErr)}`,
         );
       }
-    } catch (e) {
+    } else {
       return makeError(
-        `cannot stat run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+        `cannot create run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
-  mkdirSync(runDir, { recursive: true });
 
   const eventsPath = join(runDir, 'events.jsonl');
   const findingsPath = join(runDir, 'findings.jsonl');
@@ -309,13 +333,21 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // even when a clean run produces zero findings.
   if (!existsSync(findingsPath)) writeFileSync(findingsPath, '', 'utf8');
 
-  events.append({
-    ts: new Date().toISOString(),
-    run_id: runId,
-    kind: 'run_started',
-    actor: { type: 'orchestrator', id: 'aqa-cli' },
-    payload: { profile: profileKey, project: project.name },
-  });
+  // Persisting the initial event must succeed — if it fails (read-only FS,
+  // disk full, permission), the run can't produce a usable audit trail, so
+  // surface that as a structured error instead of crashing into the CLI's
+  // top-level unhandled-error handler.
+  try {
+    events.append({
+      ts: new Date().toISOString(),
+      run_id: runId,
+      kind: 'run_started',
+      actor: { type: 'orchestrator', id: 'aqa-cli' },
+      payload: { profile: profileKey, project: project.name },
+    });
+  } catch (e) {
+    return makeError(`cannot write events.jsonl: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   // Build the set of packs the profile actually wants (by Slug). When the
   // profile lists no packs (default), all discoverable packs are eligible.
@@ -388,21 +420,30 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  events.append({
-    ts: new Date().toISOString(),
-    run_id: runId,
-    kind: 'run_finished',
-    actor: { type: 'orchestrator', id: 'aqa-cli' },
-    payload: {
-      scenarios_run: scenariosRun,
-      findings: findings.snapshot().length,
-      pack_errors: packErrors.length,
-      scenario_errors: scenarioErrors.length,
-      missing_scenarios: missingScenarios.length,
-      unsafe_paths: unsafeScenarioPaths.length,
-      runtime_errors: runtimeErrors.length,
-    },
-  });
+  // Final `run_finished` event closes the audit trail. Wrap in try/catch
+  // so a write failure at finalization still returns a structured result
+  // (with the finalization error appended) rather than throwing past the
+  // structured RunResult.
+  let finalizationError: string | undefined;
+  try {
+    events.append({
+      ts: new Date().toISOString(),
+      run_id: runId,
+      kind: 'run_finished',
+      actor: { type: 'orchestrator', id: 'aqa-cli' },
+      payload: {
+        scenarios_run: scenariosRun,
+        findings: findings.snapshot().length,
+        pack_errors: packErrors.length,
+        scenario_errors: scenarioErrors.length,
+        missing_scenarios: missingScenarios.length,
+        unsafe_paths: unsafeScenarioPaths.length,
+        runtime_errors: runtimeErrors.length,
+      },
+    });
+  } catch (e) {
+    finalizationError = `cannot finalize run audit: ${e instanceof Error ? e.message : String(e)}`;
+  }
 
   // Build a structured error message when something went wrong. Any of these
   // is a real coverage gap, not a benign skip: a broken pack, a malformed
@@ -435,6 +476,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
     );
   }
+  if (finalizationError) reasons.push(finalizationError);
 
   return {
     ok: reasons.length === 0,
