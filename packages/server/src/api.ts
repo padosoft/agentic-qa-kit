@@ -336,6 +336,10 @@ export function makeApi(): ApiHandler[] {
         if (typeof body.sut_type !== 'string' || body.sut_type.trim() === '') {
           return asResponse({ error: 'sut_type is required (non-empty string)' }, 400);
         }
+        // Slug length is delegated to runPackNew (MAX_SLUG_LEN=52) and
+        // surfaces as a 400 EINVAL. We don't duplicate the cap here so
+        // there's one source of truth — if MAX_SLUG_LEN ever changes,
+        // the API boundary follows automatically.
         // Optional fields — strict type check at the API boundary so a
         // client can't smuggle truthy non-booleans through `force` (which
         // `runPackNew` checks via `if (!opts.force)` truthiness). A
@@ -362,14 +366,30 @@ export function makeApi(): ApiHandler[] {
         // lowercase alphanumeric" error rejecting the whitespace.
         // The admin wizard already trims; this normalizes for direct
         // API callers too.
+        //
+        // For optional string fields (description/author/license), trim
+        // AND drop empty/whitespace-only values from the forwarded
+        // payload — otherwise a request like `{"description": "   "}`
+        // would write a blank `description:` line into the generated
+        // pack.yaml, which is worse than just falling back to the
+        // scaffolder's default ("Pack scaffolded by aqa pack new").
+        function optStr(k: 'description' | 'author' | 'license'): string | undefined {
+          const v = body[k];
+          if (typeof v !== 'string') return undefined;
+          const trimmed = v.trim();
+          return trimmed === '' ? undefined : trimmed;
+        }
+        const description = optStr('description');
+        const author = optStr('author');
+        const license = optStr('license');
         const result = runPackNew({
           root: ctx.projectRoot,
           slug: body.slug.trim(),
           sutType: body.sut_type.trim(),
           ...(body.force !== undefined ? { force: body.force as boolean } : {}),
-          ...(body.description !== undefined ? { description: body.description as string } : {}),
-          ...(body.author !== undefined ? { author: body.author as string } : {}),
-          ...(body.license !== undefined ? { license: body.license as string } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(author !== undefined ? { author } : {}),
+          ...(license !== undefined ? { license } : {}),
         });
         if (!result.ok) {
           // Map the structured `code` field to an HTTP status. This is

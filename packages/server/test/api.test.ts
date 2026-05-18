@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -289,6 +289,43 @@ describe('makeApi', () => {
         assert.equal(res?.status, 400, `${k}=number must be rejected`);
         assert.match((res?.body as { error: string }).error, new RegExp(`${k}.*string`, 'i'));
       }
+    });
+
+    it('treats empty/whitespace optional strings as undefined (no blank manifest fields)', async () => {
+      // Regression test for PR #26 iter 3 (Copilot):
+      // A request with `{"description": "   "}` used to forward the
+      // whitespace string to runPackNew, which then baked a blank
+      // `description:` line into the generated pack.yaml. Now the
+      // endpoint trims and drops empty values, so runPackNew falls
+      // back to its own sensible default ("Pack scaffolded by aqa
+      // pack new"). The test asserts the request succeeds AND the
+      // resulting pack.yaml is NOT empty for that field.
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const res = await route?.handle(
+        {
+          headers: {},
+          params: {},
+          body: {
+            slug: 'pack-blank',
+            sut_type: 'api',
+            description: '   ',
+            author: '',
+            license: '\t',
+          },
+        },
+        c,
+      );
+      assert.equal(res?.status, 201);
+      const manifest = readFileSync(join(root, 'packs', 'pack-blank', 'pack.yaml'), 'utf8');
+      // The scaffolder's fallback description must be present rather
+      // than a literal empty `description:` line.
+      assert.match(
+        manifest,
+        /description:\s+Pack scaffolded by aqa pack new/i,
+        'whitespace-only description must fall back to the kit default, not write a blank line',
+      );
     });
 
     it('trims whitespace around slug + sut_type before forwarding', async () => {

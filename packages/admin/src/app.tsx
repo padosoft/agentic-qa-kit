@@ -4267,7 +4267,12 @@ function CreatePackWizard({ open, onClose }) {
       const msg = e instanceof Error ? e.message : String(e);
       const full = `Could not reach /api/packs/scaffold (${msg}). The admin is in mock-data mode or the server is down — no files were written.`;
       setError(full);
-      toast.push({ kind: 'error', title: 'Create pack failed', body: msg });
+      // Toast body uses `full` (with the mock-mode hint) rather than the
+      // raw exception `msg` — that hint is the most useful piece of
+      // context when a fetch fails, and the toast disappears on its
+      // own so the user might miss it if it only contains the cryptic
+      // exception message.
+      toast.push({ kind: 'error', title: 'Create pack failed', body: full });
     } finally {
       setSubmitting(false);
     }
@@ -4277,8 +4282,12 @@ function CreatePackWizard({ open, onClose }) {
     <Modal
       open={open}
       onClose={handleClose}
-      title="Create pack"
-      sub="Scaffolds a runnable pack under <project>/packs/<slug>/. Same code path as `aqa pack new` on the CLI."
+      title={result ? 'Pack created' : 'Create pack'}
+      sub={
+        result
+          ? 'Your pack is on disk and ready to edit. The wizard wrote the manifest + a starter scenario + a placeholder risk.'
+          : 'Scaffolds a runnable pack under <project>/packs/<slug>/. Same code path as `aqa pack new` on the CLI.'
+      }
       size="md"
       footer={
         result ? (
