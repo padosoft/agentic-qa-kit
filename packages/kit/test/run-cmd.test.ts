@@ -378,6 +378,38 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('release-gate profile (require_deterministic_replay) fails when any finding is emitted', async () => {
+    const { root, packDir } = fixtureProject();
+    // Make the scenario fail so a finding is produced.
+    const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
+    // Patch the release-gate profile to point at our local pack.
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    const rg = profiles.profiles['release-gate'];
+    if (rg) {
+      rg.packs = ['pack-local-smoke'];
+      rg.tags = ['smoke'];
+    }
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
+    assert.equal(result.findingsCount, 1, 'expected 1 finding from a failing oracle');
+    assert.equal(result.ok, false, 'release-gate must fail on findings');
+    assert.match(result.error ?? '', /release-gate|finding/i);
+  });
+
+  it('smoke profile reports ok=true even when findings are emitted (informational)', async () => {
+    const { root, packDir } = fixtureProject();
+    const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.findingsCount, 1);
+    assert.equal(result.ok, true, 'smoke profile must not fail on findings alone');
+  });
+
   it('deduplicates a pack discovered from multiple roots by manifest name', async () => {
     const { root, packDir } = fixtureProject();
     // Make a second on-disk copy of the same pack at a different absolute

@@ -2,11 +2,19 @@
  * `aqa run` — the inner-loop driver.
  *
  * Loads `.aqa/project.yaml` + `.aqa/profiles.yaml` using the canonical
- * `@aqa/schemas` shapes, resolves packs from the supplied `packsRoot` list
- * (filesystem-relative, defaults to `<root>/packs/*`), filters scenarios by
+ * `@aqa/schemas` shapes, resolves packs from either an explicit `packsRoot`
+ * list or three default locations (project's `packs/*`, `node_modules/@aqa/pack-*`,
+ * and the `dist/packs/*` bundled inside `@aqa/kit`), filters scenarios by
  * the selected profile's `tags`, and runs each one via
  * `@aqa/runner.runScenario`. The runner appends to the events + findings
  * writers we hand it; we never re-emit `finding_emitted` ourselves.
+ *
+ * Profiles with `require_deterministic_replay: true` (the canonical
+ * "release-gate" signal from the schema) treat any emitted finding as a
+ * run-level failure so CI exits non-zero on regressions. Smoke-style
+ * profiles still surface findings via `findingsCount` + `findings.jsonl`
+ * but report `ok: true` when scenarios completed without infrastructure
+ * errors.
  *
  * The default probe runner is the no-network stub from `@aqa/runner`. Wiring
  * real HTTP / browser probes against a live target is intentionally a
@@ -43,11 +51,16 @@ export interface RunOptions {
   /**
    * Filesystem paths (absolute or relative to `root`) to use as pack roots.
    * Each path must contain a `pack.yaml` manifest at its root. When omitted,
-   * `defaultPacksRoot()` discovers packs in three locations: `<root>/packs/*`,
-   * `<root>/node_modules/@aqa/pack-*`, and the `dist/packs/*` bundled inside
-   * the running `@aqa/kit` install. Both default discovery and explicit
-   * `packsRoot` values are sorted by absolute path for cross-environment
-   * determinism under `--seed`.
+   * `defaultPacksRoot()` discovers packs from three locations in fixed
+   * priority order:
+   *   1. `<root>/packs/*` (monorepo / vendored layout)
+   *   2. `<root>/node_modules/@aqa/pack-*` (npm-installed packs)
+   *   3. `dist/packs/*` bundled inside the running `@aqa/kit` install
+   * Within each tier, directory entries are sorted alphabetically for
+   * `--seed` determinism. Caller-supplied `packsRoot` values are likewise
+   * sorted alphabetically. A pack discovered in an earlier tier wins over
+   * the same-named manifest in a later tier (project beats node_modules
+   * beats bundled).
    */
   packsRoot?: string[];
 }
@@ -507,6 +520,17 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
     );
   }
+  // Release-gate semantics: a profile that opts into deterministic replay
+  // (the schema signal for "this is the merge gate") must exit non-zero on
+  // any emitted finding so CI catches regressions without callers having
+  // to manually parse findings.jsonl. Smoke profiles still report ok=true
+  // when scenarios complete — they surface findings via `findingsCount`.
+  const findingsCount = findings.snapshot().length;
+  if (profile.require_deterministic_replay && findingsCount > 0) {
+    reasons.push(
+      `profile "${profileKey}" emitted ${findingsCount} finding(s) — release-gate profiles (require_deterministic_replay: true) treat any finding as a regression`,
+    );
+  }
   if (finalizationError) reasons.push(finalizationError);
 
   return {
@@ -514,7 +538,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     runId,
     runDir,
     scenariosRun,
-    findingsCount: findings.snapshot().length,
+    findingsCount,
     ...(reasons.length > 0 ? { error: reasons.join(' | ') } : {}),
   };
 }
