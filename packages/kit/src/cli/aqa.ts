@@ -37,13 +37,13 @@ function parseArgs(argv: string[]): ParsedArgs {
         const k = a.slice(2);
         out.flags.add(k);
         if (VALUE_FLAGS.has(k)) {
-          // VALUE_FLAGS unconditionally consume the next token, even if it
-          // begins with `-` — a seed of `-123` is legal, and so is a profile
-          // key that happens to start with a hyphen. To pass a value that
-          // is itself a flag-looking string, the `--key=value` form is the
-          // documented alternative.
+          // VALUE_FLAGS consume the next token even when it starts with a
+          // single `-` (so a seed of `-123` works), but never when it starts
+          // with `--` (those are always treated as the next flag — otherwise
+          // `aqa run --profile --help` would silently swallow `--help`).
+          // Pass `--key=value` for any value that begins with `--`.
           const next = argv[i + 1];
-          if (next !== undefined) {
+          if (next !== undefined && !next.startsWith('--')) {
             out.values.set(k, next);
             i += 1;
           }

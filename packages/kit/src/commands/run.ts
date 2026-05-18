@@ -79,11 +79,30 @@ export interface RunResult {
   runDir?: string;
   scenariosRun: number;
   findingsCount: number;
+  /**
+   * Aggregated reason(s) the run is not OK. Always present when `ok: false`.
+   */
   error?: string;
+  /**
+   * Diagnostics that did not fail the run but should still be surfaced —
+   * e.g. an unrelated broken pack on disk that the selected profile didn't
+   * touch, or scenario files that the manifest mentions but couldn't be
+   * parsed when the profile is in use-everything mode without enforcing
+   * full coverage. Bounded to `MAX_DETAIL_PER_KIND` per category to keep
+   * the response payload reasonable.
+   */
+  warnings?: string[];
 }
+
+/** Cap on how many detail entries per category we surface in events/RunResult. */
+const MAX_DETAIL_PER_KIND = 10;
 
 function readYaml<T>(path: string): T {
   return yamlParse(readFileSync(path, 'utf8')) as T;
+}
+
+function cap<T>(arr: readonly T[]): T[] {
+  return arr.length <= MAX_DETAIL_PER_KIND ? [...arr] : arr.slice(0, MAX_DETAIL_PER_KIND);
 }
 
 function deterministicRunId(seed: string): string {
@@ -496,6 +515,14 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenarios: missingScenarios.length,
         unsafe_paths: unsafeScenarioPaths.length,
         runtime_errors: runtimeErrors.length,
+        // Capped detail samples — let auditors diagnose the run from the
+        // audit trail alone, without having to re-execute it. Bounded so
+        // a runaway pack tree can't blow up the JSONL line size.
+        pack_error_samples: cap(packErrors),
+        scenario_error_samples: cap(scenarioErrors),
+        missing_scenario_samples: cap(missingScenarios),
+        unsafe_path_samples: cap(unsafeScenarioPaths),
+        runtime_error_samples: cap(runtimeErrors),
       },
     });
   } catch (e) {
@@ -510,15 +537,30 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // `ok: false` so CI catches the gap instead of greenlighting an empty
   // release-gate run.
   const reasons: string[] = [];
-  // Pack errors fail the run only when the profile is in use-everything mode
-  // (`profile.packs` empty → every broken pack shrinks intended coverage).
-  // When the profile pins specific packs, an unrelated broken pack on disk
-  // (a stale `packs/experimental/`, a sibling `node_modules/@aqa/pack-old`)
-  // shouldn't block an otherwise valid run. The `scenariosRun === 0`
-  // reason below still catches the case where the profile's selected
-  // pack was the one that failed.
+  // Pack errors fail the run in two cases:
+  //   1. Use-everything mode (`profile.packs` empty): every broken pack
+  //      shrinks intended coverage.
+  //   2. Specific selection mode: at least one *selected* pack didn't
+  //      load. We detect this by comparing the count of profile-pinned
+  //      packs against the count of canonical manifest names we actually
+  //      ran (`seenPackNames`). An unrelated broken pack elsewhere on
+  //      disk stays non-blocking.
+  // The canonical names from `profile.packs` are the entries themselves
+  // plus `pack-` prefixed variants (legacy aliases), so we count how many
+  // of the canonical pack names actually got loaded.
+  const selectedCanonical = new Set<string>();
+  for (const p of profile.packs) {
+    const canonical = p.startsWith('pack-') ? p : `pack-${p}`;
+    selectedCanonical.add(canonical);
+  }
+  const selectedLoadedCount = [...selectedCanonical].filter((n) => seenPackNames.has(n)).length;
+  const missingSelectedCount = selectedCanonical.size - selectedLoadedCount;
   if (packErrors.length > 0 && profilePackSet.size === 0) {
     reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
+  } else if (missingSelectedCount > 0 && packErrors.length > 0) {
+    reasons.push(
+      `${missingSelectedCount} selected pack(s) did not load (selected: ${[...selectedCanonical].join(', ')}); errors: ${packErrors.join('; ')}`,
+    );
   }
   if (scenarioErrors.length > 0)
     reasons.push(
@@ -554,6 +596,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   }
   if (finalizationError) reasons.push(finalizationError);
 
+  // Warnings: anything we observed that didn't make `ok: false` but is
+  // still useful diagnostic context (e.g. an unrelated broken pack when
+  // the selected profile loaded fine). Capped so a noisy tree doesn't
+  // overwhelm the response.
+  const warnings: string[] = [];
+  if (packErrors.length > 0 && reasons.length === 0) {
+    for (const e of cap(packErrors)) warnings.push(`pack: ${e}`);
+  }
+  if (missingScenarios.length > 0 && reasons.length === 0) {
+    for (const m of cap(missingScenarios)) warnings.push(`missing scenario: ${m}`);
+  }
+
   return {
     ok: reasons.length === 0,
     runId,
@@ -561,5 +615,6 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     scenariosRun,
     findingsCount,
     ...(reasons.length > 0 ? { error: reasons.join(' | ') } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

@@ -378,12 +378,60 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('fails the run when a profile-selected pack does not load (even if others did)', async () => {
+    const { root, packDir } = fixtureProject();
+    // Make a second pack dir with a broken manifest, named to match a
+    // canonical entry in the profile so it's clearly "selected".
+    const brokenPackDir = join(root, 'broken-selected-pack');
+    mkdirSync(brokenPackDir, { recursive: true });
+    writeFileSync(join(brokenPackDir, 'pack.yaml'), 'oops: : invalid\n', 'utf8');
+    // Patch the profile to pin both packs.
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    if (profiles.profiles.smoke) {
+      profiles.profiles.smoke.packs = ['pack-local-smoke', 'pack-must-load'];
+      profiles.profiles.smoke.tags = ['smoke'];
+    }
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir, brokenPackDir],
+    });
+    assert.equal(result.ok, false, 'a selected-but-unloaded pack must fail the run');
+    assert.match(result.error ?? '', /selected pack/i);
+  });
+
+  it('exposes unrelated pack errors as warnings when ok=true', async () => {
+    const { root, packDir } = fixtureProject();
+    const strayPackDir = join(root, 'stray-broken-pack');
+    mkdirSync(strayPackDir, { recursive: true });
+    writeFileSync(join(strayPackDir, 'pack.yaml'), 'this is: : not valid YAML\n', 'utf8');
+
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir, strayPackDir],
+    });
+    assert.equal(result.ok, true);
+    assert.ok(result.warnings && result.warnings.length > 0, 'expected warnings');
+    assert.match(
+      (result.warnings ?? []).join(' '),
+      /pack/i,
+      'warnings must mention the unrelated broken pack',
+    );
+  });
+
   it('ignores broken packs that the selected profile did not reference', async () => {
     const { root, packDir } = fixtureProject();
     // Add an unrelated broken pack at a sibling path. The smoke profile
     // pins `pack-local-smoke` only, so this stale pack.yaml must not
-    // fail the run — its load error should be recorded in the
-    // run_finished event but not flip ok=false.
+    // fail the run — its load error is surfaced via `result.warnings`
+    // and the `pack_error_samples` field in the run_finished event,
+    // but it doesn't flip ok=false.
     const strayPackDir = join(root, 'stray-broken-pack');
     mkdirSync(strayPackDir, { recursive: true });
     writeFileSync(join(strayPackDir, 'pack.yaml'), 'this is: : not valid YAML\n', 'utf8');
