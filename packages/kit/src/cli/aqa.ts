@@ -46,7 +46,8 @@ function parseArgs(argv: string[]): ParsedArgs {
           //   - DO consume everything else
           // For ambiguous values, the `--key=value` form is unambiguous.
           const next = argv[i + 1];
-          const looksLikeFlag = next !== undefined && next.startsWith('-') && !/^-\d/.test(next); // -123 is a value; -h / --help / -v are flags
+          // -123 is a value; -h / --help / -v are flags.
+          const looksLikeFlag = next?.startsWith('-') && !/^-\d/.test(next);
           if (next !== undefined && !looksLikeFlag) {
             out.values.set(k, next);
             i += 1;
