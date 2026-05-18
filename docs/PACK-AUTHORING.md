@@ -210,9 +210,10 @@ mkdir -p packs/pack-healthcheck
 # ... copy the three files above into packs/pack-healthcheck/ ...
 ```
 
-Then add the pack to a profile in `.aqa/profiles.yaml`:
+Then add the pack to a profile in `.aqa/profiles.yaml`. Note both the top-level `schema_version` AND the per-profile `schema_version` + `execution_mode` are required by `@aqa/schemas/ProfilesFile`:
 
 ```yaml
+schema_version: "1"
 profiles:
   smoke:
     schema_version: "1"
