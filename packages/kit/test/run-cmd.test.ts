@@ -313,18 +313,20 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /unsafe/i);
   });
 
-  it('rejects a scenario file that symlinks outside the pack root', async () => {
+  it('rejects a scenario file that symlinks outside the pack root', async (t) => {
     const { root, packDir } = fixtureProject();
     // Create a target file outside the pack root and a symlink that points
-    // at it from within scenarios/. On Windows symlink creation may require
-    // admin privileges — skip gracefully if unsupported.
+    // at it from within scenarios/. On Windows, symlink creation requires
+    // admin privileges (or Developer Mode) and on some sandboxes it's
+    // disallowed; use t.skip() so CI reports it accurately rather than
+    // silently returning a pass.
     const outsideTarget = join(root, 'OUTSIDE-SECRET.yaml');
     writeFileSync(outsideTarget, 'schema_version: "1"\nid: leaked\n', 'utf8');
     const link = join(packDir, 'scenarios', 'evil-link.yaml');
     try {
       symlinkSync(outsideTarget, link, 'file');
     } catch {
-      // platform/permission limitation — symlink-test inapplicable here.
+      t.skip('symlink creation not supported on this platform/permission level');
       return;
     }
     // Point the manifest at the symlink so the run will try to load it.

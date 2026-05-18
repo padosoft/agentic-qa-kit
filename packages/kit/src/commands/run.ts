@@ -70,9 +70,12 @@ export interface RunResult {
   /**
    * Present whenever the run got far enough to allocate a run directory —
    * which is most failure modes (broken pack, malformed scenario, 0
-   * scenarios, release-gate findings). Absent only for early-exit errors:
-   * missing project.yaml, invalid CLI flags, runs directory unwritable, or
-   * deterministic-seed collision.
+   * scenarios, release-gate findings, findings.jsonl create failure, or
+   * an exception on the initial `run_started` event write). Absent only
+   * for the early-exit errors that happen before the directory is
+   * created: missing project.yaml, schema-invalid project/profiles,
+   * invalid CLI flags, runs-dir unwritable, or a deterministic-seed
+   * collision.
    */
   runId?: string;
   /** Same presence semantics as `runId`. */
@@ -84,12 +87,14 @@ export interface RunResult {
    */
   error?: string;
   /**
-   * Diagnostics that did not fail the run but should still be surfaced —
-   * e.g. an unrelated broken pack on disk that the selected profile didn't
-   * touch, or scenario files that the manifest mentions but couldn't be
-   * parsed when the profile is in use-everything mode without enforcing
-   * full coverage. Bounded to `MAX_DETAIL_PER_KIND` per category to keep
-   * the response payload reasonable.
+   * Diagnostics that did not fail the run but should still be surfaced.
+   * Currently only one condition flows through: an unrelated broken pack
+   * discovered on disk when the selected profile didn't reference it
+   * (specific-selection mode). Every other observed gap — missing
+   * manifest scenarios, malformed scenario YAML, unsafe paths, runtime
+   * exceptions, missing/unmatched selected packs — is treated as a hard
+   * error and shows up in `error` with `ok: false`. Bounded to
+   * `MAX_DETAIL_PER_KIND` entries per source.
    */
   warnings?: string[];
 }
@@ -266,9 +271,10 @@ function tagsMatch(scenarioTags: readonly string[], profileTags: readonly string
   return scenarioTags.some((t) => profileTags.includes(t));
 }
 
-function makeError(error: string): RunResult {
+function makeError(error: string, runDirInfo?: { runId: string; runDir: string }): RunResult {
   return {
     ok: false,
+    ...(runDirInfo ?? {}),
     scenariosRun: 0,
     findingsCount: 0,
     error,
@@ -377,6 +383,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     } catch (e) {
       return makeError(
         `cannot create findings.jsonl: ${e instanceof Error ? e.message : String(e)}`,
+        { runId, runDir },
       );
     }
   }
@@ -394,7 +401,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       payload: { profile: profileKey, project: project.name },
     });
   } catch (e) {
-    return makeError(`cannot write events.jsonl: ${e instanceof Error ? e.message : String(e)}`);
+    return makeError(`cannot write events.jsonl: ${e instanceof Error ? e.message : String(e)}`, {
+      runId,
+      runDir,
+    });
   }
 
   // Build the set of packs the profile actually wants (by Slug). Old
