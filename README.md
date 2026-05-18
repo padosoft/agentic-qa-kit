@@ -199,10 +199,12 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v0.6.x` | Methodology rigor | STRIDE/FMEA/OWASP integration, oracle ensemble, judge calibration |
 | `v1.0` | **GA enterprise — shipped** | SOC2/ISO controls catalog, `aqa-audit-verify` CLI, pen-test scope doc |
 | `v1.1` | **Polish — shipped** | Banner, full Helm chart (runner StatefulSet, Ingress, NetworkPolicy, Postgres subchart), 3 example targets (Bun, Next.js, Laravel) |
+| `v1.2` | **Admin SPA wired — shipped** | Tailwind 4 + TanStack Router + Query + 12 screens, audit-chain verification in-browser via Web Crypto |
+| `v1.3` | **Quality batch — shipped** | Admin server↔UI mapping, 6 detail routes, 12 new admin tests, CLI E2E smoke gate, threat-model expansion, CHANGELOG backfill |
 
 ## Status
 
-**GA (`v1.0` shipped, `v1.1` current).** The full 24-task roadmap is closed:
+**GA (`v1.0` shipped, `v1.3` current).** The full 24-task roadmap is closed:
 schemas, CLI (`@aqa/kit`), 5 baseline packs, multi-agent adapters
 (Claude/Codex/Gemini/Copilot), runner with hash-chained audit, reporter
 with 3-level replay, admin panel, server + runner fleet, on-prem LLM
