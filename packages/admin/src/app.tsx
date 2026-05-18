@@ -9822,8 +9822,19 @@ function buildCrumbs(routeKey, params) {
   return crumbs;
 }
 
+// Production fallback for the prototype's `window.useTweaks` hook, which
+// was provided by the design-tool editor. In the real build we replace it
+// with a no-op state pair seeded from TWEAK_DEFAULTS.
+if (typeof window !== 'undefined' && typeof (window as any).useTweaks !== 'function') {
+  (window as any).useTweaks = (defaults: Record<string, unknown>) => {
+    const [t, setT] = React.useState(defaults);
+    const setTweak = (k: string, v: unknown) => setT((prev) => ({ ...prev, [k]: v }));
+    return [t, setTweak];
+  };
+}
+
 function App() {
-  const [tweaks, setTweak] = window.useTweaks(TWEAK_DEFAULTS);
+  const [tweaks, setTweak] = (window as any).useTweaks(TWEAK_DEFAULTS);
   const [route, setRoute] = React.useState('dashboard');
   const [routeParams, setRouteParams] = React.useState({});
   const [paletteOpen, setPaletteOpen] = React.useState(false);
@@ -9921,9 +9932,9 @@ function App() {
             notifications={NOTIFICATIONS}
             onOpenNotifs={() => setNotifOpen(true)}
             onToggleSidebar={() => setCollapsed((c) => !c)}
-            onOpenTweaks={() =>
-              window.parent.postMessage({ type: '__edit_mode_open_request' }, '*')
-            }
+            onOpenTweaks={() => {
+              // Design-tool tweaks panel is not bundled in production.
+            }}
             lastTick={lastTick}
           />
           {!isError && <BreadcrumbRow crumbs={crumbs} onNavigate={navigate} mode={mode} />}
