@@ -1,10 +1,16 @@
 /**
- * v1.6 — End-to-end ecosystem smoke for `aqa run`.
+ * v1.6 — End-to-end smoke for `aqa run`.
  *
- * TDD discipline: this test was written *before* the `runRun` command existed.
- * It asserts the full chain — config load → pack discovery → scenario execution
- * → events.jsonl with valid hash chain → findings.jsonl produced — works from a
- * fresh fixture project without requiring a real network target.
+ * TDD-style: the suite was written before `runRun` existed. It asserts the
+ * full chain — schema-valid `aqa init` output → pack discovery via the
+ * manifest → scenario execution → events.jsonl with a chained hash → a
+ * touched findings.jsonl — works against a fresh fixture project without
+ * a real network target.
+ *
+ * We build the fixture by running the real `aqa init`, then sprinkling in a
+ * local pack so the project remains schema-valid (and `aqa validate` would
+ * accept it). Anything else risks the test passing on a shape no real user
+ * would ever have.
  */
 
 import assert from 'node:assert/strict';
@@ -20,13 +26,16 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
+import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
 
 /**
- * Re-walk the writer's hash chain. We can't use `@aqa/compliance.verifyEventChain`
- * directly because the two implementations differ slightly on canonical form and
- * on the seq=0 prev_hash (writer emits null, verifier expects "0…"). Reconciling
- * those formats is tracked as a v1.6 follow-up; this in-test verifier matches
+ * Re-walk the writer's hash chain. We can't share `@aqa/compliance.verifyEventChain`
+ * directly because the two implementations differ slightly on canonical form
+ * (writer omits prev_hash from the canonical body, verifier includes it) and on
+ * seq=0 (writer emits null, verifier expects all-zero hash). Reconciling the
+ * two formats is tracked as a separate cleanup; this local verifier mirrors
  * `packages/runner/src/events.ts` exactly.
  */
 function canonicalise(value: unknown): string {
@@ -49,13 +58,15 @@ function verifyWriterChain(lines: string[]): { ok: boolean; reason?: string } {
   for (let i = 0; i < lines.length; i++) {
     const ev = JSON.parse(lines[i] as string) as Record<string, unknown>;
     const { hash, prev_hash, ...rest } = ev as { hash: string; prev_hash: string | null };
-    if (i === 0 && prev_hash !== null)
+    if (i === 0 && prev_hash !== null) {
       return { ok: false, reason: `event[0] prev_hash must be null, got ${String(prev_hash)}` };
-    if (i > 0 && prev_hash !== prev)
+    }
+    if (i > 0 && prev_hash !== prev) {
       return {
         ok: false,
         reason: `event[${i}] prev_hash ${String(prev_hash).slice(0, 12)}… does not chain`,
       };
+    }
     const recomputed = createHash('sha256')
       .update(prev + canonicalise(rest))
       .digest('hex');
@@ -65,58 +76,7 @@ function verifyWriterChain(lines: string[]): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-function makeTempProject(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), 'aqa-run-cmd-'));
-  for (const [rel, content] of Object.entries(files)) {
-    const abs = join(dir, rel);
-    mkdirSync(join(abs, '..'), { recursive: true });
-    writeFileSync(abs, content, 'utf8');
-  }
-  return dir;
-}
-
-const MINIMAL_PROJECT_YAML = `schema_version: "1"
-name: smoke-fixture
-schema_compat: "1"
-stack:
-  runtime: node
-  framework: hono
-  sut_type: api
-  test_runner: node
-packs:
-  - "./local-pack"
-profiles:
-  default: smoke
-`;
-
-const MINIMAL_PROFILES_YAML = `schema_version: "1"
-profiles:
-  smoke:
-    name: smoke
-    description: fast inner-loop subset
-    targets: { sut_type: [api] }
-    scope: { include_tags: [api] }
-    budget: { max_findings: 50 }
-    failure_policy: { on_fail: warn }
-  release-gate:
-    name: release-gate
-    description: deterministic merge gate
-    targets: { sut_type: [api] }
-    scope: { include_tags: [api] }
-    budget: { max_findings: 0 }
-    failure_policy: { on_fail: block }
-`;
-
-const MINIMAL_RISK_MAP_YAML = `schema_version: "1"
-risks:
-  - id: r-smoke
-    category: integrity
-    description: smoke risk
-    severity: high
-    invariants: [inv-smoke]
-`;
-
-const MINIMAL_PACK_YAML = `schema_version: "1"
+const SMOKE_PACK_MANIFEST = `schema_version: "1"
 name: pack-local-smoke
 version: 0.1.0
 description: smoke-only fixture pack
@@ -132,9 +92,7 @@ oracles: []
 probes: []
 `;
 
-const MINIMAL_PACK_PACKAGE_JSON = `{"name":"pack-local-smoke","version":"0.1.0","private":true}`;
-
-const NOOP_SCENARIO_YAML = `schema_version: "1"
+const SMOKE_SCENARIO = `schema_version: "1"
 id: scn-smoke-noop
 title: Smoke no-op scenario — proves the runner emits events without a network target
 risk_refs: [r-smoke]
@@ -151,25 +109,62 @@ oracles:
 tags: [api, smoke]
 `;
 
-function fixtureProject(): string {
-  return makeTempProject({
-    '.aqa/project.yaml': MINIMAL_PROJECT_YAML,
-    '.aqa/profiles.yaml': MINIMAL_PROFILES_YAML,
-    '.aqa/risk-map.yaml': MINIMAL_RISK_MAP_YAML,
-    'local-pack/pack.yaml': MINIMAL_PACK_YAML,
-    'local-pack/package.json': MINIMAL_PACK_PACKAGE_JSON,
-    'local-pack/scenarios/smoke-noop.yaml': NOOP_SCENARIO_YAML,
-  });
+/**
+ * Build a temp project the same way a real user would:
+ * 1. Run the real `aqa init` (schema-valid project/profiles/risk-map).
+ * 2. Add a `pack-local-smoke` pack on disk.
+ * 3. Patch the `smoke` profile to list that pack and the `smoke` tag.
+ *
+ * The result passes `aqa validate` end-to-end (asserted below) so the test
+ * exercises the same path real consumers will hit.
+ */
+function fixtureProject(): { root: string; packDir: string } {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-run-cmd-'));
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'smoke', dependencies: { hono: '^4.0.0' } }),
+    'utf8',
+  );
+  writeFileSync(join(root, 'bun.lock'), '', 'utf8');
+  runInit({ root, projectName: 'smoke-fixture' });
+
+  const packDir = join(root, 'local-pack');
+  mkdirSync(join(packDir, 'scenarios'), { recursive: true });
+  writeFileSync(join(packDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');
+  writeFileSync(
+    join(packDir, 'package.json'),
+    JSON.stringify({ name: 'pack-local-smoke', version: '0.1.0', private: true }),
+    'utf8',
+  );
+  writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), SMOKE_SCENARIO, 'utf8');
+
+  // Wire the `smoke` profile to this local pack + match its tags.
+  const profilesPath = join(root, '.aqa', 'profiles.yaml');
+  const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+    schema_version: '1';
+    profiles: Record<string, { packs: string[]; tags: string[]; name: string }>;
+  };
+  if (profiles.profiles.smoke) {
+    profiles.profiles.smoke.packs = ['pack-local-smoke'];
+    profiles.profiles.smoke.tags = ['smoke'];
+  }
+  writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+  return { root, packDir };
 }
 
 describe('aqa run', () => {
-  it('boots from a fresh project, runs scenarios, and writes an audit + findings to .aqa/runs/<run_id>/', async () => {
-    const root = fixtureProject();
-    const result = await runRun({ root, profile: 'smoke' });
+  it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
+    const { root, packDir } = fixtureProject();
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
 
     assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
     assert.ok(result.runId, 'runId must be set');
     assert.ok(result.runDir, 'runDir must be set');
+    assert.ok(
+      result.scenariosRun >= 1,
+      `expected at least 1 scenario to run, got ${result.scenariosRun}`,
+    );
 
     const eventsPath = join(result.runDir, 'events.jsonl');
     const findingsPath = join(result.runDir, 'findings.jsonl');
@@ -177,36 +172,99 @@ describe('aqa run', () => {
     assert.ok(existsSync(findingsPath), `findings.jsonl must exist at ${findingsPath}`);
 
     const eventLines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
-    assert.ok(
-      eventLines.length >= 3,
-      `expected ≥3 events (run_started, probe, oracle, run_completed), got ${eventLines.length}`,
-    );
+    assert.ok(eventLines.length >= 3, `expected ≥3 events, got ${eventLines.length}`);
 
     const chain = verifyWriterChain(eventLines);
     assert.equal(chain.ok, true, `audit chain must verify, got: ${chain.reason ?? ''}`);
   });
 
+  it('emits exactly one `finding_emitted` event per failing scenario', async () => {
+    // Build a fixture whose oracle deliberately fails so we get a finding.
+    const { root, packDir } = fixtureProject();
+    const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, true);
+    assert.equal(result.findingsCount, 1, 'one failing scenario must produce one finding');
+
+    const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as { kind: string });
+    const findingEvents = events.filter((e) => e.kind === 'finding_emitted');
+    assert.equal(
+      findingEvents.length,
+      1,
+      `expected exactly 1 finding_emitted event, got ${findingEvents.length}`,
+    );
+
+    const findingsLines = readFileSync(join(result.runDir, 'findings.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    assert.equal(
+      findingsLines.length,
+      1,
+      `expected exactly 1 finding line, got ${findingsLines.length}`,
+    );
+  });
+
   it('rejects an unknown profile rather than silently running all scenarios', async () => {
-    const root = fixtureProject();
-    const result = await runRun({ root, profile: 'no-such-profile' });
+    const { root, packDir } = fixtureProject();
+    const result = await runRun({ root, profile: 'no-such-profile', packsRoot: [packDir] });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /profile/i);
   });
 
+  it('rejects an empty --profile value', async () => {
+    const { root, packDir } = fixtureProject();
+    const result = await runRun({ root, profile: '', packsRoot: [packDir] });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /--profile/);
+  });
+
   it('produces a deterministic run_id when seed is provided', async () => {
-    const root = fixtureProject();
-    const a = await runRun({ root, profile: 'smoke', seed: 'fixed-seed' });
-    const b = await runRun({ root, profile: 'smoke', seed: 'fixed-seed' });
+    const { root: rootA, packDir: packA } = fixtureProject();
+    const { root: rootB, packDir: packB } = fixtureProject();
+    const a = await runRun({
+      root: rootA,
+      profile: 'smoke',
+      seed: 'fixed-seed',
+      packsRoot: [packA],
+    });
+    const b = await runRun({
+      root: rootB,
+      profile: 'smoke',
+      seed: 'fixed-seed',
+      packsRoot: [packB],
+    });
     assert.equal(a.runId, b.runId, 'identical seeds must produce identical run_ids');
+  });
+
+  it('refuses to re-use a deterministic run directory rather than corrupting the audit chain', async () => {
+    const { root, packDir } = fixtureProject();
+    const first = await runRun({ root, profile: 'smoke', seed: 'same-seed', packsRoot: [packDir] });
+    assert.equal(first.ok, true);
+
+    const second = await runRun({
+      root,
+      profile: 'smoke',
+      seed: 'same-seed',
+      packsRoot: [packDir],
+    });
+    assert.equal(second.ok, false, 'second run with same seed must refuse to write');
+    assert.match(second.error ?? '', /non-empty|collision/i);
   });
 });
 
 describe('aqa run — fs layout', () => {
-  it('creates a separate run directory per invocation', async () => {
-    const root = fixtureProject();
-    await runRun({ root, profile: 'smoke' });
+  it('creates a separate run directory per non-seeded invocation', async () => {
+    const { root, packDir } = fixtureProject();
+    await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
     await new Promise((r) => setTimeout(r, 10));
-    await runRun({ root, profile: 'smoke' });
+    await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
     const runsDir = join(root, '.aqa', 'runs');
     const entries = readdirSync(runsDir);
     assert.ok(entries.length >= 2, `expected ≥2 run directories, found ${entries.length}`);

@@ -142,6 +142,16 @@ async function main(): Promise<number> {
     }
     case 'run': {
       printHeader('run');
+      // A flag passed without a value (e.g. `aqa run --profile`) is treated as
+      // a usage error rather than silently falling back to the default.
+      if (args.flags.has('profile') && !args.values.has('profile')) {
+        console.error(red('aqa run: --profile requires a value'));
+        return 1;
+      }
+      if (args.flags.has('seed') && !args.values.has('seed')) {
+        console.error(red('aqa run: --seed requires a value'));
+        return 1;
+      }
       const runOpts: Parameters<typeof runRun>[0] = { root: cwd };
       const profile = args.values.get('profile');
       const seed = args.values.get('seed');

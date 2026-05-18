@@ -1,29 +1,38 @@
 /**
- * `aqa run` — the inner-loop driver. Loads .aqa/project.yaml, resolves packs
- * (filesystem-relative paths only for now; npm-style packs are a follow-up),
- * executes every scenario whose tags intersect the requested profile's scope,
- * and streams an append-only events.jsonl + findings.jsonl into
- * `.aqa/runs/<run_id>/`.
+ * `aqa run` — the inner-loop driver.
+ *
+ * Loads `.aqa/project.yaml` + `.aqa/profiles.yaml` using the canonical
+ * `@aqa/schemas` shapes, resolves packs from the supplied `packsRoot` list
+ * (filesystem-relative, defaults to `<root>/packs/*`), filters scenarios by
+ * the selected profile's `tags`, and runs each one via
+ * `@aqa/runner.runScenario`. The runner appends to the events + findings
+ * writers we hand it; we never re-emit `finding_emitted` ourselves.
  *
  * The default probe runner is the no-network stub from `@aqa/runner`. Wiring
  * real HTTP / browser probes against a live target is intentionally a
- * follow-up; this command's job is the orchestration and the audit trail.
+ * follow-up; this command owns the orchestration and the audit trail.
  */
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { loadPack } from '@aqa/pack-loader';
+import { type LoadedPack, loadPack } from '@aqa/pack-loader';
 import { EventChainWriter, FindingsWriter, runScenario } from '@aqa/runner';
-import { Scenario } from '@aqa/schemas';
+import { Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 
 export interface RunOptions {
   root: string;
-  /** Profile key from .aqa/profiles.yaml; defaults to the project's profiles.default. */
+  /** Profile key from .aqa/profiles.yaml; defaults to the first profile in the file. */
   profile?: string;
   /** If set, makes run_id deterministic — useful for tests + replay. */
   seed?: string;
+  /**
+   * Filesystem paths (absolute or relative to `root`) to scan for packs.
+   * Each path must contain a `pack.yaml` manifest. Defaults to `<root>/packs/*`
+   * when present, plus any `node_modules/@aqa/pack-*` (a follow-up).
+   */
+  packsRoot?: string[];
 }
 
 export interface RunResult {
@@ -33,23 +42,6 @@ export interface RunResult {
   scenariosRun: number;
   findingsCount: number;
   error?: string;
-}
-
-interface ProjectFile {
-  schema_version: string;
-  name: string;
-  packs?: string[];
-  profiles?: { default?: string };
-}
-
-interface ProfilesFile {
-  schema_version: string;
-  profiles: Record<string, ProfileDef>;
-}
-
-interface ProfileDef {
-  name: string;
-  scope?: { include_tags?: string[]; exclude_tags?: string[] };
 }
 
 function readYaml<T>(path: string): T {
@@ -75,67 +67,114 @@ function freshRunId(): string {
   return `run-${stamp}-${rnd}`.toLowerCase();
 }
 
-function discoverScenarios(packRoot: string): string[] {
+function defaultPacksRoot(projectRoot: string): string[] {
   const candidates: string[] = [];
-  const scenariosDir = join(packRoot, 'scenarios');
-  if (!existsSync(scenariosDir)) return candidates;
-  for (const entry of readdirSync(scenariosDir)) {
-    const abs = join(scenariosDir, entry);
-    if (statSync(abs).isFile() && (entry.endsWith('.yaml') || entry.endsWith('.yml'))) {
-      candidates.push(abs);
+  const repoPacks = join(projectRoot, 'packs');
+  if (existsSync(repoPacks) && statSync(repoPacks).isDirectory()) {
+    for (const entry of readdirSync(repoPacks)) {
+      const abs = join(repoPacks, entry);
+      if (
+        statSync(abs).isDirectory() &&
+        (existsSync(join(abs, 'pack.yaml')) || existsSync(join(abs, 'pack.yml')))
+      ) {
+        candidates.push(abs);
+      }
     }
   }
   return candidates;
 }
 
-function resolvePackRoot(projectRoot: string, packRef: string): string | null {
-  if (packRef.startsWith('./') || packRef.startsWith('../') || isAbsolute(packRef)) {
-    const abs = isAbsolute(packRef) ? packRef : resolve(projectRoot, packRef);
-    return existsSync(join(abs, 'pack.yaml')) || existsSync(join(abs, 'pack.yml')) ? abs : null;
+function resolvePackDirs(opts: RunOptions): string[] {
+  if (opts.packsRoot && opts.packsRoot.length > 0) {
+    return opts.packsRoot.map((p) => (isAbsolute(p) ? p : resolve(opts.root, p)));
   }
-  return null;
+  return defaultPacksRoot(opts.root);
 }
 
-function tagsMatch(scenarioTags: readonly string[], profile: ProfileDef): boolean {
-  const include = profile.scope?.include_tags ?? [];
-  const exclude = profile.scope?.exclude_tags ?? [];
-  if (include.length > 0 && !scenarioTags.some((t) => include.includes(t))) return false;
-  if (exclude.length > 0 && scenarioTags.some((t) => exclude.includes(t))) return false;
-  return true;
+/** Scenarios listed by the pack manifest, resolved relative to packRoot. Stable order. */
+function manifestScenarioFiles(packRoot: string, pack: LoadedPack): string[] {
+  const out: string[] = [];
+  for (const rel of pack.manifest.scenarios ?? []) {
+    const abs = resolve(packRoot, rel);
+    if (existsSync(abs)) out.push(abs);
+  }
+  return out;
+}
+
+/** Scenario tags intersect profile tags (or profile has no filter). */
+function tagsMatch(scenarioTags: readonly string[], profileTags: readonly string[]): boolean {
+  if (profileTags.length === 0) return true;
+  return scenarioTags.some((t) => profileTags.includes(t));
+}
+
+function makeError(error: string): RunResult {
+  return {
+    ok: false,
+    runId: '',
+    runDir: '',
+    scenariosRun: 0,
+    findingsCount: 0,
+    error,
+  };
 }
 
 export async function runRun(opts: RunOptions): Promise<RunResult> {
+  if (opts.profile !== undefined && opts.profile.trim() === '') {
+    return makeError('--profile requires a non-empty value');
+  }
+  if (opts.seed !== undefined && opts.seed.trim() === '') {
+    return makeError('--seed requires a non-empty value');
+  }
+
   const projectPath = join(opts.root, '.aqa', 'project.yaml');
   const profilesPath = join(opts.root, '.aqa', 'profiles.yaml');
   if (!existsSync(projectPath)) {
-    return makeError(opts, '.aqa/project.yaml not found — run `aqa init` first');
+    return makeError('.aqa/project.yaml not found — run `aqa init` first');
   }
   if (!existsSync(profilesPath)) {
-    return makeError(opts, '.aqa/profiles.yaml not found — run `aqa init` first');
+    return makeError('.aqa/profiles.yaml not found — run `aqa init` first');
   }
 
-  const project = readYaml<ProjectFile>(projectPath);
-  const profilesFile = readYaml<ProfilesFile>(profilesPath);
-  const profileKey = opts.profile ?? project.profiles?.default ?? 'smoke';
-  const profile = profilesFile.profiles[profileKey];
-  if (!profile) {
+  let project: Project.Project;
+  let profilesFile: Profile.ProfilesFile;
+  try {
+    project = Project.Project.parse(readYaml<unknown>(projectPath));
+  } catch (e) {
+    return makeError(`.aqa/project.yaml: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    profilesFile = Profile.ProfilesFile.parse(readYaml<unknown>(profilesPath));
+  } catch (e) {
+    return makeError(`.aqa/profiles.yaml: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  const profileKey = opts.profile ?? Object.keys(profilesFile.profiles)[0];
+  if (!profileKey || !profilesFile.profiles[profileKey]) {
     return makeError(
-      opts,
-      `unknown profile "${profileKey}" — known: ${Object.keys(profilesFile.profiles).join(', ') || '(none)'}`,
+      `unknown profile "${profileKey ?? ''}" — known: ${Object.keys(profilesFile.profiles).join(', ') || '(none)'}`,
     );
   }
+  const profile = profilesFile.profiles[profileKey];
 
   const runId = opts.seed
     ? deterministicRunId(`${project.name}|${profileKey}|${opts.seed}`)
     : freshRunId();
   const runDir = join(opts.root, '.aqa', 'runs', runId);
+  // Refuse to merge a fresh run into a pre-existing seeded directory — that
+  // would append a second seq=0 chain onto the same events.jsonl and break
+  // any later audit verification.
+  if (existsSync(runDir) && readdirSync(runDir).length > 0) {
+    return makeError(
+      `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
+    );
+  }
   mkdirSync(runDir, { recursive: true });
 
   const eventsPath = join(runDir, 'events.jsonl');
   const findingsPath = join(runDir, 'findings.jsonl');
   const events = new EventChainWriter(eventsPath);
   const findings = new FindingsWriter(findingsPath);
-  // Touch the findings file so consumers can always count on its presence,
+  // Touch findings.jsonl so downstream consumers can rely on its presence,
   // even when a clean run produces zero findings.
   if (!existsSync(findingsPath)) writeFileSync(findingsPath, '', 'utf8');
 
@@ -147,44 +186,40 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     payload: { profile: profileKey, project: project.name },
   });
 
+  // Build the set of packs the profile actually wants (by Slug). When the
+  // profile lists no packs (default), all discoverable packs are eligible.
+  const profilePackSet = new Set(profile.packs);
   let scenariosRun = 0;
-  for (const packRef of project.packs ?? []) {
-    const packRoot = resolvePackRoot(opts.root, packRef);
-    if (!packRoot) continue;
+  let scenarioErrors = 0;
+  for (const packDir of resolvePackDirs(opts)) {
+    let pack: LoadedPack;
     try {
-      loadPack(packRoot);
+      pack = loadPack(packDir);
     } catch {
       continue;
     }
-    for (const scenarioPath of discoverScenarios(packRoot)) {
+    if (profilePackSet.size > 0 && !profilePackSet.has(pack.manifest.name)) continue;
+
+    for (const scenarioPath of manifestScenarioFiles(packDir, pack)) {
       let scenario: Scenario.Scenario;
       try {
-        const raw = readYaml<unknown>(scenarioPath);
-        scenario = Scenario.Scenario.parse(raw);
+        scenario = Scenario.Scenario.parse(readYaml<unknown>(scenarioPath));
       } catch {
+        scenarioErrors += 1;
         continue;
       }
-      if (!tagsMatch(scenario.tags ?? [], profile)) continue;
+      if (!tagsMatch(scenario.tags ?? [], profile.tags)) continue;
       scenariosRun += 1;
-      const result = await runScenario({
+      // runScenario itself appends `finding_emitted` to events and pushes the
+      // finding through findings.append when both writers are provided — do
+      // NOT re-emit here.
+      await runScenario({
         scenario,
         run_id: runId,
         events,
         findings,
         findingIdSeed: scenariosRun,
       });
-      if (result.finding) {
-        events.append({
-          ts: new Date().toISOString(),
-          run_id: runId,
-          kind: 'finding_emitted',
-          actor: { type: 'orchestrator', id: 'aqa-cli' },
-          scenario_id: scenario.id,
-          finding_id: result.finding.id,
-          payload: { severity: result.finding.severity },
-        });
-        findings.append(result.finding);
-      }
     }
   }
 
@@ -193,7 +228,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     run_id: runId,
     kind: 'run_finished',
     actor: { type: 'orchestrator', id: 'aqa-cli' },
-    payload: { scenarios_run: scenariosRun, findings: findings.snapshot().length },
+    payload: {
+      scenarios_run: scenariosRun,
+      findings: findings.snapshot().length,
+      scenario_errors: scenarioErrors,
+    },
   });
 
   return {
@@ -202,16 +241,5 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     runDir,
     scenariosRun,
     findingsCount: findings.snapshot().length,
-  };
-}
-
-function makeError(_opts: RunOptions, error: string): RunResult {
-  return {
-    ok: false,
-    runId: '',
-    runDir: '',
-    scenariosRun: 0,
-    findingsCount: 0,
-    error,
   };
 }
