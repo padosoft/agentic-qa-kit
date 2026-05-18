@@ -242,11 +242,11 @@ Required `package.json` (minimum):
 {
   "name": "@your-scope/pack-healthcheck",
   "version": "0.1.0",
-  "files": ["pack.yaml", "scenarios", "risks", "oracles", "probes"]
+  "files": ["pack.yaml", "scenarios", "risks", "README.md"]
 }
 ```
 
-`files:` is what tells npm which directories to include in the published tarball. Don't ship `node_modules/` or your dev tooling.
+`files:` is what tells npm which directories to include in the published tarball. Only list directories that actually exist in your pack — `npm pack` warns on missing entries. If you add `oracles/` or `probes/` later, extend the array accordingly. Don't ship `node_modules/` or your dev tooling.
 
 ### 3. As a workspace pack (monorepos)
 

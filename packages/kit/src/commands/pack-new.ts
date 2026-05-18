@@ -246,6 +246,7 @@ Scaffolded by \`aqa pack new\`. Replace this with a real description.
 - \`pack.yaml\` — the manifest. Update \`name\`, \`description\`, and \`applies_when\` to match your project.
 - \`scenarios/starter.yaml\` — example scenario. Edit the probe URL + oracle to match real behavior.
 - \`risks/starter.yaml\` — risk declaration. Replace the placeholder \`r-${opts.slug}-starter\` with the real risk you're proving.
+- \`package.json\` — only used if you publish to npm. The scaffold sets \`name: "${opts.slug}"\` (unscoped) so vendor/copy distribution works as-is. **Before \`npm publish\` you must change \`name\` to a scope you own** (e.g. \`"@your-scope/${opts.slug}"\`), or the publish will fail with "name already taken" / "you do not have permission". \`pack.yaml.name\` (the discovery key) stays as the unscoped slug — those two names are independent.
 
 ## Run it
 
@@ -310,10 +311,14 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
           // should extend this array themselves. Listing non-existent
           // directories here makes some tooling warn on `npm pack`.
           files: ['pack.yaml', 'scenarios', 'risks', 'README.md'],
-          // No `private: true` — pack authors need to be able to
-          // `npm publish` straight from this scaffold without editing
-          // package.json first. Setting `private: true` would make npm
-          // refuse the publish.
+          // No `private: true`. The pack must remain publishable from
+          // this scaffold: setting `private: true` would make npm refuse
+          // the publish outright. Note that an author will still need to
+          // change `name` to a scope they own (e.g. `@your-scope/<slug>`)
+          // before `npm publish` — the README explains this — but
+          // leaving `private: true` would block them at a less-obvious
+          // step. For vendor/copy distribution into `<project>/packs/`,
+          // the package.json is irrelevant either way.
         },
         null,
         2,
