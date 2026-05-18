@@ -92,6 +92,22 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
   // check above already rejects any slug containing `/` or `\`, so the
   // prior `isAbsolute(opts.slug)` branch was unreachable.
   const packDir = resolve(opts.root, 'packs', opts.slug);
+  // Also check the `packs/` parent — a symlinked parent would let
+  // `mkdirSync(packDir, { recursive: true })` follow the link and write
+  // outside the project root. Both the parent and the leaf target are
+  // refused if they're symlinks.
+  const packsParent = resolve(opts.root, 'packs');
+  if (existsSync(packsParent)) {
+    try {
+      if (lstatSync(packsParent).isSymbolicLink()) {
+        return makeError(
+          `parent directory ${packsParent} is a symlink — refusing to scaffold (would follow the link and write outside the project root)`,
+        );
+      }
+    } catch (e) {
+      return makeError(`cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
   if (existsSync(packDir)) {
     // Use lstat (not stat) so symlinks don't transparently pass the
     // directory check — following them with `mkdirSync` later would let a
@@ -227,7 +243,7 @@ Scaffolded by \`aqa pack new\`. Replace this with a real description.
 
 ## Run it
 
-Drop this pack under \`<project>/packs/${opts.slug}/\` (or install it from npm under \`@aqa/${opts.slug}\`) and reference it from \`.aqa/profiles.yaml\`. The snippet below is the smallest schema-valid form — both top-level \`schema_version\` and per-profile fields (\`schema_version\`, \`execution_mode\`) are required by \`@aqa/schemas/ProfilesFile\`:
+Drop this pack under \`<project>/packs/${opts.slug}/\` and reference it from \`.aqa/profiles.yaml\`. To distribute it across projects: publish under your own npm scope (\`@your-scope/${opts.slug}\`) and have consumers either install it directly under \`<project>/packs/\` or use an npm alias into \`@aqa/*\` for auto-discovery (\`"@aqa/${opts.slug}": "npm:@your-scope/${opts.slug}"\` in their \`package.json\`). The snippet below is the smallest schema-valid form — both top-level \`schema_version\` and per-profile fields (\`schema_version\`, \`execution_mode\`) are required by \`@aqa/schemas/ProfilesFile\`:
 
 \`\`\`yaml
 schema_version: "1"
@@ -266,7 +282,10 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
           license,
           author,
           files: ['pack.yaml', 'scenarios', 'risks', 'oracles', 'probes', 'README.md'],
-          private: true,
+          // No `private: true` — pack authors need to be able to
+          // `npm publish` straight from this scaffold without editing
+          // package.json first. Setting `private: true` would make npm
+          // refuse the publish.
         },
         null,
         2,
