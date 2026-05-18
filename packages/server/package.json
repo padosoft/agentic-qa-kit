@@ -16,9 +16,10 @@
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
+    "@aqa/auth": "workspace:*",
+    "@aqa/kit": "workspace:*",
     "@aqa/schemas": "workspace:*",
-    "@aqa/store": "workspace:*",
-    "@aqa/auth": "workspace:*"
+    "@aqa/store": "workspace:*"
   },
   "publishConfig": { "access": "public" }
 }

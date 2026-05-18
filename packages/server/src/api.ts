@@ -1,4 +1,6 @@
 import type { User, allows } from '@aqa/auth';
+import { runPackNew } from '@aqa/kit';
+import type { PackNewErrorCode } from '@aqa/kit';
 import type {
   ApiToken,
   CostSummary,
@@ -21,6 +23,17 @@ export interface ApiContext {
   queue: RunnerQueue;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
+  /**
+   * Absolute on-disk path of the project the server manages. Set at boot.
+   * Endpoints that scaffold or modify files anchor to this path and NEVER
+   * accept a client-supplied root — that would let an authenticated caller
+   * write anywhere the server process can reach.
+   *
+   * Optional so existing tests / lightweight integrations that don't touch
+   * the filesystem keep working; FS-touching endpoints return 400 when
+   * unset rather than silently writing to cwd.
+   */
+  projectRoot?: string;
 }
 
 export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -56,6 +69,22 @@ function scope(req: ApiRequest): { org?: string; project?: string } {
   if (org) out.org = org;
   if (project) out.project = project;
   return out;
+}
+
+/**
+ * Map a `runPackNew` error code to an HTTP status. Stable mapping —
+ * unlike regex-matching the human-readable error string, this survives
+ * any rewording of the underlying error messages.
+ */
+function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
+  switch (code) {
+    case 'EEXIST':
+      return 409;
+    case 'EIO':
+      return 500;
+    default:
+      return 400;
+  }
 }
 
 function requireScope(req: ApiRequest): { org: string; project: string } | ApiResponse {
@@ -252,6 +281,127 @@ export function makeApi(): ApiHandler[] {
         if (!slug) return notFound('pack');
         await ctx.store.uninstallPack(slug);
         return asResponse({ ok: true });
+      },
+    },
+    {
+      // v1.7 slice 3 — scaffold a new pack on disk for the Admin
+      // "Create pack" wizard. Delegates to `runPackNew` from `@aqa/kit`
+      // (the same code path as `aqa pack new` on the CLI) so the two
+      // UIs stay in lockstep on validation, atomic --force, etc.
+      //
+      // Synchronous FS work in an async handler: `runPackNew` is sync
+      // (mkdir / writeFile / rename of ~5 small files plus a few schema
+      // validations — typical wall-clock ~10ms on a developer laptop).
+      // For the admin's create-pack flow that's an explicit, infrequent
+      // user action (clicked from a wizard), so blocking the event loop
+      // for that brief window is an acceptable tradeoff vs the cost of
+      // duplicating runPackNew's logic in an async variant. If this
+      // endpoint ever gets called from a high-fanout path (e.g. bulk
+      // pack import), revisit and offload.
+      //
+      // Tenancy: this endpoint deliberately writes to a single,
+      // server-global `ctx.projectRoot` and ignores `x-aqa-org` /
+      // `x-aqa-project` headers — unlike the other pack endpoints
+      // which are scope-aware. The intent is single-tenant only: the
+      // server manages exactly one on-disk project, the wizard creates
+      // packs in that project's `packs/` directory, end of story.
+      // A multi-tenant deployment that wants per-tenant pack scaffold
+      // must front this endpoint with a per-tenant `projectRoot` (e.g.
+      // by booting a separate server process per tenant, or layering a
+      // routing proxy that picks the right root). Doing in-process
+      // per-tenant scaffolding here would require materially more
+      // design — at minimum, where to root the per-tenant directories,
+      // how `aqa run`'s default discovery interacts with that layout,
+      // and whether tenant isolation is enforced at the filesystem or
+      // at the API layer — and is intentionally out of scope for the
+      // v1.7 admin Create-pack wizard.
+      method: 'POST',
+      path: '/api/packs/scaffold',
+      requires: 'packs:install',
+      async handle(req, ctx) {
+        if (!ctx.projectRoot) {
+          return asResponse(
+            {
+              error:
+                'server has no projectRoot configured — pack scaffolding requires the server to know which on-disk project to write into',
+            },
+            400,
+          );
+        }
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        // Required fields — strict type + non-empty check.
+        if (typeof body.slug !== 'string' || body.slug.trim() === '') {
+          return asResponse({ error: 'slug is required (non-empty string)' }, 400);
+        }
+        if (typeof body.sut_type !== 'string' || body.sut_type.trim() === '') {
+          return asResponse({ error: 'sut_type is required (non-empty string)' }, 400);
+        }
+        // Slug length is delegated to runPackNew (MAX_SLUG_LEN=52) and
+        // surfaces as a 400 EINVAL. We don't duplicate the cap here so
+        // there's one source of truth — if MAX_SLUG_LEN ever changes,
+        // the API boundary follows automatically.
+        // Optional fields — strict type check at the API boundary so a
+        // client can't smuggle truthy non-booleans through `force` (which
+        // `runPackNew` checks via `if (!opts.force)` truthiness). A
+        // request like `{"force": "no"}` would be silently treated as
+        // force-enabled without this guard.
+        if (body.force !== undefined && typeof body.force !== 'boolean') {
+          return asResponse(
+            { error: 'force must be a boolean when provided (got non-boolean)' },
+            400,
+          );
+        }
+        for (const k of ['description', 'author', 'license'] as const) {
+          const v = body[k];
+          if (v !== undefined && typeof v !== 'string') {
+            return asResponse(
+              { error: `${k} must be a string when provided (got non-string)` },
+              400,
+            );
+          }
+        }
+        // Trim the required string inputs before forwarding so a caller
+        // who sends `"  pack-x  "` gets the right validation outcome
+        // (it's a clean slug) rather than runPackNew's "must be
+        // lowercase alphanumeric" error rejecting the whitespace.
+        // The admin wizard already trims; this normalizes for direct
+        // API callers too.
+        //
+        // For optional string fields (description/author/license), trim
+        // AND drop empty/whitespace-only values from the forwarded
+        // payload — otherwise a request like `{"description": "   "}`
+        // would write a blank `description:` line into the generated
+        // pack.yaml, which is worse than just falling back to the
+        // scaffolder's default ("Pack scaffolded by aqa pack new").
+        function optStr(k: 'description' | 'author' | 'license'): string | undefined {
+          const v = body[k];
+          if (typeof v !== 'string') return undefined;
+          const trimmed = v.trim();
+          return trimmed === '' ? undefined : trimmed;
+        }
+        const description = optStr('description');
+        const author = optStr('author');
+        const license = optStr('license');
+        const result = runPackNew({
+          root: ctx.projectRoot,
+          slug: body.slug.trim(),
+          sutType: body.sut_type.trim(),
+          ...(body.force !== undefined ? { force: body.force as boolean } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(author !== undefined ? { author } : {}),
+          ...(license !== undefined ? { license } : {}),
+        });
+        if (!result.ok) {
+          // Map the structured `code` field to an HTTP status. This is
+          // stable across error-message wording changes, unlike the
+          // earlier regex-on-error approach.
+          const httpStatus = errorCodeToStatus(result.code);
+          return asResponse(
+            { error: result.error ?? 'unknown error', code: result.code ?? 'EINVAL' },
+            httpStatus,
+          );
+        }
+        return asResponse({ pack_dir: result.packDir, files: result.files ?? [] }, 201);
       },
     },
 
