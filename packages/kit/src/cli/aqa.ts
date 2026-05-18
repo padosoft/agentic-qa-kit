@@ -37,13 +37,17 @@ function parseArgs(argv: string[]): ParsedArgs {
         const k = a.slice(2);
         out.flags.add(k);
         if (VALUE_FLAGS.has(k)) {
-          // VALUE_FLAGS consume the next token even when it starts with a
-          // single `-` (so a seed of `-123` works), but never when it starts
-          // with `--` (those are always treated as the next flag — otherwise
-          // `aqa run --profile --help` would silently swallow `--help`).
-          // Pass `--key=value` for any value that begins with `--`.
+          // VALUE_FLAGS consume the next token only when it clearly looks
+          // like a value, not another flag. Rules:
+          //   - never consume `--anything` (next long flag)
+          //   - never consume single-letter short flags `-h`, `-v`, etc.
+          //   - DO consume tokens that start with `-` followed by a digit
+          //     (so a seed of `-123` still works)
+          //   - DO consume everything else
+          // For ambiguous values, the `--key=value` form is unambiguous.
           const next = argv[i + 1];
-          if (next !== undefined && !next.startsWith('--')) {
+          const looksLikeFlag = next !== undefined && next.startsWith('-') && !/^-\d/.test(next); // -123 is a value; -h / --help / -v are flags
+          if (next !== undefined && !looksLikeFlag) {
             out.values.set(k, next);
             i += 1;
           }

@@ -10,11 +10,15 @@
  * writers we hand it; we never re-emit `finding_emitted` ourselves.
  *
  * Profiles with `require_deterministic_replay: true` (the canonical
- * "release-gate" signal from the schema) treat any emitted finding as a
- * run-level failure so CI exits non-zero on regressions. Smoke-style
- * profiles still surface findings via `findingsCount` + `findings.jsonl`
- * but report `ok: true` when scenarios completed without infrastructure
- * errors.
+ * "release-gate" signal from the schema) are *intended* to treat any
+ * emitted finding as a run-level failure, but that strict semantic is
+ * **deferred** until a real probe runner ships. Today's runs use the
+ * no-network probe stub, so every finding is synthetic and not a real
+ * regression — surfacing findings via `findingsCount` + `findings.jsonl`
+ * is the honest signal for now. Both smoke and release-gate currently
+ * report `ok: true` when scenarios completed without infrastructure
+ * errors. The check re-engages automatically once findings reflect
+ * actual SUT behavior.
  *
  * The default probe runner is the no-network stub from `@aqa/runner`. Wiring
  * real HTTP / browser probes against a live target is intentionally a
