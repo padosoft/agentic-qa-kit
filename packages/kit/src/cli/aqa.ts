@@ -81,7 +81,9 @@ ${bold('Commands')}
   doctor                 Report kit health (runtime, .aqa, agent docs, validation)
   validate               Validate .aqa/* against @aqa/schemas
   run [--profile <p>]    Execute scenarios for the given profile; write events + findings
-  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see docs/PACK-AUTHORING.md)
+  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring guide:
+                         https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
+                         — this path is only present in the source repo, not in the npm tarball)
 
 ${bold('Common options')}
   --force                (init / pack new) overwrite existing files/directory

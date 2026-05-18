@@ -14,9 +14,11 @@ my-pack/
 ├── package.json           # only if you intend to publish to npm
 ├── scenarios/*.yaml       # the actual test cases
 ├── risks/*.yaml           # the rules of the world your scenarios prove
-├── oracles/*.yaml         # extra oracle definitions (optional)
-└── probes/*.yaml          # extra probe definitions (optional)
+├── oracles/*.yaml         # informational/reserved — see note below
+└── probes/*.yaml          # informational/reserved — see note below
 ```
+
+> **Note on `oracles/` and `probes/`:** the manifest accepts these fields and `aqa run` validates that the listed files exist, but **there is no runtime loader yet that turns standalone `oracles/*.yaml` or `probes/*.yaml` files into custom oracle/probe runners.** Oracle evaluation today is limited to the three built-in kinds wired into `@aqa/runner.builtInOracles`, and probe execution comes only from `scenario.steps[].kind`. The `oracles:` / `probes:` manifest arrays and the matching directories are reserved for a future loader; populate them if you want to forward-declare intent, but don't expect listing a file there to make it run.
 
 Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it across projects, the recommended path is to **publish under your own npm scope** (`@your-scope/pack-myname` — anyone can claim a free npm scope) and have consumers install it. Because `aqa run`'s default discovery scans `<project>/node_modules/@aqa/*`, consumers wire your pack in by adding an npm alias entry (`"@aqa/pack-myname": "npm:@your-scope/pack-myname"` in their `package.json`) so the installed package lands under `node_modules/@aqa/*` and is auto-discovered. Publishing under the `@aqa` scope itself is reserved for first-party packs and is not available to community authors — use the alias pattern instead, or vendor/copy the pack directly under `<project>/packs/`. See "How `aqa run` resolves your pack" below for the constraints.
 
@@ -53,8 +55,8 @@ scenarios:                   # the unit of work
   - scenarios/auth-token-replay.yaml
 risks:                       # what could go wrong
   - risks/my-thing.yaml
-oracles: []                  # custom oracles (rare — usually use built-ins)
-probes: []                   # custom probes (rare — usually use built-ins)
+oracles: []                  # reserved/informational — no custom-oracle loader today, use built-ins
+probes: []                   # reserved/informational — no custom-probe loader today, use scenario.steps
 
 # Optional cryptographic signing for trusted packs.
 signing:
@@ -103,7 +105,7 @@ oracles:
 tags: [api, idempotency]
 ```
 
-`steps` is an ordered list of probes. Each probe has an `id`, a `kind` (today: `http`), and a `with` payload of HTTP method/url/body/headers. The probe runner executes them in order and records the responses.
+`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. The probe runner executes them in order and records the responses. **Today only `kind: http` is wired up to a real runner** (and even that goes through a no-network stub by default — see [LESSON.md](./LESSON.md)). The bundled packs (`packs/web-ui`, `packs/llm-agent`) declare other kinds like `playwright` and `llm_eval` to lock in the intended schema, but those run as no-op stubs until the corresponding runners ship; treat them as forward-looking, not as something you can rely on for real assertions yet.
 
 `oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds in `@aqa/runner.builtInOracles`:
 

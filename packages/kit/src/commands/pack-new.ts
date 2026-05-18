@@ -83,7 +83,7 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
   }
   if (opts.slug.length > MAX_SLUG_LEN) {
     return makeError(
-      `slug "${opts.slug}" is ${opts.slug.length} chars; max ${MAX_SLUG_LEN} (derived scenario/risk IDs prepend "inv-" and append "-starter", and the underlying Slug schema caps at 64)`,
+      `slug "${opts.slug}" is ${opts.slug.length} chars; max ${MAX_SLUG_LEN} (the scaffold generates derived IDs "scn-<slug>-starter", "r-<slug>-starter", and "inv-<slug>-starter" — the worst-case overhead is 4+8=12 chars, and the underlying Slug schema caps every id at 64)`,
     );
   }
   if (!VALID_SUT_TYPES.has(opts.sutType)) {
@@ -299,6 +299,16 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
   // than neither pack. On success, the backup is removed. The rename
   // stays inside the same parent directory, so it's atomic on any sane
   // filesystem (no cross-device move).
+  //
+  // Symlink safety inside `packDir`: we already rejected `packDir` itself
+  // as a symlink up top. The rename here moves the *entire* old tree out
+  // of the way as one atomic operation, so any symlinks living inside
+  // the old packDir (e.g. `<packDir>/scenarios` as a symlink) follow the
+  // rename and never get touched. The fresh `mkdirSync(packDir)` below
+  // creates a brand-new empty directory, so `mkdirSync(packDir/scenarios)`
+  // and `writeFileSync(...)` cannot follow any leftover symlink — there
+  // are none to follow. Stale files from the previous pack are likewise
+  // impossible: the new packDir starts empty.
   let backupDir: string | null = null;
   if (existingPackDirNeedsRm) {
     backupDir = `${packDir}.aqa-backup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
