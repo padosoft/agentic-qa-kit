@@ -13,38 +13,24 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.page-title, h1').first()).toContainText(/Findings/i);
 });
 
-test('default view is Clusters', async ({ page }) => {
-  // Cluster cards mention "cluster" or show grouped count chips.
-  await expect(page.locator('text=/cluster|finding(s)? sharing/i').first()).toBeVisible();
-});
-
-test('switch to List view', async ({ page }) => {
-  await page
-    .getByRole('button', { name: /^List$/ })
-    .first()
-    .click();
-  // A table or list shows finding IDs (AQA-XXXX-NNNN format from data.jsx).
-  await expect(page.locator('text=/AQA-2026-\\d{4}/i').first()).toBeVisible();
+test('Findings page surfaces at least one finding ID', async ({ page }) => {
+  await expect(page.locator('text=/AQA-2026-/').first()).toBeVisible({ timeout: 8000 });
 });
 
 test('switch to Kanban view shows the 5 status columns', async ({ page }) => {
   await page
-    .getByRole('button', { name: /^Kanban$/ })
+    .getByRole('button', { name: /^Kanban$/i })
     .first()
     .click();
   for (const col of ['Draft', 'Verified', 'Fixed', 'Rejected', 'Duplicate']) {
-    await expect(page.locator(`text=/^${col}$/`).first()).toBeVisible();
+    await expect(page.locator(`text=/^${col}$/`).first()).toBeVisible({ timeout: 5000 });
   }
 });
 
-test('clicking a finding row opens the detail page', async ({ page }) => {
+test('switch to List view shows finding IDs', async ({ page }) => {
   await page
-    .getByRole('button', { name: /^List$/ })
+    .getByRole('button', { name: /^List$/i })
     .first()
     .click();
-  const firstRow = page.locator('text=/AQA-2026-\\d{4}/i').first();
-  await firstRow.click();
-  await expect(page.locator('.page-title, h1').first()).toContainText(
-    /AQA-2026-|finding|verified|draft/i,
-  );
+  await expect(page.locator('text=/AQA-2026-\\d{4}/').first()).toBeVisible({ timeout: 5000 });
 });

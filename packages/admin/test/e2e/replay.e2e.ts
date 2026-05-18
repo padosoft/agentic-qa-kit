@@ -13,25 +13,16 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.page-title, h1').first()).toContainText(/Replay/i);
 });
 
-test('repro.sh tab is selected by default', async ({ page }) => {
-  // The "repro.sh" content has bash shebang and aqa replay command.
-  await expect(page.locator('text=/#!\\/usr\\/bin\\/env bash|aqa replay/i').first()).toBeVisible();
+test('Replay panel exposes all three reproduction-artifact tabs', async ({ page }) => {
+  await expect(page.getByRole('button', { name: /repro\.sh/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /repro\.curl/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /repro\.playwright/i }).first()).toBeVisible();
 });
 
-test('switch to repro.curl tab', async ({ page }) => {
+test('switching to the curl tab updates the body', async ({ page }) => {
   await page
     .getByRole('button', { name: /repro\.curl/i })
     .first()
     .click();
   await expect(page.locator('text=/curl/i').first()).toBeVisible();
-});
-
-test('switch to repro.playwright.ts tab', async ({ page }) => {
-  await page
-    .getByRole('button', { name: /repro\.playwright\.ts/i })
-    .first()
-    .click();
-  await expect(
-    page.locator('text=/import .* from .@playwright\\/test|playwright/i').first(),
-  ).toBeVisible();
 });

@@ -2,10 +2,7 @@ import { expect, test } from '@playwright/test';
 
 /**
  * Audit Chain Viewer — the organism that justifies the panel for auditors.
- * Covers the three demo flows from DESIGN-NOTES §13:
- *   - Load good chain → Verify → CHAIN OK
- *   - Load tampered chain → Verify → CHAIN BROKEN (mismatch at #47)
- *   - Idle state shows the empty result panel
+ * Covers the demo flows from DESIGN-NOTES §13.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -30,8 +27,7 @@ test('Load good chain → Verify → CHAIN OK', async ({ page }) => {
     .getByRole('button', { name: /^Verify( chain)?$/i })
     .first()
     .click();
-  // Result panel renders the OK pill (the prototype uses synthetic delays).
-  await expect(page.locator('text=/CHAIN OK|Verified/i')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('heading', { name: /CHAIN OK/i })).toBeVisible({ timeout: 10_000 });
 });
 
 test('Load tampered chain → Verify → CHAIN BROKEN', async ({ page }) => {
@@ -43,5 +39,7 @@ test('Load tampered chain → Verify → CHAIN BROKEN', async ({ page }) => {
     .getByRole('button', { name: /^Verify( chain)?$/i })
     .first()
     .click();
-  await expect(page.locator('text=/CHAIN BROKEN|mismatch/i')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('heading', { name: /CHAIN BROKEN/i })).toBeVisible({
+    timeout: 10_000,
+  });
 });
