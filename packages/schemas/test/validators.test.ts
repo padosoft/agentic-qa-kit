@@ -4,15 +4,20 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  ApiToken,
+  CostSummary,
   Event,
   Finding,
+  Notification,
   PackManifest,
   Profile,
   Project,
   RiskMap,
   Run,
   SCHEMA_VERSION,
+  SavedView,
   Scenario,
+  Tenancy,
 } from '../dist/index.js';
 
 // Fixture filename convention:
@@ -42,6 +47,13 @@ const validators = {
   event: Event.Event,
   run: Run.Run,
   'pack-manifest': PackManifest.PackManifest,
+  // v1.4 admin surface
+  notification: Notification.Notification,
+  'saved-view': SavedView.SavedView,
+  'api-token': ApiToken.ApiToken,
+  'cost-summary': CostSummary.CostSummary,
+  org: Tenancy.Org,
+  'project-ref': Tenancy.ProjectRef,
 } as const;
 
 describe('schema version', () => {

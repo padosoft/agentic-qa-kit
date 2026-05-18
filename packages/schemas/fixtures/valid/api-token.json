@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "id": "tok-ci-smoke-runner",
+  "org": "padosoft",
+  "prefix": "aqa_ci_smok",
+  "owner": "user-alice",
+  "display_name": "CI smoke runner token",
+  "scopes": ["runs:read", "runs:create", "findings:read"],
+  "created_at": "2026-05-18T08:00:00.000Z"
+}
