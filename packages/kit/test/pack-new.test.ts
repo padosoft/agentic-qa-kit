@@ -178,7 +178,10 @@ describe('aqa pack new — integration with aqa run', () => {
     writeFileSync(profilesPath, (await import('yaml')).stringify(profiles), 'utf8');
 
     if (!pack.packDir) throw new Error('pack.packDir must be set on success');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [pack.packDir] });
+    // Intentionally NO `packsRoot` — this is the integration's whole point:
+    // a freshly-scaffolded pack must be discoverable by `runRun`'s default
+    // discovery (which scans `<root>/packs/*`) without any caller hint.
+    const result = await runRun({ root, profile: 'smoke' });
     assert.equal(result.ok, true, `new pack must run cleanly, got: ${JSON.stringify(result)}`);
     assert.ok(result.scenariosRun >= 1, 'starter scenario must execute');
     assert.equal(result.findingsCount, 0, 'starter scenario must pass against the stub probe');

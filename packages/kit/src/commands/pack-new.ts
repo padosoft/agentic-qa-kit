@@ -243,7 +243,7 @@ Scaffolded by \`aqa pack new\`. Replace this with a real description.
 
 ## Run it
 
-Drop this pack under \`<project>/packs/${opts.slug}/\` and reference it from \`.aqa/profiles.yaml\`. To distribute it across projects: publish under your own npm scope (\`@your-scope/${opts.slug}\`) and have consumers either install it directly under \`<project>/packs/\` or use an npm alias into \`@aqa/*\` for auto-discovery (\`"@aqa/${opts.slug}": "npm:@your-scope/${opts.slug}"\` in their \`package.json\`). The snippet below is the smallest schema-valid form — both top-level \`schema_version\` and per-profile fields (\`schema_version\`, \`execution_mode\`) are required by \`@aqa/schemas/ProfilesFile\`:
+Drop this pack under \`<project>/packs/${opts.slug}/\` and reference it from \`.aqa/profiles.yaml\`. To distribute it across projects: publish under your own npm scope (\`@your-scope/${opts.slug}\`) and have consumers either (a) vendor/copy/extract the published tarball into their \`<project>/packs/\` directory, or (b) install it normally via \`npm install\` and add an alias into the \`@aqa\` scope for auto-discovery (\`"@aqa/${opts.slug}": "npm:@your-scope/${opts.slug}"\` in their \`package.json\` — packs under \`<project>/node_modules/@aqa/*\` are auto-discovered). The snippet below is the smallest schema-valid form — both top-level \`schema_version\` and per-profile fields (\`schema_version\`, \`execution_mode\`) are required by \`@aqa/schemas/ProfilesFile\`:
 
 \`\`\`yaml
 schema_version: "1"
