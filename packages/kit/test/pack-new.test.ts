@@ -13,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -161,6 +162,42 @@ describe('aqa pack new', () => {
     );
     // The original pack.yaml must also still be there.
     assert.ok(existsSync(join(first.packDir, 'pack.yaml')), 'original pack.yaml must survive');
+  });
+
+  it('cleans up the rollback backup directory after a successful --force scaffold', () => {
+    // Regression test for PR #25 iter 12 (Copilot):
+    // --force is now atomic — we rename the existing pack to a sibling
+    // backup directory before writing the new one, then remove the
+    // backup once the new pack is in place. If the cleanup ever
+    // regresses, every `--force` run would leak a stale
+    // `.aqa-backup-*` directory next to the real one.
+    const root = makeTempDir();
+    const first = runPackNew({ root, slug: 'pack-clean', sutType: 'api' });
+    assert.equal(first.ok, true);
+    const second = runPackNew({ root, slug: 'pack-clean', sutType: 'api', force: true });
+    assert.equal(second.ok, true);
+    const siblings = readdirSync(join(root, 'packs'));
+    const backups = siblings.filter((n) => n.startsWith('pack-clean.aqa-backup-'));
+    assert.deepEqual(
+      backups,
+      [],
+      `successful --force must remove the backup directory; found leftover: ${backups.join(', ')}`,
+    );
+    // And the new pack is still there.
+    assert.ok(existsSync(join(root, 'packs', 'pack-clean', 'pack.yaml')));
+  });
+
+  it('rejects an existing non-symlink, non-directory entry at packs/<slug>/', () => {
+    // Regression test for PR #25 iter 12 (Copilot):
+    // If `<root>/packs/` exists as a regular file (not a directory),
+    // we used to fail later inside `mkdirSync` with an opaque ENOTDIR.
+    // Now we reject up-front with a clear message naming the bad path.
+    const root = makeTempDir();
+    // Make `<root>/packs` a regular file rather than a directory.
+    writeFileSync(join(root, 'packs'), 'not a directory', 'utf8');
+    const result = runPackNew({ root, slug: 'pack-x', sutType: 'api' });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /not a directory/i);
   });
 
   it('rejects an unsupported sut-type', async () => {

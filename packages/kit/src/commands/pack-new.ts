@@ -11,7 +11,15 @@
  * adapts `applies_when.sut_type` and the example scenario's URL accordingly.
  */
 
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { PackManifest, RiskMap, Scenario } from '@aqa/schemas';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
@@ -98,14 +106,25 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
   // refused if they're symlinks.
   const packsParent = resolve(opts.root, 'packs');
   if (existsSync(packsParent)) {
+    let parentStat: ReturnType<typeof lstatSync>;
     try {
-      if (lstatSync(packsParent).isSymbolicLink()) {
-        return makeError(
-          `parent directory ${packsParent} is a symlink — refusing to scaffold (would follow the link and write outside the project root)`,
-        );
-      }
+      parentStat = lstatSync(packsParent);
     } catch (e) {
       return makeError(`cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (parentStat.isSymbolicLink()) {
+      return makeError(
+        `parent directory ${packsParent} is a symlink — refusing to scaffold (would follow the link and write outside the project root)`,
+      );
+    }
+    // Reject anything that isn't a directory (regular file, socket,
+    // device) up-front with a clear message — otherwise we'd fail later
+    // in `mkdirSync` with a generic ENOTDIR that doesn't pinpoint the
+    // wrong path.
+    if (!parentStat.isDirectory()) {
+      return makeError(
+        `${packsParent} exists but is not a directory — refusing to scaffold (move/remove the file first, then re-run)`,
+      );
     }
   }
   // Whether packDir already exists (as anything that's *not* a symlink —
@@ -272,19 +291,22 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
   // any FS failure (permission, file-at-path, partial-write) returns a
   // structured error instead of throwing past the CLI's top handler.
   //
-  // The destructive `rmSync` (when `--force` overwrites an existing dir)
-  // is deferred until here so that any earlier failure — invalid slug,
-  // sut-type, schema check on the generated manifest/scenario/risk — does
-  // NOT delete the user's existing pack. By this point we're committed to
-  // writing a valid scaffold; the only remaining failure modes are FS
-  // permissions, which we report without having destroyed anything we
-  // can't recreate.
+  // Atomic-ish `--force`: when overwriting, we rename the existing pack
+  // out of the way to a sibling backup path BEFORE writing the new one.
+  // If the write phase fails (permissions, disk full, partial write), we
+  // remove the half-written new pack and rename the backup back into
+  // place — so the user is left with their original pack intact rather
+  // than neither pack. On success, the backup is removed. The rename
+  // stays inside the same parent directory, so it's atomic on any sane
+  // filesystem (no cross-device move).
+  let backupDir: string | null = null;
   if (existingPackDirNeedsRm) {
+    backupDir = `${packDir}.aqa-backup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     try {
-      rmSync(packDir, { recursive: true, force: true });
+      renameSync(packDir, backupDir);
     } catch (e) {
       return makeError(
-        `cannot remove existing pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
+        `cannot rename existing pack directory ${packDir} → ${backupDir} (needed to make --force non-destructive): ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
@@ -326,7 +348,9 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
       'utf8',
     );
   } catch (e) {
-    return makeError(
+    return rollbackAndError(
+      packDir,
+      backupDir,
       `cannot write pack files to ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
@@ -337,14 +361,30 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
       yamlParse(readFileSync(resolve(packDir, 'pack.yaml'), 'utf8')),
     );
     if (!roundTrip.success) {
-      return makeError(
+      return rollbackAndError(
+        packDir,
+        backupDir,
         `scaffolded pack.yaml failed round-trip validation: ${roundTrip.error.message}`,
       );
     }
   } catch (e) {
-    return makeError(
+    return rollbackAndError(
+      packDir,
+      backupDir,
       `cannot re-read scaffolded pack.yaml at ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
     );
+  }
+
+  // Scaffold succeeded — drop the backup. A failure to clean up the
+  // backup is not fatal: the new pack is in place and usable. We still
+  // surface a warning-ish note in the error string so the user can
+  // remove the stray backup directory if they care.
+  if (backupDir !== null) {
+    try {
+      rmSync(backupDir, { recursive: true, force: true });
+    } catch {
+      // best-effort; new pack is valid either way
+    }
   }
 
   return {
@@ -358,4 +398,37 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
       'package.json',
     ],
   };
+}
+
+/**
+ * Restore the user's original pack (renamed to `backupDir`) and return a
+ * structured error. Called on every failure path after the rename has
+ * happened, so an interrupted scaffold leaves the working tree in the
+ * same state it was in before `aqa pack new --force` was invoked.
+ *
+ * If `backupDir` is null (no existing pack to begin with), we just clear
+ * any half-written content at `packDir` and surface the error.
+ */
+function rollbackAndError(
+  packDir: string,
+  backupDir: string | null,
+  message: string,
+): PackNewResult {
+  try {
+    rmSync(packDir, { recursive: true, force: true });
+  } catch {
+    // best-effort — surface the original error regardless
+  }
+  if (backupDir !== null) {
+    try {
+      renameSync(backupDir, packDir);
+    } catch (restoreErr) {
+      // We failed to restore. Don't lose the data silently — point the
+      // user at the backup path so they can recover manually.
+      return makeError(
+        `${message} (rollback FAILED — your original pack is at ${backupDir}, please restore it manually: ${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)})`,
+      );
+    }
+  }
+  return makeError(message);
 }
