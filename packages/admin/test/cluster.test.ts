@@ -12,11 +12,11 @@ function f(overrides: Partial<MockFinding>): MockFinding {
     id: 'f-x',
     run_id: 'run-x',
     severity: 'medium',
-    status: 'open',
+    status: 'draft',
     scenario_id: 'sc-x',
     risk_id: 'r-x',
     summary: 'summary',
-    verification_floor: 'L1',
+    verification_floor: 'bug_level',
     created_at: '2026-05-18T00:00:00Z',
     ...overrides,
   };
