@@ -3995,6 +3995,12 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   const [dragId, setDragId] = React.useState(null);
   const [dropCol, setDropCol] = React.useState(null);
   const [confirm, setConfirm] = React.useState(null);
+  // Captured by the confirmation textarea — required for terminal
+  // transitions because POST /api/findings/:id/status rejects an
+  // empty reason at the server (see api.test.ts).
+  const [reason, setReason] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState(null);
   const toast = useToast();
 
   const cols = [
@@ -4025,16 +4031,59 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return;
     }
     if (col.terminal) {
+      setReason('');
+      setSubmitError(null);
       setConfirm({ finding: f, toCol: col });
     } else {
-      doMove(f.id, col.key);
+      // Non-terminal moves (only `draft` today) don't require a reason —
+      // we still POST to the server so the change lands in the audit
+      // chain, but the body uses a default reason. If the server
+      // rejects, we surface a toast and revert nothing (the local
+      // state never actually flipped).
+      void doMove(f.id, col.key, '(non-terminal move from kanban drag)');
     }
     setDragId(null);
   };
-  const doMove = (id, status) => {
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)));
-    toast.push({ title: 'Status updated', body: `${id} → ${status}`, kind: 'success' });
-  };
+  // v1.7 slice 4a — wire kanban status transitions to the real
+  // POST /api/findings/:id/status endpoint. Optimistic local update
+  // happens AFTER the server confirms, so a 4xx/5xx response leaves
+  // the card in its original column with a clear error to the user.
+  async function doMove(id, status, reasonText) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch(`/api/findings/${encodeURIComponent(id)}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, reason: reasonText }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = `HTTP ${res.status}`;
+        try {
+          const parsed = text ? JSON.parse(text) : null;
+          if (parsed?.error) msg = parsed.error;
+        } catch {
+          // raw text fallback
+          if (text) msg = text.slice(0, 200);
+        }
+        setSubmitError(msg);
+        toast.push({ kind: 'error', title: 'Status change failed', body: msg });
+        return false;
+      }
+      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)));
+      toast.push({ title: 'Status updated', body: `${id} → ${status}`, kind: 'success' });
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach /api/findings/${id}/status (${msg}). The admin is in mock-data mode or the server is down — the kanban change was not recorded to the audit chain.`;
+      setSubmitError(full);
+      toast.push({ kind: 'error', title: 'Status change failed', body: full });
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <>
@@ -4044,6 +4093,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
             key={col.key}
             className="kanban-col"
             data-col={col.key}
+            data-testid={`kanban-col-${col.key}`}
             onDragOver={onDragOver(col)}
             onDragLeave={() => setDropCol(null)}
             onDrop={onDrop(col)}
@@ -4064,6 +4114,9 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
                   className={`kanban-card ${dragId === f.id ? 'dragging' : ''}`}
                   draggable
                   onDragStart={onDragStart(f.id)}
+                  data-testid={`kanban-card-${f.id}`}
+                  data-finding-id={f.id}
+                  data-finding-status={f.status}
                 >
                   <div className="kanban-card-head">
                     <SevBadge sev={f.severity} />
@@ -4103,22 +4156,35 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
 
       <Modal
         open={!!confirm}
-        onClose={() => setConfirm(null)}
+        onClose={() => {
+          if (submitting) return;
+          setConfirm(null);
+        }}
         title={`Confirm transition to ${confirm?.toCol.label}`}
         sub={`Moving "${confirm?.finding?.title}" to a terminal status. Provide a reason — this will be logged to the audit chain.`}
         footer={
           <>
-            <button className="btn" onClick={() => setConfirm(null)}>
+            <button
+              className="btn"
+              onClick={() => setConfirm(null)}
+              disabled={submitting}
+              data-testid="kanban-confirm-cancel"
+            >
               Cancel
             </button>
             <button
               className="btn primary"
-              onClick={() => {
-                doMove(confirm.finding.id, confirm.toCol.key);
-                setConfirm(null);
+              data-testid="kanban-confirm-submit"
+              disabled={submitting || reason.trim() === ''}
+              onClick={async () => {
+                const ok = await doMove(confirm.finding.id, confirm.toCol.key, reason.trim());
+                if (ok) setConfirm(null);
+                // On failure: keep the modal open so the user can fix
+                // the reason / retry. doMove already set submitError.
               }}
             >
-              <I.Check size={12} /> Confirm transition
+              <I.Check size={12} />
+              {submitting ? 'Submitting…' : 'Confirm transition'}
             </button>
           </>
         }
@@ -4133,15 +4199,27 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               <span className="mono">{confirm.finding.id}</span>
               <span style={{ flex: 1 }}>{confirm.finding.title}</span>
             </div>
+            {submitError && (
+              <Alert kind="error" title="Status change failed">
+                {submitError}
+              </Alert>
+            )}
             <div className="field-row">
-              <label className="field-label">Reason</label>
+              <label className="field-label" htmlFor="kanban-reason">
+                Reason *
+              </label>
               <textarea
+                id="kanban-reason"
+                data-testid="kanban-confirm-reason"
                 className="textarea"
                 placeholder="e.g. Verified manually with curl, matches AQA-2026-0001 cluster — confirming finding is reproducible."
                 style={{ minHeight: 90 }}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
               />
               <div className="field-hint">
-                Recorded as <code>finding.status_changed</code> event in the audit chain.
+                Required. Recorded as <code>finding.status_changed</code> event in the audit chain.
+                Confirm is disabled until you provide a non-empty reason.
               </div>
             </div>
           </div>
