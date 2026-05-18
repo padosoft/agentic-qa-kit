@@ -15,8 +15,8 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
-import { type LoadedPack, loadPack } from '@aqa/pack-loader';
+import { isAbsolute, join, relative, resolve } from 'node:path';
+import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { EventChainWriter, FindingsWriter, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
@@ -74,18 +74,28 @@ function freshRunId(): string {
 function defaultPacksRoot(projectRoot: string): string[] {
   const candidates: string[] = [];
   const repoPacks = join(projectRoot, 'packs');
-  if (existsSync(repoPacks) && statSync(repoPacks).isDirectory()) {
+  // Wrap every FS call so an unreadable entry (permissions, broken symlink,
+  // TOCTOU delete) yields zero discovered packs rather than throwing through
+  // the structured RunResult.
+  try {
+    if (!existsSync(repoPacks) || !statSync(repoPacks).isDirectory()) return candidates;
     // Sort for stable iteration — scenario execution order feeds findingIdSeed,
     // event ordering, and downstream determinism guarantees from `--seed`.
     for (const entry of readdirSync(repoPacks).sort()) {
       const abs = join(repoPacks, entry);
-      if (
-        statSync(abs).isDirectory() &&
-        (existsSync(join(abs, 'pack.yaml')) || existsSync(join(abs, 'pack.yml')))
-      ) {
-        candidates.push(abs);
+      try {
+        if (
+          statSync(abs).isDirectory() &&
+          (existsSync(join(abs, 'pack.yaml')) || existsSync(join(abs, 'pack.yml')))
+        ) {
+          candidates.push(abs);
+        }
+      } catch {
+        // unreadable entry — skip silently rather than abort discovery
       }
     }
+  } catch {
+    // unreadable packs/ root — return whatever we've collected so far
   }
   return candidates;
 }
@@ -101,18 +111,35 @@ interface ManifestScenarios {
   paths: string[];
   /** manifest-listed paths that didn't resolve on disk — treated as coverage gaps. */
   missing: string[];
+  /** manifest-listed paths that would escape packRoot — treated as malicious/buggy. */
+  unsafe: string[];
 }
 
-/** Resolve manifest-listed scenarios. Missing files are surfaced, not silently dropped. */
+/**
+ * Resolve manifest-listed scenarios. Missing files are surfaced (not silently
+ * dropped), and any entry that's absolute or escapes the pack root via `..`
+ * is rejected as unsafe so a malicious/buggy pack.yaml can't trick `aqa run`
+ * into reading arbitrary filesystem paths.
+ */
 function manifestScenarioFiles(packRoot: string, pack: LoadedPack): ManifestScenarios {
   const paths: string[] = [];
   const missing: string[] = [];
+  const unsafe: string[] = [];
   for (const rel of pack.manifest.scenarios ?? []) {
+    if (isAbsolute(rel)) {
+      unsafe.push(rel);
+      continue;
+    }
     const abs = resolve(packRoot, rel);
+    const inside = relative(packRoot, abs);
+    if (inside.startsWith('..') || isAbsolute(inside)) {
+      unsafe.push(rel);
+      continue;
+    }
     if (existsSync(abs)) paths.push(abs);
     else missing.push(rel);
   }
-  return { paths, missing };
+  return { paths, missing, unsafe };
 }
 
 /** Scenario tags intersect profile tags (or profile has no filter). */
@@ -222,10 +249,21 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // Build the set of packs the profile actually wants (by Slug). When the
   // profile lists no packs (default), all discoverable packs are eligible.
   const profilePackSet = new Set(profile.packs);
+  // applies_when context built from the parsed project — lets the pack-loader
+  // skip packs that explicitly don't match the SUT.
+  const appliesCtx = {
+    sut_type: project.sut.type,
+    runtime: project.stack.runtime,
+    ...(project.stack.framework ? { framework: project.stack.framework } : {}),
+    tags: project.tags ?? [],
+  };
+
   let scenariosRun = 0;
   const packErrors: string[] = [];
   const scenarioErrors: string[] = [];
   const missingScenarios: string[] = [];
+  const unsafeScenarioPaths: string[] = [];
+  const runtimeErrors: string[] = [];
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
@@ -235,9 +273,16 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       continue;
     }
     if (profilePackSet.size > 0 && !profilePackSet.has(pack.manifest.name)) continue;
+    // Skip packs whose `applies_when` excludes this SUT (when applies_when
+    // is set on the manifest). Packs that explicitly opt into this SUT, or
+    // that have no applies_when filter, fall through.
+    if (!appliesWhen(pack.manifest, appliesCtx)) {
+      continue;
+    }
 
-    const { paths, missing } = manifestScenarioFiles(packDir, pack);
+    const { paths, missing, unsafe } = manifestScenarioFiles(packDir, pack);
     for (const rel of missing) missingScenarios.push(`${pack.manifest.name}:${rel}`);
+    for (const rel of unsafe) unsafeScenarioPaths.push(`${pack.manifest.name}:${rel}`);
 
     for (const scenarioPath of paths) {
       let scenario: Scenario.Scenario;
@@ -251,14 +296,20 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       scenariosRun += 1;
       // runScenario itself appends `finding_emitted` to events and pushes the
       // finding through findings.append when both writers are provided — do
-      // NOT re-emit here.
-      await runScenario({
-        scenario,
-        run_id: runId,
-        events,
-        findings,
-        findingIdSeed: scenariosRun,
-      });
+      // NOT re-emit here. Wrap in try/catch so a future probe-runner
+      // exception (or write failure) is collected instead of bubbling out
+      // and skipping the `run_finished` audit event.
+      try {
+        await runScenario({
+          scenario,
+          run_id: runId,
+          events,
+          findings,
+          findingIdSeed: scenariosRun,
+        });
+      } catch (e) {
+        runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   }
 
@@ -273,14 +324,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       pack_errors: packErrors.length,
       scenario_errors: scenarioErrors.length,
       missing_scenarios: missingScenarios.length,
+      unsafe_paths: unsafeScenarioPaths.length,
+      runtime_errors: runtimeErrors.length,
     },
   });
 
   // Build a structured error message when something went wrong. Any of these
   // is a real coverage gap, not a benign skip: a broken pack, a malformed
-  // scenario, a manifest-listed file that doesn't exist, or zero scenarios
-  // executed for the requested profile. All flip `ok: false` so CI catches
-  // the gap instead of greenlighting an empty release-gate run.
+  // scenario, a manifest-listed file that doesn't exist, an unsafe path
+  // (absolute or path traversal), a runtime exception inside `runScenario`,
+  // or zero scenarios executed for the requested profile. All flip
+  // `ok: false` so CI catches the gap instead of greenlighting an empty
+  // release-gate run.
   const reasons: string[] = [];
   if (packErrors.length > 0)
     reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
@@ -291,6 +346,14 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   if (missingScenarios.length > 0)
     reasons.push(
       `${missingScenarios.length} manifest scenario(s) missing on disk: ${missingScenarios.join(', ')}`,
+    );
+  if (unsafeScenarioPaths.length > 0)
+    reasons.push(
+      `${unsafeScenarioPaths.length} unsafe scenario path(s) (absolute or path traversal): ${unsafeScenarioPaths.join(', ')}`,
+    );
+  if (runtimeErrors.length > 0)
+    reasons.push(
+      `${runtimeErrors.length} scenario(s) threw at runtime: ${runtimeErrors.join('; ')}`,
     );
   if (scenariosRun === 0) {
     reasons.push(

@@ -77,31 +77,58 @@ function riskMapYaml(name: string): string {
   });
 }
 
-const PROFILES_YAML = yamlStringify({
-  schema_version: '1',
-  profiles: {
-    smoke: {
-      schema_version: '1',
-      name: 'smoke',
-      execution_mode: 'orchestrator',
-      llm_usage: ['scenario_generation'],
-      llm_budget_usd: 5,
-      parallelism: 2,
-      require_deterministic_replay: false,
-      packs: ['pack-core'],
+/**
+ * Pick the bundled packs that actually contribute scenarios for the detected
+ * SUT type. `pack-core` is included as the always-on baseline; it ships risks
+ * and oracles but no scenarios on its own. Anything else is added when the
+ * detected type matches a pack with real scenarios — otherwise `aqa run` would
+ * exit zero on a freshly-init'd project (Codex P1 in PR #24 iter 4).
+ */
+function packsForSutType(sutType: string): string[] {
+  const base = ['pack-core'];
+  switch (sutType) {
+    case 'api':
+      return [...base, 'pack-api-core'];
+    case 'web':
+      return [...base, 'pack-web-ui'];
+    case 'agent':
+      return [...base, 'pack-llm-agent'];
+    default:
+      // cli / lib / pipeline / unknown — `pack-core` alone has no scenarios.
+      // Users will need to add their own pack or write `.aqa/scenarios/*.yaml`.
+      return base;
+  }
+}
+
+function profilesYaml(profile: ProjectProfile): string {
+  const sutType = profile.sut_type === 'unknown' ? 'lib' : profile.sut_type;
+  const packs = packsForSutType(sutType);
+  return yamlStringify({
+    schema_version: '1',
+    profiles: {
+      smoke: {
+        schema_version: '1',
+        name: 'smoke',
+        execution_mode: 'orchestrator',
+        llm_usage: ['scenario_generation'],
+        llm_budget_usd: 5,
+        parallelism: 2,
+        require_deterministic_replay: false,
+        packs,
+      },
+      'release-gate': {
+        schema_version: '1',
+        name: 'release-gate',
+        execution_mode: 'orchestrator',
+        llm_usage: ['scenario_generation'],
+        llm_budget_usd: 50,
+        parallelism: 4,
+        require_deterministic_replay: true,
+        packs,
+      },
     },
-    'release-gate': {
-      schema_version: '1',
-      name: 'release-gate',
-      execution_mode: 'orchestrator',
-      llm_usage: ['scenario_generation'],
-      llm_budget_usd: 50,
-      parallelism: 4,
-      require_deterministic_replay: true,
-      packs: ['pack-core'],
-    },
-  },
-});
+  });
+}
 
 export function runInit(opts: InitOptions): InitResult {
   const profile = profileRepo(opts.root);
@@ -114,7 +141,7 @@ export function runInit(opts: InitOptions): InitResult {
     [join(opts.root, '.aqa', 'project.yaml'), projectYaml(name, profile)],
     [join(opts.root, '.aqa', 'testing.md'), TESTING_MD.replaceAll('${PROJECT_NAME}', name)],
     [join(opts.root, '.aqa', 'risk-map.yaml'), riskMapYaml(name)],
-    [join(opts.root, '.aqa', 'profiles.yaml'), PROFILES_YAML],
+    [join(opts.root, '.aqa', 'profiles.yaml'), profilesYaml(profile)],
   ];
   const files = targets.map(([path, content]) => ({
     path,

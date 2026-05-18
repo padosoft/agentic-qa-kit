@@ -126,6 +126,11 @@ function fixtureProject(): { root: string; packDir: string } {
     'utf8',
   );
   writeFileSync(join(root, 'bun.lock'), '', 'utf8');
+  // src/server.ts is what `profileRepo` looks for to classify this as an API
+  // project, which makes the bundled api-core (and our fixture pack with
+  // `applies_when: [api]`) eligible.
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'server.ts'), 'export {};\n', 'utf8');
   runInit({ root, projectName: 'smoke-fixture' });
 
   const packDir = join(root, 'local-pack');
@@ -291,6 +296,30 @@ describe('aqa run', () => {
     const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'missing manifest scenario must surface as ok=false');
     assert.match(result.error ?? '', /missing/i);
+  });
+
+  it('rejects an absolute or traversing scenario path as unsafe', async () => {
+    const { root, packDir } = fixtureProject();
+    // Manifest tries to read outside the pack root via `..` traversal.
+    const evilManifest = SMOKE_PACK_MANIFEST.replace(
+      'scenarios/smoke-noop.yaml',
+      '../../../etc/passwd',
+    );
+    writeFileSync(join(packDir, 'pack.yaml'), evilManifest, 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'path traversal must fail the run');
+    assert.match(result.error ?? '', /unsafe/i);
+  });
+
+  it('skips packs whose applies_when does not match the project SUT', async () => {
+    const { root, packDir } = fixtureProject();
+    // Patch the pack to only apply to web SUTs — our fixture is api, so the
+    // pack should be skipped entirely and the run reports zero scenarios.
+    const webOnlyManifest = SMOKE_PACK_MANIFEST.replace('sut_type: [api]', 'sut_type: [web]');
+    writeFileSync(join(packDir, 'pack.yaml'), webOnlyManifest, 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'no eligible packs → ok=false');
+    assert.match(result.error ?? '', /0 scenarios/i);
   });
 
   it('refuses to re-use a deterministic run directory rather than corrupting the audit chain', async () => {
