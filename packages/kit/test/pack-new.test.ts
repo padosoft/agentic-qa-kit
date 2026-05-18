@@ -72,7 +72,7 @@ describe('aqa pack new', () => {
     // 53-char slug → `inv-<53>-starter` = 64 chars derived ID, but the Slug
     // regex max is 64 inclusive — going one char above keeps the manifest
     // valid while breaking the scenario file.
-    const longSlug = 'a' + 'b'.repeat(52); // 53 chars
+    const longSlug = `a${'b'.repeat(52)}`; // 53 chars
     const result = runPackNew({ root, slug: longSlug, sutType: 'api' });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /slug|chars|max/i);
