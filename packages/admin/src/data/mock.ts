@@ -8,15 +8,25 @@ export interface MockRun {
   cost_usd: number;
 }
 
+/**
+ * UI-facing finding shape. Mirrors `@aqa/schemas` `Finding.Finding`:
+ *   - `status`: schema enum `draft`/`verified`/`rejected`/`duplicate`/`fixed`
+ *   - `verification_floor`: schema enum `bug_level`/`scenario_level`/`agent_level`
+ *   - `created_at` is the UI alias for the schema field `discovered_at`
+ *     (the mapper in `data/api.ts` translates).
+ */
+export type UiFindingStatus = 'draft' | 'verified' | 'rejected' | 'duplicate' | 'fixed';
+export type UiVerificationFloor = 'bug_level' | 'scenario_level' | 'agent_level';
+
 export interface MockFinding {
   id: string;
   run_id: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  status: 'open' | 'verified' | 'fixed' | 'wontfix';
+  status: UiFindingStatus;
   scenario_id: string;
   risk_id: string;
   summary: string;
-  verification_floor: 'L1' | 'L2' | 'L3';
+  verification_floor: UiVerificationFloor;
   created_at: string;
 }
 
@@ -100,7 +110,7 @@ export const MOCK_FINDINGS: MockFinding[] = [
     scenario_id: 'sc-auth-bypass',
     risk_id: 'r-auth-001',
     summary: 'JWT signature not validated on /api/admin',
-    verification_floor: 'L3',
+    verification_floor: 'bug_level',
     created_at: '2026-05-17T10:08:00Z',
   },
   {
@@ -111,29 +121,29 @@ export const MOCK_FINDINGS: MockFinding[] = [
     scenario_id: 'sc-auth-bypass',
     risk_id: 'r-auth-001',
     summary: 'JWT signature not validated on /api/admin',
-    verification_floor: 'L3',
+    verification_floor: 'bug_level',
     created_at: '2026-05-17T10:12:00Z',
   },
   {
     id: 'f-003',
     run_id: 'run-2026-05-17-a',
     severity: 'high',
-    status: 'open',
+    status: 'draft',
     scenario_id: 'sc-idor-tenant',
     risk_id: 'r-data-014',
     summary: 'Tenant ID accepted from header overrides session tenant',
-    verification_floor: 'L2',
+    verification_floor: 'scenario_level',
     created_at: '2026-05-17T08:14:00Z',
   },
   {
     id: 'f-004',
     run_id: 'run-2026-05-17-b',
     severity: 'high',
-    status: 'open',
+    status: 'draft',
     scenario_id: 'sc-cookie-flags',
     risk_id: 'r-auth-007',
     summary: 'Session cookie missing Secure flag in dev profile',
-    verification_floor: 'L2',
+    verification_floor: 'scenario_level',
     created_at: '2026-05-17T10:21:00Z',
   },
   {
@@ -144,18 +154,18 @@ export const MOCK_FINDINGS: MockFinding[] = [
     scenario_id: 'sc-csrf-form',
     risk_id: 'r-auth-009',
     summary: 'POST /api/settings accepts cross-origin form',
-    verification_floor: 'L1',
+    verification_floor: 'agent_level',
     created_at: '2026-05-17T08:17:00Z',
   },
   {
     id: 'f-006',
     run_id: 'run-2026-05-18-a',
     severity: 'low',
-    status: 'open',
+    status: 'draft',
     scenario_id: 'sc-cache-control',
     risk_id: 'r-data-022',
     summary: '/api/me missing Cache-Control: no-store',
-    verification_floor: 'L1',
+    verification_floor: 'agent_level',
     created_at: '2026-05-18T07:30:00Z',
   },
 ];

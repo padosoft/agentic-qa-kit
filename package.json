@@ -23,6 +23,7 @@
     "format:check": "biome format .",
     "test": "node scripts/run-workspace-script.mjs test",
     "test:watch": "node scripts/run-workspace-script.mjs test:watch",
+    "test:e2e-cli": "node scripts/e2e-cli.mjs",
     "build": "node scripts/run-workspace-script.mjs build",
     "clean": "node scripts/run-workspace-script.mjs clean",
     "e2e": "node scripts/run-tool.mjs playwright test",

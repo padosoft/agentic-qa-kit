@@ -35,7 +35,7 @@ export function DashboardScreen() {
   const runs = MOCK_RUNS;
   const findings = MOCK_FINDINGS;
   const completed = runs.filter((r) => r.status === 'completed').length;
-  const open = findings.filter((f) => f.status === 'open').length;
+  const open = findings.filter((f) => f.status === 'draft').length;
   const cost = runs.reduce((acc, r) => acc + r.cost_usd, 0);
   const lastRun = runs[runs.length - 1];
 
