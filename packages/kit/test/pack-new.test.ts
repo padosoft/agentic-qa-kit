@@ -261,16 +261,22 @@ describe('aqa pack new — integration with aqa run', () => {
     const pack = runPackNew({ root, slug: 'pack-demo', sutType: 'api' });
     assert.equal(pack.ok, true);
 
-    // Wire the smoke profile to the new pack.
+    // Wire the smoke profile to the new pack. Assert the profile exists
+    // rather than silently no-oping if it doesn't — otherwise a future
+    // change to `aqa init`'s profiles.yaml shape would leave the profile
+    // unmodified, and the test could pass by running the *bundled* packs
+    // instead of the scaffolded one (false positive).
     const profilesPath = join(root, '.aqa', 'profiles.yaml');
     const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
       profiles: Record<string, { packs: string[]; tags: string[] }>;
     };
-    if (profiles.profiles.smoke) {
-      profiles.profiles.smoke.packs = ['pack-demo'];
-      // Empty tags = match every scenario tag.
-      profiles.profiles.smoke.tags = [];
-    }
+    assert.ok(
+      profiles.profiles.smoke,
+      'aqa init must produce a "smoke" profile — this test rewires it to point at the new pack',
+    );
+    profiles.profiles.smoke.packs = ['pack-demo'];
+    // Empty tags = match every scenario tag.
+    profiles.profiles.smoke.tags = [];
     writeFileSync(profilesPath, (await import('yaml')).stringify(profiles), 'utf8');
 
     if (!pack.packDir) throw new Error('pack.packDir must be set on success');
@@ -281,5 +287,16 @@ describe('aqa pack new — integration with aqa run', () => {
     assert.equal(result.ok, true, `new pack must run cleanly, got: ${JSON.stringify(result)}`);
     assert.ok(result.scenariosRun >= 1, 'starter scenario must execute');
     assert.equal(result.findingsCount, 0, 'starter scenario must pass against the stub probe');
+
+    // Prove the scaffolded scenario actually ran (not some bundled pack
+    // sneaking in). `scn-pack-demo-starter` is the derived id from the
+    // scaffold template; it can't appear in any other pack's events.
+    if (!result.runDir) throw new Error('result.runDir must be set on success');
+    const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8');
+    assert.match(
+      events,
+      /scn-pack-demo-starter/,
+      'run events.jsonl must reference the scaffolded scenario id — otherwise the test could pass by running bundled packs instead of the new one',
+    );
   });
 });

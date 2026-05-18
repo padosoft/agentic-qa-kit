@@ -105,7 +105,7 @@ oracles:
 tags: [api, idempotency]
 ```
 
-`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. The probe runner executes them in order and records the responses. **Today only `kind: http` is wired up to a real runner** (and even that goes through a no-network stub by default — see [LESSON.md](./LESSON.md)). The bundled packs (`packs/web-ui`, `packs/llm-agent`) declare other kinds like `playwright` and `llm_eval` to lock in the intended schema, but those run as no-op stubs until the corresponding runners ship; treat them as forward-looking, not as something you can rely on for real assertions yet.
+`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. The probe runner records the steps as run, but **no probe kind hits the network today** — `@aqa/runner.run()` uses a built-in `NO_NETWORK_PROBE` that returns a fixed `{ status: 200, body: "" }` response for every step regardless of `kind`. That stub exists so the orchestrator pipeline (event chain, oracle evaluation, findings) can be exercised end-to-end without external dependencies; real probe runners (real HTTP, Playwright browser, LLM evaluation) are tracked as v1.7.x / v1.8.x follow-ups. Authors should pick the right `kind` (it's recorded in the audit trail and will dispatch correctly once a runner ships) but design oracles assuming the stub response for now — that's how the bundled packs and `aqa pack new`'s starter all pass cleanly today.
 
 `oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds in `@aqa/runner.builtInOracles`:
 

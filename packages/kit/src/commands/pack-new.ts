@@ -386,9 +386,12 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
   }
 
   // Scaffold succeeded — drop the backup. A failure to clean up the
-  // backup is not fatal: the new pack is in place and usable. We still
-  // surface a warning-ish note in the error string so the user can
-  // remove the stray backup directory if they care.
+  // backup is intentionally silent: the new pack is in place and fully
+  // usable, and surfacing a partial success would force every caller
+  // (CLI, tests, future programmatic users) to handle a `warnings`
+  // shape on the happy path. The worst-case outcome is a stale
+  // `<packDir>.aqa-backup-*` sibling that a user can rm manually; the
+  // randomly-suffixed name makes it obviously not part of the pack.
   if (backupDir !== null) {
     try {
       rmSync(backupDir, { recursive: true, force: true });
