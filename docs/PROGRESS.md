@@ -28,6 +28,12 @@
 
 ## 2026-05-18
 
+- **v1.4 admin API surface (in flight).** Expanded `packages/server`'s `makeApi()` from 4 to 28 routes covering everything `docs/design/admin-panel-spec-v2.md` references: runs detail + events, finding status mutation, packs CRUD, profiles CRUD, risks CRUD, scenarios edit, audit query, cost summary, queue snapshot, notifications, saved views, API tokens, tenancy (orgs + projects). `StoreProvider` extended with matching methods; `MemoryStore` implements all of them (Postgres scaffold throws `not implemented`). New `@aqa/schemas` namespaces: `Notification`, `SavedView`, `ApiToken`, `CostSummary`, `Tenancy`. Multi-tenant via `x-aqa-org` / `x-aqa-project` headers. 8 new tests; 184 repo-wide.
+- **Design brief for admin v2 shipped.** `docs/design/admin-panel-spec-v2.md` — self-contained enterprise-grade spec (tokens, 30 screens, full component library, interaction patterns, a11y, perf budget, deliverables checklist) so an external designer (or Claude Design) can build the React template in parallel.
+- **Next macro task.** After admin v2 design lands and integrates: full end-to-end ecosystem smoke via Playwright — boot server + runner pool + admin in a single command, drive a real `aqa run` against `examples/bun-api`, verify findings appear in the admin, verify audit chain remains valid. TDD: any broken path → failing test first, then fix.
+
+## 2026-05-18 — earlier
+
 - **v1.2 admin wired.** `@aqa/admin` migrated from inline-style placeholder shell to a real SPA: Tailwind 4 + TanStack Router + TanStack Query + Zustand + lucide-react. 12 screens shipped end-to-end: Dashboard (KPIs), Runs (table), Findings (clustered via content-hash signature, async via Web Crypto), Risk map (grouped by category), Profiles, Packs (with signature badge), Scenarios (pack→scenario tree), Agents (per-agent instruction-file detection), Replay (per-finding repro.sh / repro.curl preview + verify button), Audit log (paste events.jsonl → re-walk the sha256 chain in-browser; "Load good chain" / "Load tampered chain" demo buttons), Cost (bar by profile), Settings (theme toggle).
 - **Browser-side hash-chain verifier.** `node:crypto` is not Vite-safe, so the admin re-implements `verifyEventChain` + `signatureOf` on top of `crypto.subtle.digest`. The CLI version in `@aqa/compliance` remains the SOC2 source of truth; the in-browser copy is a UX affordance only. Documented in `docs/LESSON.md`.
 - Build: 376 KB JS (116 KB gzip), Tailwind CSS 9.94 KB (2.92 KB gzip). 165 tests still pass.

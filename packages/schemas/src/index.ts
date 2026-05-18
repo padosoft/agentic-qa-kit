@@ -7,5 +7,10 @@ export * as Finding from './finding.js';
 export * as Event from './event.js';
 export * as Run from './run.js';
 export * as PackManifest from './pack-manifest.js';
+export * as Notification from './notification.js';
+export * as SavedView from './saved-view.js';
+export * as ApiToken from './api-token.js';
+export * as CostSummary from './cost-summary.js';
+export * as Tenancy from './tenancy.js';
 
 export { ExecutionMode, Severity, Status } from './common.js';

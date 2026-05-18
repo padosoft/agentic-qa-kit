@@ -61,4 +61,27 @@ export class RunnerQueue {
   list(state?: EnqueuedJob['status']): ReadonlyArray<EnqueuedJob> {
     return state ? this.jobs.filter((j) => j.status === state) : [...this.jobs];
   }
+
+  /** Snapshot for the admin `GET /api/queue` route. */
+  snapshot(): EnqueuedJob[] {
+    return [...this.jobs];
+  }
+
+  /** Mark a stuck in-flight job back to queued. Used by admin "requeue". */
+  requeue(id: string): boolean {
+    const job = this.jobs.find((j) => j.id === id);
+    if (!job) return false;
+    job.status = 'queued';
+    job.leased_until = undefined;
+    return true;
+  }
+
+  /** Kill an in-flight job. Admin "force kill" — sets state to done so the
+   * runner's eventual ack is a no-op. */
+  kill(id: string): boolean {
+    const job = this.jobs.find((j) => j.id === id);
+    if (!job) return false;
+    job.status = 'done';
+    return true;
+  }
 }
