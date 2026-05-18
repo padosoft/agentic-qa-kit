@@ -67,9 +67,15 @@ export interface RunOptions {
 
 export interface RunResult {
   ok: boolean;
-  /** Only set on `ok: true`. Empty/undefined on error. */
+  /**
+   * Present whenever the run got far enough to allocate a run directory —
+   * which is most failure modes (broken pack, malformed scenario, 0
+   * scenarios, release-gate findings). Absent only for early-exit errors:
+   * missing project.yaml, invalid CLI flags, runs directory unwritable, or
+   * deterministic-seed collision.
+   */
   runId?: string;
-  /** Only set on `ok: true`. Empty/undefined on error. */
+  /** Same presence semantics as `runId`. */
   runDir?: string;
   scenariosRun: number;
   findingsCount: number;
@@ -406,6 +412,13 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   };
 
   let scenariosRun = 0;
+  // `packErrors` collects every failed `loadPack()`; we decide later whether
+  // to surface them. When the profile pins specific packs, an unrelated
+  // broken pack elsewhere on disk (`packs/experimental/`, a stale
+  // `node_modules/@aqa/pack-old`) shouldn't make `aqa run --profile smoke`
+  // fail — but if the profile pins NO packs (use-everything mode), every
+  // load failure is a real coverage gap. Same goes for the case where the
+  // profile pins packs but none of them loaded successfully.
   const packErrors: string[] = [];
   const scenarioErrors: string[] = [];
   const missingScenarios: string[] = [];
@@ -497,8 +510,16 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // `ok: false` so CI catches the gap instead of greenlighting an empty
   // release-gate run.
   const reasons: string[] = [];
-  if (packErrors.length > 0)
+  // Pack errors fail the run only when the profile is in use-everything mode
+  // (`profile.packs` empty → every broken pack shrinks intended coverage).
+  // When the profile pins specific packs, an unrelated broken pack on disk
+  // (a stale `packs/experimental/`, a sibling `node_modules/@aqa/pack-old`)
+  // shouldn't block an otherwise valid run. The `scenariosRun === 0`
+  // reason below still catches the case where the profile's selected
+  // pack was the one that failed.
+  if (packErrors.length > 0 && profilePackSet.size === 0) {
     reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
+  }
   if (scenarioErrors.length > 0)
     reasons.push(
       `${scenarioErrors.length} scenario(s) failed to parse: ${scenarioErrors.join('; ')}`,

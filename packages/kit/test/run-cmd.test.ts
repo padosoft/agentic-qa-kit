@@ -378,6 +378,29 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('ignores broken packs that the selected profile did not reference', async () => {
+    const { root, packDir } = fixtureProject();
+    // Add an unrelated broken pack at a sibling path. The smoke profile
+    // pins `pack-local-smoke` only, so this stale pack.yaml must not
+    // fail the run — its load error should be recorded in the
+    // run_finished event but not flip ok=false.
+    const strayPackDir = join(root, 'stray-broken-pack');
+    mkdirSync(strayPackDir, { recursive: true });
+    writeFileSync(join(strayPackDir, 'pack.yaml'), 'this is: : not valid YAML\n', 'utf8');
+
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir, strayPackDir],
+    });
+    assert.equal(
+      result.ok,
+      true,
+      `unrelated broken pack must not fail the run, got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(result.scenariosRun >= 1);
+  });
+
   it('release-gate profile (require_deterministic_replay) fails when any finding is emitted', async () => {
     const { root, packDir } = fixtureProject();
     // Make the scenario fail so a finding is produced.

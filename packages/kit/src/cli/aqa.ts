@@ -37,8 +37,13 @@ function parseArgs(argv: string[]): ParsedArgs {
         const k = a.slice(2);
         out.flags.add(k);
         if (VALUE_FLAGS.has(k)) {
+          // VALUE_FLAGS unconditionally consume the next token, even if it
+          // begins with `-` — a seed of `-123` is legal, and so is a profile
+          // key that happens to start with a hyphen. To pass a value that
+          // is itself a flag-looking string, the `--key=value` form is the
+          // documented alternative.
           const next = argv[i + 1];
-          if (next !== undefined && !next.startsWith('-')) {
+          if (next !== undefined) {
             out.values.set(k, next);
             i += 1;
           }
