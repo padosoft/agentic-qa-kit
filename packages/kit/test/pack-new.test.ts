@@ -21,7 +21,7 @@ function makeTempDir(): string {
 }
 
 describe('aqa pack new', () => {
-  it('scaffolds a schema-valid pack at <cwd>/<slug>/', async () => {
+  it('scaffolds a schema-valid pack at <cwd>/packs/<slug>/', async () => {
     const root = makeTempDir();
     const result = runPackNew({ root, slug: 'pack-myapp', sutType: 'api' });
     assert.equal(result.ok, true, `pack new must succeed, got: ${JSON.stringify(result)}`);
@@ -137,7 +137,7 @@ describe('aqa pack new — integration with aqa run', () => {
     const init = await import('../dist/commands/init.js');
     init.runInit({ root, projectName: 'demo' });
 
-    // Scaffold a pack at <root>/pack-demo/.
+    // Scaffold a pack at <root>/packs/pack-demo/ (the discovery-friendly path).
     const pack = runPackNew({ root, slug: 'pack-demo', sutType: 'api' });
     assert.equal(pack.ok, true);
 

@@ -81,7 +81,7 @@ ${bold('Commands')}
   doctor                 Report kit health (runtime, .aqa, agent docs, validation)
   validate               Validate .aqa/* against @aqa/schemas
   run [--profile <p>]    Execute scenarios for the given profile; write events + findings
-  pack new <slug>        Scaffold a new pack at <cwd>/<slug>/ (see docs/PACK-AUTHORING.md)
+  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see docs/PACK-AUTHORING.md)
 
 ${bold('Common options')}
   --force                (init / pack new) overwrite existing files/directory
