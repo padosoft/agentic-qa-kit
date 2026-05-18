@@ -324,6 +324,16 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   }
   const profile = profilesFile.profiles[profileKey];
 
+  // Agent mode isn't implemented yet — the runner is orchestrator-only. A
+  // profile with `execution_mode: agent` would silently fall through to the
+  // orchestrator path and record findings with a mismatched actor, so fail
+  // fast instead. Wire this up once @aqa/runner grows an agent driver.
+  if (profile.execution_mode !== 'orchestrator') {
+    return makeError(
+      `profile "${profileKey}" requires execution_mode "${profile.execution_mode}" which is not yet implemented — only "orchestrator" is supported`,
+    );
+  }
+
   const runId = opts.seed
     ? deterministicRunId(`${project.name}|${profileKey}|${opts.seed}`)
     : freshRunId();
