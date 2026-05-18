@@ -220,6 +220,7 @@ decisions: [`docs/adr/`](docs/adr/).
 ## Documentation
 
 - [`docs/getting-started.md`](docs/getting-started.md) — junior onboarding
+- [`docs/PACK-AUTHORING.md`](docs/PACK-AUTHORING.md) — write your own pack (community guide)
 - [`docs/ecosystem-explained.md`](docs/ecosystem-explained.md) — concepts deep-dive
 - [`docs/RULES.md`](docs/RULES.md) — contribution rules
 - [`docs/adr/`](docs/adr/) — architecture decisions

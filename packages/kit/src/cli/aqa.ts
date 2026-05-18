@@ -2,6 +2,7 @@
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
+import { runPackNew } from '../commands/pack-new.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 
@@ -21,7 +22,7 @@ interface ParsedArgs {
   values: Map<string, string>;
 }
 
-const VALUE_FLAGS = new Set(['profile', 'seed']);
+const VALUE_FLAGS = new Set(['profile', 'seed', 'sut-type', 'description', 'author', 'license']);
 
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { command: null, positionals: [], flags: new Set(), values: new Map() };
@@ -80,12 +81,19 @@ ${bold('Commands')}
   doctor                 Report kit health (runtime, .aqa, agent docs, validation)
   validate               Validate .aqa/* against @aqa/schemas
   run [--profile <p>]    Execute scenarios for the given profile; write events + findings
+  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring guide:
+                         https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
+                         — this path is only present in the source repo, not in the npm tarball)
 
 ${bold('Common options')}
-  --force                (init) overwrite existing files
+  --force                (init / pack new) overwrite existing files/directory
   --dry-run              (init) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
+  --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
+  --description <text>   (pack new) one-line summary written into the manifest
+  --author <name>        (pack new) manifest author field
+  --license <spdx>       (pack new) SPDX license id (default: Apache-2.0)
   --help                 show this help
   --version              show CLI version
 `;
@@ -189,6 +197,51 @@ async function main(): Promise<number> {
         console.info(`    ${yellow('⚠ warnings:')}`);
         for (const w of result.warnings) console.info(`      ${yellow('·')} ${w}`);
       }
+      return 0;
+    }
+    case 'pack': {
+      // Subcommand router for `aqa pack <subcommand>`.
+      const sub = args.positionals[0];
+      if (sub !== 'new') {
+        console.error(red(`aqa pack: unknown subcommand "${sub ?? ''}" — expected "new"`));
+        return 1;
+      }
+      const slug = args.positionals[1];
+      if (!slug) {
+        console.error(red('aqa pack new: missing required <slug> positional argument'));
+        return 1;
+      }
+      printHeader(`pack new ${slug}`);
+      // Reject flags that were passed without a value (`--sut-type` alone)
+      // rather than silently falling back to the default. Mirrors the
+      // identical guard in the `run` command.
+      for (const k of ['sut-type', 'description', 'author', 'license'] as const) {
+        if (args.flags.has(k) && !args.values.has(k)) {
+          console.error(red(`aqa pack new: --${k} requires a value`));
+          return 1;
+        }
+      }
+      const sutType = args.values.get('sut-type') ?? 'api';
+      const packNewOpts: Parameters<typeof runPackNew>[0] = {
+        root: cwd,
+        slug,
+        sutType,
+      };
+      if (args.flags.has('force')) packNewOpts.force = true;
+      if (args.values.has('description'))
+        packNewOpts.description = args.values.get('description') ?? '';
+      if (args.values.has('author')) packNewOpts.author = args.values.get('author') ?? '';
+      if (args.values.has('license')) packNewOpts.license = args.values.get('license') ?? '';
+      const result = runPackNew(packNewOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} scaffolded ${bold(slug)}`);
+      console.info(`    ${dim('packDir: ')}${result.packDir}`);
+      for (const f of result.files ?? []) console.info(`    ${green('+')} ${f}`);
+      console.info(dim('\n  Next: edit pack.yaml + scenarios/starter.yaml to match your project,'));
+      console.info(dim('  then reference this pack from .aqa/profiles.yaml and `aqa run`.'));
       return 0;
     }
     default: {
