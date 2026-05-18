@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import { MemoryStore } from '@aqa/store';
 import { RunnerQueue, makeApi } from '../dist/index.js';
 
@@ -27,9 +27,24 @@ function ctx(opts: { projectRoot?: string } = {}) {
   };
 }
 
+// Track every tmpdir created in this suite so a teardown hook can wipe
+// them. Without this, every CI run leaks fully-scaffolded pack trees
+// under the OS temp dir.
+const TEMP_ROOTS: string[] = [];
 function tmpProjectRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'aqa-server-pack-'));
+  const root = mkdtempSync(join(tmpdir(), 'aqa-server-pack-'));
+  TEMP_ROOTS.push(root);
+  return root;
 }
+after(() => {
+  for (const root of TEMP_ROOTS) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+    } catch {
+      // best-effort; never fail the suite over a tmpdir we can't remove
+    }
+  }
+});
 
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
 
@@ -244,6 +259,65 @@ describe('makeApi', () => {
     it('requires the packs:install permission', () => {
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
       assert.equal(route?.requires, 'packs:install');
+    });
+
+    it('rejects non-boolean force with 400 (no truthy-string smuggling)', async () => {
+      // Regression test for PR #26 iter 1 (Codex P1 + Copilot):
+      // Without strict type validation, `{"force": "yes"}` would pass
+      // through the endpoint and `runPackNew` would treat the truthy
+      // string as enabled — silently overwriting an existing pack.
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-x', sut_type: 'api', force: 'yes' } },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /force.*boolean/i);
+    });
+
+    it('rejects non-string description/author/license with 400', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      for (const k of ['description', 'author', 'license']) {
+        const res = await route?.handle(
+          { headers: {}, params: {}, body: { slug: 'pack-x', sut_type: 'api', [k]: 123 } },
+          c,
+        );
+        assert.equal(res?.status, 400, `${k}=number must be rejected`);
+        assert.match((res?.body as { error: string }).error, new RegExp(`${k}.*string`, 'i'));
+      }
+    });
+
+    it('returns the structured code field alongside error on failure', async () => {
+      // Regression test for the brittle regex-on-error 409 mapping.
+      // The endpoint now uses runPackNew's structured `code` to pick
+      // the HTTP status; this test asserts the code also propagates
+      // to the response body so clients can act on it programmatically.
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      // First scaffold to set up the conflict.
+      await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-code', sut_type: 'api' } },
+        c,
+      );
+      // Second scaffold (same slug, no force) → EEXIST.
+      const dup = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-code', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(dup?.status, 409);
+      assert.equal((dup?.body as { code: string }).code, 'EEXIST');
+      // EINVAL path: bad slug.
+      const bad = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'Bad!', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(bad?.status, 400);
+      assert.equal((bad?.body as { code: string }).code, 'EINVAL');
     });
   });
 });

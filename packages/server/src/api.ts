@@ -1,5 +1,6 @@
 import type { User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
+import type { PackNewErrorCode } from '@aqa/kit';
 import type {
   ApiToken,
   CostSummary,
@@ -68,6 +69,22 @@ function scope(req: ApiRequest): { org?: string; project?: string } {
   if (org) out.org = org;
   if (project) out.project = project;
   return out;
+}
+
+/**
+ * Map a `runPackNew` error code to an HTTP status. Stable mapping —
+ * unlike regex-matching the human-readable error string, this survives
+ * any rewording of the underlying error messages.
+ */
+function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
+  switch (code) {
+    case 'EEXIST':
+      return 409;
+    case 'EIO':
+      return 500;
+    default:
+      return 400;
+  }
 }
 
 function requireScope(req: ApiRequest): { org: string; project: string } | ApiResponse {
@@ -271,6 +288,16 @@ export function makeApi(): ApiHandler[] {
       // "Create pack" wizard. Delegates to `runPackNew` from `@aqa/kit`
       // (the same code path as `aqa pack new` on the CLI) so the two
       // UIs stay in lockstep on validation, atomic --force, etc.
+      //
+      // Synchronous FS work in an async handler: `runPackNew` is sync
+      // (mkdir / writeFile / rename of ~5 small files plus a few schema
+      // validations — typical wall-clock ~10ms on a developer laptop).
+      // For the admin's create-pack flow that's an explicit, infrequent
+      // user action (clicked from a wizard), so blocking the event loop
+      // for that brief window is an acceptable tradeoff vs the cost of
+      // duplicating runPackNew's logic in an async variant. If this
+      // endpoint ever gets called from a high-fanout path (e.g. bulk
+      // pack import), revisit and offload.
       method: 'POST',
       path: '/api/packs/scaffold',
       requires: 'packs:install',
@@ -284,42 +311,54 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        const body = (req.body ?? {}) as {
-          slug?: string;
-          sut_type?: string;
-          force?: boolean;
-          description?: string;
-          author?: string;
-          license?: string;
-        };
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        // Required fields — strict type + non-empty check.
         if (typeof body.slug !== 'string' || body.slug.trim() === '') {
           return asResponse({ error: 'slug is required (non-empty string)' }, 400);
         }
         if (typeof body.sut_type !== 'string' || body.sut_type.trim() === '') {
           return asResponse({ error: 'sut_type is required (non-empty string)' }, 400);
         }
+        // Optional fields — strict type check at the API boundary so a
+        // client can't smuggle truthy non-booleans through `force` (which
+        // `runPackNew` checks via `if (!opts.force)` truthiness). A
+        // request like `{"force": "no"}` would be silently treated as
+        // force-enabled without this guard.
+        if (body.force !== undefined && typeof body.force !== 'boolean') {
+          return asResponse(
+            { error: 'force must be a boolean when provided (got non-boolean)' },
+            400,
+          );
+        }
+        for (const k of ['description', 'author', 'license'] as const) {
+          const v = body[k];
+          if (v !== undefined && typeof v !== 'string') {
+            return asResponse(
+              { error: `${k} must be a string when provided (got non-string)` },
+              400,
+            );
+          }
+        }
         const result = runPackNew({
           root: ctx.projectRoot,
           slug: body.slug,
           sutType: body.sut_type,
-          ...(body.force !== undefined ? { force: body.force } : {}),
-          ...(body.description !== undefined ? { description: body.description } : {}),
-          ...(body.author !== undefined ? { author: body.author } : {}),
-          ...(body.license !== undefined ? { license: body.license } : {}),
+          ...(body.force !== undefined ? { force: body.force as boolean } : {}),
+          ...(body.description !== undefined ? { description: body.description as string } : {}),
+          ...(body.author !== undefined ? { author: body.author as string } : {}),
+          ...(body.license !== undefined ? { license: body.license as string } : {}),
         });
         if (!result.ok) {
-          // "already exists" → 409 Conflict (the resource exists), every
-          // other validation failure → 400.
-          const status = /already exists/i.test(result.error ?? '') ? 409 : 400;
-          return asResponse({ error: result.error ?? 'unknown error' }, status);
+          // Map the structured `code` field to an HTTP status. This is
+          // stable across error-message wording changes, unlike the
+          // earlier regex-on-error approach.
+          const httpStatus = errorCodeToStatus(result.code);
+          return asResponse(
+            { error: result.error ?? 'unknown error', code: result.code ?? 'EINVAL' },
+            httpStatus,
+          );
         }
-        return asResponse(
-          {
-            pack_dir: result.packDir,
-            files: result.files ?? [],
-          },
-          201,
-        );
+        return asResponse({ pack_dir: result.packDir, files: result.files ?? [] }, 201);
       },
     },
 

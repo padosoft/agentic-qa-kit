@@ -4255,10 +4255,14 @@ function CreatePackWizard({ open, onClose }) {
       // Network error / no server / CORS. In mock-data dev (admin running
       // without @aqa/server), we surface a clear message instead of a
       // generic failure so the user knows it's an environment thing.
+      // Surface BOTH the inline alert and a toast for parity with the
+      // HTTP-failure branch above — otherwise the user gets different
+      // feedback for "server returned 500" vs "couldn't reach server"
+      // even though both mean "your request didn't succeed".
       const msg = e instanceof Error ? e.message : String(e);
-      setError(
-        `Could not reach /api/packs/scaffold (${msg}). The admin is in mock-data mode or the server is down — no files were written.`,
-      );
+      const full = `Could not reach /api/packs/scaffold (${msg}). The admin is in mock-data mode or the server is down — no files were written.`;
+      setError(full);
+      toast.push({ kind: 'error', title: 'Create pack failed', body: msg });
     } finally {
       setSubmitting(false);
     }

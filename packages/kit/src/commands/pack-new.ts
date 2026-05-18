@@ -35,6 +35,23 @@ export interface PackNewOptions {
   license?: string;
 }
 
+/**
+ * Structured error code returned alongside `error` on failure. Lets
+ * callers distinguish causes programmatically without regex-matching
+ * the human-readable error string:
+ *
+ * - `EEXIST`  — the target pack directory already exists and `force`
+ *               was not set. The right HTTP mapping is 409 Conflict.
+ * - `EINVAL`  — the input was invalid (bad slug, unsupported
+ *               sut-type, slug too long, malformed manifest). 400.
+ * - `EIO`     — filesystem operation failed (permission, disk full,
+ *               cross-device rename). 500.
+ *
+ * Always present on failure; callers can safely switch on it. The
+ * `error` field carries the human-readable detail.
+ */
+export type PackNewErrorCode = 'EEXIST' | 'EINVAL' | 'EIO';
+
 export interface PackNewResult {
   ok: boolean;
   /** Absolute path to the scaffolded pack directory. Present only on success. */
@@ -42,6 +59,8 @@ export interface PackNewResult {
   /** Files created, relative to `packDir`. Present only on success. */
   files?: string[];
   error?: string;
+  /** Structured cause; see {@link PackNewErrorCode}. Present only on failure. */
+  code?: PackNewErrorCode;
 }
 
 const VALID_SUT_TYPES = new Set(['api', 'web', 'cli', 'lib', 'agent', 'pipeline']);
@@ -52,8 +71,15 @@ const SLUG_PATTERN = /^[a-z0-9](?:-?[a-z0-9])*$/;
 // later reject the scaffolded files.
 const MAX_SLUG_LEN = 52;
 
-function makeError(error: string): PackNewResult {
-  return { ok: false, error };
+/**
+ * Build a failure result. `code` defaults to `EINVAL` because the vast
+ * majority of failures are user-input or schema-validation issues; the
+ * two non-default sites (`EEXIST` for an existing packDir without
+ * --force, and `EIO` for actual filesystem operation failures) pass
+ * the right code explicitly.
+ */
+function makeError(error: string, code: PackNewErrorCode = 'EINVAL'): PackNewResult {
+  return { ok: false, error, code };
 }
 
 /** Starter URL each SUT-type's example probe points at. Stub returns 200 either way. */
@@ -110,7 +136,10 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     try {
       parentStat = lstatSync(packsParent);
     } catch (e) {
-      return makeError(`cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`);
+      return makeError(
+        `cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`,
+        'EIO',
+      );
     }
     if (parentStat.isSymbolicLink()) {
       return makeError(
@@ -150,6 +179,7 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     } catch (e) {
       return makeError(
         `cannot stat pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)} — refusing to scaffold (cannot confirm path is not a symlink)`,
+        'EIO',
       );
     }
     if (isSymlink) {
@@ -158,7 +188,10 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
       );
     }
     if (!opts.force) {
-      return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
+      return makeError(
+        `pack directory ${packDir} already exists; pass --force to overwrite`,
+        'EEXIST',
+      );
     }
     existingPackDirNeedsRm = true;
   }
@@ -317,6 +350,7 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
     } catch (e) {
       return makeError(
         `cannot rename existing pack directory ${packDir} → ${backupDir} (needed to make --force non-destructive): ${e instanceof Error ? e.message : String(e)}`,
+        'EIO',
       );
     }
   }
@@ -440,8 +474,10 @@ function rollbackAndError(
       // user at the backup path so they can recover manually.
       return makeError(
         `${message} (rollback FAILED — your original pack is at ${backupDir}, please restore it manually: ${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)})`,
+        'EIO',
       );
     }
   }
-  return makeError(message);
+  // Write/round-trip phase failures are all EIO (FS or serializer issues).
+  return makeError(message, 'EIO');
 }
