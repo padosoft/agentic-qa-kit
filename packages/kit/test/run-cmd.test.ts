@@ -378,6 +378,26 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('deduplicates a pack discovered from multiple roots by manifest name', async () => {
+    const { root, packDir } = fixtureProject();
+    // Make a second on-disk copy of the same pack at a different absolute
+    // path. Both copies share `manifest.name = pack-local-smoke` so a naive
+    // run would execute the scenario twice and inflate `scenariosRun`.
+    const duplicateDir = join(root, 'duplicate-pack');
+    mkdirSync(join(duplicateDir, 'scenarios'), { recursive: true });
+    writeFileSync(join(duplicateDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');
+    writeFileSync(
+      join(duplicateDir, 'package.json'),
+      JSON.stringify({ name: 'pack-local-smoke', version: '0.1.0', private: true }),
+      'utf8',
+    );
+    writeFileSync(join(duplicateDir, 'scenarios', 'smoke-noop.yaml'), SMOKE_SCENARIO, 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir, duplicateDir] });
+    assert.equal(result.ok, true);
+    assert.equal(result.scenariosRun, 1, 'duplicate pack must only execute once');
+  });
+
   it('accepts a legacy bare-slug pack reference (`core` matches `pack-core`)', async () => {
     const { root, packDir } = fixtureProject();
     // Patch the profile to use the legacy bare-slug form `local-smoke` instead

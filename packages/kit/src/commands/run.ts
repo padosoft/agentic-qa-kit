@@ -54,8 +54,10 @@ export interface RunOptions {
 
 export interface RunResult {
   ok: boolean;
-  runId: string;
-  runDir: string;
+  /** Only set on `ok: true`. Empty/undefined on error. */
+  runId?: string;
+  /** Only set on `ok: true`. Empty/undefined on error. */
+  runDir?: string;
   scenariosRun: number;
   findingsCount: number;
   error?: string;
@@ -229,8 +231,6 @@ function tagsMatch(scenarioTags: readonly string[], profileTags: readonly string
 function makeError(error: string): RunResult {
   return {
     ok: false,
-    runId: '',
-    runDir: '',
     scenariosRun: 0,
     findingsCount: 0,
     error,
@@ -330,8 +330,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const events = new EventChainWriter(eventsPath);
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,
-  // even when a clean run produces zero findings.
-  if (!existsSync(findingsPath)) writeFileSync(findingsPath, '', 'utf8');
+  // even when a clean run produces zero findings. Wrap in try/catch so a
+  // read-only FS / permission error returns the structured RunResult
+  // instead of throwing past it.
+  if (!existsSync(findingsPath)) {
+    try {
+      writeFileSync(findingsPath, '', 'utf8');
+    } catch (e) {
+      return makeError(
+        `cannot create findings.jsonl: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
 
   // Persisting the initial event must succeed — if it fails (read-only FS,
   // disk full, permission), the run can't produce a usable audit trail, so
@@ -360,6 +370,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     profilePackSet.add(p);
     if (!p.startsWith('pack-')) profilePackSet.add(`pack-${p}`);
   }
+
+  // Dedupe discovered pack directories by manifest name. `resolvePackDirs()`
+  // walks `<project>/packs/*`, then `<project>/node_modules/@aqa/*`, then
+  // the kit-bundled `dist/packs/*`. A monorepo checkout (or a project that
+  // vendors packs *and* installs `@aqa/kit` for the bundled copy) can hit
+  // the same manifest name twice — without dedup, every scenario would be
+  // executed and audited twice. First-seen wins, so the priority order
+  // matches the discovery order above: project > node_modules > bundled.
+  const seenPackNames = new Set<string>();
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -394,6 +413,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     if (!appliesWhen(pack.manifest, appliesCtx)) {
       continue;
     }
+    // Skip a pack we've already executed under the same manifest name
+    // (project/node_modules already won; bundled copy is a fallback).
+    if (seenPackNames.has(pack.manifest.name)) continue;
+    seenPackNames.add(pack.manifest.name);
 
     const { paths, missing, unsafe } = manifestScenarioFiles(packDir, pack);
     for (const rel of missing) missingScenarios.push(`${pack.manifest.name}:${rel}`);

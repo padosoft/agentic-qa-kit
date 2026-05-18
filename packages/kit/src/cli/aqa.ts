@@ -163,8 +163,8 @@ async function main(): Promise<number> {
         console.error(red(`  ✗ ${result.error}`));
         return 1;
       }
-      console.info(`  ${green('✓')} ${bold(result.runId)}`);
-      console.info(`    ${dim('runDir:    ')}${result.runDir}`);
+      console.info(`  ${green('✓')} ${bold(result.runId ?? '?')}`);
+      console.info(`    ${dim('runDir:    ')}${result.runDir ?? '?'}`);
       console.info(`    ${dim('scenarios: ')}${result.scenariosRun}`);
       console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
       return 0;
