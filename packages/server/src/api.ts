@@ -298,6 +298,23 @@ export function makeApi(): ApiHandler[] {
       // duplicating runPackNew's logic in an async variant. If this
       // endpoint ever gets called from a high-fanout path (e.g. bulk
       // pack import), revisit and offload.
+      //
+      // Tenancy: this endpoint deliberately writes to a single,
+      // server-global `ctx.projectRoot` and ignores `x-aqa-org` /
+      // `x-aqa-project` headers — unlike the other pack endpoints
+      // which are scope-aware. The intent is single-tenant only: the
+      // server manages exactly one on-disk project, the wizard creates
+      // packs in that project's `packs/` directory, end of story.
+      // A multi-tenant deployment that wants per-tenant pack scaffold
+      // must front this endpoint with a per-tenant `projectRoot` (e.g.
+      // by booting a separate server process per tenant, or layering a
+      // routing proxy that picks the right root). Doing in-process
+      // per-tenant scaffolding here would require materially more
+      // design — at minimum, where to root the per-tenant directories,
+      // how `aqa run`'s default discovery interacts with that layout,
+      // and whether tenant isolation is enforced at the filesystem or
+      // at the API layer — and is intentionally out of scope for the
+      // v1.7 admin Create-pack wizard.
       method: 'POST',
       path: '/api/packs/scaffold',
       requires: 'packs:install',
@@ -339,10 +356,16 @@ export function makeApi(): ApiHandler[] {
             );
           }
         }
+        // Trim the required string inputs before forwarding so a caller
+        // who sends `"  pack-x  "` gets the right validation outcome
+        // (it's a clean slug) rather than runPackNew's "must be
+        // lowercase alphanumeric" error rejecting the whitespace.
+        // The admin wizard already trims; this normalizes for direct
+        // API callers too.
         const result = runPackNew({
           root: ctx.projectRoot,
-          slug: body.slug,
-          sutType: body.sut_type,
+          slug: body.slug.trim(),
+          sutType: body.sut_type.trim(),
           ...(body.force !== undefined ? { force: body.force as boolean } : {}),
           ...(body.description !== undefined ? { description: body.description as string } : {}),
           ...(body.author !== undefined ? { author: body.author as string } : {}),

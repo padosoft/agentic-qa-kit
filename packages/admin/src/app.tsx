@@ -4168,7 +4168,12 @@ function CreatePackWizard({ open, onClose }) {
   const [sutType, setSutType] = React.useState('api');
   const [description, setDescription] = React.useState('');
   const [author, setAuthor] = React.useState('');
-  const [license, setLicense] = React.useState('Apache-2.0');
+  // license is intentionally empty by default — only forwarded when the
+  // user explicitly types something in Advanced. Otherwise we'd silently
+  // bake "Apache-2.0" into every pack scaffolded from the admin, which
+  // overrides whatever default `runPackNew` would otherwise pick and
+  // surprises users in orgs with a different default license.
+  const [license, setLicense] = React.useState('');
   const [force, setForce] = React.useState(false);
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -4200,7 +4205,7 @@ function CreatePackWizard({ open, onClose }) {
     setSutType('api');
     setDescription('');
     setAuthor('');
-    setLicense('Apache-2.0');
+    setLicense('');
     setForce(false);
     setAdvancedOpen(false);
     setError(null);
@@ -4421,9 +4426,14 @@ function CreatePackWizard({ open, onClose }) {
                 <input
                   id="cp-license"
                   className="input mono"
+                  placeholder="Apache-2.0 (default if left blank)"
                   value={license}
                   onChange={(e) => setLicense(e.target.value)}
                 />
+                <div className="field-hint">
+                  Leave blank to use the kit's default (Apache-2.0). The CLI flag is{' '}
+                  <code>--license &lt;spdx&gt;</code>.
+                </div>
               </div>
               <label
                 className="row gap-8"

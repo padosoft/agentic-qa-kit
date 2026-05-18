@@ -291,6 +291,30 @@ describe('makeApi', () => {
       }
     });
 
+    it('trims whitespace around slug + sut_type before forwarding', async () => {
+      // Regression test for PR #26 iter 2 (Copilot):
+      // The endpoint used to check `slug.trim() !== ''` for non-empty
+      // but then forward the untrimmed value, so `"  pack-trim  "`
+      // would pass the boundary check and then runPackNew would reject
+      // it with the unrelated "must be lowercase alphanumeric…" error.
+      // Now the trim happens before forwarding, so a whitespace-padded
+      // valid slug succeeds end-to-end.
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: '  pack-trim  ', sut_type: '  api  ' } },
+        c,
+      );
+      assert.equal(
+        res?.status,
+        201,
+        `expected 201 after trim, got ${res?.status}: ${JSON.stringify(res?.body)}`,
+      );
+      const body = res?.body as { pack_dir: string };
+      assert.match(body.pack_dir, /pack-trim$/);
+    });
+
     it('returns the structured code field alongside error on failure', async () => {
       // Regression test for the brittle regex-on-error 409 mapping.
       // The endpoint now uses runPackNew's structured `code` to pick
