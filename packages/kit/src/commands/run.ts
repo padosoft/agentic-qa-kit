@@ -14,8 +14,16 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { EventChainWriter, FindingsWriter, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
@@ -71,18 +79,16 @@ function freshRunId(): string {
   return `run-${stamp}-${rnd}`.toLowerCase();
 }
 
-function defaultPacksRoot(projectRoot: string): string[] {
-  const candidates: string[] = [];
-  const repoPacks = join(projectRoot, 'packs');
-  // Wrap every FS call so an unreadable entry (permissions, broken symlink,
-  // TOCTOU delete) yields zero discovered packs rather than throwing through
-  // the structured RunResult.
+/**
+ * Scan one directory for child pack manifests (each child must have a
+ * `pack.yaml` or `pack.yml`). Sorted for `--seed` determinism. FS failures
+ * degrade to fewer discovered packs, not a thrown exception.
+ */
+function discoverInDir(parentDir: string, candidates: string[]): void {
   try {
-    if (!existsSync(repoPacks) || !statSync(repoPacks).isDirectory()) return candidates;
-    // Sort for stable iteration — scenario execution order feeds findingIdSeed,
-    // event ordering, and downstream determinism guarantees from `--seed`.
-    for (const entry of readdirSync(repoPacks).sort()) {
-      const abs = join(repoPacks, entry);
+    if (!existsSync(parentDir) || !statSync(parentDir).isDirectory()) return;
+    for (const entry of readdirSync(parentDir).sort()) {
+      const abs = join(parentDir, entry);
       try {
         if (
           statSync(abs).isDirectory() &&
@@ -91,12 +97,23 @@ function defaultPacksRoot(projectRoot: string): string[] {
           candidates.push(abs);
         }
       } catch {
-        // unreadable entry — skip silently rather than abort discovery
+        // unreadable child — skip
       }
     }
   } catch {
-    // unreadable packs/ root — return whatever we've collected so far
+    // unreadable parent — skip
   }
+}
+
+function defaultPacksRoot(projectRoot: string): string[] {
+  const candidates: string[] = [];
+  // 1. Monorepo / vendored layout: <project>/packs/*
+  discoverInDir(join(projectRoot, 'packs'), candidates);
+  // 2. npm-installed bundled packs: <project>/node_modules/@aqa/pack-*
+  //    Real consumer projects install packs as workspace or registry deps;
+  //    without this, `aqa init` → `aqa run` in an external project would
+  //    discover zero packs and fail with "0 scenarios".
+  discoverInDir(join(projectRoot, 'node_modules', '@aqa'), candidates);
   return candidates;
 }
 
@@ -116,28 +133,68 @@ interface ManifestScenarios {
 }
 
 /**
+ * Containment check: does `abs` resolve to a path inside `root`?
+ * - Rejects absolute escapes (relative result is itself absolute).
+ * - Rejects `..` segments (uses exact-segment match, not prefix — so a
+ *   legitimate directory named `..data/` doesn't trigger false positives).
+ */
+function isInside(root: string, abs: string): boolean {
+  const rel = relative(root, abs);
+  if (rel === '' || rel === '.') return true;
+  if (isAbsolute(rel)) return false;
+  const segments = rel.split(sep);
+  return !segments.some((s) => s === '..');
+}
+
+/**
  * Resolve manifest-listed scenarios. Missing files are surfaced (not silently
- * dropped), and any entry that's absolute or escapes the pack root via `..`
- * is rejected as unsafe so a malicious/buggy pack.yaml can't trick `aqa run`
- * into reading arbitrary filesystem paths.
+ * dropped), and any entry that's absolute, escapes the pack root via `..`,
+ * or symlinks outside the pack root is rejected as unsafe so a
+ * malicious/buggy pack.yaml can't trick `aqa run` into reading arbitrary
+ * filesystem paths.
  */
 function manifestScenarioFiles(packRoot: string, pack: LoadedPack): ManifestScenarios {
   const paths: string[] = [];
   const missing: string[] = [];
   const unsafe: string[] = [];
+  // realpath the root once so we compare real-path containment, not symlink
+  // illusions. Falls back to the literal root if realpath fails (e.g. the
+  // pack root itself is a broken symlink).
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(packRoot);
+  } catch {
+    realRoot = packRoot;
+  }
   for (const rel of pack.manifest.scenarios ?? []) {
     if (isAbsolute(rel)) {
       unsafe.push(rel);
       continue;
     }
     const abs = resolve(packRoot, rel);
-    const inside = relative(packRoot, abs);
-    if (inside.startsWith('..') || isAbsolute(inside)) {
+    if (!isInside(packRoot, abs)) {
       unsafe.push(rel);
       continue;
     }
-    if (existsSync(abs)) paths.push(abs);
-    else missing.push(rel);
+    if (!existsSync(abs)) {
+      missing.push(rel);
+      continue;
+    }
+    // Symlink-aware check: resolve the real path and assert it's still under
+    // the real pack root. This blocks `scenarios/foo.yaml -> /etc/passwd`.
+    let realAbs: string;
+    try {
+      realAbs = realpathSync(abs);
+    } catch {
+      // realpath failure (e.g. dangling symlink) — treat as unsafe.
+      unsafe.push(rel);
+      continue;
+    }
+    if (!isInside(realRoot, realAbs)) {
+      unsafe.push(rel);
+      continue;
+    }
+    paths.push(abs);
   }
   return { paths, missing, unsafe };
 }
@@ -250,11 +307,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // profile lists no packs (default), all discoverable packs are eligible.
   const profilePackSet = new Set(profile.packs);
   // applies_when context built from the parsed project — lets the pack-loader
-  // skip packs that explicitly don't match the SUT.
+  // skip packs that explicitly don't match the SUT. We forward every field
+  // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
+  // pack declaring `applies_when.db: [postgres]` only runs when the project
+  // actually uses postgres.
   const appliesCtx = {
     sut_type: project.sut.type,
     runtime: project.stack.runtime,
     ...(project.stack.framework ? { framework: project.stack.framework } : {}),
+    db: project.stack.db ?? [],
     tags: project.tags ?? [],
   };
 

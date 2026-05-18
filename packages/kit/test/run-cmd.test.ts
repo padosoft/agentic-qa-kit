@@ -16,11 +16,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -309,6 +311,47 @@ describe('aqa run', () => {
     const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'path traversal must fail the run');
     assert.match(result.error ?? '', /unsafe/i);
+  });
+
+  it('rejects a scenario file that symlinks outside the pack root', async () => {
+    const { root, packDir } = fixtureProject();
+    // Create a target file outside the pack root and a symlink that points
+    // at it from within scenarios/. On Windows symlink creation may require
+    // admin privileges — skip gracefully if unsupported.
+    const outsideTarget = join(root, 'OUTSIDE-SECRET.yaml');
+    writeFileSync(outsideTarget, 'schema_version: "1"\nid: leaked\n', 'utf8');
+    const link = join(packDir, 'scenarios', 'evil-link.yaml');
+    try {
+      symlinkSync(outsideTarget, link, 'file');
+    } catch {
+      // platform/permission limitation — symlink-test inapplicable here.
+      return;
+    }
+    // Point the manifest at the symlink so the run will try to load it.
+    const linkedManifest = SMOKE_PACK_MANIFEST.replace(
+      'scenarios/smoke-noop.yaml',
+      'scenarios/evil-link.yaml',
+    );
+    writeFileSync(join(packDir, 'pack.yaml'), linkedManifest, 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'symlink escape must fail the run');
+    assert.match(result.error ?? '', /unsafe/i);
+  });
+
+  it('discovers bundled packs from node_modules/@aqa when no packsRoot is provided', async () => {
+    const { root, packDir } = fixtureProject();
+    // Simulate an external project that has `pack-local-smoke` installed as
+    // an npm dep. Copy the on-disk pack into the project's node_modules so
+    // `defaultPacksRoot()` discovers it without an explicit packsRoot.
+    const nmPack = join(root, 'node_modules', '@aqa', 'pack-local-smoke');
+    cpSync(packDir, nmPack, { recursive: true });
+    const result = await runRun({ root, profile: 'smoke' });
+    assert.equal(
+      result.ok,
+      true,
+      `node_modules discovery must work, got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
   it('skips packs whose applies_when does not match the project SUT', async () => {
