@@ -19,14 +19,16 @@
     "build": "tsc -p tsconfig.json && node scripts/emit-json-schemas.mjs",
     "build:schemas": "node scripts/emit-json-schemas.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/validators.test.ts",
+    "pretest": "tsc -p tsconfig.json && node scripts/emit-json-schemas.mjs",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/validators.test.ts test/ajv-roundtrip.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
     "zod": "^3.25.28"
   },
   "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "zod-to-json-schema": "^3.23.5"
   },
   "publishConfig": {

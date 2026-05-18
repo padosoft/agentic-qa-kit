@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "id": "notif-run-failed-001",
+  "kind": "run.failed",
+  "at": "2026-05-18T10:00:00.000Z",
+  "org": "padosoft",
+  "project": "demo",
+  "actor": "runner@host01",
+  "summary": "Run run-2026-05-17-001 failed: budget exceeded",
+  "payload": { "run_id": "run-2026-05-17-001" },
+  "read_by": []
+}

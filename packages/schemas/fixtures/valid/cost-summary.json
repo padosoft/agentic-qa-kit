@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "org": "padosoft",
+  "project": "demo",
+  "from": "2026-05-01T00:00:00.000Z",
+  "to": "2026-05-18T23:59:59.000Z",
+  "total_usd": 4.27,
+  "budget_usd": 20.0,
+  "by_profile": [
+    {
+      "profile": "smoke",
+      "llm_tokens_in": 120000,
+      "llm_tokens_out": 8000,
+      "llm_cost_usd": 4.27,
+      "runs": 3
+    }
+  ],
+  "daily": {
+    "2026-05-17": 2.1,
+    "2026-05-18": 2.17
+  }
+}
