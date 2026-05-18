@@ -13,9 +13,12 @@ my-pack/
 ├── pack.yaml              # the manifest (always required)
 ├── package.json           # only if you intend to publish to npm
 ├── scenarios/*.yaml       # the actual test cases
-├── risks/*.yaml           # the rules of the world your scenarios prove
-├── oracles/*.yaml         # informational/reserved — see note below
-└── probes/*.yaml          # informational/reserved — see note below
+└── risks/*.yaml           # the rules of the world your scenarios prove
+
+# Optional / reserved (do NOT create today unless you have a reason —
+# see note below; `aqa pack new` deliberately omits these):
+# ├── oracles/*.yaml       # reserved for a future custom-oracle loader
+# └── probes/*.yaml        # reserved for a future custom-probe loader
 ```
 
 > **Note on `oracles/` and `probes/`:** the manifest schema accepts these fields, but **`aqa run` does not load or validate them yet** — it only iterates `manifest.scenarios` and only those paths are checked for existence/safety today (custom oracle/probe loading, plus existence checks for `oracles:` / `probes:` / `risks:` entries, are tracked as v1.7.x follow-ups). Oracle evaluation today is limited to the three built-in kinds wired into `@aqa/runner.builtInOracles`, and probe execution comes only from `scenario.steps[].kind`. The `oracles:` / `probes:` manifest arrays and the matching directories are reserved for a future loader; populate them if you want to forward-declare intent, but don't expect listing a file there to make it run, and don't expect `aqa run` to fail if a listed path is missing.
@@ -105,7 +108,7 @@ oracles:
 tags: [api, idempotency]
 ```
 
-`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. The probe runner records the steps as run, but **no probe kind hits the network today** — `@aqa/runner.run()` uses a built-in `NO_NETWORK_PROBE` that returns a fixed `{ status: 200, body: "" }` response for every step regardless of `kind`. That stub exists so the orchestrator pipeline (event chain, oracle evaluation, findings) can be exercised end-to-end without external dependencies; real probe runners (real HTTP, Playwright browser, LLM evaluation) are tracked as v1.7.x / v1.8.x follow-ups. Authors should pick the right `kind` (it's recorded in the audit trail and will dispatch correctly once a runner ships) but design oracles assuming the stub response for now — that's how the bundled packs and `aqa pack new`'s starter all pass cleanly today.
+`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. The probe runner records the steps as run, but **no probe kind hits the network today** — `@aqa/runner.run()` uses a built-in `NO_NETWORK_PROBE` that returns a fixed `{ status: 200, body: null, headers: {} }` response for every step regardless of `kind` (see `packages/runner/src/run.ts`). That stub exists so the orchestrator pipeline (event chain, oracle evaluation, findings) can be exercised end-to-end without external dependencies; real probe runners (real HTTP, Playwright browser, LLM evaluation) are tracked as v1.7.x / v1.8.x follow-ups. Authors should pick the right `kind` (it's recorded in the audit trail and will dispatch correctly once a runner ships) but design oracles assuming the stub response for now — note in particular that `response_contains` sees `body: null` stringified as `"null"`, which contains the substring `"null"` and nothing else. That's how the bundled packs and `aqa pack new`'s starter (which uses `http_status: 200`) all pass cleanly against the stub today.
 
 `oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds in `@aqa/runner.builtInOracles`:
 
