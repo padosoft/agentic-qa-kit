@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page
-    .locator('.nav-item', { hasText: /^Risk map$/ })
+    .locator('.nav-item', { hasText: /^Risk map/ })
     .first()
     .click();
   await expect(page.locator('.page-title, h1').first()).toContainText(/Risk map/i);

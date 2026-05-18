@@ -66,7 +66,11 @@ test.describe('smoke: each navigable screen renders', () => {
       await page.goto('/');
       await expect(page.locator('.sidebar')).toBeVisible();
 
-      const navItem = page.locator('.nav-item', { hasText: new RegExp(`^${s.nav}$`, 'i') }).first();
+      // Anchor at start only, not end: some nav items render a trailing count badge
+      // (e.g. "Queue12", "Notifications3") so a `^X$` match would never bind.
+      // Escape regex meta-chars in s.nav (e.g. parens in "Audit (admin)").
+      const escaped = s.nav.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const navItem = page.locator('.nav-item', { hasText: new RegExp(`^${escaped}`, 'i') }).first();
       await navItem.click();
 
       await expect(page.locator('.page-title, h1').first()).toContainText(s.expect);

@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page
-    .locator('.nav-item', { hasText: /^Audit log$/ })
+    .locator('.nav-item', { hasText: /^Audit log/ })
     .first()
     .click();
   await expect(page.locator('.page-title, h1').first()).toContainText(/Audit/i);
