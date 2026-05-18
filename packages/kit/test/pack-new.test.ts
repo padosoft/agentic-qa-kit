@@ -8,7 +8,14 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -78,6 +85,23 @@ describe('aqa pack new', () => {
     const result = runPackNew({ root, slug: longSlug, sutType: 'api' });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /slug|chars|max/i);
+  });
+
+  it('refuses to scaffold over a symlinked pack directory (even with --force)', async (t) => {
+    const root = makeTempDir();
+    // Make the target path a symlink to a directory outside the project.
+    const externalDir = makeTempDir();
+    mkdirSync(join(root, 'packs'), { recursive: true });
+    const link = join(root, 'packs', 'pack-evil');
+    try {
+      symlinkSync(externalDir, link, 'dir');
+    } catch {
+      t.skip('symlink creation not supported on this platform/permission level');
+      return;
+    }
+    const result = runPackNew({ root, slug: 'pack-evil', sutType: 'api', force: true });
+    assert.equal(result.ok, false, 'must refuse even with --force');
+    assert.match(result.error ?? '', /symlink/i);
   });
 
   it('rejects an unsupported sut-type', async () => {

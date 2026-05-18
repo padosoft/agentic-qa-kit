@@ -11,7 +11,7 @@
  * adapts `applies_when.sut_type` and the example scenario's URL accordingly.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PackManifest, RiskMap, Scenario } from '@aqa/schemas';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
@@ -92,8 +92,34 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
   // check above already rejects any slug containing `/` or `\`, so the
   // prior `isAbsolute(opts.slug)` branch was unreachable.
   const packDir = resolve(opts.root, 'packs', opts.slug);
-  if (existsSync(packDir) && !opts.force) {
-    return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
+  if (existsSync(packDir)) {
+    // Use lstat (not stat) so symlinks don't transparently pass the
+    // directory check — following them with `mkdirSync` later would let a
+    // malicious or accidental symlink overwrite files outside packDir.
+    let isSymlink = false;
+    try {
+      isSymlink = lstatSync(packDir).isSymbolicLink();
+    } catch {
+      // unreadable — treat as a hard refusal below
+    }
+    if (isSymlink) {
+      return makeError(
+        `pack directory ${packDir} is a symlink — refusing to scaffold into it (would follow the link and write outside the pack root)`,
+      );
+    }
+    if (!opts.force) {
+      return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
+    }
+    // `--force` mode: remove the existing tree (real directory, not a
+    // symlink — we just rejected those) and recreate from scratch so we
+    // don't merge stale files with the new scaffold.
+    try {
+      rmSync(packDir, { recursive: true, force: true });
+    } catch (e) {
+      return makeError(
+        `cannot remove existing pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   const description = opts.description ?? 'Pack scaffolded by aqa pack new';
@@ -201,12 +227,15 @@ Scaffolded by \`aqa pack new\`. Replace this with a real description.
 
 ## Run it
 
-Drop this pack under \`<project>/packs/${opts.slug}/\` and reference it from \`.aqa/profiles.yaml\`:
+Drop this pack under \`<project>/packs/${opts.slug}/\` (or install it from npm under \`@aqa/${opts.slug}\`) and reference it from \`.aqa/profiles.yaml\`. The snippet below is the smallest schema-valid form — both top-level \`schema_version\` and per-profile fields (\`schema_version\`, \`execution_mode\`) are required by \`@aqa/schemas/ProfilesFile\`:
 
 \`\`\`yaml
+schema_version: "1"
 profiles:
   smoke:
+    schema_version: "1"
     name: smoke
+    execution_mode: orchestrator
     packs: [${opts.slug}]
     tags: [${opts.sutType}, starter]
 \`\`\`
