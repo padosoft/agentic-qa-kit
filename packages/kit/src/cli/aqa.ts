@@ -153,10 +153,11 @@ async function main(): Promise<number> {
         return 1;
       }
       const runOpts: Parameters<typeof runRun>[0] = { root: cwd };
-      const profile = args.values.get('profile');
-      const seed = args.values.get('seed');
-      if (profile) runOpts.profile = profile;
-      if (seed) runOpts.seed = seed;
+      // Use `.has()` rather than truthiness so an empty `--profile=""` is
+      // forwarded to runRun() and rejected by its validation, instead of
+      // silently falling back to the default profile.
+      if (args.values.has('profile')) runOpts.profile = args.values.get('profile') ?? '';
+      if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));

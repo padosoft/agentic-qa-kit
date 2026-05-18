@@ -88,7 +88,7 @@ const PROFILES_YAML = yamlStringify({
       llm_budget_usd: 5,
       parallelism: 2,
       require_deterministic_replay: false,
-      packs: ['core'],
+      packs: ['pack-core'],
     },
     'release-gate': {
       schema_version: '1',
@@ -98,7 +98,7 @@ const PROFILES_YAML = yamlStringify({
       llm_budget_usd: 50,
       parallelism: 4,
       require_deterministic_replay: true,
-      packs: ['core'],
+      packs: ['pack-core'],
     },
   },
 });

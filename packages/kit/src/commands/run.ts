@@ -148,7 +148,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     return makeError(`.aqa/profiles.yaml: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  const profileKey = opts.profile ?? Object.keys(profilesFile.profiles)[0];
+  // Default-profile policy: when --profile is omitted, prefer "smoke" if it
+  // exists, otherwise the first key in the file (deterministic only if the
+  // YAML has stable key order). Documented so consumers don't depend on
+  // luck for the "release-gate" path.
+  const profileKey =
+    opts.profile ?? (profilesFile.profiles.smoke ? 'smoke' : Object.keys(profilesFile.profiles)[0]);
   if (!profileKey || !profilesFile.profiles[profileKey]) {
     return makeError(
       `unknown profile "${profileKey ?? ''}" — known: ${Object.keys(profilesFile.profiles).join(', ') || '(none)'}`,
@@ -162,11 +167,25 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const runDir = join(opts.root, '.aqa', 'runs', runId);
   // Refuse to merge a fresh run into a pre-existing seeded directory — that
   // would append a second seq=0 chain onto the same events.jsonl and break
-  // any later audit verification.
-  if (existsSync(runDir) && readdirSync(runDir).length > 0) {
-    return makeError(
-      `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
-    );
+  // any later audit verification. Wrap the stat + readdir in try/catch so
+  // we surface a structured error instead of throwing if the path exists
+  // but is not a directory (e.g. someone touched a file at that name).
+  if (existsSync(runDir)) {
+    try {
+      const st = statSync(runDir);
+      if (!st.isDirectory()) {
+        return makeError(`run path ${runDir} exists but is not a directory`);
+      }
+      if (readdirSync(runDir).length > 0) {
+        return makeError(
+          `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
+        );
+      }
+    } catch (e) {
+      return makeError(
+        `cannot stat run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
   mkdirSync(runDir, { recursive: true });
 
@@ -236,10 +255,16 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   });
 
   return {
-    ok: true,
+    // A scenario that failed schema validation is a real coverage hole, not a
+    // benign skip — flag the run as not-ok so CI catches a malformed pack
+    // instead of silently dropping the scenario.
+    ok: scenarioErrors === 0,
     runId,
     runDir,
     scenariosRun,
     findingsCount: findings.snapshot().length,
+    ...(scenarioErrors > 0
+      ? { error: `${scenarioErrors} scenario(s) failed to parse or validate` }
+      : {}),
   };
 }

@@ -243,6 +243,19 @@ describe('aqa run', () => {
     assert.equal(a.runId, b.runId, 'identical seeds must produce identical run_ids');
   });
 
+  it('flags a malformed scenario as ok=false instead of silently dropping coverage', async () => {
+    const { root, packDir } = fixtureProject();
+    // Write a scenario YAML that parses but fails Zod validation (missing required fields).
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      `schema_version: "1"\nid: scn-broken\n`, // missing title, risk_refs, etc.
+      'utf8',
+    );
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'malformed scenario must surface as ok=false');
+    assert.match(result.error ?? '', /scenario/i);
+  });
+
   it('refuses to re-use a deterministic run directory rather than corrupting the audit chain', async () => {
     const { root, packDir } = fixtureProject();
     const first = await runRun({ root, profile: 'smoke', seed: 'same-seed', packsRoot: [packDir] });
