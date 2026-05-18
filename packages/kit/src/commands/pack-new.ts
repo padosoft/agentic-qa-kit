@@ -252,8 +252,8 @@ profiles:
     schema_version: "1"
     name: smoke
     execution_mode: orchestrator
-    packs: [${opts.slug}]
-    tags: [${opts.sutType}, starter]
+    packs: ["${opts.slug}"]
+    tags: ["${opts.sutType}", "starter"]
 \`\`\`
 
 Then \`aqa run --profile smoke\` will pick it up.

@@ -232,7 +232,7 @@ Now `aqa run --profile smoke` should report `scenarios: 1`.
 For the `@aqa` scope itself the install is automatic:
 
 ```bash
-npm install --save-dev @aqa/pack-foo   # any pack with name starting with anything
+npm install --save-dev @aqa/pack-foo   # any pack under the @aqa scope
 ```
 
 `aqa run`'s `defaultPacksRoot()` discovers it from `<project>/node_modules/@aqa/pack-foo/` as long as that directory contains a `pack.yaml`. The directory name does **not** have to start with `pack-` — only the manifest's `name:` field matters.
