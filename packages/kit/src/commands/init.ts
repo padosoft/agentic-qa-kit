@@ -77,31 +77,70 @@ function riskMapYaml(name: string): string {
   });
 }
 
-const PROFILES_YAML = yamlStringify({
-  schema_version: '1',
-  profiles: {
-    smoke: {
-      schema_version: '1',
-      name: 'smoke',
-      execution_mode: 'orchestrator',
-      llm_usage: ['scenario_generation'],
-      llm_budget_usd: 5,
-      parallelism: 2,
-      require_deterministic_replay: false,
-      packs: ['core'],
+/**
+ * Pick the bundled packs that actually contribute scenarios for the detected
+ * SUT type. `pack-core` is included as the always-on baseline; it ships
+ * templates and a baseline risk catalog, but no scenarios or oracles of its
+ * own. Anything else is added when the detected type matches a pack with
+ * real scenarios — otherwise `aqa run` would exit zero on a freshly-init'd
+ * project (Codex P1 in PR #24 iter 4).
+ */
+function packsForSutType(sutType: string): string[] {
+  const base = ['pack-core'];
+  switch (sutType) {
+    case 'api':
+      return [...base, 'pack-api-core'];
+    case 'web':
+      return [...base, 'pack-web-ui'];
+    case 'agent':
+      return [...base, 'pack-llm-agent'];
+    default:
+      // cli / lib / pipeline / unknown — `pack-core` alone has no scenarios.
+      // Users will need to author or install a separate pack with scenarios;
+      // `pack-core` ships risks and oracles only. Loose `.aqa/scenarios/*.yaml`
+      // discovery is not currently supported by `aqa run` — every scenario must
+      // be referenced from a pack manifest.
+      return base;
+  }
+}
+
+function profilesYaml(profile: ProjectProfile): string {
+  const sutType = profile.sut_type === 'unknown' ? 'lib' : profile.sut_type;
+  const packs = packsForSutType(sutType);
+  return yamlStringify({
+    schema_version: '1',
+    profiles: {
+      smoke: {
+        schema_version: '1',
+        name: 'smoke',
+        execution_mode: 'orchestrator',
+        llm_usage: ['scenario_generation'],
+        llm_budget_usd: 5,
+        parallelism: 2,
+        require_deterministic_replay: false,
+        packs,
+      },
+      'release-gate': {
+        schema_version: '1',
+        name: 'release-gate',
+        execution_mode: 'orchestrator',
+        llm_usage: ['scenario_generation'],
+        llm_budget_usd: 50,
+        parallelism: 4,
+        require_deterministic_replay: true,
+        // Same scenario set as smoke for now. The "release-gate fails on
+        // findings" semantic depends on a real probe runner — until that
+        // ships, every finding from this profile is a synthetic stub
+        // result and would make the merge gate unusable out of the box.
+        // `runRun()` deliberately does not enforce no-findings while
+        // running against the no-network stub; once a real HTTP/browser
+        // probe runner is wired, the strict semantics from iter 10
+        // re-engage automatically.
+        packs,
+      },
     },
-    'release-gate': {
-      schema_version: '1',
-      name: 'release-gate',
-      execution_mode: 'orchestrator',
-      llm_usage: ['scenario_generation'],
-      llm_budget_usd: 50,
-      parallelism: 4,
-      require_deterministic_replay: true,
-      packs: ['core'],
-    },
-  },
-});
+  });
+}
 
 export function runInit(opts: InitOptions): InitResult {
   const profile = profileRepo(opts.root);
@@ -114,7 +153,7 @@ export function runInit(opts: InitOptions): InitResult {
     [join(opts.root, '.aqa', 'project.yaml'), projectYaml(name, profile)],
     [join(opts.root, '.aqa', 'testing.md'), TESTING_MD.replaceAll('${PROJECT_NAME}', name)],
     [join(opts.root, '.aqa', 'risk-map.yaml'), riskMapYaml(name)],
-    [join(opts.root, '.aqa', 'profiles.yaml'), PROFILES_YAML],
+    [join(opts.root, '.aqa', 'profiles.yaml'), profilesYaml(profile)],
   ];
   const files = targets.map(([path, content]) => ({
     path,

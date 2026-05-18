@@ -88,6 +88,8 @@
         "aqa": "./dist/cli/aqa.js",
       },
       "dependencies": {
+        "@aqa/pack-loader": "workspace:*",
+        "@aqa/runner": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "kleur": "^4.1.5",
         "yaml": "^2.6.0",

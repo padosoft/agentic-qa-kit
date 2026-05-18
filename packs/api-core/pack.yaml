@@ -6,7 +6,11 @@ author: Padosoft
 license: Apache-2.0
 applies_when:
   sut_type: [api]
-  framework: [hono, express, fastify, koa, nestjs]
+# Intentionally no `framework` clause: this pack ships generic API scenarios
+# (idempotency, auth-token replay) that don't depend on a specific framework,
+# and `aqa init` may classify a project as `sut_type=api` (via src/server.ts
+# detection) without identifying its framework. Constraining to a named
+# framework list would silently drop the pack for plain Node/Bun APIs.
 templates: []
 scenarios:
   - scenarios/idempotency.yaml
