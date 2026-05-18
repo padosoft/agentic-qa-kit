@@ -1,13 +1,15 @@
+import { useQuery } from '@tanstack/react-query';
 import { PlayCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '../components/Badge.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
-import { MOCK_FINDINGS } from '../data/mock.ts';
+import { fetchFindings } from '../data/api.ts';
 
 export function ReplayScreen() {
-  const [selected, setSelected] = useState(MOCK_FINDINGS[0]?.id ?? '');
-  const f = MOCK_FINDINGS.find((x) => x.id === selected);
+  const { data: findings = [] } = useQuery({ queryKey: ['findings'], queryFn: fetchFindings });
+  const [selected, setSelected] = useState<string>('');
+  const f = findings.find((x) => x.id === selected) ?? findings[0];
   return (
     <>
       <PageHeader
@@ -19,7 +21,7 @@ export function ReplayScreen() {
           <CardHeader>Findings</CardHeader>
           <CardBody>
             <ul className="space-y-1 text-sm">
-              {MOCK_FINDINGS.map((m) => (
+              {findings.map((m) => (
                 <li key={m.id}>
                   <button
                     type="button"
@@ -69,7 +71,7 @@ export function ReplayScreen() {
                   >
                     {`#!/usr/bin/env bash
 set -euo pipefail
-aqa replay --finding ${f.id} --level L${f.verification_floor.replace('L', '')}`}
+aqa replay --finding ${f.id} --floor ${f.verification_floor}`}
                   </pre>
                 </CardBody>
               </Card>

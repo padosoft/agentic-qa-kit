@@ -45,7 +45,7 @@ Boundaries (anywhere a security decision must be enforced):
 |---|---|---|---|---|
 | S-01 | Runner impersonation (rogue worker claims fleet credential) | High | Per-runner mTLS or signed JWT (design intent for `@aqa/auth` + `@aqa/server`). The current `/api/runner/jobs/next` route in `packages/server/src/api.ts` ships with `requires: null` — runner-credential validation lands in a future server iteration. | **Partial — design specified, enforcement deferred.** |
 | S-02 | User session hijack via cookie theft | High | `Secure` + `HttpOnly` + `SameSite=Lax` enforced as Risk invariant; pack-security asserts it. | Mitigated |
-| S-03 | Pack-author spoofing (malicious pack pretending to be `@aqa/...`) | Critical | Pack signing (cosign-compatible); `@aqa/pack-scanner` refuses unsigned ≥1.0 packs. | Mitigated |
+| S-03 | Pack-author spoofing (malicious pack pretending to be `@aqa/...`) | Critical | Pack signing (cosign-compatible). `@aqa/pack-scanner` currently raises a **critical** issue for unsigned packs that include **shell probes** specifically — full unsigned-≥1.0 rejection is broader than what the current scanner rule covers. | **Partial — covered for unsigned-shell-pack; broader unsigned rejection is roadmap.** |
 | S-04 | LLM vendor MITM (response forgery) | Medium | TLS pinning at adapter layer (`@aqa/llm-adapters`); content-hash deterministic replay for fixture mode. | Partial — pinning per-adapter, not enforced. |
 
 ### Tampering
@@ -79,7 +79,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| D-01 | Runaway LLM cost (intentional or accidental) | Critical | `@aqa/cost` hard cap; server refuses to start with budget=0; per-tenant USD limit enforced at request time. | Mitigated |
+| D-01 | Runaway LLM cost (intentional or accidental) | Critical | `@aqa/cost` ships `BudgetTracker` + `defaultPricing`. The tracker accumulates spend; callers are expected to stop dispatching when the cap is hit. The server-side enforcement gate inside `makeApi()` is roadmap. | **Partial — tracker shipped, server gate not yet wired.** |
 | D-02 | Runner pool overwhelmed | Medium | `RunnerQueue` FIFO with visibility leases; backpressure via 429. | Mitigated |
 | D-03 | SUT DoS by misconfigured probe | Medium | Per-scenario probe rate documented in pack manifest; profile `release-gate` enforces conservative defaults. | Advisory — enforcement is per-pack. |
 | D-04 | Adversarial pack publishes infinite-loop probe | High | Container sandbox CPU/memory limits via cgroups; wallclock cap per probe. | Mitigated via `@aqa/sandbox` (process default; container default with `selectSandbox`). |

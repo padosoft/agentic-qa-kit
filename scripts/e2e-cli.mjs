@@ -17,19 +17,53 @@
  * Wire into CI via `bun run test:e2e-cli` from the root package.json.
  */
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const AQA_BIN = resolve(ROOT, 'packages/kit/dist/cli/aqa.js');
-const EXAMPLE = resolve(ROOT, 'examples/bun-api');
+
+// Initialise a fresh sandbox via `aqa init` so that `aqa validate` has the
+// `.aqa/` artifacts it expects. Using a tmp dir keeps the smoke test
+// hermetic — no checked-in fixture to drift out of date.
+const SANDBOX = mkdtempSync(`${tmpdir()}/aqa-cli-e2e-`);
+
+// Seed a minimal package.json so `aqa doctor`'s runtime check resolves.
+writeFileSync(
+  join(SANDBOX, 'package.json'),
+  JSON.stringify(
+    {
+      name: 'aqa-cli-e2e-fixture',
+      private: true,
+      version: '0.0.0',
+      type: 'module',
+      engines: { node: '>=22' },
+    },
+    null,
+    2,
+  ),
+);
+const initResult = spawnSync(process.execPath, [AQA_BIN, 'init', '--silent'], {
+  cwd: SANDBOX,
+  encoding: 'utf8',
+  timeout: 20_000,
+});
+if ((initResult.status ?? -1) !== 0) {
+  console.error('`aqa init` failed in sandbox:');
+  console.error(' stdout:', initResult.stdout);
+  console.error(' stderr:', initResult.stderr);
+  rmSync(SANDBOX, { recursive: true, force: true });
+  process.exit(1);
+}
 
 const cases = [
   { label: 'version', args: ['--version'], expectExit: 0, expectStdout: /\d+\.\d+/ },
   { label: 'help', args: ['--help'], expectExit: 0, expectStdout: /Usage/i },
-  { label: 'doctor', args: ['doctor'], expectExit: [0, 1], cwd: EXAMPLE },
-  { label: 'validate', args: ['validate'], expectExit: [0, 1], cwd: EXAMPLE },
+  { label: 'doctor', args: ['doctor'], expectExit: 0, cwd: SANDBOX },
+  { label: 'validate', args: ['validate'], expectExit: 0, cwd: SANDBOX },
 ];
 
 let failed = 0;
@@ -57,8 +91,10 @@ for (const c of cases) {
   }
 }
 
+rmSync(SANDBOX, { recursive: true, force: true });
+
 if (failed > 0) {
   console.error(`\n${failed} smoke check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll ${cases.length} CLI smoke checks passed.`);
+console.log(`\nAll ${cases.length} CLI smoke checks passed (exit 0 required).`);

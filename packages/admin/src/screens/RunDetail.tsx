@@ -8,7 +8,12 @@ import { fetchFindings, fetchRuns } from '../data/api.ts';
 
 export function RunDetailScreen() {
   const { runId } = useParams({ strict: false }) as { runId: string };
-  const { data: runs = [], isLoading: runsLoading } = useQuery({
+  const {
+    data: runs = [],
+    isLoading: runsLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['runs'],
     queryFn: fetchRuns,
   });
@@ -24,6 +29,18 @@ export function RunDetailScreen() {
       <>
         <Breadcrumb items={[{ label: 'Runs', to: '/runs' }, { label: runId }]} />
         <PageHeader title={`Run ${runId}`} subtitle="Loading…" />
+      </>
+    );
+  }
+
+  if (isError) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Runs', to: '/runs' }, { label: runId }]} />
+        <PageHeader
+          title={`Run ${runId}`}
+          subtitle={`Live fetch failed: ${(error as Error).message}`}
+        />
       </>
     );
   }

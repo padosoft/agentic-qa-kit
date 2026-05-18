@@ -8,11 +8,28 @@ import { fetchFindings } from '../data/api.ts';
 
 export function FindingDetailScreen() {
   const { findingId } = useParams({ strict: false }) as { findingId: string };
-  const { data: findings = [], isLoading } = useQuery({
+  const {
+    data: findings = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['findings'],
     queryFn: fetchFindings,
   });
   const f = findings.find((x) => x.id === findingId);
+
+  if (isError) {
+    return (
+      <>
+        <Breadcrumb items={[{ label: 'Findings', to: '/findings' }, { label: findingId }]} />
+        <PageHeader
+          title={`Finding ${findingId}`}
+          subtitle={`Live fetch failed: ${(error as Error).message}`}
+        />
+      </>
+    );
+  }
 
   if (isLoading) {
     return (

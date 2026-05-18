@@ -2,13 +2,22 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge, severityTone } from '../components/Badge.tsx';
 import { Card, CardBody, CardHeader } from '../components/Card.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
+import { fetchFindings, isLive } from '../data/api.ts';
 import { clusterFindings } from '../data/cluster.ts';
-import { MOCK_FINDINGS } from '../data/mock.ts';
 
 export function FindingsScreen() {
+  const {
+    data: findings = [],
+    error,
+    isError,
+  } = useQuery({
+    queryKey: ['findings'],
+    queryFn: fetchFindings,
+  });
   const { data: clusters, isLoading } = useQuery({
-    queryKey: ['findings-clusters'],
-    queryFn: () => clusterFindings(MOCK_FINDINGS),
+    queryKey: ['findings-clusters', findings.map((f) => f.id).join(',')],
+    queryFn: () => clusterFindings(findings),
+    enabled: findings.length > 0,
   });
 
   return (
@@ -16,7 +25,15 @@ export function FindingsScreen() {
       <PageHeader
         title="Findings"
         subtitle="Clustered by content-hash signature (scenario × risk × normalised summary). Same content across runs collapses into one cluster."
+        actions={isLive() ? <Badge tone="success">live</Badge> : <Badge tone="ai">mock</Badge>}
       />
+      {isError && (
+        <Card>
+          <div className="px-4 py-3 text-sm" style={{ color: 'var(--color-status-danger)' }}>
+            Live fetch failed: {(error as Error).message}
+          </div>
+        </Card>
+      )}
       {isLoading && (
         <Card>
           <CardBody>Clustering…</CardBody>

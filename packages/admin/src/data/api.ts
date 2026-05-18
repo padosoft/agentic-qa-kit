@@ -74,34 +74,34 @@ function mapRun(r: ServerRun): MockRun {
   };
 }
 
+/**
+ * Mirrors `@aqa/schemas` `Finding.Finding` shape (the relevant subset).
+ * Source of truth for field values is `packages/schemas/src/finding.ts`.
+ */
 interface ServerFinding {
   id: string;
   run_id: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  status: 'open' | 'verified' | 'fixed' | 'wontfix' | string;
+  status: 'draft' | 'verified' | 'rejected' | 'duplicate' | 'fixed';
   scenario_id: string;
   risk_id: string;
   summary?: string;
   title?: string;
-  verification_floor?: 'L1' | 'L2' | 'L3';
-  created_at?: string;
+  verification_floor: 'bug_level' | 'scenario_level' | 'agent_level';
+  discovered_at: string;
 }
 
 function mapFinding(f: ServerFinding): MockFinding {
-  const status: MockFinding['status'] =
-    f.status === 'verified' || f.status === 'fixed' || f.status === 'wontfix' || f.status === 'open'
-      ? f.status
-      : 'open';
   return {
     id: f.id,
     run_id: f.run_id,
     severity: f.severity,
-    status,
+    status: f.status, // schema enum carried through verbatim
     scenario_id: f.scenario_id,
     risk_id: f.risk_id,
     summary: f.summary ?? f.title ?? '(no summary)',
-    verification_floor: f.verification_floor ?? 'L1',
-    created_at: f.created_at ?? new Date(0).toISOString(),
+    verification_floor: f.verification_floor, // schema enum carried through verbatim
+    created_at: f.discovered_at, // schema uses `discovered_at`; UI alias is `created_at`
   };
 }
 
