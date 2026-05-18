@@ -3,8 +3,9 @@
  *
  * Loads `.aqa/project.yaml` + `.aqa/profiles.yaml` using the canonical
  * `@aqa/schemas` shapes, resolves packs from either an explicit `packsRoot`
- * list or three default locations (project's `packs/*`, `node_modules/@aqa/pack-*`,
- * and the `dist/packs/*` bundled inside `@aqa/kit`), filters scenarios by
+ * list or three default locations (project's `packs/*`, every
+ * `node_modules/@aqa/*` subdir that contains a `pack.yaml`, and the
+ * `dist/packs/*` bundled inside `@aqa/kit`), filters scenarios by
  * the selected profile's `tags`, and runs each one via
  * `@aqa/runner.runScenario`. The runner appends to the events + findings
  * writers we hand it; we never re-emit `finding_emitted` ourselves.
@@ -74,12 +75,14 @@ export interface RunResult {
   /**
    * Present whenever the run got far enough to allocate a run directory —
    * which is most failure modes (broken pack, malformed scenario, 0
-   * scenarios, release-gate findings, findings.jsonl create failure, or
-   * an exception on the initial `run_started` event write). Absent only
-   * for the early-exit errors that happen before the directory is
-   * created: missing project.yaml, schema-invalid project/profiles,
-   * invalid CLI flags, runs-dir unwritable, or a deterministic-seed
-   * collision.
+   * scenarios, findings.jsonl create failure, or an exception on the
+   * initial `run_started` event write). Absent only for the early-exit
+   * errors that happen before the directory is created: missing
+   * project.yaml, schema-invalid project/profiles, invalid CLI flags,
+   * runs-dir unwritable, agent-mode profile, or a deterministic-seed
+   * collision. (Note: "release-gate findings" is **not** a failure mode
+   * today; the strict semantics are deferred until a real probe runner
+   * ships — see the file-level docstring.)
    */
   runId?: string;
   /** Same presence semantics as `runId`. */

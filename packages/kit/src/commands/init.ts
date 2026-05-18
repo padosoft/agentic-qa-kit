@@ -79,10 +79,11 @@ function riskMapYaml(name: string): string {
 
 /**
  * Pick the bundled packs that actually contribute scenarios for the detected
- * SUT type. `pack-core` is included as the always-on baseline; it ships risks
- * and oracles but no scenarios on its own. Anything else is added when the
- * detected type matches a pack with real scenarios — otherwise `aqa run` would
- * exit zero on a freshly-init'd project (Codex P1 in PR #24 iter 4).
+ * SUT type. `pack-core` is included as the always-on baseline; it ships
+ * templates and a baseline risk catalog, but no scenarios or oracles of its
+ * own. Anything else is added when the detected type matches a pack with
+ * real scenarios — otherwise `aqa run` would exit zero on a freshly-init'd
+ * project (Codex P1 in PR #24 iter 4).
  */
 function packsForSutType(sutType: string): string[] {
   const base = ['pack-core'];
