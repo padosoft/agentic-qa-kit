@@ -80,8 +80,10 @@ export class MemoryStore implements StoreProvider {
   }): Promise<Event.Event[]> {
     let out = [...this.audit];
     if (opts.kind) out = out.filter((e) => e.kind === opts.kind);
-    if (opts.from) out = out.filter((e) => e.ts >= opts.from!);
-    if (opts.to) out = out.filter((e) => e.ts <= opts.to!);
+    const from = opts.from;
+    const to = opts.to;
+    if (from) out = out.filter((e) => e.ts >= from);
+    if (to) out = out.filter((e) => e.ts <= to);
     out.sort((a, b) => (a.ts < b.ts ? 1 : -1));
     return typeof opts.limit === 'number' ? out.slice(0, opts.limit) : out;
   }
@@ -173,7 +175,8 @@ export class MemoryStore implements StoreProvider {
     opts: { pack?: string; risk_id?: string } = {},
   ): Promise<Scenario.Scenario[]> {
     let out = [...this.scenarios.values()];
-    if (opts.risk_id) out = out.filter((s) => s.risk_refs.includes(opts.risk_id!));
+    const riskId = opts.risk_id;
+    if (riskId) out = out.filter((s) => s.risk_refs.includes(riskId));
     return out;
   }
   async loadScenario(id: string): Promise<Scenario.Scenario | null> {
@@ -192,7 +195,8 @@ export class MemoryStore implements StoreProvider {
   }): Promise<Notification.Notification[]> {
     let out = this.notifications.filter((n) => n.org === opts.org);
     if (opts.project) out = out.filter((n) => n.project === opts.project);
-    if (opts.unread_for) out = out.filter((n) => !n.read_by.includes(opts.unread_for!));
+    const unreadFor = opts.unread_for;
+    if (unreadFor) out = out.filter((n) => !n.read_by.includes(unreadFor));
     out.sort((a, b) => (a.at < b.at ? 1 : -1));
     return typeof opts.limit === 'number' ? out.slice(0, opts.limit) : out;
   }

@@ -16,16 +16,26 @@
  *      `allOf` of `if/then` clauses, one per verification_floor.
  *   3. patchRunTerminalGating — encode "terminal state ⇒ finished_at required"
  *      and "non-terminal state ⇒ finished_at forbidden".
+ *   4. patchReproLevelDeterministic — `deterministic=true ⇒ attempts >= 1`.
+ *      The `successes === attempts` half of the rule is cross-field and
+ *      surfaced via `$comment`.
+ *   5. patchFindingDuplicateOf — `status='duplicate' ⇒ duplicate_of required`.
+ *      `duplicate_of !== id` is cross-field and surfaced via `$comment`.
+ *   6. patchProfilesFileNameKey — `$comment` documenting that each entry's
+ *      `profile.name === key`; JSON Schema cannot bind a property key to
+ *      a sub-property value.
  *
- * Known limitation: a handful of remaining superRefines (ReproLevel
- * successes-vs-attempts, ProfilesFile key-vs-name, Finding.duplicate_of
- * self-reference and status='duplicate'-requires-duplicate_of, Run's
- * finished_at >= started_at cross-field comparison) are intentionally NOT
- * mirrored to JSON Schema. They require either complex if/then nests or
- * cross-field comparisons that JSON Schema cannot express natively.
- * Consumers validating via the shipped JSON Schema must therefore re-check
- * these invariants at the application layer; consumers validating via Zod
- * get them for free. Tracked as a follow-up enhancement (see PROGRESS.md).
+ * Remaining cross-field invariants enforced only by Zod (with `$comment`
+ * notice on the emitted schema) — consumers validating via JSON Schema
+ * must re-check them at the application layer:
+ *   - ReproLevel: `successes <= attempts`, `deterministic && successes === attempts`
+ *   - Finding:    `duplicate_of !== id`
+ *   - ProfilesFile: `entries[key].profile.name === key`
+ *   - Run:        `finished_at >= started_at`
+ *
+ * An Ajv 2020 round-trip test (`test/ajv-roundtrip.test.ts`) validates
+ * the shipped fixtures against the emitted JSON Schemas so a divergence
+ * between layers fails the build.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -92,7 +102,19 @@ function fixExclusiveBounds(node) {
  * `finished_at`; non-terminal states forbid it; `finished_at >= started_at`
  * cannot be expressed in pure JSON Schema, so we surface it via description.
  */
+/** zod-to-json-schema wraps the root under `#/definitions/<name>` and
+ * sets `$ref` at the top. Patches that drill into `properties` need to
+ * resolve that indirection. Returns the inner object that carries
+ * `properties` / `required` / `additionalProperties`. */
+function resolveDefinition(schema, schemaName) {
+  if (schema?.definitions && schemaName in schema.definitions) {
+    return schema.definitions[schemaName];
+  }
+  return schema;
+}
+
 function patchRunTerminalGating(schema) {
+  const root = resolveDefinition(schema, 'run');
   const terminal = ['succeeded', 'failed', 'aborted', 'budget_exceeded'];
   const nonTerminal = ['pending', 'running'];
   const allOf = [
@@ -107,12 +129,65 @@ function patchRunTerminalGating(schema) {
       then: { not: { required: ['finished_at'] } },
     },
   ];
-  schema.allOf = [...(schema.allOf ?? []), ...allOf];
+  root.allOf = [...(root.allOf ?? []), ...allOf];
   schema.$comment =
     'finished_at >= started_at is enforced by the Zod validator; JSON Schema cannot express the cross-field comparison.';
 }
 
+/**
+ * Mirror Finding.duplicate_of superRefine: `status='duplicate'` requires
+ * `duplicate_of` to be present. The `duplicate_of !== id` half is a
+ * cross-field comparison flagged via `$comment`.
+ */
+function patchFindingDuplicateOf(schema) {
+  const root = resolveDefinition(schema, 'finding');
+  const allOf = [
+    {
+      if: { properties: { status: { const: 'duplicate' } }, required: ['status'] },
+      // biome-ignore lint/suspicious/noThenProperty: JSON Schema's `then` keyword
+      then: { required: ['duplicate_of'] },
+    },
+  ];
+  root.allOf = [...(root.allOf ?? []), ...allOf];
+  const existing = typeof schema.$comment === 'string' ? `${schema.$comment} ` : '';
+  schema.$comment = `${existing}duplicate_of !== id is enforced by the Zod validator; JSON Schema cannot express the cross-field comparison.`;
+}
+
+/**
+ * Mirror ReproLevel's superRefine: `deterministic=true ⇒ attempts >= 1`.
+ * The `successes === attempts` half is cross-field — flagged via `$comment`.
+ */
+function patchReproLevelDeterministic(schema) {
+  const root = resolveDefinition(schema, 'finding');
+  const repro = root?.properties?.reproducibility?.properties;
+  if (!repro) return;
+  for (const floor of ['bug_level', 'scenario_level', 'agent_level']) {
+    const level = repro[floor];
+    if (!level || typeof level !== 'object') continue;
+    const allOf = [
+      {
+        if: { properties: { deterministic: { const: true } }, required: ['deterministic'] },
+        // biome-ignore lint/suspicious/noThenProperty: JSON Schema's `then` keyword
+        then: { properties: { attempts: { minimum: 1 } } },
+      },
+    ];
+    level.allOf = [...(level.allOf ?? []), ...allOf];
+    const existing = typeof level.$comment === 'string' ? `${level.$comment} ` : '';
+    level.$comment = `${existing}successes <= attempts, and deterministic=true => successes === attempts, are enforced by the Zod validator; JSON Schema cannot express the cross-field comparisons.`;
+  }
+}
+
+/**
+ * Document ProfilesFile's superRefine via `$comment` — JSON Schema cannot
+ * bind a property key to a sub-property value of the same entry.
+ */
+function patchProfilesFileNameKey(schema) {
+  const existing = typeof schema.$comment === 'string' ? `${schema.$comment} ` : '';
+  schema.$comment = `${existing}For each entry under profiles, profile.name === key is enforced by the Zod validator; JSON Schema cannot express the key/value binding.`;
+}
+
 function patchFindingVerifiedGating(schema) {
+  const root = resolveDefinition(schema, 'finding');
   // `if`/`then`/`else` are JSON Schema 2020-12 keywords. Building the object via
   // bracket assignment avoids tripping lint rules that flag `.then` (intended to
   // catch accidental Promise-like properties, irrelevant here).
@@ -144,7 +219,7 @@ function patchFindingVerifiedGating(schema) {
     // biome-ignore lint/suspicious/noThenProperty: JSON Schema's `then` keyword
     return { if: ifBranch, then: thenBranch };
   });
-  schema.allOf = [...(schema.allOf ?? []), ...allOf];
+  root.allOf = [...(root.allOf ?? []), ...allOf];
 }
 
 let emitted = 0;
@@ -161,8 +236,13 @@ for (const { file, exportName, schemaName } of modules) {
     $refStrategy: 'none',
   });
   fixExclusiveBounds(json);
-  if (schemaName === 'finding') patchFindingVerifiedGating(json);
+  if (schemaName === 'finding') {
+    patchFindingVerifiedGating(json);
+    patchFindingDuplicateOf(json);
+    patchReproLevelDeterministic(json);
+  }
   if (schemaName === 'run') patchRunTerminalGating(json);
+  if (schemaName === 'profiles-file') patchProfilesFileNameKey(json);
   // Declare the dialect explicitly so consumers that default to an older draft
   // (e.g. ajv without the 2020-12 plugin) cannot silently mis-validate.
   json.$schema = 'https://json-schema.org/draft/2020-12/schema';

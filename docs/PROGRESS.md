@@ -30,7 +30,22 @@
 
 - **v1.4 admin API surface (in flight).** Expanded `packages/server`'s `makeApi()` from 4 to 28 routes covering everything `docs/design/admin-panel-spec-v2.md` references: runs detail + events, finding status mutation, packs CRUD, profiles CRUD, risks CRUD, scenarios edit, audit query, cost summary, queue snapshot, notifications, saved views, API tokens, tenancy (orgs + projects). `StoreProvider` extended with matching methods; `MemoryStore` implements all of them (Postgres scaffold throws `not implemented`). New `@aqa/schemas` namespaces: `Notification`, `SavedView`, `ApiToken`, `CostSummary`, `Tenancy`. Multi-tenant via `x-aqa-org` / `x-aqa-project` headers. 8 new tests; 184 repo-wide.
 - **Design brief for admin v2 shipped.** `docs/design/admin-panel-spec-v2.md` — self-contained enterprise-grade spec (tokens, 30 screens, full component library, interaction patterns, a11y, perf budget, deliverables checklist) so an external designer (or Claude Design) can build the React template in parallel.
-- **Next macro task.** After admin v2 design lands and integrates: full end-to-end ecosystem smoke via Playwright — boot server + runner pool + admin in a single command, drive a real `aqa run` against `examples/bun-api`, verify findings appear in the admin, verify audit chain remains valid. TDD: any broken path → failing test first, then fix.
+- **Next macro task (post-admin-design).** After admin v2 design lands and integrates: full end-to-end ecosystem smoke via Playwright — boot server + runner pool + admin in a single command, drive a real `aqa run` against `examples/bun-api`, verify findings appear in the admin, verify audit chain remains valid. TDD: any broken path → failing test first, then fix.
+- **Issue #3 closed.** Mirrored 3 remaining Zod superRefines into JSON Schema (Finding `status='duplicate' ⇒ duplicate_of`, ReproLevel `deterministic=true ⇒ attempts >= 1`, ProfilesFile `profile.name === key` via `$comment`). Added Ajv 2020 round-trip test (`packages/schemas/test/ajv-roundtrip.test.ts`) that validates every fixture against the emitted schema — catches Zod/JSON-Schema divergence at build time. 204 tests repo-wide. Patches resolve `#/definitions/<name>` indirection emitted by zod-to-json-schema.
+- **Final closing step (after every macro task above is closed).** README + docs refresh pass:
+  1. Audit every `v0.x.x` reference in `README.md` — replace stale ones with the current shipped surface or drop.
+  2. Quick-start section: remove the "preview of v0.1.0" disclaimer; write the definitive end-to-end junior flow that **actually works today**, including booting the web admin panel. No more "this will work in vX" hedging.
+  3. Architecture section in `README.md`: refresh diagram + component list to match the 18 packages shipped (schemas, kit, pack-loader, pack-scanner, adapters, llm-adapters, runner, reporter, admin, admin-core, auth, sandbox, store, generator, server, clustering, methodology, compliance).
+  4. `docs/`: audit every file, prune obsolete content, keep only current/good. Anything that says "stub" or "lands in vX" must either be filled in or removed.
+  5. After "The mental model in 7 words" section, add a new section titled **"How you use it"** — clean, concise, written in the same rhythm as "7 words" — describing the end-to-end junior workflow:
+     - `aqa init` (detect repo, scaffold `.aqa/`)
+     - edit `risk-map.yaml` (declare what matters)
+     - install agent files for your coding agent
+     - `aqa run --profile smoke` (skills + scenarios + runner + oracles)
+     - open admin panel (`bun --filter @aqa/admin dev`)
+     - inspect findings, replay deterministically, verify audit chain
+     - iterate on risks + scenarios until release-gate green
+  6. Tag the README/docs refresh PR as the official **closure** of the agentic-qa-kit v1.x line.
 
 ## 2026-05-18 — earlier
 
