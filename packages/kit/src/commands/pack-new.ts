@@ -108,15 +108,27 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
       return makeError(`cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+  // Whether packDir already exists as a real directory (not a symlink) and
+  // therefore needs to be `rmSync`'d before we recreate it. We compute this
+  // up-front so we can refuse fast (no --force + path exists, or symlink +
+  // --force) but defer the actual destructive rmSync until *after* all
+  // schema validation passes. Otherwise a scaffold that fails schema
+  // validation would still have nuked the user's existing pack, with
+  // nothing recreated to take its place.
+  let existingPackDirNeedsRm = false;
   if (existsSync(packDir)) {
     // Use lstat (not stat) so symlinks don't transparently pass the
     // directory check — following them with `mkdirSync` later would let a
     // malicious or accidental symlink overwrite files outside packDir.
-    let isSymlink = false;
+    // Failure to stat is treated as a hard refusal: we can't confirm the
+    // target is safe to overwrite, so we don't.
+    let isSymlink: boolean;
     try {
       isSymlink = lstatSync(packDir).isSymbolicLink();
-    } catch {
-      // unreadable — treat as a hard refusal below
+    } catch (e) {
+      return makeError(
+        `cannot stat pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)} — refusing to scaffold (cannot confirm path is not a symlink)`,
+      );
     }
     if (isSymlink) {
       return makeError(
@@ -126,16 +138,7 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     if (!opts.force) {
       return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
     }
-    // `--force` mode: remove the existing tree (real directory, not a
-    // symlink — we just rejected those) and recreate from scratch so we
-    // don't merge stale files with the new scaffold.
-    try {
-      rmSync(packDir, { recursive: true, force: true });
-    } catch (e) {
-      return makeError(
-        `cannot remove existing pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
+    existingPackDirNeedsRm = true;
   }
 
   const description = opts.description ?? 'Pack scaffolded by aqa pack new';
@@ -264,6 +267,23 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
   // All the content is built and validated. Wrap writes in try/catch so
   // any FS failure (permission, file-at-path, partial-write) returns a
   // structured error instead of throwing past the CLI's top handler.
+  //
+  // The destructive `rmSync` (when `--force` overwrites an existing dir)
+  // is deferred until here so that any earlier failure — invalid slug,
+  // sut-type, schema check on the generated manifest/scenario/risk — does
+  // NOT delete the user's existing pack. By this point we're committed to
+  // writing a valid scaffold; the only remaining failure modes are FS
+  // permissions, which we report without having destroyed anything we
+  // can't recreate.
+  if (existingPackDirNeedsRm) {
+    try {
+      rmSync(packDir, { recursive: true, force: true });
+    } catch (e) {
+      return makeError(
+        `cannot remove existing pack directory ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
   try {
     mkdirSync(packDir, { recursive: true });
     mkdirSync(resolve(packDir, 'scenarios'), { recursive: true });

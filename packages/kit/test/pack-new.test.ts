@@ -104,6 +104,42 @@ describe('aqa pack new', () => {
     assert.match(result.error ?? '', /symlink/i);
   });
 
+  it('leaves the existing pack intact when --force scaffold fails schema validation', () => {
+    // Regression test for PR #25 iter 9 (Codex P1):
+    // Before the fix, `--force` ran `rmSync(packDir)` BEFORE building +
+    // validating the new manifest/scenario/risk. So a `--force` call that
+    // later failed validation (e.g. an over-length slug fitting through
+    // MAX_SLUG_LEN but breaking some other derived schema, or a future
+    // validation we add) would irreversibly delete the user's pack and
+    // return an error with nothing recreated. The contract is now:
+    // "validation failures are non-destructive — if scaffold can't produce
+    // a valid pack, the existing one stays untouched."
+    const root = makeTempDir();
+    const first = runPackNew({ root, slug: 'pack-keep', sutType: 'api' });
+    assert.equal(first.ok, true);
+    if (!first.packDir) throw new Error('first.packDir must be set');
+    // Sentinel file proves the original pack was NOT wiped on validation failure.
+    const sentinel = join(first.packDir, 'sentinel.txt');
+    writeFileSync(sentinel, 'do-not-delete', 'utf8');
+
+    // Trigger a validation failure AFTER existence checks but BEFORE writes:
+    // an unsupported sut-type. The function must refuse without removing
+    // anything from the existing packDir.
+    const overwrite = runPackNew({
+      root,
+      slug: 'pack-keep',
+      sutType: 'not-a-real-sut',
+      force: true,
+    });
+    assert.equal(overwrite.ok, false, 'invalid input must not succeed even with --force');
+    assert.ok(
+      existsSync(sentinel),
+      'sentinel file must survive a failed --force scaffold — rmSync must be deferred until after validation',
+    );
+    // The original pack.yaml must also still be there.
+    assert.ok(existsSync(join(first.packDir, 'pack.yaml')), 'original pack.yaml must survive');
+  });
+
   it('rejects an unsupported sut-type', async () => {
     const root = makeTempDir();
     const result = runPackNew({

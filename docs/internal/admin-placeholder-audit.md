@@ -6,11 +6,12 @@
 
 `packages/admin/src/app.tsx` contains the entire bundled admin (the v1.5 design-handoff port). Static analysis shows:
 
-- **126 `<button>` elements** in total
-- **91 elements with `onClick` handlers** (some local-only React state, some calling toasts, some doing nothing meaningful)
-- **81 buttons with NO `onClick` at all** — pure visual placeholders
+- **126 `<button>` elements** in total, of which:
+  - **45 have an `onClick` handler** wired to a real action or local state (some calling toasts, some doing meaningful work, some still cosmetic)
+  - **81 have NO `onClick` at all** — pure visual placeholders
+- **91 *click targets* with `onClick` handlers across the whole file**, counting both the 45 wired `<button>`s above and ~46 non-button click targets (`<div onClick=…>`, `<span onClick=…>`, `<tr onClick=…>` for table rows, tabs, dropdowns, list rows). The non-button click targets also need triage — many should become real `<button>`s for accessibility before being wired or marked decorative.
 
-Plus an unknown number of cosmetic `<div onClick={() => {}}>` non-button click targets (tabs, dropdowns, list rows) that also need triage.
+In other words: 126 buttons (= 45 wired + 81 silent) and a separate ~46 non-button click targets, for a total of ~172 interactive elements to audit.
 
 ## Categorization
 
