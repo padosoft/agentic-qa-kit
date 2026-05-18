@@ -2,6 +2,7 @@
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
+import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 
 const VERSION = '0.0.1';
@@ -16,15 +17,40 @@ interface ParsedArgs {
   command: string | null;
   positionals: string[];
   flags: Set<string>;
+  /** Captured key/value pairs for flags written as `--key value` or `--key=value`. */
+  values: Map<string, string>;
 }
 
+const VALUE_FLAGS = new Set(['profile', 'seed']);
+
 function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { command: null, positionals: [], flags: new Set() };
-  for (const a of argv) {
-    if (a.startsWith('--')) out.flags.add(a.slice(2));
-    else if (a.startsWith('-')) out.flags.add(a.slice(1));
-    else if (out.command === null) out.command = a;
-    else out.positionals.push(a);
+  const out: ParsedArgs = { command: null, positionals: [], flags: new Set(), values: new Map() };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i] as string;
+    if (a.startsWith('--')) {
+      const eq = a.indexOf('=');
+      if (eq > 0) {
+        const k = a.slice(2, eq);
+        out.flags.add(k);
+        out.values.set(k, a.slice(eq + 1));
+      } else {
+        const k = a.slice(2);
+        out.flags.add(k);
+        if (VALUE_FLAGS.has(k)) {
+          const next = argv[i + 1];
+          if (next !== undefined && !next.startsWith('-')) {
+            out.values.set(k, next);
+            i += 1;
+          }
+        }
+      }
+    } else if (a.startsWith('-')) {
+      out.flags.add(a.slice(1));
+    } else if (out.command === null) {
+      out.command = a;
+    } else {
+      out.positionals.push(a);
+    }
   }
   return out;
 }
@@ -40,18 +66,21 @@ ${bold('Usage')}
   aqa <command> [options]
 
 ${bold('Commands')}
-  init [name]   Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
-  doctor        Report kit health (runtime, .aqa, agent docs, validation)
-  validate      Validate .aqa/* against @aqa/schemas
+  init [name]            Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
+  doctor                 Report kit health (runtime, .aqa, agent docs, validation)
+  validate               Validate .aqa/* against @aqa/schemas
+  run [--profile <p>]    Execute scenarios for the given profile; write events + findings
 
 ${bold('Common options')}
-  --force       (init) overwrite existing files
-  --dry-run     (init) don't write to disk; print what would happen
-  --help        show this help
-  --version     show CLI version
+  --force                (init) overwrite existing files
+  --dry-run              (init) don't write to disk; print what would happen
+  --profile <name>       (run) profile key from .aqa/profiles.yaml
+  --seed <string>        (run) deterministic run_id seed — useful for replay
+  --help                 show this help
+  --version              show CLI version
 `;
 
-function main(): number {
+async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.flags.has('version') || args.flags.has('v')) {
     console.info(VERSION);
@@ -111,6 +140,24 @@ function main(): number {
       }
       return result.ok ? 0 : 1;
     }
+    case 'run': {
+      printHeader('run');
+      const runOpts: Parameters<typeof runRun>[0] = { root: cwd };
+      const profile = args.values.get('profile');
+      const seed = args.values.get('seed');
+      if (profile) runOpts.profile = profile;
+      if (seed) runOpts.seed = seed;
+      const result = await runRun(runOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} ${bold(result.runId)}`);
+      console.info(`    ${dim('runDir:    ')}${result.runDir}`);
+      console.info(`    ${dim('scenarios: ')}${result.scenariosRun}`);
+      console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
+      return 0;
+    }
     default: {
       console.error(red(`aqa: unknown command "${args.command}"`));
       console.info(HELP);
@@ -119,9 +166,9 @@ function main(): number {
   }
 }
 
-try {
-  process.exit(main());
-} catch (err) {
-  console.error(red('aqa: unhandled error'), err);
-  process.exit(2);
-}
+main()
+  .then((code) => process.exit(code))
+  .catch((err: unknown) => {
+    console.error(red('aqa: unhandled error'), err);
+    process.exit(2);
+  });
