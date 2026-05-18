@@ -18,7 +18,7 @@ my-pack/
 └── probes/*.yaml          # extra probe definitions (optional)
 ```
 
-Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it across projects, the recommended path today is publishing under the `@aqa` scope on npm (`@aqa/pack-myname`) since the default discovery scans `<project>/node_modules/@aqa/*` automatically. Non-`@aqa` scopes work too but currently require an alias install or an explicit `packsRoot` — see "How `aqa run` resolves your pack" below for the constraints.
+Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it across projects, the recommended path is to **publish under your own npm scope** (`@your-scope/pack-myname` — anyone can claim a free npm scope) and have consumers install it. Because `aqa run`'s default discovery scans `<project>/node_modules/@aqa/*`, consumers wire your pack in by adding an npm alias entry (`"@aqa/pack-myname": "npm:@your-scope/pack-myname"` in their `package.json`) so the installed package lands under `node_modules/@aqa/*` and is auto-discovered. Publishing under the `@aqa` scope itself is reserved for first-party packs and is not available to community authors — use the alias pattern instead, or vendor/copy the pack directly under `<project>/packs/`. See "How `aqa run` resolves your pack" below for the constraints.
 
 ## The manifest (`pack.yaml`)
 

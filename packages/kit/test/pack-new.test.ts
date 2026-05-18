@@ -104,6 +104,29 @@ describe('aqa pack new', () => {
     assert.match(result.error ?? '', /symlink/i);
   });
 
+  it('scaffolded package.json `files` only lists directories that actually exist', () => {
+    // Regression test for PR #25 iter 10 (Copilot):
+    // The earlier scaffold listed `oracles` and `probes` in `package.json#files`
+    // but never created those directories. `npm pack` (and some tooling)
+    // warns on missing entries. Contract: every entry in `files` must
+    // resolve to a path that actually exists in the scaffolded pack.
+    const root = makeTempDir();
+    const result = runPackNew({ root, slug: 'pack-files', sutType: 'api' });
+    assert.equal(result.ok, true);
+    if (!result.packDir) throw new Error('packDir must be set');
+    const pkg = JSON.parse(readFileSync(join(result.packDir, 'package.json'), 'utf8')) as {
+      files: string[];
+    };
+    assert.ok(Array.isArray(pkg.files), 'files must be an array');
+    assert.ok(pkg.files.length >= 1, 'files must list at least pack.yaml');
+    for (const entry of pkg.files) {
+      assert.ok(
+        existsSync(join(result.packDir, entry)),
+        `package.json files entry "${entry}" must exist on disk after scaffold`,
+      );
+    }
+  });
+
   it('leaves the existing pack intact when --force scaffold fails schema validation', () => {
     // Regression test for PR #25 iter 9 (Codex P1):
     // Before the fix, `--force` ran `rmSync(packDir)` BEFORE building +

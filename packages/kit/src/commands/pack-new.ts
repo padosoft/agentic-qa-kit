@@ -108,13 +108,16 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
       return makeError(`cannot stat ${packsParent}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  // Whether packDir already exists as a real directory (not a symlink) and
-  // therefore needs to be `rmSync`'d before we recreate it. We compute this
-  // up-front so we can refuse fast (no --force + path exists, or symlink +
-  // --force) but defer the actual destructive rmSync until *after* all
-  // schema validation passes. Otherwise a scaffold that fails schema
-  // validation would still have nuked the user's existing pack, with
-  // nothing recreated to take its place.
+  // Whether packDir already exists (as anything that's *not* a symlink —
+  // we explicitly reject symlinks above, but the path could still be a
+  // regular file rather than a directory; either way `rmSync({recursive,
+  // force})` will clear it) and therefore needs to be removed before we
+  // recreate it. We compute this up-front so we can refuse fast (no
+  // --force + path exists, or symlink at any time) but defer the actual
+  // destructive rmSync until *after* all schema validation passes.
+  // Otherwise a scaffold that fails schema validation would still have
+  // nuked the user's existing pack, with nothing recreated to take its
+  // place.
   let existingPackDirNeedsRm = false;
   if (existsSync(packDir)) {
     // Use lstat (not stat) so symlinks don't transparently pass the
@@ -301,7 +304,12 @@ See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/m
           description,
           license,
           author,
-          files: ['pack.yaml', 'scenarios', 'risks', 'oracles', 'probes', 'README.md'],
+          // `files` lists what to include in the published tarball.
+          // We only list directories the scaffold actually creates; if
+          // the author later adds custom `oracles/` or `probes/`, they
+          // should extend this array themselves. Listing non-existent
+          // directories here makes some tooling warn on `npm pack`.
+          files: ['pack.yaml', 'scenarios', 'risks', 'README.md'],
           // No `private: true` — pack authors need to be able to
           // `npm publish` straight from this scaffold without editing
           // package.json first. Setting `private: true` would make npm
