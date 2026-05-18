@@ -12,8 +12,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
-import { PackManifest } from '@aqa/schemas';
+import { resolve } from 'node:path';
+import { PackManifest, RiskMap, Scenario } from '@aqa/schemas';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 export interface PackNewOptions {
@@ -38,6 +38,11 @@ export interface PackNewResult {
 
 const VALID_SUT_TYPES = new Set(['api', 'web', 'cli', 'lib', 'agent', 'pipeline']);
 const SLUG_PATTERN = /^[a-z0-9](?:-?[a-z0-9])*$/;
+// Derived IDs prepend at most `inv-` (4 chars) and append `-starter` (8 chars).
+// `Slug` schema allows up to 64 chars, so the user-supplied slug fragment must
+// stay within (64 - 12) = 52 chars or `Scenario.parse` / `RiskMap.parse` will
+// later reject the scaffolded files.
+const MAX_SLUG_LEN = 52;
 
 function makeError(error: string): PackNewResult {
   return { ok: false, error };
@@ -68,13 +73,21 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
       `slug "${opts.slug}" must be lowercase alphanumeric with single dashes (matches /^[a-z0-9](?:-?[a-z0-9])*$/)`,
     );
   }
+  if (opts.slug.length > MAX_SLUG_LEN) {
+    return makeError(
+      `slug "${opts.slug}" is ${opts.slug.length} chars; max ${MAX_SLUG_LEN} (derived scenario/risk IDs prepend "inv-" and append "-starter", and the underlying Slug schema caps at 64)`,
+    );
+  }
   if (!VALID_SUT_TYPES.has(opts.sutType)) {
     return makeError(
       `unsupported sut-type "${opts.sutType}" — must be one of: ${[...VALID_SUT_TYPES].join(', ')}`,
     );
   }
 
-  const packDir = isAbsolute(opts.slug) ? opts.slug : join(opts.root, opts.slug);
+  // `resolve` always returns an absolute path, even if `opts.root` was
+  // relative. Drop the now-unreachable `isAbsolute(opts.slug)` branch — the
+  // SLUG_PATTERN check above rejects any slug containing `/` or `\`.
+  const packDir = resolve(opts.root, opts.slug);
   if (existsSync(packDir) && !opts.force) {
     return makeError(`pack directory ${packDir} already exists; pass --force to overwrite`);
   }
@@ -110,8 +123,8 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     );
   }
 
-  const scenarioYaml = yamlStringify({
-    schema_version: '1',
+  const scenarioObj = {
+    schema_version: '1' as const,
     id: `scn-${opts.slug}-starter`,
     title: `Starter scenario for ${opts.slug} — replace with a real test`,
     risk_refs: [`r-${opts.slug}-starter`],
@@ -120,14 +133,14 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
     steps: [
       {
         id: 'probe-starter',
-        kind: 'http',
+        kind: 'http' as const,
         with: { method: 'GET', url: exampleUrl },
       },
     ],
     oracles: [
       {
         id: 'o-starter-ok',
-        kind: 'http_status',
+        kind: 'http_status' as const,
         // The no-network probe stub returns status=200, so this passes
         // out of the box. When you wire a real probe runner the oracle
         // will be checked against the actual server response.
@@ -135,18 +148,25 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
       },
     ],
     tags: [opts.sutType, 'starter'],
-  });
+  };
+  const scenarioValid = Scenario.Scenario.safeParse(scenarioObj);
+  if (!scenarioValid.success) {
+    return makeError(
+      `generated scenario failed schema validation (likely a too-long slug): ${scenarioValid.error.message}`,
+    );
+  }
+  const scenarioYaml = yamlStringify(scenarioObj);
 
-  const riskYaml = yamlStringify({
-    schema_version: '1',
+  const riskObj = {
+    schema_version: '1' as const,
     project: opts.slug,
     risks: [
       {
         id: `r-${opts.slug}-starter`,
-        category: 'integrity',
+        category: 'integrity' as const,
         title: 'Starter risk — replace with a real one',
-        severity: 'medium',
-        likelihood: 'possible',
+        severity: 'medium' as const,
+        likelihood: 'possible' as const,
         invariants: [
           {
             id: `inv-${opts.slug}-starter`,
@@ -156,7 +176,14 @@ export function runPackNew(opts: PackNewOptions): PackNewResult {
         ],
       },
     ],
-  });
+  };
+  const riskValid = RiskMap.RiskMap.safeParse(riskObj);
+  if (!riskValid.success) {
+    return makeError(
+      `generated risk map failed schema validation (likely a too-long slug): ${riskValid.error.message}`,
+    );
+  }
+  const riskYaml = yamlStringify(riskObj);
 
   const readmeMd = `# ${opts.slug}
 
@@ -182,42 +209,56 @@ profiles:
 
 Then \`aqa run --profile smoke\` will pick it up.
 
-See [\`docs/PACK-AUTHORING.md\`](../docs/PACK-AUTHORING.md) in the kit repo for the full pack authoring guide.
+See the [pack authoring guide](https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md) for the full reference.
 `;
 
-  // All the content is built and validated. Now write to disk.
-  mkdirSync(packDir, { recursive: true });
-  mkdirSync(join(packDir, 'scenarios'), { recursive: true });
-  mkdirSync(join(packDir, 'risks'), { recursive: true });
-  writeFileSync(join(packDir, 'pack.yaml'), yamlStringify(manifest), 'utf8');
-  writeFileSync(join(packDir, 'scenarios', 'starter.yaml'), scenarioYaml, 'utf8');
-  writeFileSync(join(packDir, 'risks', 'starter.yaml'), riskYaml, 'utf8');
-  writeFileSync(join(packDir, 'README.md'), readmeMd, 'utf8');
-  writeFileSync(
-    join(packDir, 'package.json'),
-    JSON.stringify(
-      {
-        name: opts.slug,
-        version: '0.1.0',
-        description,
-        license,
-        author,
-        files: ['pack.yaml', 'scenarios', 'risks', 'oracles', 'probes', 'README.md'],
-        private: true,
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
+  // All the content is built and validated. Wrap writes in try/catch so
+  // any FS failure (permission, file-at-path, partial-write) returns a
+  // structured error instead of throwing past the CLI's top handler.
+  try {
+    mkdirSync(packDir, { recursive: true });
+    mkdirSync(resolve(packDir, 'scenarios'), { recursive: true });
+    mkdirSync(resolve(packDir, 'risks'), { recursive: true });
+    writeFileSync(resolve(packDir, 'pack.yaml'), yamlStringify(manifest), 'utf8');
+    writeFileSync(resolve(packDir, 'scenarios', 'starter.yaml'), scenarioYaml, 'utf8');
+    writeFileSync(resolve(packDir, 'risks', 'starter.yaml'), riskYaml, 'utf8');
+    writeFileSync(resolve(packDir, 'README.md'), readmeMd, 'utf8');
+    writeFileSync(
+      resolve(packDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: opts.slug,
+          version: '0.1.0',
+          description,
+          license,
+          author,
+          files: ['pack.yaml', 'scenarios', 'risks', 'oracles', 'probes', 'README.md'],
+          private: true,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch (e) {
+    return makeError(
+      `cannot write pack files to ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
   // Re-validate by parsing what we wrote — catches any serializer divergence.
-  const roundTrip = PackManifest.PackManifest.safeParse(
-    yamlParse(readFileSync(join(packDir, 'pack.yaml'), 'utf8')),
-  );
-  if (!roundTrip.success) {
+  try {
+    const roundTrip = PackManifest.PackManifest.safeParse(
+      yamlParse(readFileSync(resolve(packDir, 'pack.yaml'), 'utf8')),
+    );
+    if (!roundTrip.success) {
+      return makeError(
+        `scaffolded pack.yaml failed round-trip validation: ${roundTrip.error.message}`,
+      );
+    }
+  } catch (e) {
     return makeError(
-      `scaffolded pack.yaml failed round-trip validation: ${roundTrip.error.message}`,
+      `cannot re-read scaffolded pack.yaml at ${packDir}: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 

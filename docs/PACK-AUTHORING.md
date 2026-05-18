@@ -94,7 +94,12 @@ steps:
 oracles:
   - id: o-same-id
     kind: response_contains
-    with: { jsonpath: "$.id", equals: "@probe-post-1.body.id" }
+    # Today the built-in `response_contains` evaluator does a substring
+    # match against every probe response body — `with: { value: "<needle>" }`.
+    # The jsonpath/equals shape used by some bundled scenarios is a
+    # documented extension for a future evaluator; only `value` is wired up
+    # in @aqa/runner.builtInOracles today.
+    with: { value: "abc-123" }
 tags: [api, idempotency]
 ```
 
@@ -128,7 +133,7 @@ risks:
           (no duplicate row in storage).
 ```
 
-`category` is one of `integrity | confidentiality | availability | auth | safety | usability | performance`. `severity` and `likelihood` follow the OWASP-style risk matrix.
+`category` is one of the values defined by [`RiskCategory`](../packages/schemas/src/risk-map.ts) in `@aqa/schemas`: `auth | data | integrity | availability | confidentiality | integration | business_logic | ui_ux | compliance | agentic`. `severity` is `info | low | medium | high | critical`. `likelihood` is `rare | unlikely | possible | likely | almost_certain`.
 
 ## The minimum viable pack
 
@@ -219,13 +224,15 @@ Now `aqa run --profile smoke` should report `scenarios: 1`.
 
 ### 2. As an npm-installed package
 
-If you publish to npm under your scope (e.g. `@your-scope/pack-healthcheck`), consumers can:
+**Current limitation:** `aqa run`'s default discovery only scans `<project>/node_modules/@aqa/*`, not arbitrary scopes. If you publish your pack as `@your-scope/pack-healthcheck`, consumers must either (a) place a copy under `<project>/packs/pack-healthcheck/` for now, (b) install it under the `@aqa` scope name on disk (e.g. via `package.json` `"@aqa/pack-healthcheck": "npm:@your-scope/pack-healthcheck"`), or (c) pass an explicit `packsRoot` to programmatic `runRun({ packsRoot: [...] })`. Broader scope discovery is tracked as a v1.7.x follow-up.
+
+For the `@aqa` scope itself the install is automatic:
 
 ```bash
-npm install --save-dev @your-scope/pack-healthcheck
+npm install --save-dev @aqa/pack-foo   # any pack with name starting with anything
 ```
 
-`aqa run`'s `defaultPacksRoot()` will discover it automatically from `<project>/node_modules/@your-scope/pack-healthcheck/` as long as that directory contains a `pack.yaml`. The npm name does **not** have to start with `pack-` — only the manifest's `name:` field matters.
+`aqa run`'s `defaultPacksRoot()` discovers it from `<project>/node_modules/@aqa/pack-foo/` as long as that directory contains a `pack.yaml`. The directory name does **not** have to start with `pack-` — only the manifest's `name:` field matters.
 
 Required `package.json` (minimum):
 ```json

@@ -67,6 +67,17 @@ describe('aqa pack new', () => {
     assert.match(result.error ?? '', /slug|name/i);
   });
 
+  it('rejects a slug that would generate over-length scenario/risk IDs', () => {
+    const root = makeTempDir();
+    // 53-char slug → `inv-<53>-starter` = 64 chars derived ID, but the Slug
+    // regex max is 64 inclusive — going one char above keeps the manifest
+    // valid while breaking the scenario file.
+    const longSlug = 'a' + 'b'.repeat(52); // 53 chars
+    const result = runPackNew({ root, slug: longSlug, sutType: 'api' });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /slug|chars|max/i);
+  });
+
   it('rejects an unsupported sut-type', async () => {
     const root = makeTempDir();
     const result = runPackNew({

@@ -84,7 +84,7 @@ ${bold('Commands')}
   pack new <slug>        Scaffold a new pack at <cwd>/<slug>/ (see docs/PACK-AUTHORING.md)
 
 ${bold('Common options')}
-  --force                (init) overwrite existing files
+  --force                (init / pack new) overwrite existing files/directory
   --dry-run              (init) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
