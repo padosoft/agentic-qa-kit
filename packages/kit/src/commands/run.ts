@@ -344,29 +344,30 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   try {
     mkdirSync(runDir);
   } catch (e) {
-    // EEXIST is the interesting case — distinguish a deterministic-seed
-    // collision (non-empty dir) from a benign "already there but empty".
+    // Any pre-existing `runDir` is a collision and we refuse to reuse it.
+    // Reusing a same-named but currently-empty directory looks safe in
+    // isolation, but it opens a TOCTOU race for concurrent
+    // `aqa run --seed <same>` invocations: process A creates the dir →
+    // process B sees the EEXIST → reads it as empty → both append seq=0
+    // events to the same events.jsonl and corrupt the hash chain. Forcing
+    // the user to clean up an old empty seeded dir is a much smaller cost.
     if (existsSync(runDir)) {
       try {
         if (!statSync(runDir).isDirectory()) {
           return makeError(`run path ${runDir} exists but is not a directory`);
         }
-        if (readdirSync(runDir).length > 0) {
-          return makeError(
-            `run directory ${runDir} is non-empty (likely a deterministic seed collision); refusing to overwrite`,
-          );
-        }
-        // Empty directory left over from a previous failed run — safe to reuse.
       } catch (statErr) {
         return makeError(
           `cannot stat run directory ${runDir}: ${statErr instanceof Error ? statErr.message : String(statErr)}`,
         );
       }
-    } else {
       return makeError(
-        `cannot create run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+        `run directory ${runDir} already exists; refusing to reuse it (concurrent --seed collision, or a leftover from a prior failed run — remove it manually if intentional)`,
       );
     }
+    return makeError(
+      `cannot create run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   const eventsPath = join(runDir, 'events.jsonl');
@@ -546,6 +547,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // or zero scenarios executed for the requested profile. All flip
   // `ok: false` so CI catches the gap instead of greenlighting an empty
   // release-gate run.
+  /**
+   * Format an error list for the human-facing `error` string. We cap the
+   * embedded samples at `MAX_DETAIL_PER_KIND` to keep the string
+   * actionable for CLI users; the full list still lives in the event
+   * payload via `*_samples` for auditors who need it.
+   */
+  function fmtList(list: readonly string[]): string {
+    const sample = cap(list);
+    const more = list.length - sample.length;
+    return more > 0 ? `${sample.join('; ')}; … +${more} more` : sample.join('; ');
+  }
+
   const reasons: string[] = [];
   // Pack errors fail the run in two cases:
   //   1. Use-everything mode (`profile.packs` empty): every broken pack
@@ -566,7 +579,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const selectedLoadedCount = [...selectedCanonical].filter((n) => seenPackNames.has(n)).length;
   const missingSelectedCount = selectedCanonical.size - selectedLoadedCount;
   if (packErrors.length > 0 && profilePackSet.size === 0) {
-    reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
+    reasons.push(`${packErrors.length} pack(s) failed to load: ${fmtList(packErrors)}`);
   } else if (missingSelectedCount > 0) {
     // A selected pack didn't make it into `seenPackNames`. This catches:
     //   - load errors on a selected pack (packErrors populated)
@@ -578,27 +591,25 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     // pass silently.
     const missingNames = [...selectedCanonical].filter((n) => !seenPackNames.has(n));
     reasons.push(
-      `${missingSelectedCount} selected pack(s) did not load: ${missingNames.join(', ')}${
-        packErrors.length > 0 ? `; errors: ${packErrors.join('; ')}` : ''
+      `${missingSelectedCount} selected pack(s) did not load: ${fmtList(missingNames)}${
+        packErrors.length > 0 ? `; errors: ${fmtList(packErrors)}` : ''
       }`,
     );
   }
   if (scenarioErrors.length > 0)
     reasons.push(
-      `${scenarioErrors.length} scenario(s) failed to parse: ${scenarioErrors.join('; ')}`,
+      `${scenarioErrors.length} scenario(s) failed to parse: ${fmtList(scenarioErrors)}`,
     );
   if (missingScenarios.length > 0)
     reasons.push(
-      `${missingScenarios.length} manifest scenario(s) missing on disk: ${missingScenarios.join(', ')}`,
+      `${missingScenarios.length} manifest scenario(s) missing on disk: ${fmtList(missingScenarios)}`,
     );
   if (unsafeScenarioPaths.length > 0)
     reasons.push(
-      `${unsafeScenarioPaths.length} unsafe scenario path(s) (absolute or path traversal): ${unsafeScenarioPaths.join(', ')}`,
+      `${unsafeScenarioPaths.length} unsafe scenario path(s) (absolute or path traversal): ${fmtList(unsafeScenarioPaths)}`,
     );
   if (runtimeErrors.length > 0)
-    reasons.push(
-      `${runtimeErrors.length} scenario(s) threw at runtime: ${runtimeErrors.join('; ')}`,
-    );
+    reasons.push(`${runtimeErrors.length} scenario(s) threw at runtime: ${fmtList(runtimeErrors)}`);
   if (scenariosRun === 0) {
     reasons.push(
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
