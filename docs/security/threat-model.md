@@ -43,7 +43,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | Per-runner mTLS or signed JWT issued by `@aqa/auth`; `@aqa/server` validates issuer before enqueue. | Mitigated |
+| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | Per-runner mTLS or signed JWT (design intent for `@aqa/auth` + `@aqa/server`). The current `/api/runner/jobs/next` route in `packages/server/src/api.ts` ships with `requires: null` — runner-credential validation lands in a future server iteration. | **Partial — design specified, enforcement deferred.** |
 | S-02 | User session hijack via cookie theft | High | `Secure` + `HttpOnly` + `SameSite=Lax` enforced as Risk invariant; pack-security asserts it. | Mitigated |
 | S-03 | Pack-author spoofing (malicious pack pretending to be `@aqa/...`) | Critical | Pack signing (cosign-compatible); `@aqa/pack-scanner` refuses unsigned ≥1.0 packs. | Mitigated |
 | S-04 | LLM vendor MITM (response forgery) | Medium | TLS pinning at adapter layer (`@aqa/llm-adapters`); content-hash deterministic replay for fixture mode. | Partial — pinning per-adapter, not enforced. |
@@ -72,7 +72,7 @@ Boundaries (anywhere a security decision must be enforced):
 |---|---|---|---|---|
 | I-01 | Finding contents leak (e.g. secrets in summary) | High | Pack contract requires probes to redact known secret formats; finding text passes through allowlist. | Partial — allowlist per pack, not centralised. |
 | I-02 | Audit log discloses target endpoints to readers | Medium | Audit reader role gated by `@aqa/auth` `audit:read`. | Mitigated |
-| I-03 | Cross-tenant findings visible | Critical | Tenant ID in JWT, server filters all reads by tenant. | Mitigated |
+| I-03 | Cross-tenant findings visible | Critical | Tenant-aware data path is roadmap: `@aqa/auth` `User`, `@aqa/server` `makeApi()` handlers, and `@aqa/store` `StoreProvider` do not yet carry a tenant field, so server-side filtering by tenant is not enforced. | **Unmitigated — roadmap.** |
 | I-04 | LLM prompt leaks proprietary code via vendor logging | High | On-prem LLM adapter option (`@aqa/llm-adapters` `ScaffoldAdapter` for vLLM/Ollama). | Mitigated for self-hosted; vendor-dependent otherwise. |
 
 ### Denial of service

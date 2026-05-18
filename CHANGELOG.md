@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Admin server integration.** New `packages/admin/src/data/api.ts` fetches from `VITE_AQA_SERVER_URL` (real `@aqa/server`'s `makeApi()` shape) with automatic fallback to in-bundle mock fixtures. Screens show a `live` or `mock` badge so operators see at a glance which mode they're in.
 - **Admin sub-screens.** 6 detail routes wired: `/runs/$runId`, `/findings/$findingId`, `/risk-map/$riskId`, `/profiles/$profileName`, `/packs/$packSlug`, `/scenarios/$scenarioId`. Each with `Breadcrumb` + `PageHeader`.
-- **Admin unit tests.** `test/audit.test.ts` (6 tests) + `test/cluster.test.ts` (6 tests) cover the in-browser Web Crypto verifier and signature clusterer. Tests run unchanged on Node 22 because `crypto.subtle` is global there.
+- **Admin unit tests.** `test/audit.test.ts` (5 tests: `parseEventLines` ×2, `verifyEventChain` ×3) + `test/cluster.test.ts` (6 tests) cover the in-browser Web Crypto verifier and signature clusterer. Tests run unchanged on Node 22 because `crypto.subtle` is global there.
 - **CLI E2E smoke.** `scripts/e2e-cli.mjs` exercises `aqa --version`, `aqa --help`, `aqa doctor`, `aqa validate` against `examples/bun-api`. Wired as `bun run test:e2e-cli`.
 - **`docs/security/threat-model.md`** expanded from 12-line stub to full STRIDE catalog: trust boundaries diagram, 20 threats with severity + current mitigation + status, agentic-specific cross-cutting threats, pen-test cadence link.
 - **`docs/architecture/reference.md`** updated with the v0.2 → v1.2 component summary + per-component file paths + adjacent docs index.

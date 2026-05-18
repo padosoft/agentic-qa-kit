@@ -117,26 +117,26 @@ export async function fetchFindings(): Promise<MockFinding[]> {
   return r.findings.map(mapFinding);
 }
 
+/**
+ * Packs / profiles / risks / agents are currently mock-only.
+ *
+ * `@aqa/server`'s `makeApi()` ships `/api/runs`, `/api/findings`, and
+ * `/api/runner/jobs/next` — the other endpoints land in a future server
+ * iteration. Returning the bundled fixtures unconditionally avoids
+ * "live mode but actually mock data" confusion (PR #20 review feedback).
+ */
 export async function fetchPacks(): Promise<MockPack[]> {
-  if (!isLive()) return MOCK_PACKS;
-  const r = await liveFetch<{ packs: MockPack[] }>('/api/packs');
-  return r.packs;
+  return MOCK_PACKS;
 }
 
 export async function fetchProfiles(): Promise<MockProfile[]> {
-  if (!isLive()) return MOCK_PROFILES;
-  const r = await liveFetch<{ profiles: MockProfile[] }>('/api/profiles');
-  return r.profiles;
+  return MOCK_PROFILES;
 }
 
 export async function fetchRisks(): Promise<MockRisk[]> {
-  if (!isLive()) return MOCK_RISKS;
-  const r = await liveFetch<{ risks: MockRisk[] }>('/api/risks');
-  return r.risks;
+  return MOCK_RISKS;
 }
 
 export async function fetchAgents() {
-  if (!isLive()) return MOCK_AGENTS;
-  const r = await liveFetch<{ agents: typeof MOCK_AGENTS }>('/api/agents');
-  return r.agents;
+  return MOCK_AGENTS;
 }
