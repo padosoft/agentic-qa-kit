@@ -106,10 +106,12 @@ export function makeApi(): ApiHandler[] {
       path: '/api/runs',
       requires: 'runs:read',
       async handle(req, ctx) {
-        const s = scope(req);
-        const filter: { project?: string; limit?: number } = { limit: 100 };
-        if (s.project) filter.project = s.project;
-        const runs = await ctx.store.listRuns(filter);
+        // Project-scoped listing is required so that a token without scope
+        // cannot leak runs across tenants. The admin always sets
+        // x-aqa-project; CLI consumers must do the same.
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const runs = await ctx.store.listRuns({ project: s.project, limit: 100 });
         return asResponse({ runs } satisfies { runs: Run.Run[] });
       },
     },

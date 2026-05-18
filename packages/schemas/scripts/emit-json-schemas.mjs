@@ -59,6 +59,13 @@ const modules = [
   { file: 'event.js', exportName: 'Event', schemaName: 'event' },
   { file: 'run.js', exportName: 'Run', schemaName: 'run' },
   { file: 'pack-manifest.js', exportName: 'PackManifest', schemaName: 'pack-manifest' },
+  // v1.4 admin surface — Zod namespaces that back the admin API.
+  { file: 'notification.js', exportName: 'Notification', schemaName: 'notification' },
+  { file: 'saved-view.js', exportName: 'SavedView', schemaName: 'saved-view' },
+  { file: 'api-token.js', exportName: 'ApiToken', schemaName: 'api-token' },
+  { file: 'cost-summary.js', exportName: 'CostSummary', schemaName: 'cost-summary' },
+  { file: 'tenancy.js', exportName: 'Org', schemaName: 'org' },
+  { file: 'tenancy.js', exportName: 'ProjectRef', schemaName: 'project-ref' },
 ];
 
 /**

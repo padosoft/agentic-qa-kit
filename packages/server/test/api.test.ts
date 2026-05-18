@@ -33,12 +33,14 @@ describe('makeApi', () => {
     }
   });
 
-  it('GET /api/runs returns the stored runs', async () => {
+  it('GET /api/runs requires tenant scope', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs');
-    const res = await route?.handle({ headers: {}, params: {} }, c);
-    assert.equal(res?.status, 200);
-    assert.deepEqual((res?.body as { runs: unknown[] }).runs, []);
+    const noScope = await route?.handle({ headers: {}, params: {} }, c);
+    assert.equal(noScope?.status, 400);
+    const scoped = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(scoped?.status, 200);
+    assert.deepEqual((scoped?.body as { runs: unknown[] }).runs, []);
   });
 
   it('GET /api/runs/:id 404s when missing', async () => {

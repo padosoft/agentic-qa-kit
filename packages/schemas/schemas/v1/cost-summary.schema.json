@@ -1,0 +1,99 @@
+{
+  "$ref": "#/definitions/cost-summary",
+  "definitions": {
+    "cost-summary": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "total_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "by_profile": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+              },
+              "llm_tokens_in": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "llm_tokens_out": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "llm_cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "profile",
+              "llm_tokens_in",
+              "llm_tokens_out",
+              "llm_cost_usd",
+              "runs"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "daily": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "schema_version",
+        "org",
+        "project",
+        "from",
+        "to",
+        "total_usd"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

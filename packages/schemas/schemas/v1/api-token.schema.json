@@ -1,0 +1,83 @@
+{
+  "$ref": "#/definitions/api-token",
+  "definitions": {
+    "api-token": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "prefix": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 16
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "runs:read",
+              "runs:create",
+              "findings:read",
+              "findings:edit",
+              "audit:read",
+              "admin:everything"
+            ]
+          },
+          "minItems": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_used_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revoked_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "org",
+        "prefix",
+        "owner",
+        "display_name",
+        "scopes",
+        "created_at"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

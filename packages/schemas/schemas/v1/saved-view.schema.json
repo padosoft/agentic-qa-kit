@@ -1,0 +1,83 @@
+{
+  "$ref": "#/definitions/saved-view",
+  "definitions": {
+    "saved-view": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "runs",
+            "findings",
+            "risk-map",
+            "packs",
+            "scenarios",
+            "audit",
+            "queue"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared": {
+          "type": "boolean",
+          "default": false
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": {},
+          "default": {}
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "org",
+        "project",
+        "surface",
+        "name",
+        "owner",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
