@@ -256,6 +256,43 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /scenario/i);
   });
 
+  it('flags a profile that selects zero scenarios as ok=false', async () => {
+    const { root, packDir } = fixtureProject();
+    // Patch the smoke profile to ask for a non-existent pack so the run loop
+    // finds zero matching scenarios.
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[] }>;
+    };
+    if (profiles.profiles.smoke) profiles.profiles.smoke.packs = ['pack-does-not-exist'];
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'zero-scenario run must not silently succeed');
+    assert.match(result.error ?? '', /0 scenarios/i);
+  });
+
+  it('surfaces a malformed pack.yaml as a pack error', async () => {
+    const { root, packDir } = fixtureProject();
+    writeFileSync(join(packDir, 'pack.yaml'), 'not valid YAML: : :\n', 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'broken pack.yaml must fail the run');
+    assert.match(result.error ?? '', /pack/i);
+  });
+
+  it('surfaces a manifest-listed scenario file that does not exist as a coverage gap', async () => {
+    const { root, packDir } = fixtureProject();
+    // Replace pack.yaml with one that references a missing scenario file.
+    const brokenManifest = SMOKE_PACK_MANIFEST.replace(
+      'scenarios/smoke-noop.yaml',
+      'scenarios/does-not-exist.yaml',
+    );
+    writeFileSync(join(packDir, 'pack.yaml'), brokenManifest, 'utf8');
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'missing manifest scenario must surface as ok=false');
+    assert.match(result.error ?? '', /missing/i);
+  });
+
   it('refuses to re-use a deterministic run directory rather than corrupting the audit chain', async () => {
     const { root, packDir } = fixtureProject();
     const first = await runRun({ root, profile: 'smoke', seed: 'same-seed', packsRoot: [packDir] });

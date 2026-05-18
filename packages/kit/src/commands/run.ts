@@ -23,7 +23,11 @@ import { parse as yamlParse } from 'yaml';
 
 export interface RunOptions {
   root: string;
-  /** Profile key from .aqa/profiles.yaml; defaults to the first profile in the file. */
+  /**
+   * Profile key from .aqa/profiles.yaml. When omitted, prefers "smoke" if
+   * present; otherwise falls back to the first key in the file (insertion
+   * order). Pass `--profile` explicitly for release-gate paths.
+   */
   profile?: string;
   /** If set, makes run_id deterministic — useful for tests + replay. */
   seed?: string;
@@ -71,7 +75,9 @@ function defaultPacksRoot(projectRoot: string): string[] {
   const candidates: string[] = [];
   const repoPacks = join(projectRoot, 'packs');
   if (existsSync(repoPacks) && statSync(repoPacks).isDirectory()) {
-    for (const entry of readdirSync(repoPacks)) {
+    // Sort for stable iteration — scenario execution order feeds findingIdSeed,
+    // event ordering, and downstream determinism guarantees from `--seed`.
+    for (const entry of readdirSync(repoPacks).sort()) {
       const abs = join(repoPacks, entry);
       if (
         statSync(abs).isDirectory() &&
@@ -91,14 +97,22 @@ function resolvePackDirs(opts: RunOptions): string[] {
   return defaultPacksRoot(opts.root);
 }
 
-/** Scenarios listed by the pack manifest, resolved relative to packRoot. Stable order. */
-function manifestScenarioFiles(packRoot: string, pack: LoadedPack): string[] {
-  const out: string[] = [];
+interface ManifestScenarios {
+  paths: string[];
+  /** manifest-listed paths that didn't resolve on disk — treated as coverage gaps. */
+  missing: string[];
+}
+
+/** Resolve manifest-listed scenarios. Missing files are surfaced, not silently dropped. */
+function manifestScenarioFiles(packRoot: string, pack: LoadedPack): ManifestScenarios {
+  const paths: string[] = [];
+  const missing: string[] = [];
   for (const rel of pack.manifest.scenarios ?? []) {
     const abs = resolve(packRoot, rel);
-    if (existsSync(abs)) out.push(abs);
+    if (existsSync(abs)) paths.push(abs);
+    else missing.push(rel);
   }
-  return out;
+  return { paths, missing };
 }
 
 /** Scenario tags intersect profile tags (or profile has no filter). */
@@ -209,22 +223,28 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // profile lists no packs (default), all discoverable packs are eligible.
   const profilePackSet = new Set(profile.packs);
   let scenariosRun = 0;
-  let scenarioErrors = 0;
+  const packErrors: string[] = [];
+  const scenarioErrors: string[] = [];
+  const missingScenarios: string[] = [];
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
       pack = loadPack(packDir);
-    } catch {
+    } catch (e) {
+      packErrors.push(`${packDir}: ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
     if (profilePackSet.size > 0 && !profilePackSet.has(pack.manifest.name)) continue;
 
-    for (const scenarioPath of manifestScenarioFiles(packDir, pack)) {
+    const { paths, missing } = manifestScenarioFiles(packDir, pack);
+    for (const rel of missing) missingScenarios.push(`${pack.manifest.name}:${rel}`);
+
+    for (const scenarioPath of paths) {
       let scenario: Scenario.Scenario;
       try {
         scenario = Scenario.Scenario.parse(readYaml<unknown>(scenarioPath));
-      } catch {
-        scenarioErrors += 1;
+      } catch (e) {
+        scenarioErrors.push(`${scenarioPath}: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
       if (!tagsMatch(scenario.tags ?? [], profile.tags)) continue;
@@ -250,21 +270,40 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     payload: {
       scenarios_run: scenariosRun,
       findings: findings.snapshot().length,
-      scenario_errors: scenarioErrors,
+      pack_errors: packErrors.length,
+      scenario_errors: scenarioErrors.length,
+      missing_scenarios: missingScenarios.length,
     },
   });
 
+  // Build a structured error message when something went wrong. Any of these
+  // is a real coverage gap, not a benign skip: a broken pack, a malformed
+  // scenario, a manifest-listed file that doesn't exist, or zero scenarios
+  // executed for the requested profile. All flip `ok: false` so CI catches
+  // the gap instead of greenlighting an empty release-gate run.
+  const reasons: string[] = [];
+  if (packErrors.length > 0)
+    reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
+  if (scenarioErrors.length > 0)
+    reasons.push(
+      `${scenarioErrors.length} scenario(s) failed to parse: ${scenarioErrors.join('; ')}`,
+    );
+  if (missingScenarios.length > 0)
+    reasons.push(
+      `${missingScenarios.length} manifest scenario(s) missing on disk: ${missingScenarios.join(', ')}`,
+    );
+  if (scenariosRun === 0) {
+    reasons.push(
+      `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
+    );
+  }
+
   return {
-    // A scenario that failed schema validation is a real coverage hole, not a
-    // benign skip — flag the run as not-ok so CI catches a malformed pack
-    // instead of silently dropping the scenario.
-    ok: scenarioErrors === 0,
+    ok: reasons.length === 0,
     runId,
     runDir,
     scenariosRun,
     findingsCount: findings.snapshot().length,
-    ...(scenarioErrors > 0
-      ? { error: `${scenarioErrors} scenario(s) failed to parse or validate` }
-      : {}),
+    ...(reasons.length > 0 ? { error: reasons.join(' | ') } : {}),
   };
 }
