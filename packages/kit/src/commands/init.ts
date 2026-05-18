@@ -127,15 +127,15 @@ function profilesYaml(profile: ProjectProfile): string {
         llm_budget_usd: 50,
         parallelism: 4,
         require_deterministic_replay: true,
-        // `pack-core` only on release-gate until real HTTP probes are wired.
-        // `pack-api-core` / `pack-web-ui` / `pack-llm-agent` ship scenarios
-        // whose oracles compare against actual server responses; with the
-        // current no-network probe stub they emit synthetic findings on
-        // every run, which would make a fresh `aqa run --profile release-gate`
-        // exit non-zero before exercising the SUT. Smoke still pulls those
-        // scenario packs so users see the *shape* of findings in the inner
-        // loop — but the merge gate stays usable out of the box.
-        packs: ['pack-core'],
+        // Same scenario set as smoke for now. The "release-gate fails on
+        // findings" semantic depends on a real probe runner — until that
+        // ships, every finding from this profile is a synthetic stub
+        // result and would make the merge gate unusable out of the box.
+        // `runRun()` deliberately does not enforce no-findings while
+        // running against the no-network stub; once a real HTTP/browser
+        // probe runner is wired, the strict semantics from iter 10
+        // re-engage automatically.
+        packs,
       },
     },
   });

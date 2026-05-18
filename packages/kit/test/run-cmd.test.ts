@@ -472,6 +472,42 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1);
   });
 
+  it('matches a third-party pack whose manifest name does not start with `pack-`', async () => {
+    const { root } = fixtureProject();
+    // Build a pack whose manifest name is "security" (no pack- prefix).
+    const customDir = join(root, 'security-pack');
+    mkdirSync(join(customDir, 'scenarios'), { recursive: true });
+    writeFileSync(
+      join(customDir, 'pack.yaml'),
+      SMOKE_PACK_MANIFEST.replace('pack-local-smoke', 'security'),
+      'utf8',
+    );
+    writeFileSync(
+      join(customDir, 'package.json'),
+      JSON.stringify({ name: 'security', version: '0.1.0', private: true }),
+      'utf8',
+    );
+    writeFileSync(join(customDir, 'scenarios', 'smoke-noop.yaml'), SMOKE_SCENARIO, 'utf8');
+    // Patch the profile to pin the bare name (no pack- prefix).
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    if (profiles.profiles.smoke) {
+      profiles.profiles.smoke.packs = ['security'];
+      profiles.profiles.smoke.tags = ['smoke'];
+    }
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [customDir] });
+    assert.equal(
+      result.ok,
+      true,
+      `non-prefixed pack name must match, got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(result.scenariosRun >= 1);
+  });
+
   it('rejects profiles with execution_mode "agent" until that driver lands', async () => {
     const { root, packDir } = fixtureProject();
     const profilesPath = join(root, '.aqa', 'profiles.yaml');
@@ -486,12 +522,15 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /execution_mode|orchestrator/i);
   });
 
-  it('release-gate profile (require_deterministic_replay) fails when any finding is emitted', async () => {
+  it('release-gate profile does NOT fail on findings while using the no-network probe stub', async () => {
+    // Once a real probe runner ships, `require_deterministic_replay: true`
+    // re-engages the iter-10 strict semantics (any finding → ok=false).
+    // Until then, every finding the stub produces is synthetic, so we
+    // surface findingsCount but don't fail the run — otherwise a fresh
+    // `aqa run --profile release-gate` would be unusable out of the box.
     const { root, packDir } = fixtureProject();
-    // Make the scenario fail so a finding is produced.
     const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
     writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
-    // Patch the release-gate profile to point at our local pack.
     const profilesPath = join(root, '.aqa', 'profiles.yaml');
     const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
       profiles: Record<string, { packs: string[]; tags: string[] }>;
@@ -505,8 +544,11 @@ describe('aqa run', () => {
 
     const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
     assert.equal(result.findingsCount, 1, 'expected 1 finding from a failing oracle');
-    assert.equal(result.ok, false, 'release-gate must fail on findings');
-    assert.match(result.error ?? '', /release-gate|finding/i);
+    assert.equal(
+      result.ok,
+      true,
+      'release-gate strict semantics are deferred until real probes ship',
+    );
   });
 
   it('smoke profile reports ok=true even when findings are emitted (informational)', async () => {
