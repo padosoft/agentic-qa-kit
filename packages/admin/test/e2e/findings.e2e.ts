@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 
 /**
  * Findings — three views (Clusters / List / Kanban) + open detail.
+ *
+ * View switcher is rendered as <span className="seg-btn"> (not <button>),
+ * so we target it via the `.seg-btn` class.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -19,7 +22,7 @@ test('Findings page surfaces at least one finding ID', async ({ page }) => {
 
 test('switch to Kanban view shows the 5 status columns', async ({ page }) => {
   await page
-    .getByRole('button', { name: /^Kanban$/i })
+    .locator('.seg-btn', { hasText: /^Kanban$/i })
     .first()
     .click();
   for (const col of ['Draft', 'Verified', 'Fixed', 'Rejected', 'Duplicate']) {
@@ -29,7 +32,7 @@ test('switch to Kanban view shows the 5 status columns', async ({ page }) => {
 
 test('switch to List view shows finding IDs', async ({ page }) => {
   await page
-    .getByRole('button', { name: /^List$/i })
+    .locator('.seg-btn', { hasText: /^List$/i })
     .first()
     .click();
   await expect(page.locator('text=/AQA-2026-\\d{4}/').first()).toBeVisible({ timeout: 5000 });
