@@ -166,12 +166,24 @@ async function main(): Promise<number> {
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));
+        // Surface runId/runDir even on failure when the run reached the
+        // directory-allocation phase — auditors need them to find the
+        // partial audit trail on disk.
+        if (result.runId) console.error(`    ${dim('runId:     ')}${result.runId}`);
+        if (result.runDir) console.error(`    ${dim('runDir:    ')}${result.runDir}`);
         return 1;
       }
       console.info(`  ${green('✓')} ${bold(result.runId ?? '?')}`);
       console.info(`    ${dim('runDir:    ')}${result.runDir ?? '?'}`);
       console.info(`    ${dim('scenarios: ')}${result.scenariosRun}`);
       console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
+      // Warnings: ok=true but something on disk merits attention (e.g. a
+      // broken stale pack that the selected profile didn't reference).
+      // Print in yellow so they stand out from the success summary.
+      if (result.warnings && result.warnings.length > 0) {
+        console.info(`    ${yellow('⚠ warnings:')}`);
+        for (const w of result.warnings) console.info(`      ${yellow('·')} ${w}`);
+      }
       return 0;
     }
     default: {
