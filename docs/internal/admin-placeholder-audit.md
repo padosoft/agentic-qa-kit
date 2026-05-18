@@ -54,7 +54,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 ### Packs (lines ~6850-7040)
 
-- `6850`, `6853` — top-bar "Import manifest" / "Install pack" (slice 3 wires "Install pack" via the new wizard)
+- ~~`6850`, `6853` — top-bar "Import manifest" / "Install pack" (slice 3 wires "Install pack" via the new wizard)~~ **DONE (slice 3, PR #26):** the "Install pack" placeholder was renamed to "Create pack" and wired to the new `<CreatePackWizard>` component that POSTs to `/api/packs/scaffold`. "Import manifest" remains a placeholder for slice 4b.
 - `6910`, `6914`, `6925` — pack row actions (toggle / inspect)
 - `6986` — pack detail actions
 - `7028`, `7033`, `7038` — scenario picker inside pack detail

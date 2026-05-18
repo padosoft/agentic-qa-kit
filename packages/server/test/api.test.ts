@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { MemoryStore } from '@aqa/store';
 import { RunnerQueue, makeApi } from '../dist/index.js';
@@ -10,12 +13,22 @@ const FAKE_USER = {
   roles: ['admin' as const],
 };
 
-function ctx() {
+function ctx(opts: { projectRoot?: string } = {}) {
   return {
     store: new MemoryStore(),
     queue: new RunnerQueue(),
     authenticate: async () => FAKE_USER,
+    // The server is configured at boot with the on-disk project root
+    // it manages. Endpoints that touch the filesystem (pack scaffold)
+    // anchor to this path — they NEVER honor a client-supplied root,
+    // since that would let an authenticated caller write anywhere the
+    // server process can reach.
+    projectRoot: opts.projectRoot,
   };
+}
+
+function tmpProjectRoot(): string {
+  return mkdtempSync(join(tmpdir(), 'aqa-server-pack-'));
 }
 
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
@@ -132,5 +145,105 @@ describe('makeApi', () => {
     const res = await route?.handle({ headers: {}, params: {} }, c);
     assert.equal(res?.status, 200);
     assert.deepEqual((res?.body as { orgs: unknown[] }).orgs, []);
+  });
+
+  // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
+
+  describe('POST /api/packs/scaffold', () => {
+    it('scaffolds a pack on disk under ctx.projectRoot/packs/<slug>/', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      assert.ok(route, 'POST /api/packs/scaffold must exist');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-admin-demo', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(
+        res?.status,
+        201,
+        `expected 201, got ${res?.status}: ${JSON.stringify(res?.body)}`,
+      );
+      const body = res?.body as { pack_dir: string; files: string[] };
+      assert.equal(body.pack_dir, join(root, 'packs', 'pack-admin-demo'));
+      assert.ok(body.files.includes('pack.yaml'), 'files list must include pack.yaml');
+      assert.ok(existsSync(join(root, 'packs', 'pack-admin-demo', 'pack.yaml')));
+    });
+
+    it('returns 400 when the server has no projectRoot configured', async () => {
+      const c = ctx(); // no projectRoot
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-x', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      const body = res?.body as { error: string };
+      assert.match(body.error, /projectRoot/i);
+    });
+
+    it('returns 400 on missing or invalid slug', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      // missing slug
+      const a = await route?.handle({ headers: {}, params: {}, body: { sut_type: 'api' } }, c);
+      assert.equal(a?.status, 400);
+      // invalid slug
+      const b = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'Bad Name!', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(b?.status, 400);
+      assert.match((b?.body as { error: string }).error, /slug/i);
+    });
+
+    it('returns 400 on unsupported sut_type', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-z', sut_type: 'not-real' } },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /sut/i);
+    });
+
+    it('returns 409 when the pack already exists and force is not set', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      const first = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-dup', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(first?.status, 201);
+      const second = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-dup', sut_type: 'api' } },
+        c,
+      );
+      assert.equal(second?.status, 409);
+    });
+
+    it('overwrites with force=true', async () => {
+      const root = tmpProjectRoot();
+      const c = ctx({ projectRoot: root });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-ow', sut_type: 'api' } },
+        c,
+      );
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { slug: 'pack-ow', sut_type: 'api', force: true } },
+        c,
+      );
+      assert.equal(res?.status, 201);
+    });
+
+    it('requires the packs:install permission', () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/scaffold');
+      assert.equal(route?.requires, 'packs:install');
+    });
   });
 });

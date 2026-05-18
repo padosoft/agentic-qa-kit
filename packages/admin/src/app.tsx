@@ -4153,6 +4153,299 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
 
 Object.assign(window, { AuditChainViewer, LiveTerminal, ReplayCommandPanel, FindingsKanban });
 
+// =============================================================
+// Create-pack wizard (v1.7 slice 3)
+// =============================================================
+// Front-end for POST /api/packs/scaffold. The endpoint delegates to
+// `runPackNew` from @aqa/kit, the same code path as the `aqa pack new`
+// CLI — so the form validation here is a usability layer; authoritative
+// validation lives server-side. We deliberately keep the form thin: a
+// slug + sut-type covers the minimum viable pack, and the optional
+// fields (description/author/license/force) are collapsed behind an
+// "Advanced" disclosure.
+function CreatePackWizard({ open, onClose }) {
+  const [slug, setSlug] = React.useState('');
+  const [sutType, setSutType] = React.useState('api');
+  const [description, setDescription] = React.useState('');
+  const [author, setAuthor] = React.useState('');
+  const [license, setLicense] = React.useState('Apache-2.0');
+  const [force, setForce] = React.useState(false);
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [result, setResult] = React.useState(null);
+  const toast = useToast();
+
+  // Mirror the Slug schema regex from @aqa/schemas so the user gets
+  // immediate feedback rather than waiting for the server round-trip.
+  // The server is still the source of truth (this is a usability check,
+  // not a security boundary).
+  const SLUG_PATTERN = /^[a-z0-9](?:-?[a-z0-9])*$/;
+  const MAX_SLUG_LEN = 52;
+  const slugTrimmed = slug.trim();
+  const slugError = (() => {
+    if (slugTrimmed === '') return null; // empty is "not yet entered", not an error
+    if (slugTrimmed.length > MAX_SLUG_LEN) {
+      return `${slugTrimmed.length} chars — max ${MAX_SLUG_LEN}`;
+    }
+    if (!SLUG_PATTERN.test(slugTrimmed)) {
+      return 'lowercase a-z, 0-9, single dashes only';
+    }
+    return null;
+  })();
+  const canSubmit = slugTrimmed !== '' && slugError === null && !submitting;
+
+  function reset() {
+    setSlug('');
+    setSutType('api');
+    setDescription('');
+    setAuthor('');
+    setLicense('Apache-2.0');
+    setForce(false);
+    setAdvancedOpen(false);
+    setError(null);
+    setResult(null);
+    setSubmitting(false);
+  }
+
+  function handleClose() {
+    if (submitting) return; // don't abandon a request mid-flight
+    reset();
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = {
+        slug: slugTrimmed,
+        sut_type: sutType,
+        ...(description.trim() ? { description: description.trim() } : {}),
+        ...(author.trim() ? { author: author.trim() } : {}),
+        ...(license.trim() ? { license: license.trim() } : {}),
+        ...(force ? { force: true } : {}),
+      };
+      const res = await fetch('/api/packs/scaffold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        setError(msg);
+        toast.push({ kind: 'error', title: 'Create pack failed', body: msg });
+        return;
+      }
+      setResult(parsed);
+      toast.push({
+        kind: 'success',
+        title: 'Pack scaffolded',
+        body: parsed?.pack_dir ?? slugTrimmed,
+      });
+    } catch (e) {
+      // Network error / no server / CORS. In mock-data dev (admin running
+      // without @aqa/server), we surface a clear message instead of a
+      // generic failure so the user knows it's an environment thing.
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        `Could not reach /api/packs/scaffold (${msg}). The admin is in mock-data mode or the server is down — no files were written.`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Create pack"
+      sub="Scaffolds a runnable pack under <project>/packs/<slug>/. Same code path as `aqa pack new` on the CLI."
+      size="md"
+      footer={
+        result ? (
+          <>
+            <button className="btn" onClick={handleClose} data-testid="create-pack-done">
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn" onClick={handleClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              data-testid="create-pack-submit"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+            >
+              {submitting ? 'Scaffolding…' : (<>
+                <I.Plus size={12} />
+                Create pack
+              </>)}
+            </button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <div className="col gap-12" data-testid="create-pack-result">
+          <Alert kind="success" title="Pack scaffolded successfully">
+            <div className="col gap-4">
+              <div>
+                <strong>Location:</strong>{' '}
+                <span className="mono" style={{ fontSize: 12 }}>
+                  {result.pack_dir}
+                </span>
+              </div>
+              <div>
+                <strong>Files:</strong>{' '}
+                <span className="mono" style={{ fontSize: 11 }}>
+                  {(result.files ?? []).join(', ')}
+                </span>
+              </div>
+            </div>
+          </Alert>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Next: open <code>pack.yaml</code> and <code>scenarios/starter.yaml</code> in your editor,
+            replace the placeholder probe URL and oracle with real ones, then wire this pack into a
+            profile in <code>.aqa/profiles.yaml</code>.
+          </div>
+        </div>
+      ) : (
+        <div className="col gap-12">
+          {error && (
+            <Alert kind="error" title="Scaffold failed">
+              {error}
+            </Alert>
+          )}
+          <div className="field-row">
+            <label className="field-label" htmlFor="cp-slug">
+              Slug *
+            </label>
+            <input
+              id="cp-slug"
+              className="input mono"
+              data-testid="create-pack-slug"
+              placeholder="pack-myapp-smoke"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              autoFocus
+            />
+            <div
+              className="field-hint"
+              style={slugError ? { color: 'var(--accent-danger)' } : undefined}
+            >
+              {slugError
+                ? slugError
+                : 'lowercase a-z and 0-9 with single dashes; up to 52 chars. Used as both the manifest `name:` and the on-disk directory name.'}
+            </div>
+          </div>
+          <div className="field-row">
+            <label className="field-label" htmlFor="cp-sut">
+              SUT type *
+            </label>
+            <select
+              id="cp-sut"
+              className="select"
+              data-testid="create-pack-sut"
+              value={sutType}
+              onChange={(e) => setSutType(e.target.value)}
+            >
+              <option value="api">api — HTTP service</option>
+              <option value="web">web — browser UI</option>
+              <option value="cli">cli — command-line tool</option>
+              <option value="lib">lib — library / SDK</option>
+              <option value="agent">agent — LLM / autonomous agent</option>
+              <option value="pipeline">pipeline — data / build / CI pipeline</option>
+            </select>
+            <div className="field-hint">
+              Controls <code>applies_when.sut_type</code> in the generated manifest. The pack will
+              only run against projects whose detected SUT type matches.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn xs ghost"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            style={{ alignSelf: 'flex-start' }}
+            data-testid="create-pack-advanced-toggle"
+          >
+            {advancedOpen ? <I.ChevronDown size={11} /> : <I.ChevronRight size={11} />}
+            Advanced
+          </button>
+          {advancedOpen && (
+            <>
+              <div className="field-row">
+                <label className="field-label" htmlFor="cp-desc">
+                  Description
+                </label>
+                <input
+                  id="cp-desc"
+                  className="input"
+                  placeholder="One-line summary of what this pack proves."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div className="field-row">
+                <label className="field-label" htmlFor="cp-author">
+                  Author
+                </label>
+                <input
+                  id="cp-author"
+                  className="input"
+                  placeholder="Your name or team"
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                />
+              </div>
+              <div className="field-row">
+                <label className="field-label" htmlFor="cp-license">
+                  License (SPDX)
+                </label>
+                <input
+                  id="cp-license"
+                  className="input mono"
+                  value={license}
+                  onChange={(e) => setLicense(e.target.value)}
+                />
+              </div>
+              <label
+                className="row gap-8"
+                style={{ alignItems: 'center', cursor: 'pointer', fontSize: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  data-testid="create-pack-force"
+                  checked={force}
+                  onChange={(e) => setForce(e.target.checked)}
+                />
+                <span>
+                  <strong>Force overwrite</strong> — replace the existing pack directory if one is
+                  already at <code>packs/{slugTrimmed || '<slug>'}/</code>. The existing pack is
+                  backed up to a sibling directory and restored on failure.
+                </span>
+              </label>
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+Object.assign(window, { CreatePackWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -6900,6 +7193,7 @@ Object.assign(window, { PageFindings, PageFindingDetail, PageRiskMap, PageRiskEd
 
 // ---------------- Packs ----------------
 function PagePacks({ onNavigate, onOpenPack }) {
+  const [createOpen, setCreateOpen] = React.useState(false);
   return (
     <div className="page" data-screen-label="09 Packs">
       <PageHeader
@@ -6911,13 +7205,18 @@ function PagePacks({ onNavigate, onOpenPack }) {
               <I.Upload size={12} />
               Import manifest
             </button>
-            <button className="btn sm primary">
+            <button
+              className="btn sm primary"
+              data-testid="packs-create-btn"
+              onClick={() => setCreateOpen(true)}
+            >
               <I.Plus size={12} />
-              Install pack
+              Create pack
             </button>
           </>
         }
       />
+      <CreatePackWizard open={createOpen} onClose={() => setCreateOpen(false)} />
 
       <Alert kind="warning" title="One pack is unsigned">
         <span className="mono">community-stripe@0.3.1</span> is installed without signature

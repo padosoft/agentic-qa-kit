@@ -156,6 +156,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@aqa/auth": "workspace:*",
+        "@aqa/kit": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "@aqa/store": "workspace:*",
       },
