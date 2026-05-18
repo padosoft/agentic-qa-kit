@@ -187,11 +187,12 @@ describe('aqa pack new', () => {
     assert.ok(existsSync(join(root, 'packs', 'pack-clean', 'pack.yaml')));
   });
 
-  it('rejects an existing non-symlink, non-directory entry at packs/<slug>/', () => {
+  it('rejects when the packs/ parent itself exists as a regular file, not a directory', () => {
     // Regression test for PR #25 iter 12 (Copilot):
-    // If `<root>/packs/` exists as a regular file (not a directory),
-    // we used to fail later inside `mkdirSync` with an opaque ENOTDIR.
-    // Now we reject up-front with a clear message naming the bad path.
+    // If `<root>/packs/` (the *parent* of every pack, not the pack
+    // itself) exists as a regular file, we used to fail later inside
+    // `mkdirSync` with an opaque ENOTDIR. Now we reject up-front with a
+    // clear message naming the bad path.
     const root = makeTempDir();
     // Make `<root>/packs` a regular file rather than a directory.
     writeFileSync(join(root, 'packs'), 'not a directory', 'utf8');
@@ -250,8 +251,7 @@ describe('aqa pack new — integration with aqa run', () => {
     );
     writeFileSync(join(root, 'bun.lock'), '', 'utf8');
     // src/server.ts → api sut_type so the new pack's applies_when matches.
-    const fs = await import('node:fs');
-    fs.mkdirSync(join(root, 'src'));
+    mkdirSync(join(root, 'src'));
     writeFileSync(join(root, 'src', 'server.ts'), 'export {};\n', 'utf8');
 
     const init = await import('../dist/commands/init.js');
