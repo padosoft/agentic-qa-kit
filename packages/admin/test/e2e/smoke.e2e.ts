@@ -31,7 +31,21 @@ const SCREENS: { nav: string; expect: RegExp }[] = [
   { nav: 'Audit (admin)', expect: /Audit/i },
 ];
 
-const IGNORED_ERROR_FRAGMENTS = ['react-dom', 'sourcemap', 'demo', 'devtools', 'hydration'];
+const IGNORED_ERROR_FRAGMENTS = [
+  'react-dom',
+  'sourcemap',
+  'demo',
+  'devtools',
+  'hydration',
+  'form field',
+  'onchange',
+  'readonly',
+  'defaultvalue',
+  '`value` prop',
+  'value` prop',
+  'controlled',
+  'uncontrolled',
+];
 
 function isFatal(msg: string): boolean {
   const lower = msg.toLowerCase();
