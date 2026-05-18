@@ -43,11 +43,11 @@ export interface RunOptions {
   /**
    * Filesystem paths (absolute or relative to `root`) to use as pack roots.
    * Each path must contain a `pack.yaml` manifest at its root. When omitted,
-   * `defaultPacksRoot()` discovers packs in three locations (sorted within
-   * each): `<root>/packs/*`, `<root>/node_modules/@aqa/pack-*`, and the
-   * `dist/packs/*` bundled inside the running `@aqa/kit` install. Caller
-   * order is preserved; pass `packsRoot` in a stable order when relying on
-   * `--seed` for cross-environment determinism.
+   * `defaultPacksRoot()` discovers packs in three locations: `<root>/packs/*`,
+   * `<root>/node_modules/@aqa/pack-*`, and the `dist/packs/*` bundled inside
+   * the running `@aqa/kit` install. Both default discovery and explicit
+   * `packsRoot` values are sorted by absolute path for cross-environment
+   * determinism under `--seed`.
    */
   packsRoot?: string[];
 }
@@ -349,9 +349,17 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     return makeError(`cannot write events.jsonl: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Build the set of packs the profile actually wants (by Slug). When the
-  // profile lists no packs (default), all discoverable packs are eligible.
-  const profilePackSet = new Set(profile.packs);
+  // Build the set of packs the profile actually wants (by Slug). Old
+  // `aqa init` versions wrote bare slugs like `core` / `api-core`; current
+  // manifests are named `pack-core` / `pack-api-core`. Accept both forms so
+  // projects scaffolded against older kits keep working without manual
+  // migration: each entry is matched against both its exact value and its
+  // `pack-`-prefixed variant.
+  const profilePackSet = new Set<string>();
+  for (const p of profile.packs) {
+    profilePackSet.add(p);
+    if (!p.startsWith('pack-')) profilePackSet.add(`pack-${p}`);
+  }
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a

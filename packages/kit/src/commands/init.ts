@@ -95,7 +95,10 @@ function packsForSutType(sutType: string): string[] {
       return [...base, 'pack-llm-agent'];
     default:
       // cli / lib / pipeline / unknown — `pack-core` alone has no scenarios.
-      // Users will need to add their own pack or write `.aqa/scenarios/*.yaml`.
+      // Users will need to author or install a separate pack with scenarios;
+      // `pack-core` ships risks and oracles only. Loose `.aqa/scenarios/*.yaml`
+      // discovery is not currently supported by `aqa run` — every scenario must
+      // be referenced from a pack manifest.
       return base;
   }
 }

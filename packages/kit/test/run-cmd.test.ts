@@ -378,6 +378,21 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('accepts a legacy bare-slug pack reference (`core` matches `pack-core`)', async () => {
+    const { root, packDir } = fixtureProject();
+    // Patch the profile to use the legacy bare-slug form `local-smoke` instead
+    // of the manifest name `pack-local-smoke`.
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    if (profiles.profiles.smoke) profiles.profiles.smoke.packs = ['local-smoke'];
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, true, `legacy alias must match, got: ${JSON.stringify(result)}`);
+  });
+
   it('skips packs whose applies_when does not match the project SUT', async () => {
     const { root, packDir } = fixtureProject();
     // Patch the pack to only apply to web SUTs — our fixture is api, so the
