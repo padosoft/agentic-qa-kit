@@ -338,6 +338,30 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /unsafe/i);
   });
 
+  it('discovers packs bundled inside @aqa/kit when no other source is provided', async () => {
+    // Build the fixture but DO NOT pass packsRoot. The bundled pack-api-core
+    // (now shipped in @aqa/kit/dist/packs/) should be picked up automatically.
+    // We point the profile at pack-api-core which has scenarios tagged "api".
+    const { root } = fixtureProject();
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    if (profiles.profiles.smoke) {
+      profiles.profiles.smoke.packs = ['pack-api-core'];
+      profiles.profiles.smoke.tags = ['api'];
+    }
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke' });
+    assert.equal(
+      result.ok,
+      true,
+      `kit-bundled discovery must work, got: ${JSON.stringify(result)}`,
+    );
+    assert.ok(result.scenariosRun >= 1, 'must find scenarios via kit-bundled packs');
+  });
+
   it('discovers bundled packs from node_modules/@aqa when no packsRoot is provided', async () => {
     const { root, packDir } = fixtureProject();
     // Simulate an external project that has `pack-local-smoke` installed as

@@ -23,7 +23,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { EventChainWriter, FindingsWriter, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
@@ -105,15 +106,28 @@ function discoverInDir(parentDir: string, candidates: string[]): void {
   }
 }
 
+/**
+ * Path to the packs bundled inside `@aqa/kit/dist/packs/`. We resolve this
+ * from the running module URL so it works whether the kit is installed from
+ * npm, linked from the workspace, or running from a global install.
+ */
+function bundledKitPacksDir(): string {
+  // dist/commands/run.js → dist/packs
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, '..', 'packs');
+}
+
 function defaultPacksRoot(projectRoot: string): string[] {
   const candidates: string[] = [];
   // 1. Monorepo / vendored layout: <project>/packs/*
   discoverInDir(join(projectRoot, 'packs'), candidates);
   // 2. npm-installed bundled packs: <project>/node_modules/@aqa/pack-*
-  //    Real consumer projects install packs as workspace or registry deps;
-  //    without this, `aqa init` → `aqa run` in an external project would
-  //    discover zero packs and fail with "0 scenarios".
+  //    Real consumer projects install packs as workspace or registry deps.
   discoverInDir(join(projectRoot, 'node_modules', '@aqa'), candidates);
+  // 3. Packs bundled inside the running `@aqa/kit` install. Lets the
+  //    documented `aqa init` → `aqa run --profile smoke` flow work with
+  //    only `@aqa/kit` installed (the canonical junior workflow).
+  discoverInDir(bundledKitPacksDir(), candidates);
   return candidates;
 }
 
