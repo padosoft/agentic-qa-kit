@@ -378,6 +378,27 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1, 'must find at least 1 scenario via node_modules');
   });
 
+  it('fails the run when a profile-selected pack is missing from discovery entirely', async () => {
+    const { root, packDir } = fixtureProject();
+    // The profile pins both the local pack AND a pack that simply does not
+    // exist anywhere on disk. There's no load error to record — the pack
+    // just isn't there. The run must still fail rather than silently skip
+    // it on the strength of the one pack that did load.
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[] }>;
+    };
+    if (profiles.profiles.smoke) {
+      profiles.profiles.smoke.packs = ['pack-local-smoke', 'pack-ghost'];
+      profiles.profiles.smoke.tags = ['smoke'];
+    }
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'a selected pack absent from discovery must fail');
+    assert.match(result.error ?? '', /pack-ghost|selected pack/i);
+  });
+
   it('fails the run when a profile-selected pack does not load (even if others did)', async () => {
     const { root, packDir } = fixtureProject();
     // Make a second pack dir with a broken manifest, named to match a

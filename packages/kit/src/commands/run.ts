@@ -557,9 +557,20 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const missingSelectedCount = selectedCanonical.size - selectedLoadedCount;
   if (packErrors.length > 0 && profilePackSet.size === 0) {
     reasons.push(`${packErrors.length} pack(s) failed to load: ${packErrors.join('; ')}`);
-  } else if (missingSelectedCount > 0 && packErrors.length > 0) {
+  } else if (missingSelectedCount > 0) {
+    // A selected pack didn't make it into `seenPackNames`. This catches:
+    //   - load errors on a selected pack (packErrors populated)
+    //   - a selected pack that wasn't discovered at all (no directory
+    //     matching its name anywhere → packErrors stays empty)
+    //   - a selected pack that was discovered but skipped by applies_when
+    // Any of those is intended coverage that didn't run, so the release
+    // gate (and any specific-selection profile) must fail rather than
+    // pass silently.
+    const missingNames = [...selectedCanonical].filter((n) => !seenPackNames.has(n));
     reasons.push(
-      `${missingSelectedCount} selected pack(s) did not load (selected: ${[...selectedCanonical].join(', ')}); errors: ${packErrors.join('; ')}`,
+      `${missingSelectedCount} selected pack(s) did not load: ${missingNames.join(', ')}${
+        packErrors.length > 0 ? `; errors: ${packErrors.join('; ')}` : ''
+      }`,
     );
   }
   if (scenarioErrors.length > 0)
@@ -601,11 +612,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // the selected profile loaded fine). Capped so a noisy tree doesn't
   // overwhelm the response.
   const warnings: string[] = [];
+  // Only pack errors land here as warnings — manifest-missing scenarios
+  // already fail the run unconditionally (see the `missingScenarios.length`
+  // reason above), so they never reach this branch.
   if (packErrors.length > 0 && reasons.length === 0) {
     for (const e of cap(packErrors)) warnings.push(`pack: ${e}`);
-  }
-  if (missingScenarios.length > 0 && reasons.length === 0) {
-    for (const m of cap(missingScenarios)) warnings.push(`missing scenario: ${m}`);
   }
 
   return {
