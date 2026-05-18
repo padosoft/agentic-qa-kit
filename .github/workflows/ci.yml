@@ -224,8 +224,13 @@ jobs:
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
         run: bunx playwright install --with-deps chromium
 
-      - name: Run Playwright
+      - name: Build admin (Vite) for the dev server Playwright will boot
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
+        run: bun run build
+
+      - name: Run Playwright (admin SPA)
+        if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
+        working-directory: packages/admin
         run: bunx playwright test --reporter=line
 
       - name: Skip notice

@@ -16,7 +16,10 @@
       "**/*.min.js",
       "**/playwright-report",
       "**/test-results",
-      "packages/*/schemas/v1/**"
+      "packages/*/schemas/v1/**",
+      "packages/admin/src/app.tsx",
+      "packages/admin/src/styles/styles.css",
+      "packages/admin/src/styles/styles-organisms.css"
     ]
   },
   "overrides": [
