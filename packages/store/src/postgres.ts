@@ -1,4 +1,5 @@
 import type {
+  Agent,
   ApiToken,
   CostSummary,
   Event,
@@ -122,6 +123,20 @@ export class PostgresStore implements StoreProvider {
   }
   async deleteScenario(_id: string): Promise<void> {
     this.notImpl('deleteScenario');
+  }
+
+  // ----- Agents (v1.7 slice 4d) -----
+  async listAgents(): Promise<Agent.Agent[]> {
+    this.notImpl('listAgents');
+  }
+  async loadAgent(_id: string): Promise<Agent.Agent | null> {
+    this.notImpl('loadAgent');
+  }
+  async installAgent(_id: string): Promise<Agent.Agent | null> {
+    this.notImpl('installAgent');
+  }
+  async uninstallAgent(_id: string): Promise<Agent.Agent | null> {
+    this.notImpl('uninstallAgent');
   }
 
   async listNotifications(): Promise<Notification.Notification[]> {

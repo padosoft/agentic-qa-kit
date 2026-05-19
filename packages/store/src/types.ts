@@ -1,4 +1,5 @@
 import type {
+  Agent,
   ApiToken,
   CostSummary,
   Event,
@@ -106,6 +107,16 @@ export interface StoreProvider {
   // loadScenario + saveScenario.
   createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }>;
   deleteScenario(id: string): Promise<void>;
+
+  // ----- Agents (v1.7 slice 4d) -----
+  listAgents(): Promise<Agent.Agent[]>;
+  loadAgent(id: string): Promise<Agent.Agent | null>;
+  // Idempotent install: marks installed=true and stamps last_updated.
+  // Returns the resulting Agent record (so the admin can correlate).
+  installAgent(id: string): Promise<Agent.Agent | null>;
+  // Idempotent uninstall: marks installed=false, leaves last_updated
+  // as a record of the last install. Returns the resulting Agent.
+  uninstallAgent(id: string): Promise<Agent.Agent | null>;
 
   // ----- Notifications -----
   listNotifications(opts: {

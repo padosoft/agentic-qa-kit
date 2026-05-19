@@ -738,6 +738,104 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4d — Agents ============
+
+  describe('Agents (slice 4d)', () => {
+    const sampleAgent = {
+      schema_version: '1' as const,
+      id: 'claude',
+      name: 'Claude Code',
+      vendor: 'Anthropic',
+      installed: false,
+      last_updated: null,
+      files: ['CLAUDE.md'],
+    };
+
+    it('GET /api/agents returns the seeded list', async () => {
+      const c = ctx();
+      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent(sampleAgent);
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/agents');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { agents: Array<{ id: string }> };
+      assert.equal(body.agents.length, 1);
+      assert.equal(body.agents[0]?.id, 'claude');
+    });
+
+    it('GET /api/agents/:id 404s when missing', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/agents/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'nope' } }, c);
+      assert.equal(res?.status, 404);
+    });
+
+    it('POST /api/agents/:id/install flips installed=true and stamps last_updated', async () => {
+      const c = ctx();
+      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent(sampleAgent);
+      const route = makeApi().find(
+        (r) => r.method === 'POST' && r.path === '/api/agents/:id/install',
+      );
+      const res = await route?.handle({ headers: {}, params: { id: 'claude' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { agent: { installed: boolean; last_updated: string | null } };
+      assert.equal(body.agent.installed, true);
+      assert.ok(body.agent.last_updated, 'last_updated must be stamped');
+    });
+
+    it('POST /api/agents/:id/uninstall flips installed=false (idempotent)', async () => {
+      const c = ctx();
+      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent({
+        ...sampleAgent,
+        installed: true,
+        last_updated: '2026-05-19T12:00:00Z',
+      });
+      const route = makeApi().find(
+        (r) => r.method === 'POST' && r.path === '/api/agents/:id/uninstall',
+      );
+      const res = await route?.handle({ headers: {}, params: { id: 'claude' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { agent: { installed: boolean; last_updated: string | null } };
+      assert.equal(body.agent.installed, false);
+      // last_updated is preserved as a record of when the agent was
+      // last installed — useful in the admin's "last_updated" column.
+      assert.equal(body.agent.last_updated, '2026-05-19T12:00:00Z');
+    });
+
+    it('install/uninstall 404 when the agent id is unknown', async () => {
+      const c = ctx();
+      const install = makeApi().find(
+        (r) => r.method === 'POST' && r.path === '/api/agents/:id/install',
+      );
+      const uninstall = makeApi().find(
+        (r) => r.method === 'POST' && r.path === '/api/agents/:id/uninstall',
+      );
+      assert.equal(
+        (await install?.handle({ headers: {}, params: { id: 'nope' }, body: {} }, c))?.status,
+        404,
+      );
+      assert.equal(
+        (await uninstall?.handle({ headers: {}, params: { id: 'nope' }, body: {} }, c))?.status,
+        404,
+      );
+    });
+
+    it('install/uninstall require agents:edit; read requires agents:read', () => {
+      const api = makeApi();
+      assert.equal(
+        api.find((r) => r.method === 'GET' && r.path === '/api/agents')?.requires,
+        'agents:read',
+      );
+      assert.equal(
+        api.find((r) => r.method === 'POST' && r.path === '/api/agents/:id/install')?.requires,
+        'agents:edit',
+      );
+      assert.equal(
+        api.find((r) => r.method === 'POST' && r.path === '/api/agents/:id/uninstall')?.requires,
+        'agents:edit',
+      );
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {

@@ -8,6 +8,7 @@ import {
   Scenario as ScenarioSchema,
 } from '@aqa/schemas';
 import type {
+  Agent,
   ApiToken,
   CostSummary,
   Event,
@@ -801,6 +802,53 @@ export function makeApi(): ApiHandler[] {
         // the profiles list.)
         await ctx.store.deleteScenario(id);
         return asResponse({ id, deleted: true });
+      },
+    },
+
+    // ============ v1.7 slice 4d — Agents ============
+    {
+      method: 'GET',
+      path: '/api/agents',
+      requires: 'agents:read',
+      async handle(_req, ctx) {
+        const agents = await ctx.store.listAgents();
+        return asResponse({ agents } satisfies { agents: Agent.Agent[] });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/:id',
+      requires: 'agents:read',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('agent');
+        const agent = await ctx.store.loadAgent(id);
+        if (!agent) return notFound('agent');
+        return asResponse({ agent });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/agents/:id/install',
+      requires: 'agents:edit',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('agent');
+        const agent = await ctx.store.installAgent(id);
+        if (!agent) return notFound('agent');
+        return asResponse({ agent });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/agents/:id/uninstall',
+      requires: 'agents:edit',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('agent');
+        const agent = await ctx.store.uninstallAgent(id);
+        if (!agent) return notFound('agent');
+        return asResponse({ agent });
       },
     },
 

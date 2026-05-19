@@ -10749,6 +10749,80 @@ function PageProfileDetail({
 // ---------------- Agents ----------------
 function PageAgents({ onNavigate }) {
   const [showInstall, setShowInstall] = React.useState(null);
+  // v1.7 slice 4d — fetch agents from the server. Falls back to the
+  // local AGENTS fixture when the server is unreachable / mock-data
+  // mode is in effect, so the screen still renders something useful.
+  const [agents, setAgents] = React.useState(AGENTS);
+  const [pendingId, setPendingId] = React.useState(null);
+  const toast = useToast();
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/agents'));
+        if (!res.ok) return; // mock mode / dev — keep the fixture
+        const body = await res.json();
+        const list = body?.agents;
+        if (!Array.isArray(list) || list.length === 0 || cancelled) return;
+        setAgents(list);
+      } catch {
+        // Mock data mode — leave the fixture in place. The toast bus
+        // is for action errors, not the initial fetch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggleInstall(agent) {
+    if (pendingId) return; // simple in-flight guard
+    setPendingId(agent.id);
+    const action = agent.installed ? 'uninstall' : 'install';
+    try {
+      const res = await fetch(
+        apiUrl(`/api/agents/${encodeURIComponent(agent.id)}/${action}`),
+        { method: 'POST' },
+      );
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        toast.push({
+          kind: 'error',
+          title: `${action} ${agent.name} failed`,
+          body: parsed?.error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      const next = parsed?.agent;
+      if (next) {
+        setAgents((prev) => prev.map((a) => (a.id === next.id ? next : a)));
+      } else {
+        // Server didn't echo a body — apply the expected toggle so the
+        // UI doesn't get stuck. Real-mode endpoints always echo; this
+        // path is purely defensive.
+        setAgents((prev) =>
+          prev.map((a) => (a.id === agent.id ? { ...a, installed: !a.installed } : a)),
+        );
+      }
+      toast.push({
+        kind: 'success',
+        title: `${action === 'install' ? 'Installed' : 'Uninstalled'} ${agent.name}`,
+        body: next?.last_updated ?? '',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.push({ kind: 'error', title: `${action} ${agent.name} failed`, body: msg });
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   return (
     <div className="page" data-screen-label="15 Agents">
       <PageHeader
@@ -10763,7 +10837,7 @@ function PageAgents({ onNavigate }) {
       />
 
       <div className="dash-grid">
-        {AGENTS.map((a) => (
+        {agents.map((a) => (
           <div key={a.id} className="card span-6">
             <div className="card-head">
               <h3 className="card-title">
@@ -10826,15 +10900,26 @@ function PageAgents({ onNavigate }) {
                 ))}
               </div>
               <div className="row gap-6">
-                <button className="btn sm" onClick={() => setShowInstall(a)}>
+                <button
+                  className="btn sm"
+                  data-testid={`agent-preview-${a.id}`}
+                  onClick={() => setShowInstall(a)}
+                >
                   <I.Eye size={11} />
                   Preview files
                 </button>
-                <button className={`btn sm ${a.installed ? '' : 'primary'}`}>
-                  {a.installed ? (
+                <button
+                  className={`btn sm ${a.installed ? '' : 'primary'}`}
+                  data-testid={`agent-${a.installed ? 'uninstall' : 'install'}-${a.id}`}
+                  disabled={pendingId === a.id}
+                  onClick={() => toggleInstall(a)}
+                >
+                  {pendingId === a.id ? (
+                    'Working…'
+                  ) : a.installed ? (
                     <>
-                      <I.Refresh size={11} />
-                      Update
+                      <I.Trash size={11} />
+                      Uninstall
                     </>
                   ) : (
                     <>

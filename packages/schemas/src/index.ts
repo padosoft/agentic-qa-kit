@@ -12,5 +12,6 @@ export * as SavedView from './saved-view.js';
 export * as ApiToken from './api-token.js';
 export * as CostSummary from './cost-summary.js';
 export * as Tenancy from './tenancy.js';
+export * as Agent from './agent.js';
 
 export { ExecutionMode, Severity, Status } from './common.js';

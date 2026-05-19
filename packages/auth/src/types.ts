@@ -11,7 +11,12 @@ export const Permission = z.enum([
   'profiles:edit',
   'packs:read',
   'packs:install',
+  // Pre-v1.7 the only agent permission was 'agents:install' — kept for
+  // backwards compatibility. v1.7 slice 4d introduces split read/edit
+  // permissions for the new /api/agents* routes.
   'agents:install',
+  'agents:read',
+  'agents:edit',
   'audit:read',
   'cost:read',
   'settings:read',
