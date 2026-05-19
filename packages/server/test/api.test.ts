@@ -359,6 +359,59 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.3 — POST /api/profiles (Profile Clone) ============
+
+  describe('POST /api/profiles', () => {
+    const validProfile = {
+      schema_version: '1',
+      name: 'smoke-clone',
+      execution_mode: 'orchestrator',
+      llm_usage: [],
+      llm_budget_usd: 10,
+      parallelism: 4,
+      require_deterministic_replay: false,
+      packs: ['core', 'api'],
+      tags: [],
+    };
+
+    it('creates a new profile with 201 when the name is unused', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const res = await route?.handle({ headers: {}, params: {}, body: validProfile }, c);
+      assert.equal(res?.status, 201);
+      assert.equal((res?.body as { profile: { name: string } }).profile.name, 'smoke-clone');
+      const stored = await c.store.loadProfile('smoke-clone');
+      assert.equal(stored?.name, 'smoke-clone');
+    });
+
+    it('rejects a body that fails Profile schema parsing (400)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const bad = { ...validProfile, parallelism: -1 };
+      const res = await route?.handle({ headers: {}, params: {}, body: bad }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /profile failed schema validation/i);
+    });
+
+    it('409s with code=EEXIST when a profile with that name already exists', async () => {
+      // POST is strict "create-new" semantics; clones over an existing
+      // name would silently overwrite the original via the upsert
+      // store API, so the route rejects with 409 + EEXIST instead.
+      const c = ctx();
+      await c.store.saveProfile(validProfile);
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const res = await route?.handle({ headers: {}, params: {}, body: validProfile }, c);
+      assert.equal(res?.status, 409);
+      assert.equal((res?.body as { code: string }).code, 'EEXIST');
+      assert.match((res?.body as { error: string }).error, /already exists/i);
+    });
+
+    it('requires the profiles:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      assert.equal(route?.requires, 'profiles:edit');
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {

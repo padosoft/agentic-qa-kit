@@ -5562,6 +5562,230 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
 }
 Object.assign(window, { EditProfileWizard });
 
+// v1.7 slice 4c.3 — Profile Clone wizard wired to POST /api/profiles.
+// Mirrors the architecture of EditProfileWizard (sync in-flight guard,
+// captured submittedName guard, sync handleClose reset, modal close-
+// affordance inertness during submit, slug validation that mirrors
+// @aqa/schemas Slug) so the same race-condition lessons from slice
+// 4c.1/4c.2 don't need to be re-discovered. The form is intentionally
+// minimal — just the new profile's name — and the wizard copies every
+// other field from the source profile at submit time. This matches the
+// user mental model of "clone X as Y, then go edit Y".
+function CloneProfileWizard({ open, profile, existingNames, onClose, onCloned }) {
+  const [newName, setNewName] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  // Same render-time profileRef pattern as EditProfileWizard — see
+  // that wizard's comments for why we assign during render and not
+  // in a post-commit effect. The stale-submit guard reads
+  // `profileRef.current?.name` after the awaited fetch.
+  const profileRef = React.useRef(profile);
+  profileRef.current = profile;
+  const toast = useToast();
+  const profileName = profile?.name;
+
+  React.useEffect(() => {
+    if (open) {
+      setNewName('');
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, profileName]);
+
+  // Inline validation: the slug must match @aqa/schemas Slug and must
+  // not collide with an existing profile (mock or already-created).
+  // Case-insensitive comparison so a slug-cased "smoke" can't be
+  // cloned as "Smoke" → server-side casing would then conflict on
+  // the next case-folded lookup.
+  const trimmed = newName.trim();
+  const existing = existingNames instanceof Set ? existingNames : new Set();
+  const nameError = (() => {
+    if (trimmed === '') return 'required';
+    if (trimmed.length > MAX_SLUG_LEN) return `exceeds ${MAX_SLUG_LEN} chars`;
+    if (!SLUG_PATTERN.test(trimmed)) return 'lowercase letters/digits, dashes between only';
+    if (trimmed === profileName) return `same as source — pick a different name`;
+    if (existing.has(trimmed)) return `"${trimmed}" already exists`;
+    return null;
+  })();
+  const canSubmit = !submitting && nameError === null;
+
+  function handleClose() {
+    if (submitting) return;
+    // Same lesson as EditProfileWizard.handleClose: reset every piece
+    // of state synchronously so close+reopen on the same source
+    // profile doesn't flash stale error / typed name from the
+    // previous session.
+    setNewName('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return; // synchronous double-click guard
+    if (!profile) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    const submittedSource = profileName;
+    try {
+      // Build a schema-conforming Profile body by copying every
+      // field from the source and overriding the name. Drop the
+      // legacy mock-only `budget_usd` alias; the schema field is
+      // `llm_budget_usd`.
+      const sourceProfile = profileRef.current ?? profile;
+      const body = {
+        schema_version: '1',
+        name: trimmed,
+        execution_mode:
+          sourceProfile.execution_mode === 'sandbox' || sourceProfile.execution_mode === 'host'
+            ? 'orchestrator'
+            : sourceProfile.execution_mode,
+        llm_usage: Array.isArray(sourceProfile.llm_usage) ? sourceProfile.llm_usage : [],
+        llm_budget_usd:
+          sourceProfile.llm_budget_usd != null
+            ? sourceProfile.llm_budget_usd
+            : sourceProfile.budget_usd != null
+              ? sourceProfile.budget_usd
+              : null,
+        ...(sourceProfile.budget_minutes != null
+          ? { budget_minutes: sourceProfile.budget_minutes }
+          : {}),
+        parallelism:
+          typeof sourceProfile.parallelism === 'number' && sourceProfile.parallelism >= 1
+            ? sourceProfile.parallelism
+            : 1,
+        require_deterministic_replay: !!sourceProfile.require_deterministic_replay,
+        packs: Array.isArray(sourceProfile.packs) ? sourceProfile.packs : [],
+        tags: Array.isArray(sourceProfile.tags) ? sourceProfile.tags : [],
+      };
+      const res = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let detail = `${res.status} ${res.statusText}`;
+        try {
+          const j = await res.json();
+          if (j?.error) detail = j.error;
+        } catch {
+          /* ignore parse error */
+        }
+        const full = `Could not clone profile: ${detail}`;
+        // Same stale-submit guard as EditProfileWizard — only surface
+        // the error if the source profile in the wizard hasn't been
+        // swapped out from under us mid-request.
+        if (submittedSource === profileRef.current?.name) setError(full);
+        return;
+      }
+      if (submittedSource === profileRef.current?.name) {
+        toast.push({
+          kind: 'success',
+          title: `Profile "${trimmed}" created`,
+          body: `Cloned from "${submittedSource}"`,
+        });
+        // Broadcast so PageProfiles + any open lists pick up the new
+        // entry without a reload. App-level handler merges into the
+        // `createdProfiles` Map alongside the mock list.
+        window.dispatchEvent(
+          new CustomEvent('aqa:profile-created', {
+            detail: { name: trimmed, profile: body },
+          }),
+        );
+        onCloned?.(trimmed);
+      }
+    } catch (e) {
+      const full = `Could not clone profile: ${e instanceof Error ? e.message : String(e)}`;
+      if (submittedSource === profileRef.current?.name) setError(full);
+    } finally {
+      if (submittedSource === profileRef.current?.name) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
+
+  if (!profile) return null;
+
+  return (
+    <Modal
+      open={open}
+      // Same close-affordance inertness pattern as 4c.1 iter 10 +
+      // 4c.2: while submitting, Escape / overlay click / X are no-ops.
+      onClose={submitting ? undefined : handleClose}
+      title="Clone profile"
+      sub={
+        <>
+          Creates a new profile by copying <code className="mono">{profileName}</code>'s settings
+          (packs, execution mode, budgets, parallelism, tags). The new profile is independent —
+          subsequent edits to either won't affect the other.
+        </>
+      }
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            data-testid="profile-clone-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Cloning…' : 'Clone profile'}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="danger" title="Clone failed" data-testid="profile-clone-error">
+            <span style={{ fontSize: 12 }}>{error}</span>
+          </Alert>
+        )}
+        <div className="field-row">
+          <label className="field-label" htmlFor="cp-source">
+            Source profile
+          </label>
+          <input
+            id="cp-source"
+            className="input mono"
+            data-testid="profile-clone-source"
+            value={profileName ?? ''}
+            readOnly
+          />
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="cp-newname">
+            New profile name *
+          </label>
+          <input
+            id="cp-newname"
+            className="input mono"
+            data-testid="profile-clone-newname"
+            placeholder="my-new-profile"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            autoFocus
+          />
+          {nameError && (
+            <div className="field-hint danger" data-testid="profile-clone-newname-err">
+              {nameError}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { CloneProfileWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -8976,7 +9200,13 @@ function PageScenarioDetail({ id, onNavigate }) {
 }
 
 // ---------------- Profiles ----------------
-function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles, updatedProfiles }) {
+function PageProfiles({
+  onNavigate,
+  onOpenProfile,
+  deletedProfiles,
+  updatedProfiles,
+  createdProfiles,
+}) {
   // `deletedProfiles` is owned by App (lifted state) so it survives
   // route changes. PageProfileDetail dispatches `aqa:profile-deleted`
   // BEFORE navigating back here, so a listener on PageProfiles itself
@@ -8989,7 +9219,25 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles, updatedProfi
   // reason) is merged on top of the static mock row here so the list
   // doesn't display stale values right after a save.
   const overrides = updatedProfiles ?? new Map();
-  const visible = PROFILES.filter((p) => !deletedNames.has(p.name)).map((p) => {
+  // v1.7 slice 4c.3 — CloneProfileWizard dispatches
+  // `aqa:profile-created` on success; the App-level Map is merged
+  // alongside the static mock list so cloned entries appear in the
+  // table without a reload. Profiles in BOTH the mock list and
+  // `createdProfiles` shouldn't render twice — the create event
+  // dispatches on schema-valid bodies (not on the static mock),
+  // and the new-name collision check in CloneProfileWizard prevents
+  // a clone from shadowing a mock entry, so the de-duplication
+  // here is belt-and-braces.
+  const created = createdProfiles instanceof Map ? createdProfiles : new Map();
+  const mockRows = PROFILES.filter((p) => !deletedNames.has(p.name));
+  const mockNames = new Set(mockRows.map((p) => p.name));
+  const createdRows = [];
+  for (const [k, v] of created.entries()) {
+    if (deletedNames.has(k)) continue;
+    if (mockNames.has(k)) continue;
+    createdRows.push(v);
+  }
+  const visible = [...mockRows, ...createdRows].map((p) => {
     const patch = overrides.get(p.name);
     return patch ? { ...p, ...patch } : p;
   });
@@ -9073,8 +9321,19 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles, updatedProfi
 }
 
 // ---------------- Profile detail ----------------
-function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles }) {
-  const rawP = name ? profileByName(name) : null;
+function PageProfileDetail({
+  name,
+  onNavigate,
+  deletedProfiles,
+  updatedProfiles,
+  createdProfiles,
+}) {
+  // Look up the profile from the mock list OR from `createdProfiles`
+  // (v1.7 slice 4c.3) so a freshly-cloned profile resolves on its
+  // detail page even though it's not in the static PROFILES array.
+  const fromMock = name ? profileByName(name) : null;
+  const fromCreated = name ? createdProfiles?.get?.(name) : null;
+  const rawP = fromMock ?? fromCreated ?? null;
   // Treat just-deleted profiles as not-found so a stale link
   // (e.g. a notification linking to a profile a colleague just
   // removed) doesn't render the underlying mock row.
@@ -9088,6 +9347,23 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
   const p = isDeleted ? null : rawP ? { ...rawP, ...(overrides || {}) } : null;
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [cloneOpen, setCloneOpen] = React.useState(false);
+  // Set of every name already taken — feeds CloneProfileWizard's
+  // collision-detection so the user can't pick a name that exists
+  // in either the mock list, the created-via-clone Map, or as a
+  // freshly-edited override. Deleted names are eligible for re-use.
+  const existingNames = React.useMemo(() => {
+    const s = new Set();
+    for (const pr of PROFILES) {
+      if (!deletedProfiles?.has(pr.name)) s.add(pr.name);
+    }
+    if (createdProfiles instanceof Map) {
+      for (const k of createdProfiles.keys()) {
+        if (!deletedProfiles?.has(k)) s.add(k);
+      }
+    }
+    return s;
+  }, [deletedProfiles, createdProfiles]);
   // Now that this page has a destructive Delete action, a stale or
   // typoed route param (e.g. /profiles/<deleted-name>) must NOT
   // silently render the first profile in the list — otherwise the
@@ -9165,6 +9441,14 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
               Edit
             </button>
             <button
+              className="btn sm"
+              data-testid="profile-clone-btn"
+              onClick={() => setCloneOpen(true)}
+            >
+              <I.Plus size={12} />
+              Clone
+            </button>
+            <button
               className="btn sm danger"
               data-testid="profile-delete-btn"
               onClick={() => setDeleteOpen(true)}
@@ -9182,6 +9466,16 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
         onDeleted={() => {
           setDeleteOpen(false);
           onNavigate?.('profiles', {});
+        }}
+      />
+      <CloneProfileWizard
+        open={cloneOpen}
+        profile={p}
+        existingNames={existingNames}
+        onClose={() => setCloneOpen(false)}
+        onCloned={(newName) => {
+          setCloneOpen(false);
+          onNavigate?.('profile-detail', { name: newName });
         }}
       />
       <EditProfileWizard
@@ -11471,6 +11765,36 @@ function App() {
     return () => window.removeEventListener('aqa:profile-updated', handler);
   }, []);
 
+  // v1.7 slice 4c.3 — Profile clones broadcast via
+  // `aqa:profile-created` and the new-profile Map lives at App level
+  // for the same lifted-state reason as the other Profile maps:
+  // PageProfileDetail dispatches the event BEFORE navigating to the
+  // cloned profile's detail page, so a listener on PageProfiles
+  // would miss it. The Map seeds PageProfiles row rendering AND
+  // PageProfileDetail's profile lookup for the freshly-created
+  // entry (which isn't in the static PROFILES list).
+  const [createdProfiles, setCreatedProfiles] = React.useState(() => new Map());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const name = e?.detail?.name;
+      const profile = e?.detail?.profile;
+      if (typeof name !== 'string' || !profile || typeof profile !== 'object') return;
+      // Mirror the schema field into the legacy mock alias so
+      // PageProfiles' table (which reads `p.budget_usd` directly)
+      // formats correctly without each row needing schema-aware
+      // accessors. Same trick the EditProfileWizard submit handler
+      // uses for `updatedProfiles`.
+      const withMockAliases = { ...profile, budget_usd: profile.llm_budget_usd };
+      setCreatedProfiles((prev) => {
+        const next = new Map(prev);
+        next.set(name, withMockAliases);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:profile-created', handler);
+    return () => window.removeEventListener('aqa:profile-created', handler);
+  }, []);
+
   // Apply theme
   React.useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
@@ -11530,6 +11854,7 @@ function App() {
     onTheme: (th) => setTweak('theme', th),
     deletedProfiles,
     updatedProfiles,
+    createdProfiles,
   };
 
   if (!signedIn) {
