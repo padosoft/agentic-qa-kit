@@ -172,11 +172,14 @@ test.describe('Profile edit', () => {
   });
 
   test('invalid pack slug disables Save and shows the validation hint', async ({ page }) => {
-    // PR #30 iter 2 (Codex): the server's PUT handler doesn't
-    // re-validate `req.body`, so without this UI check the user
-    // could persist a profile with uppercase / spaced / consecutive-
-    // dash pack slugs. The wizard now mirrors the @aqa/schemas Slug
-    // regex.
+    // The server PUT handler is the trust boundary — iter 10 added
+    // `ProfileSchema.Profile.safeParse(req.body)` plus a path/body
+    // name-match check, so malformed slugs are rejected by the
+    // server regardless of UI state. This test asserts the wizard
+    // mirrors the @aqa/schemas Slug regex so the user gets
+    // immediate inline feedback before a round-trip rejection toast.
+    // (Originally added per Codex review on PR #30 iter 2; comment
+    // rewritten in iter 13 after Copilot flagged it as stale.)
     await navigateToProfileDetail(page);
     await page.getByTestId('profile-edit-btn').click();
     await page.getByTestId('profile-edit-packs').fill('core, Bad Slug');
