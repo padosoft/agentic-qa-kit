@@ -4108,6 +4108,12 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   // the background and shouldn't disable a different unrelated modal
   // the user might open while the request is in flight).
   async function doMove(id, status, reasonText, setOnModal) {
+    // Resolve the request URL up front so the same string is used by
+    // both the fetch call and any error/toast surfaces — otherwise a
+    // VITE_AQA_SERVER_URL-configured deployment would hit one URL but
+    // show a different (hardcoded relative) URL in the error message,
+    // making debugging harder.
+    const reqUrl = apiUrl(`/api/findings/${encodeURIComponent(id)}/status`);
     // Reject re-entrant transitions for the same finding while a POST
     // is already in flight. Without this guard, two drags in quick
     // succession could submit competing transitions and the slower
@@ -4137,7 +4143,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return next;
     });
     try {
-      const res = await fetch(apiUrl(`/api/findings/${encodeURIComponent(id)}/status`), {
+      const res = await fetch(reqUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, reason: reasonText }),
@@ -4161,7 +4167,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const full = `Could not reach /api/findings/${id}/status (${msg}). The admin is in mock-data mode or the server is down — the status change was not persisted.`;
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the status change was not persisted.`;
       if (setOnModal) setSubmitError(full);
       toast.push({ kind: 'error', title: 'Status change failed', body: full });
       return false;

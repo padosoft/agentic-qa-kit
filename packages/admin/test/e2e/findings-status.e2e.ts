@@ -251,10 +251,13 @@ test.describe('Findings kanban status change', () => {
     // The submit button should disable while the request is in flight.
     await expect(page.getByTestId('kanban-confirm-submit')).toBeDisabled();
     // Even if a phantom synchronous double-click slipped through, the
-    // synchronous ref guard prevents a second POST. Release and check.
+    // synchronous ref guard prevents a second POST. Release and wait
+    // for a deterministic settle signal: the modal must close once
+    // the response lands. No fixed waitForTimeout — that races on
+    // slow CI.
     releaseFirst();
-    // Wait for callCount to settle.
-    await page.waitForTimeout(150);
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Now callCount is settled.
     expect(callCount).toBe(1);
   });
 
