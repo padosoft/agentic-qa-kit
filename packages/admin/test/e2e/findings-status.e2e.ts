@@ -152,6 +152,73 @@ test.describe('Findings kanban status change', () => {
     await expect(stillThere).toHaveAttribute('data-finding-status', originalStatus ?? '');
   });
 
+  test('apiUrl helper composes base + path (handles VITE_AQA_SERVER_URL)', async ({ page }) => {
+    // Regression test for PR #27 iter 3 (Copilot):
+    // The fetch URL used to be hard-coded relative ("/api/..."), which
+    // breaks the documented deployment where the admin runs on Vite
+    // dev and @aqa/server is at a separate origin (configured via
+    // VITE_AQA_SERVER_URL). The `apiUrl` helper is exposed on `window`
+    // so we can directly assert its composition rules from a page
+    // context — including the case where the base has a trailing
+    // slash and the case where it doesn't.
+    await navigateToFindings(page);
+    const cases = await page.evaluate(() => {
+      const fn = (window as unknown as { __aqaApiUrl?: (p: string) => string }).__aqaApiUrl;
+      if (!fn) return null;
+      // We can't change `import.meta.env` at runtime, so the helper
+      // returns relative paths under test config. Assert that
+      // contract (it'd be hidden if we hard-coded an origin).
+      return { rel: fn('/api/test'), noLead: fn('api/test') };
+    });
+    expect(cases).not.toBeNull();
+    // With no VITE_AQA_SERVER_URL set at build time, the base is empty
+    // and both forms produce a leading-slash relative path.
+    expect(cases?.rel).toBe('/api/test');
+    expect(cases?.noLead).toBe('/api/test');
+  });
+
+  test('per-finding pending lock prevents racing transitions', async ({ page }) => {
+    // Regression test for PR #27 iter 3 (Copilot):
+    // Without the per-finding pending guard, two drags in quick
+    // succession on the same card could submit competing transitions
+    // (last response wins, possibly inconsistent with server state).
+    // This test holds the first POST response open and asserts the
+    // card is marked `data-finding-pending="true"` while in flight.
+    let resolveFirst: () => void = () => {};
+    const firstHold = new Promise<void>((r) => {
+      resolveFirst = r;
+    });
+    let callCount = 0;
+    await page.route('**/api/findings/*/status', async (route) => {
+      callCount += 1;
+      if (callCount === 1) {
+        await firstHold;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await navigateToFindings(page);
+    const firstCard = page.locator('[data-testid^="kanban-card-"]').first();
+    await firstCard.dragTo(page.getByTestId('kanban-col-verified'));
+    await page.getByTestId('kanban-confirm-reason').fill('First transition');
+    // Don't await — fire the submit and let it sit pending.
+    void page.getByTestId('kanban-confirm-submit').click();
+    // Some card must enter the pending state while the POST is held
+    // open. We don't pin to a specific finding ID because Playwright's
+    // dragTo can resolve to a different card than `firstCard` after
+    // layout shifts — the test's point is that *the* dragged card
+    // gets marked pending, whatever its id ended up being.
+    const pendingCard = page.locator('[data-finding-pending="true"]');
+    await expect(pendingCard).toBeVisible();
+    const pendingId = await pendingCard.getAttribute('data-finding-id');
+    expect(pendingId).toMatch(/^AQA-2026-\d{4}$/);
+    // Release the hold so the test cleans up. The card flips back to
+    // pending="false" once the response resolves.
+    resolveFirst();
+    await expect(
+      page.locator(`[data-finding-id="${pendingId}"][data-finding-pending="false"]`),
+    ).toBeVisible();
+  });
+
   test('dragging to Duplicate shows the schema-invariant warning', async ({ page }) => {
     // Regression test for PR #27 iter 2 (Copilot):
     // `duplicate` status requires `duplicate_of` per the Finding

@@ -4000,11 +4000,35 @@ test('${f.id} — ${f.title}', async ({ page, context }) => {
 // -------------------------------------------------------------
 // FindingsKanban — 5 columns, drag-drop, terminal confirmation
 // -------------------------------------------------------------
+// API base URL: when the admin is deployed alongside @aqa/server the
+// admin can fetch the same origin (relative paths). When running the
+// Vite dev server against a separate @aqa/server (the documented
+// deployment, see docs/design/admin-panel-spec-v2.md:379), Vite has
+// no `/api` proxy, so admin code must build an absolute URL using
+// `VITE_AQA_SERVER_URL`. Falling back to relative paths keeps the
+// "admin served by server" case working without configuration.
+function apiUrl(path) {
+  const base =
+    typeof import.meta !== 'undefined' && (import.meta).env
+      ? ((import.meta).env.VITE_AQA_SERVER_URL || '')
+      : '';
+  // Trim trailing slash on base + leading slash collision.
+  const cleanBase = base.replace(/\/+$/, '');
+  return `${cleanBase}${path.startsWith('/') ? path : `/${path}`}`;
+}
+Object.assign(window, { __aqaApiUrl: apiUrl });
+
 function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   const [items, setItems] = React.useState(initialFindings);
   const [dragId, setDragId] = React.useState(null);
   const [dropCol, setDropCol] = React.useState(null);
   const [confirm, setConfirm] = React.useState(null);
+  // Per-finding in-flight set. A card whose status POST is still in
+  // flight is locked: its `draggable` is dropped and re-dragging is
+  // a no-op. Prevents the "two concurrent transitions for the same
+  // finding, last response wins" race that an unguarded background
+  // POST would otherwise allow.
+  const [pending, setPending] = React.useState(() => new Set());
   // Captured by the confirmation textarea — required for terminal
   // transitions because POST /api/findings/:id/status rejects an
   // empty reason at the server (see api.test.ts).
@@ -4074,12 +4098,30 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   // the background and shouldn't disable a different unrelated modal
   // the user might open while the request is in flight).
   async function doMove(id, status, reasonText, setOnModal) {
+    // Reject re-entrant transitions for the same finding while a POST
+    // is already in flight. Without this guard, two drags in quick
+    // succession could submit competing transitions and the slower
+    // response would silently overwrite the faster one on both the
+    // client (setItems) and the server (last write wins).
+    if (pending.has(id)) {
+      toast.push({
+        kind: 'warning',
+        title: 'Status change skipped',
+        body: `${id} already has a transition in flight — wait for it to land before retrying.`,
+      });
+      return false;
+    }
     if (setOnModal) {
       setSubmitting(true);
       setSubmitError(null);
     }
+    setPending((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     try {
-      const res = await fetch(`/api/findings/${encodeURIComponent(id)}/status`, {
+      const res = await fetch(apiUrl(`/api/findings/${encodeURIComponent(id)}/status`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, reason: reasonText }),
@@ -4109,6 +4151,11 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return false;
     } finally {
       if (setOnModal) setSubmitting(false);
+      setPending((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -4138,12 +4185,14 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               {byCol(col.key).map((f) => (
                 <div
                   key={f.id}
-                  className={`kanban-card ${dragId === f.id ? 'dragging' : ''}`}
-                  draggable
-                  onDragStart={onDragStart(f.id)}
+                  className={`kanban-card ${dragId === f.id ? 'dragging' : ''} ${pending.has(f.id) ? 'pending' : ''}`}
+                  draggable={!pending.has(f.id)}
+                  onDragStart={!pending.has(f.id) ? onDragStart(f.id) : undefined}
                   data-testid={`kanban-card-${f.id}`}
                   data-finding-id={f.id}
                   data-finding-status={f.status}
+                  data-finding-pending={pending.has(f.id) ? 'true' : 'false'}
+                  title={pending.has(f.id) ? 'Status change in flight…' : undefined}
                 >
                   <div className="kanban-card-head">
                     <SevBadge sev={f.severity} />
@@ -4188,7 +4237,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
           setConfirm(null);
         }}
         title={`Confirm transition to ${confirm?.toCol.label}`}
-        sub={`Moving "${confirm?.finding?.title}" to a terminal status. Provide a reason — this will be logged to the audit chain.`}
+        sub={`Moving "${confirm?.finding?.title}" to a terminal status. Provide a reason — it will be persisted on the finding record. (The matching audit-chain event is a v1.7.x follow-up.)`}
         footer={
           <>
             <button
@@ -4268,9 +4317,8 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               />
               <div className="field-hint">
                 Required by the server. Confirm is disabled until you provide a non-empty reason.
-                Note: status transitions are persisted to the store today, but the server-side
-                hook that appends a <code>finding.status_changed</code> event to the audit chain
-                is a follow-up — until then the reason text is stored on the finding record only.
+                The reason is stored on the finding record; see the subtitle above for the
+                audit-chain caveat.
               </div>
             </div>
           </div>
