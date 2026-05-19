@@ -54,7 +54,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 ### Packs (lines ~6850-7040)
 
-- ~~`6850`, `6853` — top-bar "Import manifest" / "Install pack" (slice 3 wires "Install pack" via the new wizard)~~ **DONE (slice 3, PR #26):** the "Install pack" placeholder was renamed to "Create pack" and wired to the new `<CreatePackWizard>` component that POSTs to `/api/packs/scaffold`. "Import manifest" remains a placeholder for slice 4b.
+- ~~`6850`, `6853` — top-bar "Import manifest" / "Install pack"~~ **DONE:** "Install pack" → "Create pack" wizard (slice 3, PR #26) wired to `POST /api/packs/scaffold`; "Import manifest" wired in slice 4b (PR #28) to a new `<ImportManifestWizard>` that calls `POST /api/packs/import` — server parses YAML, validates against `@aqa/schemas/PackManifest`, installs via store. 4 Playwright e2e tests cover open/disabled, happy-path 201, schema-validation 400, 409-duplicate-with-force-retry path. 8 server unit tests cover the endpoint contract.
 - `6910`, `6914`, `6925` — pack row actions (toggle / inspect)
 - `6986` — pack detail actions
 - `7028`, `7033`, `7038` — scenario picker inside pack detail
@@ -72,7 +72,7 @@ Not yet line-counted — comes after the first 49 fit.
 Doing all 81 in one PR is unreviewable. Plan: **one PR per page** so each is a manageable review surface.
 
 1. ~~**slice 4a — Findings page actions** (verify, reject, mark-fixed, mark-duplicate row actions). Needs `PATCH /api/findings/:id/status` (already exists in `packages/server` from v1.4). Just wire the UI buttons.~~ **SHIPPED (PR #27).** Kanban terminal-transition modal wired to `POST /api/findings/:id/status`. Drag-and-drop, required-reason capture, error-on-fail, optimistic UI only after server confirmation. The server *persists* the new status to the store; appending a corresponding `finding.status_changed` event to the audit chain is a separate task tracked as a v1.7.x follow-up (requires extending the `EventKind` enum in `@aqa/schemas` and the store's `updateFindingStatus` to append the event). Remaining row actions in clusters/list views (verify/reject inline buttons) also deferred to a follow-up PR — today the kanban is the canonical status-change surface.
-2. **slice 4b — Packs page** (Import manifest, Install pack). "Install pack" delegates to the wizard from slice 3; "Import manifest" needs a `POST /api/packs/import` route.
+2. ~~**slice 4b — Packs page** (Import manifest, Install pack). "Install pack" delegates to the wizard from slice 3; "Import manifest" needs a `POST /api/packs/import` route.~~ **SHIPPED (PR #28).** `POST /api/packs/import` accepts YAML text, parses + validates against the canonical `PackManifest` schema, installs via store. Admin `<ImportManifestWizard>` lets users paste YAML or load a file from disk, surfaces 4xx/5xx errors inline, and offers a Force-overwrite path on 409.
 3. **slice 4c — Scenarios / Risks / Profiles CRUD** (edit/save/clone/delete). Heaviest slice — needs full CRUD flows on three resources.
 4. **slice 4d — Agents page** (install-instructions copy, "Install for X"). Mostly client-side (copy to clipboard, download files).
 5. **slice 4e — Replay / Audit / Cost / Queue / Notifications** (export CSV, mark-read, drain, pause). Mix of W + C.
