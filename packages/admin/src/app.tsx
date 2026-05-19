@@ -9239,7 +9239,13 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
             <div className="field-row">
               <label className="field-label">Budget per run (USD)</label>
               <div className="input-with-suffix">
-                <input className="input mono" value={p.budget_usd} readOnly />
+                <input
+                  className="input mono"
+                  data-testid="profile-detail-budget"
+                  value={p.budget_usd ?? ''}
+                  placeholder="Unlimited"
+                  readOnly
+                />
                 <span className="suffix">USD · hard kill</span>
               </div>
               <div className="field-hint">

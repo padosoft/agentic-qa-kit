@@ -338,6 +338,47 @@ test.describe('Profile edit', () => {
     await expect(sub).not.toContainText(/\bhost\b/);
   });
 
+  test('blank budget saves null and the legacy detail input stays null-safe', async ({ page }) => {
+    // PR #30 iter 5 (Copilot): blanking the budget in the wizard
+    // PUTs `llm_budget_usd: null`. The submit handler also writes
+    // `budget_usd: null` into the App override Map so the legacy
+    // display path stays in sync — but the Configuration card was
+    // rendering `<input value={p.budget_usd}>` directly, which
+    // produces React's "value prop on input should not be null"
+    // warning and a controlled→uncontrolled switch. The detail input
+    // now coalesces null to '' (with an "Unlimited" placeholder).
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    await page.route('**/api/profiles/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: route.request().postDataJSON() }),
+      });
+    });
+    await navigateToProfileDetail(page);
+    await page.getByTestId('profile-edit-btn').click();
+    const budget = page.getByTestId('profile-edit-budget');
+    await budget.fill('');
+    await expect(budget).toHaveValue('');
+    await page.getByTestId('profile-edit-submit').click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Legacy display input renders empty (not "null") and exposes the
+    // Unlimited placeholder.
+    const detailBudget = page.getByTestId('profile-detail-budget');
+    await expect(detailBudget).toHaveValue('');
+    await expect(detailBudget).toHaveAttribute('placeholder', 'Unlimited');
+    // No controlled-input null warnings.
+    expect(
+      consoleErrors.filter((m) =>
+        /value\s+prop\s+on.*should not be null|changing an? (un)?controlled input/i.test(m),
+      ),
+    ).toEqual([]);
+  });
+
   test('modal close affordances are inert while PUT is in flight', async ({ page }) => {
     // Definite assignment assertion: see profile-delete.e2e.ts for
     // why we capture the resolver this way (TS otherwise narrows the
