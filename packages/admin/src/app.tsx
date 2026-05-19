@@ -6,6 +6,14 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { parse as yamlParse } from 'yaml';
+
+// Expose the YAML parser on `window` so the test-only ScenarioYamlWizard
+// (and the e2e tests) can drive client-side parsing through a stable
+// symbol. Mirrors __aqaApiUrl / __aqaNavigate.
+if (typeof window !== 'undefined') {
+  window.__aqaYamlParse = yamlParse;
+}
 const { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Fragment } = React;
 
 // =============================================================
@@ -5451,6 +5459,215 @@ function DeleteScenarioWizard({ open, scenarioId, onClose, onDeleted }) {
 }
 Object.assign(window, { DeleteScenarioWizard });
 
+// v1.7 slice 4c.7-admin / 4c.8-admin — shared YAML-textarea wizard for
+// Scenario Edit (PUT) and Scenario Clone (POST). Both flows operate
+// on a schema-conforming Scenario body; the textarea is seeded with
+// a stub for the current scenario id and the user edits free-form
+// YAML. On Save the body is parsed with the `yaml` package and PUT
+// or POST to the server, which is the actual schema trust boundary.
+function buildScenarioStubYaml(id) {
+  return [
+    'schema_version: "1"',
+    `id: ${id}`,
+    'title: Scenario title (≥ 4 chars)',
+    'risk_refs:',
+    '  - risk-cross-tenant-leak',
+    'invariant_refs: []',
+    'preconditions: []',
+    'steps:',
+    '  - id: probe-1',
+    '    kind: http',
+    '    with: {}',
+    '    timeout_ms: 30000',
+    'oracles:',
+    '  - id: oracle-1',
+    '    kind: http_status',
+    '    with: {}',
+    '    weight: 1',
+    'cleanup: []',
+    'tags: []',
+  ].join('\n');
+}
+
+function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDone }) {
+  // mode: 'edit' | 'clone'
+  const [yamlText, setYamlText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (open) {
+      setYamlText(buildScenarioStubYaml(mode === 'clone' ? '' : scenarioId));
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, scenarioId, mode]);
+
+  function handleClose() {
+    if (submitting) return;
+    setYamlText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  // Parse client-side for an early UX hint. Server is the trust
+  // boundary.
+  let parsedBody = null;
+  let parseError = null;
+  try {
+    parsedBody = window.__aqaYamlParse?.(yamlText);
+  } catch (e) {
+    parseError = e instanceof Error ? e.message : String(e);
+  }
+  const sameAsSourceError =
+    mode === 'clone' && parsedBody?.id && parsedBody.id === scenarioId
+      ? 'new id is the same as the source'
+      : null;
+  const collisionError =
+    mode === 'clone' && parsedBody?.id && existingIds?.has?.(parsedBody.id)
+      ? `id "${parsedBody.id}" already exists`
+      : null;
+  const idMismatchError =
+    mode === 'edit' && parsedBody?.id && parsedBody.id !== scenarioId
+      ? `body id "${parsedBody.id}" does not match the path "${scenarioId}"`
+      : null;
+  const uxError = parseError || sameAsSourceError || collisionError || idMismatchError;
+  const canSubmit = !submitting && uxError === null && parsedBody !== null;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    const submittedSourceId = scenarioId;
+    try {
+      const reqUrl =
+        mode === 'edit'
+          ? apiUrl(`/api/scenarios/${encodeURIComponent(submittedSourceId)}`)
+          : apiUrl('/api/scenarios');
+      const res = await fetch(reqUrl, {
+        method: mode === 'edit' ? 'PUT' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsedBody),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        const fullMsg = `${submittedSourceId}: ${msg}`;
+        toast.push({ kind: 'error', title: `Save scenario failed`, body: fullMsg });
+        setError(msg);
+        return;
+      }
+      const newId = parsed?.scenario?.id ?? parsedBody.id;
+      toast.push({
+        kind: 'success',
+        title: mode === 'edit' ? 'Scenario saved' : `Scenario "${newId}" created`,
+        body: newId,
+      });
+      try {
+        window.dispatchEvent(
+          new CustomEvent(mode === 'edit' ? 'aqa:scenario-updated' : 'aqa:scenario-created', {
+            detail:
+              mode === 'edit'
+                ? { id: submittedSourceId, patch: parsedBody }
+                : { id: newId, scenario: parsedBody },
+          }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+      onDone?.(newId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.push({
+        kind: 'error',
+        title: 'Save scenario failed',
+        body: `${submittedSourceId}: ${msg}`,
+      });
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={submitting ? undefined : handleClose}
+      title={mode === 'edit' ? 'Edit scenario' : 'Clone scenario'}
+      sub={
+        mode === 'edit' ? (
+          <>
+            Editing <code className="mono">{scenarioId}</code>. The body is parsed as YAML and
+            schema-validated server-side. Keep the <code>id</code> field unchanged — changing it
+            here would 400 against the path-id check.
+          </>
+        ) : (
+          <>
+            Cloning <code className="mono">{scenarioId}</code>. Edit the <code>id</code> field to
+            a new slug; the server enforces 409 + EEXIST on collisions.
+          </>
+        )
+      }
+      size="lg"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            data-testid="scenario-yaml-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Saving…' : mode === 'edit' ? 'Save scenario' : 'Clone scenario'}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Save failed">
+            <span data-testid="scenario-yaml-error">{error}</span>
+          </Alert>
+        )}
+        {uxError && !error && (
+          <Alert kind="warning" title="Fix before saving">
+            <span data-testid="scenario-yaml-uxerr">{uxError}</span>
+          </Alert>
+        )}
+        <textarea
+          data-testid="scenario-yaml-textarea"
+          className="input mono"
+          style={{ minHeight: 360, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+          value={yamlText}
+          onChange={(e) => setYamlText(e.target.value)}
+          spellCheck={false}
+        />
+        <div className="field-hint">
+          YAML is parsed client-side for early feedback. The server is the trust boundary — it
+          schema-validates and {mode === 'edit' ? 'rejects path/body id mismatches' : 'rejects collisions with 409'}.
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { ScenarioYamlWizard });
+
 // v1.7 slice 4c.2 — Profile Edit/Save modal wired to PUT
 // /api/profiles/:name. Mirrors the architecture of DeleteProfileWizard
 // (sync in-flight guard, captured submittedName guard, sync handleClose
@@ -9357,7 +9574,7 @@ function PagePackDetail({ slug, onNavigate }) {
 }
 
 // ---------------- Scenarios ----------------
-function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
+function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdScenarios }) {
   const rawScenarios = [
     {
       id: 'api.tenant.cross_tenant_search',
@@ -9419,9 +9636,29 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
   ];
   // v1.7 slice 4c.6 — hide scenarios that the user has deleted via
   // DeleteScenarioWizard. App-level Set survives route changes.
-  const scenarios = deletedScenarios
+  // v1.7 slice 4c.8-admin — also append any clones the user has
+  // created (App-level Map) so the new rows appear in the list.
+  let scenarios = deletedScenarios
     ? rawScenarios.filter((s) => !deletedScenarios.has(s.id))
     : rawScenarios;
+  if (createdScenarios instanceof Map && createdScenarios.size > 0) {
+    const existingIds = new Set(scenarios.map((s) => s.id));
+    const createdRows = [];
+    for (const [id, sc] of createdScenarios.entries()) {
+      if (existingIds.has(id) || deletedScenarios?.has?.(id)) continue;
+      createdRows.push({
+        id,
+        // Mock-display defaults: pack-prefix splits cleanly enough for
+        // the tree grouping; oracle/last_status are best-effort.
+        pack: typeof sc?.tags?.find?.((t) => /^pack:/i.test(t)) === 'string'
+          ? sc.tags.find((t) => /^pack:/i.test(t)).split(':').slice(1).join(':')
+          : 'core',
+        oracle: 'custom',
+        last_status: 'pending',
+      });
+    }
+    scenarios = scenarios.concat(createdRows);
+  }
 
   // Group by pack → category → leaf
   const byPack = {};
@@ -9562,9 +9799,49 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
 }
 
 // ---------------- Scenario detail ----------------
-function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
+function PageScenarioDetail({
+  id,
+  onNavigate,
+  deletedScenarios,
+  createdScenarios,
+  updatedScenarios,
+}) {
   const [tab, setTab] = React.useState('spec');
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [cloneOpen, setCloneOpen] = React.useState(false);
+  // Set of every scenario id already taken — feeds the Clone wizard's
+  // collision check. Built from the PageScenarios mock list + any
+  // App-level created scenarios. (Deleted ids are eligible for re-use,
+  // same as Profile Clone in slice 4c.3.)
+  const existingIds = React.useMemo(() => {
+    const s = new Set();
+    // Re-derive from the PageScenarios mock list (kept inline there
+    // for v1.7; a future slice can promote both to a shared module).
+    const mockIds = [
+      'api.tenant.cross_tenant_search',
+      'api.tenant.cross_tenant_invoice',
+      'auth.jwt.replay_after_logout',
+      'api.idor.invoice_pdf',
+      'security.rate_limit.search',
+      'agentic.tool_budget.runaway',
+      'data.pii.logs',
+      'business.order.total_rounding',
+      'security.csrf.admin',
+      'ui.xss.reflected_search',
+      'security.prompt_injection.search_rag',
+      'migrations.rollback.smoke',
+    ];
+    for (const m of mockIds) {
+      if (!deletedScenarios?.has?.(m)) s.add(m);
+    }
+    if (createdScenarios instanceof Map) {
+      for (const k of createdScenarios.keys()) {
+        if (!deletedScenarios?.has?.(k)) s.add(k);
+      }
+    }
+    return s;
+  }, [deletedScenarios, createdScenarios]);
   // PR #34 iter 2 (Copilot): the previous fallback to a hard-coded
   // scenario id meant a user landing here via ScreenJumper with no
   // params could see Delete and accidentally remove that scenario.
@@ -9629,9 +9906,21 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
               <I.Replay size={12} />
               Run this scenario
             </button>
-            <button className="btn sm primary">
+            <button
+              className="btn sm primary"
+              data-testid="scenario-edit-btn"
+              onClick={() => setEditOpen(true)}
+            >
               <I.Edit size={12} />
               Edit
+            </button>
+            <button
+              className="btn sm"
+              data-testid="scenario-clone-btn"
+              onClick={() => setCloneOpen(true)}
+            >
+              <I.Plus size={12} />
+              Clone
             </button>
             <button
               className="btn sm danger"
@@ -9651,6 +9940,25 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
         onDeleted={() => {
           setDeleteOpen(false);
           onNavigate?.('scenarios', {});
+        }}
+      />
+      <ScenarioYamlWizard
+        open={editOpen}
+        mode="edit"
+        scenarioId={sid}
+        existingIds={existingIds}
+        onClose={() => setEditOpen(false)}
+        onDone={() => setEditOpen(false)}
+      />
+      <ScenarioYamlWizard
+        open={cloneOpen}
+        mode="clone"
+        scenarioId={sid}
+        existingIds={existingIds}
+        onClose={() => setCloneOpen(false)}
+        onDone={(newId) => {
+          setCloneOpen(false);
+          if (newId) onNavigate?.('scenario-detail', { id: newId });
         }}
       />
 
@@ -12417,6 +12725,51 @@ function App() {
     return () => window.removeEventListener('aqa:risk-deleted', handler);
   }, []);
 
+  // v1.7 slice 4c.7-admin / 4c.8-admin — Scenario edits broadcast
+  // via `aqa:scenario-updated` and clones via `aqa:scenario-created`.
+  // Same lifted-state reasoning as profile and risk: App-level Map
+  // survives route changes and seeds both the Scenarios list and the
+  // detail-page rendering for cloned-but-new ids.
+  const [updatedScenarios, setUpdatedScenarios] = React.useState(() => new Map());
+  const [createdScenarios, setCreatedScenarios] = React.useState(() => new Map());
+  React.useEffect(() => {
+    const onUpdate = (e) => {
+      const id = e?.detail?.id;
+      const patch = e?.detail?.patch;
+      if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
+      setUpdatedScenarios((prev) => {
+        const next = new Map(prev);
+        next.set(id, { ...(prev.get(id) || {}), ...patch });
+        return next;
+      });
+    };
+    const onCreate = (e) => {
+      const id = e?.detail?.id;
+      const scenario = e?.detail?.scenario;
+      if (typeof id !== 'string' || !scenario || typeof scenario !== 'object') return;
+      setCreatedScenarios((prev) => {
+        const next = new Map(prev);
+        next.set(id, scenario);
+        return next;
+      });
+      // If the user cloned into a previously-deleted id, lift the
+      // tombstone so the new row resolves (same lesson as Profile
+      // Clone in PR #31 iter 1).
+      setDeletedScenarios((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:scenario-updated', onUpdate);
+    window.addEventListener('aqa:scenario-created', onCreate);
+    return () => {
+      window.removeEventListener('aqa:scenario-updated', onUpdate);
+      window.removeEventListener('aqa:scenario-created', onCreate);
+    };
+  }, []);
+
   // v1.7 slice 4c.6 — Scenario deletions broadcast via
   // `aqa:scenario-deleted` and the Set lives at App level for the
   // same lifted-state reason as `deletedProfiles`/`deletedRisks`.
@@ -12532,6 +12885,8 @@ function App() {
     deletedRisks,
     updatedRisks,
     deletedScenarios,
+    updatedScenarios,
+    createdScenarios,
   };
 
   if (!signedIn) {
