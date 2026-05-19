@@ -255,9 +255,7 @@ test.describe('Profile edit', () => {
     await expect(budget).toHaveValue('42.5');
   });
 
-  test('a 64-char slug is accepted but 65 is rejected (matches Slug.max(64))', async ({
-    page,
-  }) => {
+  test('a 64-char slug is accepted but 65 is rejected (matches Slug.max(64))', async ({ page }) => {
     // PR #30 iter 3 (Copilot): the wizard previously capped slug
     // length at 52, but @aqa/schemas Slug allows 64. The form now
     // mirrors the schema limit so a valid 53–64 char slug isn't
@@ -303,6 +301,38 @@ test.describe('Profile edit', () => {
     // bug was rendering NO selected mode at all).
     await expect(page.getByTestId('profile-detail-execmode-agent')).toBeChecked();
     await expect(page.getByTestId('profile-detail-execmode-host')).not.toBeChecked();
+  });
+
+  test('PageProfiles summary counts every mode present in visible rows', async ({ page }) => {
+    // PR #30 iter 4 (Copilot): the summary previously hard-counted
+    // only `sandbox` and `host`, so a profile saved as a schema mode
+    // (`agent`/`orchestrator`) disappeared from the mix even though
+    // it appears in the table. The summary is now derived from a
+    // distinct-mode count over `visible`.
+    await page.route('**/api/profiles/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: route.request().postDataJSON() }),
+      });
+    });
+    // Save the first profile as `agent` first (re-uses the live wizard).
+    await navigateToProfileDetail(page);
+    await page.getByTestId('profile-edit-btn').click();
+    await page.getByTestId('profile-edit-mode').selectOption('agent');
+    await page.getByTestId('profile-edit-submit').click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Navigate back to the list and assert `agent` appears in the
+    // execution-mode mix. Mock has 4 sandbox / 1 host originally; the
+    // first row is `host`-mode `smoke` profile, now overridden to
+    // `agent`, so the summary should be "4 sandbox · 1 agent" (host
+    // count goes to 0 and disappears).
+    await page.locator('.nav-item', { hasText: /^Profiles/i }).first().click();
+    const sub = page.locator('.page-sub, .page-header').first();
+    await expect(sub).toContainText(/1 agent/);
+    await expect(sub).toContainText(/4 sandbox/);
+    await expect(sub).not.toContainText(/\bhost\b/);
   });
 
   test('modal close affordances are inert while PUT is in flight', async ({ page }) => {

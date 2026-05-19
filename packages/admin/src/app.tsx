@@ -5225,9 +5225,15 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
   // ref after the await to detect a mid-flight profile swap.
   // (Copilot review on PR #30 iter 2.)
   const profileRef = React.useRef(profile);
-  React.useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
+  // Assign during render (not in a post-commit effect) so the
+  // stale-submit guard's `profileRef.current?.name` lookup always
+  // sees the latest committed profile. A useEffect-driven ref update
+  // runs *after* the render is committed — if the parent re-renders
+  // with a new profile and the in-flight PUT resolves before that
+  // effect ticks, the guard would still read the old profile and
+  // call `onSaved` / reset state for the wrong session. Render-time
+  // assignment closes that race. (Copilot review on PR #30 iter 3.)
+  profileRef.current = profile;
   const toast = useToast();
   const profileName = profile?.name;
 
@@ -8966,11 +8972,25 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles, updatedProfi
     const patch = overrides.get(p.name);
     return patch ? { ...p, ...patch } : p;
   });
+  // Count every distinct execution_mode in the visible rows so a
+  // profile saved as a schema mode (`agent`/`orchestrator`) doesn't
+  // silently drop out of the summary. (Copilot review on PR #30 iter
+  // 3 — previously the summary only counted `sandbox` + `host`.)
+  // Sorted for stable rendering across renders/tests.
+  const modeCounts = visible.reduce((acc, p) => {
+    const m = p.execution_mode || 'unknown';
+    acc[m] = (acc[m] || 0) + 1;
+    return acc;
+  }, {});
+  const modeSummary = Object.keys(modeCounts)
+    .sort()
+    .map((m) => `${modeCounts[m]} ${m}`)
+    .join(' · ');
   return (
     <div className="page" data-screen-label="13 Profiles">
       <PageHeader
         title="Profiles"
-        sub={`${visible.length} configured · execution mode mix: ${visible.filter((p) => p.execution_mode === 'sandbox').length} sandbox · ${visible.filter((p) => p.execution_mode === 'host').length} host`}
+        sub={`${visible.length} configured · execution mode mix: ${modeSummary}`}
         actions={
           <button className="btn sm primary">
             <I.Plus size={12} />
