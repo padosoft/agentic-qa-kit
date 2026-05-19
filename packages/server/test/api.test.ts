@@ -284,6 +284,70 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.2 — PUT /api/profiles/:name validation ============
+
+  describe('PUT /api/profiles/:name', () => {
+    const validProfile = {
+      schema_version: '1',
+      name: 'smoke',
+      execution_mode: 'orchestrator',
+      llm_usage: [],
+      llm_budget_usd: 10,
+      parallelism: 4,
+      require_deterministic_replay: false,
+      packs: ['core', 'api'],
+      tags: [],
+    };
+
+    it('persists a schema-conforming body whose name matches the path', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      const res = await route?.handle(
+        { headers: {}, params: { name: 'smoke' }, body: validProfile },
+        c,
+      );
+      assert.equal(res?.status, 200);
+      assert.equal((res?.body as { profile: { name: string } }).profile.name, 'smoke');
+    });
+
+    it('rejects a body that fails Profile schema parsing (400)', async () => {
+      // PR #30 iter 9 (Copilot): server must parse the Profile schema
+      // before persisting; the admin UI's client-side validation is
+      // not a trust boundary.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      // parallelism over the max=64 cap; the modal blocks this in
+      // the UI but a stale bundle / curl would otherwise persist it.
+      const bad = { ...validProfile, parallelism: 999 };
+      const res = await route?.handle({ headers: {}, params: { name: 'smoke' }, body: bad }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /profile failed schema validation/i);
+    });
+
+    it('rejects a body whose name does not match the path (400)', async () => {
+      // PR #30 iter 9 (Copilot): a body that names a different
+      // profile would silently create-or-replace the body's name
+      // instead of the path's. Reject the mismatch.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      const mismatched = { ...validProfile, name: 'attacker-owned' };
+      const res = await route?.handle(
+        { headers: {}, params: { name: 'smoke' }, body: mismatched },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match(
+        (res?.body as { error: string }).error,
+        /name mismatch.*"smoke".*"attacker-owned"/i,
+      );
+    });
+
+    it('requires the profiles:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      assert.equal(route?.requires, 'profiles:edit');
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {
