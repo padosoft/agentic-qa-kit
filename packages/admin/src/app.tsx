@@ -980,8 +980,18 @@ function Alert({ kind = 'info', title, children, icon }) {
     ) : (
       <I.AlertCircle size={14} />
     ));
+  // Screen-reader semantics:
+  //  - `error` and `warning` use role="alert" (implicit aria-live="assertive"
+  //    + aria-atomic) so an alert that appears AFTER initial render
+  //    (e.g. an inline error rendered when a form submit fails) is
+  //    announced to assistive tech.
+  //  - `success` uses role="status" (aria-live="polite") because confirmations
+  //    are useful to announce but should not interrupt the user.
+  //  - `info` and `ai` get no live region — they're decorative banners
+  //    rendered with the page and announced by the surrounding context.
+  const role = kind === 'error' || kind === 'warning' ? 'alert' : kind === 'success' ? 'status' : undefined;
   return (
-    <div className={`alert ${kind}`}>
+    <div className={`alert ${kind}`} role={role}>
       <span className="icon">{iconEl}</span>
       <div>
         {title && <b>{title}</b>}
@@ -4218,8 +4228,10 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
                 onChange={(e) => setReason(e.target.value)}
               />
               <div className="field-hint">
-                Required. Recorded as <code>finding.status_changed</code> event in the audit chain.
-                Confirm is disabled until you provide a non-empty reason.
+                Required by the server. Confirm is disabled until you provide a non-empty reason.
+                Note: status transitions are persisted to the store today, but the server-side
+                hook that appends a <code>finding.status_changed</code> event to the audit chain
+                is a follow-up — until then the reason text is stored on the finding record only.
               </div>
             </div>
           </div>
