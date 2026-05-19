@@ -5509,7 +5509,15 @@ function buildScenarioStubYaml(id) {
   ].join('\n');
 }
 
-function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDone }) {
+function ScenarioYamlWizard({
+  open,
+  mode,
+  scenarioId,
+  existingIds,
+  persistedBody,
+  onClose,
+  onDone,
+}) {
   // mode: 'edit' | 'clone'
   const [yamlText, setYamlText] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
@@ -5519,12 +5527,29 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
 
   React.useEffect(() => {
     if (open) {
-      setYamlText(buildScenarioStubYaml(mode === 'clone' ? '' : scenarioId));
+      // PR #37 Copilot iter 6: edit mode now seeds from the persisted
+      // body (App-level updatedScenarios/createdScenarios override)
+      // when available, so reopening Edit after a successful save
+      // shows the saved YAML, and a user who clicks Save without
+      // editing doesn't overwrite the body with a stub. Clone mode
+      // always seeds with an empty id to force the user to choose.
+      let seeded = buildScenarioStubYaml(mode === 'clone' ? '' : scenarioId);
+      if (mode === 'edit' && persistedBody && typeof persistedBody === 'object') {
+        try {
+          const stringified = window.__aqaYamlStringify?.(persistedBody);
+          if (typeof stringified === 'string' && stringified.length > 0) {
+            seeded = stringified;
+          }
+        } catch {
+          /* fall through to stub */
+        }
+      }
+      setYamlText(seeded);
       setError(null);
       setSubmitting(false);
       inFlightRef.current = false;
     }
-  }, [open, scenarioId, mode]);
+  }, [open, scenarioId, mode, persistedBody]);
 
   function handleClose() {
     if (submitting) return;
@@ -5594,6 +5619,22 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
     (typeof parsedBody.id !== 'string' || parsedBody.id.length === 0)
       ? 'id must be a non-empty string'
       : null;
+  // PR #37 Copilot iter 6: enforce the same Slug regex client-side
+  // that the server applies via @aqa/schemas Scenario.id, so the
+  // user gets the rejection in the wizard instead of after a
+  // round-trip. Uppercase, dots, underscores, and length > 64 all
+  // fail server-side anyway.
+  const slugError =
+    parseError == null &&
+    isPlainObject(parsedBody) &&
+    typeof parsedBody.id === 'string' &&
+    parsedBody.id.length > 0
+      ? parsedBody.id.length > MAX_SLUG_LEN
+        ? `id exceeds ${MAX_SLUG_LEN} chars`
+        : !SLUG_PATTERN.test(parsedBody.id)
+          ? 'id must be lowercase letters/digits with dashes between (Slug)'
+          : null
+      : null;
   const uxError =
     parseError ||
     bodyShapeError ||
@@ -5602,6 +5643,7 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
     // the technical "id must be a non-empty string".
     cloneEmptyIdError ||
     missingIdError ||
+    slugError ||
     sameAsSourceError ||
     collisionError ||
     idMismatchError;
@@ -9664,60 +9706,94 @@ function PagePackDetail({ slug, onNavigate }) {
 // constant keeps them in sync; before the refactor, duplicating the
 // list would have either allowed duplicate clones (id missing from
 // the check) or false-positive collisions (extra id in the check).
+//
+// PR #37 Copilot iter 6: scenario ids must match @aqa/schemas Slug
+// (lowercase alnum + single dashes, max 64) — the previous dot-
+// separated ids would 400 on the real server's PUT/POST routes.
+// Tree grouping used to derive its category from `id.split('.')[0]`;
+// after the dash migration, the explicit `category` field carries
+// the grouping instead.
 const SCENARIO_FIXTURES = [
   {
-    id: 'api.tenant.cross_tenant_search',
+    id: 'api-tenant-cross-tenant-search',
+    category: 'api',
     pack: 'api',
     oracle: 'cross_tenant',
     last_status: 'failed',
   },
   {
-    id: 'api.tenant.cross_tenant_invoice',
+    id: 'api-tenant-cross-tenant-invoice',
+    category: 'api',
     pack: 'api',
     oracle: 'cross_tenant',
     last_status: 'failed',
   },
   {
-    id: 'auth.jwt.replay_after_logout',
+    id: 'auth-jwt-replay-after-logout',
+    category: 'auth',
     pack: 'security-owasp',
     oracle: 'authn',
     last_status: 'failed',
   },
-  { id: 'api.idor.invoice_pdf', pack: 'api', oracle: 'authz', last_status: 'succeeded' },
   {
-    id: 'security.rate_limit.search',
+    id: 'api-idor-invoice-pdf',
+    category: 'api',
+    pack: 'api',
+    oracle: 'authz',
+    last_status: 'succeeded',
+  },
+  {
+    id: 'security-rate-limit-search',
+    category: 'security',
     pack: 'security-owasp',
     oracle: 'rate_limit',
     last_status: 'failed',
   },
   {
-    id: 'agentic.tool_budget.runaway',
+    id: 'agentic-tool-budget-runaway',
+    category: 'agentic',
     pack: 'security-agentic',
     oracle: 'budget',
     last_status: 'failed',
   },
-  { id: 'data.pii.logs', pack: 'security-owasp', oracle: 'pii_scan', last_status: 'failed' },
   {
-    id: 'business.order.total_rounding',
+    id: 'data-pii-logs',
+    category: 'data',
+    pack: 'security-owasp',
+    oracle: 'pii_scan',
+    last_status: 'failed',
+  },
+  {
+    id: 'business-order-total-rounding',
+    category: 'business',
     pack: 'core',
     oracle: 'invariant',
     last_status: 'succeeded',
   },
-  { id: 'security.csrf.admin', pack: 'security-owasp', oracle: 'csrf', last_status: 'failed' },
   {
-    id: 'ui.xss.reflected_search',
+    id: 'security-csrf-admin',
+    category: 'security',
+    pack: 'security-owasp',
+    oracle: 'csrf',
+    last_status: 'failed',
+  },
+  {
+    id: 'ui-xss-reflected-search',
+    category: 'ui',
     pack: 'web-ui-laravel',
     oracle: 'xss_scan',
     last_status: 'succeeded',
   },
   {
-    id: 'security.prompt_injection.search_rag',
+    id: 'security-prompt-injection-search-rag',
+    category: 'security',
     pack: 'security-agentic',
     oracle: 'llm_judge',
     last_status: 'failed',
   },
   {
-    id: 'migrations.rollback.smoke',
+    id: 'migrations-rollback-smoke',
+    category: 'migrations',
     pack: 'migrations',
     oracle: 'rollback_works',
     last_status: 'succeeded',
@@ -9755,7 +9831,9 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdSc
   // Group by pack → category → leaf
   const byPack = {};
   for (const s of scenarios) {
-    const cat = s.id.split('.')[0];
+    // Use the explicit `category` field rather than deriving from the
+    // id — Slug-conforming ids (post-iter 6) can't carry dots.
+    const cat = s.category || s.id.split('-')[0];
     (byPack[s.pack] = byPack[s.pack] || {})[cat] = byPack[s.pack][cat] || [];
     byPack[s.pack][cat].push(s);
   }
@@ -9825,7 +9903,7 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdSc
                                   </span>
                                   <I.Beaker size={11} style={{ color: 'var(--text-tertiary)' }} />
                                   <span className="label mono" style={{ fontSize: 11.5 }}>
-                                    {s.id.split('.').slice(2).join('.') || s.id}
+                                    {s.id}
                                   </span>
                                   <span style={{ marginLeft: 'auto' }}>
                                     {s.last_status === 'failed' ? (
@@ -10024,6 +10102,7 @@ function PageScenarioDetail({
         mode="edit"
         scenarioId={sid}
         existingIds={existingIds}
+        persistedBody={updatedScenarios?.get?.(sid) ?? createdScenarios?.get?.(sid) ?? null}
         onClose={() => setEditOpen(false)}
         onDone={() => setEditOpen(false)}
       />
@@ -10032,6 +10111,7 @@ function PageScenarioDetail({
         mode="clone"
         scenarioId={sid}
         existingIds={existingIds}
+        persistedBody={null}
         onClose={() => setCloneOpen(false)}
         onDone={(newId) => {
           setCloneOpen(false);

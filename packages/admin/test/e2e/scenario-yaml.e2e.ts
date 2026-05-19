@@ -103,8 +103,8 @@ test.describe('Scenario YAML edit/clone', () => {
     const seeded = await textarea.inputValue();
     await textarea.fill(seeded.replace(/^id:.*/m, `id: ${id}`));
     await expect(page.getByTestId('scenario-yaml-uxerr')).toContainText(/same as the source/i);
-    // Type the well-known mock id `api.idor.invoice_pdf` — collision.
-    await textarea.fill(seeded.replace(/^id:.*/m, 'id: api.idor.invoice_pdf'));
+    // Type the well-known mock id `api-idor-invoice-pdf` — collision.
+    await textarea.fill(seeded.replace(/^id:.*/m, 'id: api-idor-invoice-pdf'));
     await expect(page.getByTestId('scenario-yaml-uxerr')).toContainText(/already exists/i);
     // Switch to a unique id — UX-hint clears, submit enables.
     await textarea.fill(seeded.replace(/^id:.*/m, 'id: brand-new-scenario'));
@@ -181,6 +181,59 @@ test.describe('Scenario YAML edit/clone', () => {
     await expect(
       page.locator('.editor-content', { hasText: /Edited via the YAML wizard/i }),
     ).toBeVisible();
+  });
+
+  test('Clone with non-Slug id is blocked by an explicit slug-format hint', async ({ page }) => {
+    // PR #37 Copilot iter 6: client mirrors @aqa/schemas Slug check
+    // (lowercase alnum + dashes, max 64) so the user sees the
+    // rejection before any round-trip. Uppercase / dots / underscores
+    // all fail.
+    await openFirstScenarioDetail(page);
+    await page.getByTestId('scenario-clone-btn').click();
+    const textarea = page.getByTestId('scenario-yaml-textarea');
+    await expect(textarea).not.toHaveValue('');
+    const seeded = await textarea.inputValue();
+    // dots not allowed
+    await textarea.fill(seeded.replace(/^id:.*/m, 'id: Has.Dots'));
+    await expect(page.getByTestId('scenario-yaml-uxerr')).toContainText(/Slug/i);
+    await expect(page.getByTestId('scenario-yaml-submit')).toBeDisabled();
+    // valid slug clears the hint
+    await textarea.fill(seeded.replace(/^id:.*/m, 'id: a-valid-slug'));
+    await expect(page.getByTestId('scenario-yaml-uxerr')).toHaveCount(0);
+    await expect(page.getByTestId('scenario-yaml-submit')).toBeEnabled();
+  });
+
+  test('Edit re-opened after a successful save seeds from the persisted override', async ({
+    page,
+  }) => {
+    // PR #37 Copilot iter 6: previously edit mode always seeded with
+    // a generic stub, so a user re-opening Edit after a save would
+    // see the stub, not the saved body. Now the wizard reads the
+    // App-level override Map and serializes it as the textarea seed.
+    await page.route('**/api/scenarios/**', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ scenario: route.request().postDataJSON() }),
+      });
+    });
+    await openFirstScenarioDetail(page);
+    await page.getByTestId('scenario-edit-btn').click();
+    const textarea = page.getByTestId('scenario-yaml-textarea');
+    await expect(textarea).not.toHaveValue('');
+    const original = await textarea.inputValue();
+    await textarea.fill(original.replace(/^title:.*/m, 'title: Persisted across reopen'));
+    await page.getByTestId('scenario-yaml-submit').click();
+    await expect(page.locator('.toast.success', { hasText: /Scenario saved/i })).toBeVisible();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Re-open Edit — the textarea must seed with the saved body, not
+    // the stub.
+    await page.getByTestId('scenario-edit-btn').click();
+    const reopened = page.getByTestId('scenario-yaml-textarea');
+    await expect(reopened).not.toHaveValue('');
+    const seeded = await reopened.inputValue();
+    expect(seeded).toContain('title: Persisted across reopen');
   });
 
   test('4xx keeps the modal open with the server error inline', async ({ page }) => {
