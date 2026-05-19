@@ -9563,10 +9563,36 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
 
 // ---------------- Scenario detail ----------------
 function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
-  const sid = id || 'api.tenant.cross_tenant_search';
-  const isDeleted = deletedScenarios?.has?.(sid) ?? false;
   const [tab, setTab] = React.useState('spec');
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  // PR #34 iter 2 (Copilot): the previous fallback to a hard-coded
+  // scenario id meant a user landing here via ScreenJumper with no
+  // params could see Delete and accidentally remove that scenario.
+  // Show an explicit "no scenario selected" state instead.
+  if (!id) {
+    return (
+      <div className="page" data-screen-label="12 Scenario detail (no selection)">
+        <PageHeader title="No scenario selected" sub="Pick a scenario to see its details." />
+        <Alert kind="info" title="No scenario selected">
+          <span style={{ fontSize: 12.5 }}>
+            Open this page from the Scenarios catalog or a notification link to view a specific
+            scenario.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="scenario-detail-back"
+              onClick={() => onNavigate?.('scenarios', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to scenarios
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
+  const sid = id;
+  const isDeleted = deletedScenarios?.has?.(sid) ?? false;
   if (isDeleted) {
     return (
       <div className="page" data-screen-label="12 Scenario detail (not found)">

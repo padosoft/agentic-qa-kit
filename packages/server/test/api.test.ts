@@ -562,13 +562,23 @@ probes: []
   // ============ v1.7 slice 4c.6 — DELETE /api/scenarios/:id (Scenario Delete) ============
 
   describe('DELETE /api/scenarios/:id', () => {
+    // Schema-conforming fixture matching @aqa/schemas Scenario:
+    // includes the required schema_version/title/steps/oracles.
     const validScenario = {
+      schema_version: '1' as const,
       id: 'sc-x',
-      pack: 'core',
-      level: 'scenario_level' as const,
+      title: 'Verify cross-tenant isolation',
       risk_refs: ['risk-cross-tenant-leak'],
-      goal: 'Verify cross-tenant isolation',
-      probes: [],
+      invariant_refs: [],
+      preconditions: [],
+      steps: [
+        { id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 },
+      ],
+      oracles: [
+        { id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 },
+      ],
+      cleanup: [],
+      tags: [],
     };
 
     it('removes the scenario and returns { id, deleted: true }', async () => {

@@ -134,11 +134,18 @@ describe('PostgresStore (v0.3 scaffold)', () => {
         s.saveScenario({
           schema_version: '1',
           id: 's',
-          pack: 'core',
-          level: 'scenario_level',
-          risk_refs: [],
-          goal: 'g',
-          probes: [],
+          title: 'A scaffold-test scenario',
+          risk_refs: ['risk-x'],
+          invariant_refs: [],
+          preconditions: [],
+          steps: [
+            { id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 },
+          ],
+          oracles: [
+            { id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 },
+          ],
+          cleanup: [],
+          tags: [],
         }),
       /not implemented/,
     );
