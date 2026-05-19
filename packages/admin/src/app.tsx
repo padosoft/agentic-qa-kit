@@ -4046,11 +4046,14 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       setConfirm({ finding: f, toCol: col });
     } else {
       // Non-terminal moves (only `draft` today) don't require a reason —
-      // we still POST to the server so the change lands in the audit
-      // chain, but the body uses a default reason. If the server
-      // rejects, we surface a toast and revert nothing (the local
-      // state never actually flipped).
-      void doMove(f.id, col.key, '(non-terminal move from kanban drag)');
+      // we still POST so the change persists to the store, but the body
+      // uses a default reason. State is intentionally NOT routed through
+      // the shared modal `submitting`/`submitError` — that state belongs
+      // to the terminal-transition modal, and a slow / failing
+      // non-terminal POST shouldn't disable a different terminal modal
+      // the user might open while the drag-to-draft request is in
+      // flight. Failures surface via toast only.
+      void doMove(f.id, col.key, '(non-terminal move from kanban drag)', false);
     }
     setDragId(null);
   };
@@ -4058,9 +4061,23 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   // POST /api/findings/:id/status endpoint. Optimistic local update
   // happens AFTER the server confirms, so a 4xx/5xx response leaves
   // the card in its original column with a clear error to the user.
-  async function doMove(id, status, reasonText) {
-    setSubmitting(true);
-    setSubmitError(null);
+  //
+  // The server today only mutates `status` on the finding record —
+  // appending a `finding.status_changed` event to the audit chain is
+  // a v1.7.x follow-up (EventKind enum + store wiring). This function
+  // POSTs the change but does NOT claim audit-chain coverage yet.
+  //
+  // `setOnModal` lets the caller route submit-state into either the
+  // shared modal state (for terminal transitions, where the user is
+  // staring at a wizard and wants disabled/error feedback there) or
+  // toast-only (for drag-to-draft non-terminal moves, which happen in
+  // the background and shouldn't disable a different unrelated modal
+  // the user might open while the request is in flight).
+  async function doMove(id, status, reasonText, setOnModal) {
+    if (setOnModal) {
+      setSubmitting(true);
+      setSubmitError(null);
+    }
     try {
       const res = await fetch(`/api/findings/${encodeURIComponent(id)}/status`, {
         method: 'POST',
@@ -4077,7 +4094,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
           // raw text fallback
           if (text) msg = text.slice(0, 200);
         }
-        setSubmitError(msg);
+        if (setOnModal) setSubmitError(msg);
         toast.push({ kind: 'error', title: 'Status change failed', body: msg });
         return false;
       }
@@ -4086,12 +4103,12 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const full = `Could not reach /api/findings/${id}/status (${msg}). The admin is in mock-data mode or the server is down — the kanban change was not recorded to the audit chain.`;
-      setSubmitError(full);
+      const full = `Could not reach /api/findings/${id}/status (${msg}). The admin is in mock-data mode or the server is down — the status change was not persisted.`;
+      if (setOnModal) setSubmitError(full);
       toast.push({ kind: 'error', title: 'Status change failed', body: full });
       return false;
     } finally {
-      setSubmitting(false);
+      if (setOnModal) setSubmitting(false);
     }
   }
 
@@ -4187,7 +4204,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               data-testid="kanban-confirm-submit"
               disabled={submitting || reason.trim() === ''}
               onClick={async () => {
-                const ok = await doMove(confirm.finding.id, confirm.toCol.key, reason.trim());
+                const ok = await doMove(confirm.finding.id, confirm.toCol.key, reason.trim(), true);
                 if (ok) setConfirm(null);
                 // On failure: keep the modal open so the user can fix
                 // the reason / retry. doMove already set submitError.
@@ -4214,6 +4231,28 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
                 {submitError}
               </Alert>
             )}
+            {confirm.toCol.key === 'duplicate' || confirm.toCol.key === 'verified' ? (
+              <Alert kind="warning" title={`${confirm.toCol.label}: extra fields not yet collected`}>
+                <span style={{ fontSize: 12 }}>
+                  The Finding schema requires{' '}
+                  {confirm.toCol.key === 'duplicate' ? (
+                    <>
+                      <code>duplicate_of</code> (the canonical finding ID this one duplicates)
+                    </>
+                  ) : (
+                    <>
+                      <code>verification.deterministic === true</code> with at least one verified
+                      attempt
+                    </>
+                  )}{' '}
+                  for this transition to be schema-valid. Today the API only persists{' '}
+                  <code>status</code> and <code>reason</code> — the extra fields aren't yet wired
+                  through the wizard or the server endpoint, so the resulting finding may fail
+                  re-validation. Tracked as a v1.7.x follow-up. You can still proceed; the change
+                  will land in the store and you can fill in the missing fields via the YAML editor.
+                </span>
+              </Alert>
+            ) : null}
             <div className="field-row">
               <label className="field-label" htmlFor="kanban-reason">
                 Reason *

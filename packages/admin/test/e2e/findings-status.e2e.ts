@@ -98,13 +98,21 @@ test.describe('Findings kanban status change', () => {
     // The non-terminal path (drag to `draft`) skips the confirm modal
     // entirely — the kanban posts directly with a default reason. This
     // is still a server-writing action, so the e2e must cover it.
-    let posted: { status?: string; reason?: string } | null = null;
+    //
+    // Capture-by-reference via a wrapper object: assigning to a closure-
+    // mutated `let posted: T | null` confuses TS's control-flow analysis
+    // under strict null checks (it narrows the outer-scope post-await
+    // type to `never` instead of trusting the closure assignment). A
+    // single-property object is the simplest workaround that keeps the
+    // shape typed.
+    type PostedBody = { status?: string; reason?: string };
+    const captured: { value: PostedBody | null } = { value: null };
     await page.route('**/api/findings/*/status', async (route) => {
-      posted = route.request().postDataJSON();
+      captured.value = route.request().postDataJSON() as PostedBody;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ finding: { id: 'x', status: posted?.status } }),
+        body: JSON.stringify({ finding: { id: 'x', status: captured.value.status } }),
       });
     });
     await navigateToFindings(page);
@@ -117,8 +125,8 @@ test.describe('Findings kanban status change', () => {
     await nonDraftCard.dragTo(page.getByTestId('kanban-col-draft'));
     // Modal must NOT appear — non-terminal moves bypass confirmation.
     await expect(page.locator('.modal-title')).toHaveCount(0);
-    expect(posted?.status).toBe('draft');
-    expect(posted?.reason).toMatch(/non-terminal move/i);
+    expect(captured.value?.status).toBe('draft');
+    expect(captured.value?.reason).toMatch(/non-terminal move/i);
   });
 
   test('non-terminal drag failure: server 4xx leaves card in original column', async ({ page }) => {
@@ -142,6 +150,29 @@ test.describe('Findings kanban status change', () => {
     // flip is gated on a 200 from the server).
     const stillThere = page.locator(`[data-finding-id="${originalId}"]`);
     await expect(stillThere).toHaveAttribute('data-finding-status', originalStatus ?? '');
+  });
+
+  test('dragging to Duplicate shows the schema-invariant warning', async ({ page }) => {
+    // Regression test for PR #27 iter 2 (Copilot):
+    // `duplicate` status requires `duplicate_of` per the Finding
+    // schema; `verified` requires deterministic reproducibility.
+    // The wizard doesn't yet collect those fields, so the modal
+    // surfaces a warning Alert when those targets are chosen.
+    await navigateToFindings(page);
+    const firstCard = page.locator('[data-testid^="kanban-card-"]').first();
+    await firstCard.dragTo(page.getByTestId('kanban-col-duplicate'));
+    await expect(
+      page.locator('.alert', { hasText: /duplicate_of|extra fields not yet collected/i }),
+    ).toBeVisible();
+  });
+
+  test('dragging to Verified shows the schema-invariant warning', async ({ page }) => {
+    await navigateToFindings(page);
+    const firstCard = page.locator('[data-testid^="kanban-card-"]').first();
+    await firstCard.dragTo(page.getByTestId('kanban-col-verified'));
+    await expect(
+      page.locator('.alert', { hasText: /deterministic|extra fields not yet collected/i }),
+    ).toBeVisible();
   });
 
   test('server-side 4xx keeps modal open and surfaces the error', async ({ page }) => {
