@@ -428,6 +428,75 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.5 — PUT /api/risks/:id (Risk Edit) ============
+
+  describe('PUT /api/risks/:id', () => {
+    const validRisk = {
+      id: 'risk-y',
+      title: 'Some risk',
+      category: 'auth' as const,
+      severity: 'medium' as const,
+      likelihood: 'possible' as const,
+      invariants: [],
+      owners: [],
+      tags: [],
+    };
+
+    it('persists a schema-conforming body whose id matches the path', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/risks/:id');
+      const res = await route?.handle(
+        { headers: {}, params: { id: 'risk-y' }, body: validRisk },
+        c,
+      );
+      assert.equal(res?.status, 200);
+      const body = res?.body as { risk: { id: string } };
+      assert.equal(body.risk.id, 'risk-y');
+      const stored = await c.store.loadRisk('risk-y');
+      assert.equal(stored?.id, 'risk-y');
+    });
+
+    it('rejects a body that fails Risk schema parsing (400)', async () => {
+      // Trust boundary: the admin UI's inline validation is not a
+      // server-side contract — a stale bundle/curl could otherwise
+      // persist garbage. The Risk schema's `category` is a tight
+      // enum; sending an off-enum value must 400.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/risks/:id');
+      const bad = { ...validRisk, category: 'not-a-category' };
+      const res = await route?.handle({ headers: {}, params: { id: 'risk-y' }, body: bad }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /risk failed schema validation/i);
+    });
+
+    it('rejects a body whose id does not match the path (400)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/risks/:id');
+      const mismatched = { ...validRisk, id: 'attacker-owned' };
+      const res = await route?.handle(
+        { headers: {}, params: { id: 'risk-y' }, body: mismatched },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match(
+        (res?.body as { error: string }).error,
+        /id mismatch.*"risk-y".*"attacker-owned"/i,
+      );
+    });
+
+    it('404s when the path id is missing', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/risks/:id');
+      const res = await route?.handle({ headers: {}, params: {}, body: validRisk }, c);
+      assert.equal(res?.status, 404);
+    });
+
+    it('requires the risk-map:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/risks/:id');
+      assert.equal(route?.requires, 'risk-map:edit');
+    });
+  });
+
   // ============ v1.7 slice 4c.4 — DELETE /api/risks/:id (Risk Delete) ============
 
   describe('DELETE /api/risks/:id', () => {

@@ -1,7 +1,11 @@
 import type { User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
 import type { PackNewErrorCode } from '@aqa/kit';
-import { PackManifest as PackManifestSchema, Profile as ProfileSchema } from '@aqa/schemas';
+import {
+  PackManifest as PackManifestSchema,
+  Profile as ProfileSchema,
+  RiskMap as RiskMapSchema,
+} from '@aqa/schemas';
 import type {
   ApiToken,
   CostSummary,
@@ -656,7 +660,27 @@ export function makeApi(): ApiHandler[] {
       path: '/api/risks/:id',
       requires: 'risk-map:edit',
       async handle(req, ctx) {
-        const risk = req.body as RiskMap.Risk;
+        // Mirrors PUT /api/profiles/:name's trust-boundary checks:
+        // schema validation (UI inline validation is a UX nicety, not
+        // a trust boundary), path/body id-match (so a request to
+        // /risks/A can't silently upsert risk-id "B"), and 404 on
+        // missing path id (matches GET/DELETE).
+        const pathId = req.params.id;
+        if (!pathId) return notFound('risk');
+        const parsed = RiskMapSchema.Risk.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `risk failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        const risk = parsed.data;
+        if (risk.id !== pathId) {
+          return asResponse(
+            { error: `risk id mismatch: path "${pathId}" vs body "${risk.id}"` },
+            400,
+          );
+        }
         await ctx.store.saveRisk(risk);
         return asResponse({ risk });
       },

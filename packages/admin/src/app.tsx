@@ -8119,7 +8119,7 @@ function PageFindingDetail({ findingId, onNavigate }) {
 }
 
 // ---------------- Risk map ----------------
-function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
+function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks, updatedRisks }) {
   const [view, setView] = React.useState('matrix');
   const [selCell, setSelCell] = React.useState(null);
   const [filterCat, setFilterCat] = React.useState(new Set());
@@ -8128,9 +8128,18 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
   // from every view (matrix, category, list). App-level Set survives
   // route changes; the wizard dispatches `aqa:risk-deleted` after a
   // successful DELETE /api/risks/:id.
-  const liveRisks = deletedRisks
-    ? RISKS.filter((r) => !deletedRisks.has(r.id))
-    : RISKS;
+  // v1.7 slice 4c.5 — risks edited via PageRiskEditor are merged on
+  // top of the mock row via `updatedRisks` (Map<id, patch>) so a
+  // successful PUT updates the matrix/category views without a
+  // reload.
+  const liveRisks = React.useMemo(() => {
+    const filtered = deletedRisks ? RISKS.filter((r) => !deletedRisks.has(r.id)) : RISKS;
+    if (!(updatedRisks instanceof Map) || updatedRisks.size === 0) return filtered;
+    return filtered.map((r) => {
+      const patch = updatedRisks.get(r.id);
+      return patch ? { ...r, ...patch } : r;
+    });
+  }, [deletedRisks, updatedRisks]);
   const visible = liveRisks.filter((r) => filterCat.size === 0 || filterCat.has(r.category));
   const cellFiltered = selCell
     ? visible.filter((r) => r.likelihood === selCell.likelihood && r.severity === selCell.severity)
@@ -8294,10 +8303,14 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
 }
 
 // ---------------- Risk editor ----------------
-function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
+function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const isNew = riskId === 'new';
   const isDeleted = !isNew && (deletedRisks?.has?.(riskId) ?? false);
-  const risk = isNew
+  // Merge any user-saved overrides from a prior PUT on top of the mock
+  // row so a refreshed editor reflects what's actually been persisted
+  // (server-side state isn't read back in mock mode). Same pattern as
+  // EditProfileWizard's `updatedProfiles` Map.
+  const baseRisk = isNew
     ? {
         id: 'risk_new_draft',
         title: '',
@@ -8310,8 +8323,92 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
         description: '',
       }
     : riskById(riskId) || RISKS[0];
+  const overrides = !isNew && riskId ? updatedRisks?.get?.(riskId) : null;
+  const risk = overrides ? { ...baseRisk, ...overrides } : baseRisk;
   const [r, setR] = React.useState(risk);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  // Render-time ref so the stale-submit guard sees the LATEST riskId
+  // after an in-flight PUT resolves. Matches EditProfileWizard's
+  // render-time profileRef pattern from PR #30 iter 8.
+  const riskIdRef = React.useRef(riskId);
+  riskIdRef.current = riskId;
+  const toast = useToast();
+
+  // Inline UX validation mirrors the @aqa/schemas Risk shape so the
+  // user gets immediate feedback. The server is the actual trust
+  // boundary (PUT /api/risks/:id schema-validates the body).
+  const titleError = r.title.trim().length < 4 ? 'min 4 chars' : null;
+  const canSave = !isNew && titleError === null && !saving;
+
+  async function handleSave() {
+    if (!canSave) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    const submittedId = riskId;
+    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(submittedId)}`);
+    // Build a schema-conforming Risk body. Invariants on the mock are
+    // bare slug strings, but the schema requires { id, statement }
+    // objects — coerce so the server doesn't 400 on a legacy mock row
+    // when the user only edited title/severity/etc.
+    const body = {
+      ...r,
+      invariants: Array.isArray(r.invariants)
+        ? r.invariants.map((inv) =>
+            typeof inv === 'string'
+              ? { id: inv, statement: `Invariant: ${inv.replace(/_/g, ' ')}` }
+              : inv,
+          )
+        : [],
+    };
+    try {
+      const res = await fetch(reqUrl, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const stillCurrent = submittedId === riskIdRef.current;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        toast.push({ kind: 'error', title: 'Save risk failed', body: `${submittedId}: ${msg}` });
+        if (stillCurrent) setSaveError(msg);
+        return;
+      }
+      toast.push({ kind: 'success', title: 'Risk saved', body: submittedId });
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:risk-updated', { detail: { id: submittedId, patch: body } }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the risk was not saved.`;
+      toast.push({
+        kind: 'error',
+        title: 'Save risk failed',
+        body: `${submittedId}: ${full}`,
+      });
+      if (submittedId === riskIdRef.current) setSaveError(full);
+    } finally {
+      if (submittedId === riskIdRef.current) {
+        setSaving(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
   if (isDeleted) {
     return (
       <div className="page" data-screen-label="08 Risk editor (not found)">
@@ -8360,19 +8457,35 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
         sub={isNew ? 'Create a new risk · STRIDE/FMEA preview updates live' : r.title}
         actions={
           <>
-            <button className="btn sm ghost" onClick={() => onNavigate('risk-map')}>
+            <button
+              className="btn sm ghost"
+              onClick={() => onNavigate('risk-map')}
+              disabled={saving}
+            >
               <I.X size={12} />
               Cancel
             </button>
-            <button className="btn sm primary">
-              <I.Check size={12} />
-              Save
+            <button
+              className="btn sm primary"
+              data-testid="risk-save-btn"
+              disabled={!canSave}
+              onClick={handleSave}
+            >
+              {saving ? (
+                'Saving…'
+              ) : (
+                <>
+                  <I.Check size={12} />
+                  Save
+                </>
+              )}
             </button>
             {!isNew && (
               <button
                 className="btn sm danger"
                 data-testid="risk-delete-btn"
                 onClick={() => setDeleteOpen(true)}
+                disabled={saving}
               >
                 <I.Trash size={12} />
                 Delete
@@ -8411,16 +8524,28 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
               <label className="field-label">Title</label>
               <input
                 className="input"
+                data-testid="risk-edit-title"
                 placeholder="e.g. Cross-tenant data leak via raw query"
                 value={r.title}
                 onChange={(e) => setR({ ...r, title: e.target.value })}
               />
+              {titleError && (
+                <div className="field-hint danger" data-testid="risk-edit-title-err">
+                  {titleError}
+                </div>
+              )}
             </div>
+            {saveError && (
+              <Alert kind="error" title="Save failed">
+                <span data-testid="risk-edit-error">{saveError}</span>
+              </Alert>
+            )}
             <div className="row gap-12">
               <div className="field-row" style={{ flex: 1 }}>
                 <label className="field-label">Category</label>
                 <select
                   className="select"
+                  data-testid="risk-edit-category"
                   value={r.category}
                   onChange={(e) => setR({ ...r, category: e.target.value })}
                 >
@@ -8433,6 +8558,7 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
                 <label className="field-label">Severity</label>
                 <select
                   className="select"
+                  data-testid="risk-edit-severity"
                   value={r.severity}
                   onChange={(e) => setR({ ...r, severity: e.target.value })}
                 >
@@ -12050,6 +12176,27 @@ function App() {
     return () => window.removeEventListener('aqa:risk-deleted', handler);
   }, []);
 
+  // v1.7 slice 4c.5 — Risk edits broadcast via `aqa:risk-updated` and
+  // the override map lives at App level (same lifted-state reasoning
+  // as `updatedProfiles`). PageRiskEditor dispatches the event on PUT
+  // success — PageRiskMap and the editor itself consume the map to
+  // shadow the static mock display with the user's latest save.
+  const [updatedRisks, setUpdatedRisks] = React.useState(() => new Map());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      const patch = e?.detail?.patch;
+      if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
+      setUpdatedRisks((prev) => {
+        const next = new Map(prev);
+        next.set(id, { ...(prev.get(id) || {}), ...patch });
+        return next;
+      });
+    };
+    window.addEventListener('aqa:risk-updated', handler);
+    return () => window.removeEventListener('aqa:risk-updated', handler);
+  }, []);
+
   // Apply theme
   React.useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
@@ -12121,6 +12268,7 @@ function App() {
     updatedProfiles,
     createdProfiles,
     deletedRisks,
+    updatedRisks,
   };
 
   if (!signedIn) {
