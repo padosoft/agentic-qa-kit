@@ -163,6 +163,13 @@ export class MemoryStore implements StoreProvider {
   async saveProfile(profile: Profile.Profile): Promise<void> {
     this.profiles.set(profile.name, profile);
   }
+  async createProfile(profile: Profile.Profile): Promise<{ created: boolean }> {
+    // `has` + `set` runs synchronously between awaits, so two concurrent
+    // callers can't both observe "missing" and overwrite each other.
+    if (this.profiles.has(profile.name)) return { created: false };
+    this.profiles.set(profile.name, profile);
+    return { created: true };
+  }
   async deleteProfile(name: string): Promise<void> {
     this.profiles.delete(name);
   }

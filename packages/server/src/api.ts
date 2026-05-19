@@ -548,8 +548,11 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const profile = parsed.data;
-        const existing = await ctx.store.loadProfile(profile.name);
-        if (existing) {
+        // Atomic check+create at the store layer — two concurrent POSTs
+        // for the same name can't both observe "missing" and overwrite
+        // each other. saveProfile + a prior loadProfile would race.
+        const { created } = await ctx.store.createProfile(profile);
+        if (!created) {
           return asResponse(
             {
               error: `profile "${profile.name}" already exists; PUT /api/profiles/${encodeURIComponent(profile.name)} to update or pick a different name`,
@@ -558,7 +561,6 @@ export function makeApi(): ApiHandler[] {
             409,
           );
         }
-        await ctx.store.saveProfile(profile);
         return asResponse({ profile }, 201);
       },
     },

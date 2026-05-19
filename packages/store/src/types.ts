@@ -77,6 +77,10 @@ export interface StoreProvider {
   listProfiles(opts?: { org?: string; project?: string }): Promise<Profile.Profile[]>;
   loadProfile(name: string): Promise<Profile.Profile | null>;
   saveProfile(profile: Profile.Profile): Promise<void>;
+  // Atomic create: { created: true } on insert, { created: false } if a
+  // profile with the same name already exists. Used by POST /api/profiles
+  // to avoid a TOCTOU race between loadProfile + saveProfile.
+  createProfile(profile: Profile.Profile): Promise<{ created: boolean }>;
   deleteProfile(name: string): Promise<void>;
 
   // ----- Risk map -----

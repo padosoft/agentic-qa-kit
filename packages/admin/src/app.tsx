@@ -686,7 +686,12 @@ function Tag({ tag }) {
 const NOW_REF = new Date('2026-05-18T14:32:00Z').getTime();
 
 function fmtRelative(ts) {
+  // Null/undefined → em dash (mirrors fmtDuration). A freshly-created
+  // profile has no run history yet, so a stale timestamp would print
+  // "NaNmo ago" without this guard.
+  if (ts == null) return '—';
   const t = typeof ts === 'string' ? new Date(ts).getTime() : ts;
+  if (!Number.isFinite(t)) return '—';
   const diff = (NOW_REF - t) / 1000;
   if (diff < 0) return 'just now';
   if (diff < 60) return `${Math.floor(diff)}s ago`;
@@ -5594,11 +5599,11 @@ function CloneProfileWizard({ open, profile, existingNames, onClose, onCloned })
     }
   }, [open, profileName]);
 
-  // Inline validation: the slug must match @aqa/schemas Slug and must
-  // not collide with an existing profile (mock or already-created).
-  // Case-insensitive comparison so a slug-cased "smoke" can't be
-  // cloned as "Smoke" → server-side casing would then conflict on
-  // the next case-folded lookup.
+  // Inline validation: the slug must match @aqa/schemas Slug (a-z,
+  // 0-9, single dashes between, max 64) and must not collide with an
+  // existing profile (mock or already-created). Comparison is case-
+  // sensitive — SLUG_PATTERN already rejects uppercase, so "Smoke"
+  // never makes it past the regex check.
   const trimmed = newName.trim();
   const existing = existingNames instanceof Set ? existingNames : new Set();
   const nameError = (() => {
@@ -5663,7 +5668,10 @@ function CloneProfileWizard({ open, profile, existingNames, onClose, onCloned })
         packs: Array.isArray(sourceProfile.packs) ? sourceProfile.packs : [],
         tags: Array.isArray(sourceProfile.tags) ? sourceProfile.tags : [],
       };
-      const res = await fetch('/api/profiles', {
+      // Route through apiUrl so the request lands on VITE_AQA_SERVER_URL
+      // when the admin is hosted separately from the server — same as
+      // Edit/Delete/Create-pack/Import-manifest wizards.
+      const res = await fetch(apiUrl('/api/profiles'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -9350,8 +9358,9 @@ function PageProfileDetail({
   const [cloneOpen, setCloneOpen] = React.useState(false);
   // Set of every name already taken — feeds CloneProfileWizard's
   // collision-detection so the user can't pick a name that exists
-  // in either the mock list, the created-via-clone Map, or as a
-  // freshly-edited override. Deleted names are eligible for re-use.
+  // in either the mock list or the created-via-clone Map. Deleted
+  // names are eligible for re-use (the App-level handler clears the
+  // tombstone when a re-created profile is broadcast).
   const existingNames = React.useMemo(() => {
     const s = new Set();
     for (const pr of PROFILES) {
@@ -11783,11 +11792,29 @@ function App() {
       // PageProfiles' table (which reads `p.budget_usd` directly)
       // formats correctly without each row needing schema-aware
       // accessors. Same trick the EditProfileWizard submit handler
-      // uses for `updatedProfiles`.
-      const withMockAliases = { ...profile, budget_usd: profile.llm_budget_usd };
+      // uses for `updatedProfiles`. Default `last_run_at: null` so
+      // PageProfiles' "Last run" column gets an em-dash from
+      // fmtRelative instead of "NaNmo ago" — a freshly-created
+      // profile has no run history yet.
+      const withMockAliases = {
+        ...profile,
+        budget_usd: profile.llm_budget_usd,
+        last_run_at: profile.last_run_at ?? null,
+      };
       setCreatedProfiles((prev) => {
         const next = new Map(prev);
         next.set(name, withMockAliases);
+        return next;
+      });
+      // If the user is re-creating a profile whose name was previously
+      // deleted (the wizard's collision check explicitly allows this),
+      // lift the tombstone so the new profile is visible in the list
+      // and reachable on its detail page. Without this, the freshly-
+      // POST'd row would be hidden by the deletedProfiles filter.
+      setDeletedProfiles((prev) => {
+        if (!prev.has(name)) return prev;
+        const next = new Set(prev);
+        next.delete(name);
         return next;
       });
     };

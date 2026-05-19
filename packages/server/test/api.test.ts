@@ -396,7 +396,9 @@ probes: []
     it('409s with code=EEXIST when a profile with that name already exists', async () => {
       // POST is strict "create-new" semantics; clones over an existing
       // name would silently overwrite the original via the upsert
-      // store API, so the route rejects with 409 + EEXIST instead.
+      // saveProfile API, so the route delegates to the atomic
+      // createProfile and rejects with 409 + EEXIST when it returns
+      // { created: false }.
       const c = ctx();
       await c.store.saveProfile(validProfile);
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
@@ -404,6 +406,20 @@ probes: []
       assert.equal(res?.status, 409);
       assert.equal((res?.body as { code: string }).code, 'EEXIST');
       assert.match((res?.body as { error: string }).error, /already exists/i);
+    });
+
+    it('uses atomic createProfile so concurrent same-name POSTs do not both succeed', async () => {
+      // Two concurrent POSTs for the same name must yield exactly one
+      // 201 and one 409 — verifying the route doesn't fall back to a
+      // load+save sequence that could race between the await points.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const [a, b] = await Promise.all([
+        route?.handle({ headers: {}, params: {}, body: validProfile }, c),
+        route?.handle({ headers: {}, params: {}, body: validProfile }, c),
+      ]);
+      const statuses = [a?.status, b?.status].sort();
+      assert.deepEqual(statuses, [201, 409]);
     });
 
     it('requires the profiles:edit permission', () => {

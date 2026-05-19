@@ -165,6 +165,60 @@ test.describe('Profile clone', () => {
     ).toHaveCount(1);
   });
 
+  test('cloning into a deleted name clears the tombstone and the new row is reachable', async ({
+    page,
+  }) => {
+    // Delete `smoke` via the Delete wizard, then clone `exploratory`
+    // into the just-freed `smoke` name. The freshly-created profile
+    // must be visible in the Profiles list (no tombstone hiding it)
+    // and its detail page must resolve (no "Profile not found").
+    await page.route('**/api/profiles/smoke', async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      await route.fulfill({ status: 204, body: '' });
+    });
+    await page.route('**/api/profiles', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: route.request().postDataJSON() }),
+      });
+    });
+    await navigateToProfileDetail(page);
+    // Delete `smoke`.
+    await page.getByTestId('profile-delete-btn').click();
+    await page.getByTestId('profile-delete-confirm').fill('smoke');
+    await page.getByTestId('profile-delete-submit').click();
+    // Lands back on /profiles; row for `smoke` is gone.
+    await expect(page.locator('.page-title, h1').first()).toContainText(/Profiles/i);
+    await expect(
+      page.locator('table.tbl tbody tr td span.mono', { hasText: /^smoke$/ }),
+    ).toHaveCount(0);
+    // Open `exploratory` and clone it into the just-freed name.
+    await page
+      .locator('table.tbl tbody tr td span.mono', { hasText: 'exploratory' })
+      .first()
+      .click();
+    await page.getByTestId('profile-clone-btn').click();
+    await page.getByTestId('profile-clone-newname').fill('smoke');
+    await page.getByTestId('profile-clone-submit').click();
+    // Modal closes and we land on the new `smoke` detail page —
+    // NOT the "Profile not found" state, because the tombstone has
+    // been cleared.
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    await expect(page.locator('.page-header .mono, h1 .mono').first()).toContainText(/^smoke$/);
+    await expect(page.locator('h1', { hasText: /Profile not found/i })).toHaveCount(0);
+    // The Profiles list now shows `smoke` again as a freshly-created
+    // row, not the deleted mock row.
+    await page
+      .locator('.nav-item', { hasText: /^Profiles/i })
+      .first()
+      .click();
+    await expect(
+      page.locator('table.tbl tbody tr td span.mono', { hasText: /^smoke$/ }),
+    ).toHaveCount(1);
+  });
+
   test('4xx keeps the modal open and surfaces the server error', async ({ page }) => {
     await page.route('**/api/profiles', async (route) => {
       if (route.request().method() !== 'POST') return route.continue();
