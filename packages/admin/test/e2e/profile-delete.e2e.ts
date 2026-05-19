@@ -56,11 +56,22 @@ test.describe('Profile delete confirmation', () => {
   test('exact-match name enables Delete; DELETE fires; toast shown; navigates to /profiles; row drops from list', async ({
     page,
   }) => {
+    // Only intercept DELETEs — let any other HTTP method continue
+    // to the dev server unmodified so unexpected GET/PUT calls don't
+    // get silently fulfilled with our `{}` stub. Also match the real
+    // endpoint's response shape: `DELETE /api/profiles/:name` returns
+    // `{ok: true}` per @aqa/server's `asResponse({ ok: true })`.
     type Req = { url: string; method: string };
     const calls: Req[] = [];
     await page.route('**/api/profiles/*', async (route) => {
-      calls.push({ url: route.request().url(), method: route.request().method() });
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      const method = route.request().method();
+      if (method !== 'DELETE') return route.continue();
+      calls.push({ url: route.request().url(), method });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
     });
     const name = await navigateToProfileDetail(page);
     await page.getByTestId('profile-delete-btn').click();
@@ -70,9 +81,9 @@ test.describe('Profile delete confirmation', () => {
     // (1) On success the modal closes.
     await expect(page.locator('.modal-title')).toHaveCount(0);
     // (2) Exactly one DELETE call to /api/profiles/<name>.
-    const deletes = calls.filter((c) => c.method === 'DELETE');
-    expect(deletes.length).toBe(1);
-    expect(deletes[0]?.url).toContain(`/api/profiles/${encodeURIComponent(name)}`);
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls[0]?.url).toContain(`/api/profiles/${encodeURIComponent(name)}`);
     // (3) Success toast appears with the right title.
     await expect(page.locator('.toast.success', { hasText: 'Profile deleted' })).toBeVisible();
     // (4) After navigating back to /profiles, the just-deleted row
