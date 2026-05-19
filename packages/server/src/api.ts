@@ -530,6 +530,41 @@ export function makeApi(): ApiHandler[] {
       },
     },
     {
+      // v1.7 slice 4c.3 — Profile Clone. POST is strictly "create new"
+      // semantics: schema-validate, reject if a profile with that name
+      // already exists (409, mirrors POST /api/packs/scaffold), then
+      // persist. PUT remains the upsert / replace-by-path-name route
+      // for edits — keeping the verbs separate prevents a clone
+      // operation from silently overwriting an existing profile.
+      method: 'POST',
+      path: '/api/profiles',
+      requires: 'profiles:edit',
+      async handle(req, ctx) {
+        const parsed = ProfileSchema.Profile.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `profile failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        const profile = parsed.data;
+        // Atomic check+create at the store layer — two concurrent POSTs
+        // for the same name can't both observe "missing" and overwrite
+        // each other. saveProfile + a prior loadProfile would race.
+        const { created } = await ctx.store.createProfile(profile);
+        if (!created) {
+          return asResponse(
+            {
+              error: `profile "${profile.name}" already exists; PUT /api/profiles/${encodeURIComponent(profile.name)} to update or pick a different name`,
+              code: 'EEXIST',
+            },
+            409,
+          );
+        }
+        return asResponse({ profile }, 201);
+      },
+    },
+    {
       method: 'GET',
       path: '/api/profiles/:name',
       requires: 'profiles:read',

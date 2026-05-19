@@ -88,5 +88,41 @@ describe('PostgresStore (v0.3 scaffold)', () => {
     const s = new PostgresStore('postgres://localhost/aqa');
     await assert.rejects(() => s.saveRun(RUN), /not implemented/);
     await assert.rejects(() => s.loadRun('x'), /not implemented/);
+    // Profile CRUD (v1.7 slice 4c) — keep this list in sync with the
+    // Store interface so the scaffold contract stays accurate as new
+    // methods are added.
+    await assert.rejects(() => s.listProfiles(), /not implemented/);
+    await assert.rejects(() => s.loadProfile('p'), /not implemented/);
+    await assert.rejects(
+      () =>
+        s.saveProfile({
+          schema_version: '1',
+          name: 'p',
+          execution_mode: 'orchestrator',
+          llm_usage: [],
+          llm_budget_usd: null,
+          packs: [],
+          tags: [],
+          parallelism: 1,
+          require_deterministic_replay: false,
+        }),
+      /not implemented/,
+    );
+    await assert.rejects(
+      () =>
+        s.createProfile({
+          schema_version: '1',
+          name: 'p',
+          execution_mode: 'orchestrator',
+          llm_usage: [],
+          llm_budget_usd: null,
+          packs: [],
+          tags: [],
+          parallelism: 1,
+          require_deterministic_replay: false,
+        }),
+      /not implemented/,
+    );
+    await assert.rejects(() => s.deleteProfile('p'), /not implemented/);
   });
 });

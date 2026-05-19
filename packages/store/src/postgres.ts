@@ -88,6 +88,9 @@ export class PostgresStore implements StoreProvider {
   async saveProfile(_p: Profile.Profile): Promise<void> {
     this.notImpl('saveProfile');
   }
+  async createProfile(_p: Profile.Profile): Promise<{ created: boolean }> {
+    this.notImpl('createProfile');
+  }
   async deleteProfile(_name: string): Promise<void> {
     this.notImpl('deleteProfile');
   }
