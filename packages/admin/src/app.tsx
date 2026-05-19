@@ -5134,6 +5134,340 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
 }
 Object.assign(window, { DeleteProfileWizard });
 
+// v1.7 slice 4c.2 — Profile Edit/Save modal wired to PUT
+// /api/profiles/:name. Mirrors the architecture of DeleteProfileWizard
+// (sync in-flight guard, captured submittedName guard, sync handleClose
+// reset, modal close-affordance inertness during submit) so the same
+// race-condition lessons learned during slice 4c.1's nine review
+// iterations don't need to be re-discovered. Form fields cover the
+// commonly-edited subset of the @aqa/schemas Profile shape:
+//   - execution_mode (orchestrator | agent)
+//   - llm_budget_usd (number | null)
+//   - parallelism (1..64)
+//   - require_deterministic_replay (bool)
+//   - packs (comma-separated slug list)
+//   - tags (comma-separated free-form list)
+// Unspecified schema fields are filled with sensible defaults so the
+// PUT body parses as a full Profile.
+//
+// The admin's static PROFILES mock uses a few fictional values
+// (execution_mode 'host'/'sandbox', a `budget_usd` field, no
+// `parallelism`) that don't conform to the schema. We treat those as
+// loose seed data and let the form coerce them: invalid execution_mode
+// falls back to 'orchestrator' on initial render, missing parallelism
+// defaults to 1, etc. The user's edited body is what hits the server.
+const PROFILE_EXECUTION_MODES = ['orchestrator', 'agent'];
+function deriveProfileForm(profile) {
+  if (!profile) return null;
+  const mode = PROFILE_EXECUTION_MODES.includes(profile.execution_mode)
+    ? profile.execution_mode
+    : 'orchestrator';
+  const budget =
+    profile.llm_budget_usd != null
+      ? profile.llm_budget_usd
+      : profile.budget_usd != null
+        ? profile.budget_usd
+        : null;
+  return {
+    execution_mode: mode,
+    llm_budget_usd: budget,
+    parallelism: typeof profile.parallelism === 'number' ? profile.parallelism : 1,
+    require_deterministic_replay: profile.require_deterministic_replay === true,
+    packs: Array.isArray(profile.packs) ? profile.packs.join(', ') : '',
+    tags: Array.isArray(profile.tags) ? profile.tags.join(', ') : '',
+  };
+}
+
+function parseSlugList(s) {
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
+function EditProfileWizard({ open, profile, onClose, onSaved }) {
+  const initial = React.useMemo(() => deriveProfileForm(profile), [profile]);
+  const [form, setForm] = React.useState(initial ?? deriveProfileForm({ packs: [], tags: [] }));
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+  const profileName = profile?.name;
+
+  // Whenever the wizard opens (or the source profile swaps under us),
+  // re-seed the form to the current display values. Same dual-trigger
+  // dependency as DeleteProfileWizard's reset effect, and same
+  // inFlightRef-with-submitting reset (slice 4c.1 iter 5 lesson).
+  React.useEffect(() => {
+    if (open) {
+      setForm(initial ?? deriveProfileForm({ packs: [], tags: [] }));
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, initial]);
+
+  // Inline validation: parallelism must be a positive integer ≤ 64
+  // (matches Zod schema), llm_budget_usd must be non-negative when
+  // set. Both checks mirror the schema so the user gets immediate
+  // feedback instead of a server round-trip rejection.
+  const parallelismError = (() => {
+    const n = form.parallelism;
+    if (!Number.isInteger(n) || n < 1 || n > 64) return '1..64 integer';
+    return null;
+  })();
+  const budgetError = (() => {
+    const v = form.llm_budget_usd;
+    if (v == null) return null;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 'must be ≥ 0';
+    return null;
+  })();
+  const canSubmit = !submitting && parallelismError === null && budgetError === null;
+
+  function handleClose() {
+    if (submitting) return;
+    // Synchronous reset same as DeleteProfileWizard.handleClose so
+    // close+reopen on the same profile doesn't flash stale error /
+    // submitting / inFlightRef state (slice 4c.1 iter 9 lesson).
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return; // synchronous double-click guard
+    if (!profileName) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    // Capture the name we're saving against. If `profile` swaps mid
+    // request, the post-fetch code must only mutate wizard state /
+    // dispatch the broadcast for the OLD submission — never for the
+    // new profile that's now in scope. (Slice 4c.1 iter 8 lesson.)
+    const submittedName = profileName;
+    const body = {
+      schema_version: '1',
+      name: submittedName,
+      execution_mode: form.execution_mode,
+      llm_usage: Array.isArray(profile?.llm_usage) ? profile.llm_usage : [],
+      llm_budget_usd: form.llm_budget_usd,
+      parallelism: form.parallelism,
+      require_deterministic_replay: form.require_deterministic_replay,
+      packs: parseSlugList(form.packs),
+      tags: parseSlugList(form.tags),
+    };
+    const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(submittedName)}`);
+    try {
+      const res = await fetch(reqUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const stillCurrent = submittedName === profileName;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        const full = `${submittedName}: ${msg}`;
+        toast.push({ kind: 'error', title: 'Save profile failed', body: full });
+        if (stillCurrent) setError(msg);
+        return;
+      }
+      toast.push({
+        kind: 'success',
+        title: 'Profile saved',
+        body: submittedName,
+      });
+      // Broadcast the patch we just persisted so PageProfileDetail and
+      // PageProfiles render the new values immediately — the static
+      // PROFILES mock array is otherwise the only source of truth.
+      //
+      // The mock display reads the legacy `budget_usd` field name, but
+      // the schema uses `llm_budget_usd`. Mirror the saved value into
+      // the legacy alias so the header sub and the list "Budget" cell
+      // pick up the new value without us having to migrate every
+      // mock-driven UI site to the schema field name in this slice.
+      const patch = { ...body, budget_usd: body.llm_budget_usd };
+      window.dispatchEvent(
+        new CustomEvent('aqa:profile-updated', {
+          detail: { name: submittedName, patch },
+        }),
+      );
+      if (stillCurrent) onSaved?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — no changes were saved.`;
+      toast.push({ kind: 'error', title: 'Save profile failed', body: full });
+      if (submittedName === profileName) setError(full);
+    } finally {
+      if (submittedName === profileName) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      // Same close-affordance inertness as DeleteProfileWizard (slice
+      // 4c.1 iter 10 lesson): while submitting, neutralize Escape /
+      // overlay click / X by passing undefined.
+      onClose={submitting ? undefined : handleClose}
+      title="Edit profile"
+      sub={
+        <>
+          Updates <code className="mono">{profileName}</code> via{' '}
+          <code>PUT /api/profiles/:name</code>. The profile name is the key and cannot be changed.
+        </>
+      }
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            data-testid="profile-edit-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Saving…' : 'Save changes'}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Save failed">
+            {error}
+          </Alert>
+        )}
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-mode">
+            Execution mode
+          </label>
+          <select
+            id="ep-mode"
+            className="input"
+            data-testid="profile-edit-mode"
+            value={form.execution_mode}
+            onChange={(e) => setForm((f) => ({ ...f, execution_mode: e.target.value }))}
+          >
+            {PROFILE_EXECUTION_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-budget">
+            LLM budget (USD, blank = unlimited)
+          </label>
+          <input
+            id="ep-budget"
+            className="input mono"
+            type="number"
+            step="0.01"
+            min="0"
+            data-testid="profile-edit-budget"
+            value={form.llm_budget_usd ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              setForm((f) => ({
+                ...f,
+                llm_budget_usd: v === '' ? null : Number(v),
+              }));
+            }}
+          />
+          {budgetError && (
+            <div className="field-hint danger" data-testid="profile-edit-budget-err">
+              {budgetError}
+            </div>
+          )}
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-parallelism">
+            Parallelism (1..64)
+          </label>
+          <input
+            id="ep-parallelism"
+            className="input mono"
+            type="number"
+            step="1"
+            min="1"
+            max="64"
+            data-testid="profile-edit-parallelism"
+            value={form.parallelism}
+            onChange={(e) => {
+              const v = e.target.value;
+              setForm((f) => ({
+                ...f,
+                parallelism: v === '' ? 0 : Number.parseInt(v, 10),
+              }));
+            }}
+          />
+          {parallelismError && (
+            <div className="field-hint danger" data-testid="profile-edit-parallelism-err">
+              {parallelismError}
+            </div>
+          )}
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-detreplay">
+            Require deterministic replay
+          </label>
+          <input
+            id="ep-detreplay"
+            type="checkbox"
+            data-testid="profile-edit-detreplay"
+            checked={form.require_deterministic_replay}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, require_deterministic_replay: e.target.checked }))
+            }
+          />
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-packs">
+            Packs (comma-separated slugs)
+          </label>
+          <input
+            id="ep-packs"
+            className="input mono"
+            data-testid="profile-edit-packs"
+            placeholder="core, api, web-ui-laravel"
+            value={form.packs}
+            onChange={(e) => setForm((f) => ({ ...f, packs: e.target.value }))}
+          />
+        </div>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ep-tags">
+            Tags (comma-separated)
+          </label>
+          <input
+            id="ep-tags"
+            className="input"
+            data-testid="profile-edit-tags"
+            placeholder="nightly, release-gate"
+            value={form.tags}
+            onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { EditProfileWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -8548,7 +8882,7 @@ function PageScenarioDetail({ id, onNavigate }) {
 }
 
 // ---------------- Profiles ----------------
-function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
+function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles, updatedProfiles }) {
   // `deletedProfiles` is owned by App (lifted state) so it survives
   // route changes. PageProfileDetail dispatches `aqa:profile-deleted`
   // BEFORE navigating back here, so a listener on PageProfiles itself
@@ -8556,7 +8890,15 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
   // App-level listener catches every dispatch and the Set drips down
   // through props.
   const deletedNames = deletedProfiles ?? new Set();
-  const visible = PROFILES.filter((p) => !deletedNames.has(p.name));
+  // EditProfileWizard dispatches `aqa:profile-updated` on success and
+  // the override Map (lifted to App for the same survives-route-change
+  // reason) is merged on top of the static mock row here so the list
+  // doesn't display stale values right after a save.
+  const overrides = updatedProfiles ?? new Map();
+  const visible = PROFILES.filter((p) => !deletedNames.has(p.name)).map((p) => {
+    const patch = overrides.get(p.name);
+    return patch ? { ...p, ...patch } : p;
+  });
   return (
     <div className="page" data-screen-label="13 Profiles">
       <PageHeader
@@ -8623,14 +8965,21 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
 }
 
 // ---------------- Profile detail ----------------
-function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
+function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles }) {
   const rawP = name ? profileByName(name) : null;
   // Treat just-deleted profiles as not-found so a stale link
   // (e.g. a notification linking to a profile a colleague just
   // removed) doesn't render the underlying mock row.
   const isDeleted = name ? deletedProfiles?.has(name) : false;
-  const p = isDeleted ? null : rawP;
+  // Merge any user-saved overrides from the EditProfileWizard on top
+  // of the mock row, so a successful PUT is reflected here without
+  // having to swap out the underlying mock data. The override Map
+  // lives at App level (see `updatedProfiles` in App + the
+  // `aqa:profile-updated` event).
+  const overrides = name ? updatedProfiles?.get(name) : null;
+  const p = isDeleted ? null : rawP ? { ...rawP, ...(overrides || {}) } : null;
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
   // Now that this page has a destructive Delete action, a stale or
   // typoed route param (e.g. /profiles/<deleted-name>) must NOT
   // silently render the first profile in the list — otherwise the
@@ -8699,7 +9048,11 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
               <I.Replay size={12} />
               Trigger now
             </button>
-            <button className="btn sm primary">
+            <button
+              className="btn sm primary"
+              data-testid="profile-edit-btn"
+              onClick={() => setEditOpen(true)}
+            >
               <I.Edit size={12} />
               Edit
             </button>
@@ -8722,6 +9075,12 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
           setDeleteOpen(false);
           onNavigate?.('profiles', {});
         }}
+      />
+      <EditProfileWizard
+        open={editOpen}
+        profile={p}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => setEditOpen(false)}
       />
 
       <div className="split-2-3">
@@ -10947,6 +11306,29 @@ function App() {
     return () => window.removeEventListener('aqa:profile-deleted', handler);
   }, []);
 
+  // Profile edits broadcast via `aqa:profile-updated` CustomEvent and
+  // the override map lives at App level (same lifted-state reasoning
+  // as `deletedProfiles`). EditProfileWizard dispatches the event on
+  // success — PageProfileDetail and PageProfiles consume the map to
+  // shadow the static mock display with the user's latest save, so
+  // the UI doesn't briefly show stale values right after a PUT
+  // succeeded.
+  const [updatedProfiles, setUpdatedProfiles] = React.useState(() => new Map());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const name = e?.detail?.name;
+      const patch = e?.detail?.patch;
+      if (typeof name !== 'string' || !patch || typeof patch !== 'object') return;
+      setUpdatedProfiles((prev) => {
+        const next = new Map(prev);
+        next.set(name, { ...(prev.get(name) || {}), ...patch });
+        return next;
+      });
+    };
+    window.addEventListener('aqa:profile-updated', handler);
+    return () => window.removeEventListener('aqa:profile-updated', handler);
+  }, []);
+
   // Apply theme
   React.useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
@@ -11005,6 +11387,7 @@ function App() {
     theme: tweaks.theme,
     onTheme: (th) => setTweak('theme', th),
     deletedProfiles,
+    updatedProfiles,
   };
 
   if (!signedIn) {
