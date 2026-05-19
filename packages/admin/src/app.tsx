@@ -4906,6 +4906,234 @@ function ImportManifestWizard({ open, onClose }) {
 }
 Object.assign(window, { ImportManifestWizard });
 
+// =============================================================
+// Delete-profile wizard (v1.7 slice 4c)
+// =============================================================
+// Front-end for DELETE /api/profiles/:name. Deleting a profile is
+// destructive (it removes the configuration that drives `aqa run
+// --profile <name>`) so the modal requires the user to type the
+// profile name as confirmation, mirroring the GitHub repo-delete
+// confirmation pattern. The server endpoint exists since v1.4.
+function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
+  const [confirmText, setConfirmText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  // Synchronous in-flight guard: `submitting` state doesn't flip until
+  // the next render, so two rapid clicks on the disabled-soon button
+  // could both pass the `submitting` check and fire two DELETE
+  // requests. The ref is mutated inline before any await, so the
+  // second call short-circuits immediately. Same pattern as the
+  // kanban's pendingRef (slice 4a iter 4).
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+
+  // Reset when modal opens for a new profile (the parent re-uses the
+  // same component for every profile it renders detail for).
+  // Include `profileName` so the reset also fires if the modal stays
+  // mounted across a profile switch (e.g. parent re-uses the wizard
+  // with a different name) — otherwise the typed confirm text from
+  // the previous profile would stick around.
+  //
+  // CRITICAL: reset `inFlightRef.current` together with `submitting`.
+  // Otherwise a profile switch mid-flight would re-enable the Delete
+  // button (submitting=false) while the ref stays true — the user
+  // could click Delete and the new submit would silently no-op via
+  // the synchronous guard. Keeping both in sync means the old
+  // request's finally block becomes a no-op assignment, and the user
+  // can issue a fresh delete on the new profile. (The old request's
+  // success path would still toast against the old profileName,
+  // which is acceptable — the user just changed context.)
+  React.useEffect(() => {
+    if (open) {
+      setConfirmText('');
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, profileName]);
+
+  const canSubmit = confirmText === profileName && !submitting;
+
+  function handleClose() {
+    if (submitting) return;
+    // Reset state synchronously on close — don't rely solely on the
+    // open-true effect. If the user closes the modal and reopens it
+    // for the same profile (no `profileName` change to retrigger
+    // the effect), the first render after reopening would otherwise
+    // briefly show stale `confirmText` / `error` from the prior
+    // session before the next effect tick clears them.
+    setConfirmText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return; // synchronous double-click guard
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    // Capture the profile name we're submitting against. If the parent
+    // swaps `profileName` while the fetch is in flight (e.g. user
+    // navigates to a different profile-detail page that reuses this
+    // wizard mount), the in-flight resolve must NOT mutate the
+    // wizard's UI state for the OLD profile. The post-fetch code
+    // checks `submittedName === profileName` before calling any
+    // setState / onDeleted. This is the "stale closure" guard
+    // Copilot flagged in iter 7 review.
+    const submittedName = profileName;
+    const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(submittedName)}`);
+    try {
+      const res = await fetch(reqUrl, { method: 'DELETE' });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      // Stale-submit guard: if the user switched profiles while this
+      // fetch was in flight, we still toast/broadcast the *correct*
+      // event for `submittedName` (the action did happen server-side
+      // and the user deserves the feedback), but we do NOT mutate
+      // the wizard's UI state for the NEW profile (setError /
+      // onDeleted). The wizard belongs to the new profile now.
+      const stillCurrent = submittedName === profileName;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        // Toast carries the submittedName so the user knows which
+        // delete attempt failed, even after switching.
+        toast.push({
+          kind: 'error',
+          title: 'Delete profile failed',
+          body: `${submittedName}: ${msg}`,
+        });
+        if (stillCurrent) setError(msg);
+        return;
+      }
+      toast.push({
+        kind: 'success',
+        title: 'Profile deleted',
+        body: submittedName,
+      });
+      // Broadcast the deletion regardless of stale-submit state —
+      // App-level listener filters PROFILES, and that's true whether
+      // the user is on the old or new detail page. The event uses
+      // submittedName, not profileName.
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:profile-deleted', { detail: { name: submittedName } }),
+        );
+      } catch {
+        // CustomEvent unsupported in this runtime — non-fatal.
+      }
+      // onDeleted (which navigates back to /profiles) only makes
+      // sense when the wizard still belongs to the deleted profile.
+      // If the user already moved on, don't yank them back.
+      if (stillCurrent) onDeleted?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the profile was not deleted.`;
+      // Same stale-submit guard as the success path: toast against
+      // the submitted name so the user gets the right context, but
+      // only mutate wizard error state if it still belongs to that
+      // profile.
+      toast.push({
+        kind: 'error',
+        title: 'Delete profile failed',
+        body: `${submittedName}: ${full}`,
+      });
+      if (submittedName === profileName) setError(full);
+    } finally {
+      // Only flip submitting/inFlightRef when the wizard still
+      // belongs to the submitted profile — otherwise a stale resolve
+      // could re-enable the Delete button for an unrelated profile
+      // mid-flight (the user's current submit might still be in
+      // progress on the new profile).
+      if (submittedName === profileName) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      // While the DELETE is in flight, neutralize Modal close affordances
+      // (Escape, overlay click, X button) by passing undefined. Otherwise
+      // the user could dismiss the modal mid-request and miss the result
+      // toast / error state, and the Cancel button being disabled while
+      // the X close still works would look inconsistent.
+      onClose={submitting ? undefined : handleClose}
+      title="Delete profile"
+      sub={
+        <>
+          This permanently removes the "<span className="mono">{profileName}</span>" profile.{' '}
+          <code>aqa run --profile {profileName}</code> will start failing immediately. The action
+          cannot be undone from the admin (you'd need to re-create the profile from scratch).
+        </>
+      }
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn danger"
+            data-testid="profile-delete-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? (
+              'Deleting…'
+            ) : (
+              <>
+                <I.Trash size={12} />
+                Delete profile
+              </>
+            )}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Delete failed">
+            {error}
+          </Alert>
+        )}
+        <Alert kind="warning" title="This is destructive">
+          Removing a profile drops every run configuration that uses it. Existing run records,
+          findings, and audit events are unaffected — only the profile definition is removed.
+        </Alert>
+        <div className="field-row">
+          <label className="field-label" htmlFor="dp-confirm">
+            Type <code className="mono">{profileName}</code> to confirm *
+          </label>
+          <input
+            id="dp-confirm"
+            className="input mono"
+            data-testid="profile-delete-confirm"
+            placeholder={profileName}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoFocus
+          />
+          <div className="field-hint">
+            The Delete button stays disabled until the typed text matches the profile name
+            exactly. Stops accidental clicks on the wrong profile in a list.
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { DeleteProfileWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -8320,12 +8548,20 @@ function PageScenarioDetail({ id, onNavigate }) {
 }
 
 // ---------------- Profiles ----------------
-function PageProfiles({ onNavigate, onOpenProfile }) {
+function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
+  // `deletedProfiles` is owned by App (lifted state) so it survives
+  // route changes. PageProfileDetail dispatches `aqa:profile-deleted`
+  // BEFORE navigating back here, so a listener on PageProfiles itself
+  // would miss the event (we weren't mounted at dispatch time). The
+  // App-level listener catches every dispatch and the Set drips down
+  // through props.
+  const deletedNames = deletedProfiles ?? new Set();
+  const visible = PROFILES.filter((p) => !deletedNames.has(p.name));
   return (
     <div className="page" data-screen-label="13 Profiles">
       <PageHeader
         title="Profiles"
-        sub={`${PROFILES.length} configured · execution mode mix: ${PROFILES.filter((p) => p.execution_mode === 'sandbox').length} sandbox · ${PROFILES.filter((p) => p.execution_mode === 'host').length} host`}
+        sub={`${visible.length} configured · execution mode mix: ${visible.filter((p) => p.execution_mode === 'sandbox').length} sandbox · ${visible.filter((p) => p.execution_mode === 'host').length} host`}
         actions={
           <button className="btn sm primary">
             <I.Plus size={12} />
@@ -8348,7 +8584,7 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
               </tr>
             </thead>
             <tbody>
-              {PROFILES.map((p) => (
+              {visible.map((p) => (
                 <tr key={p.name} onClick={() => onOpenProfile(p.name)}>
                   <td>
                     <span className="id-link mono" style={{ fontSize: 12.5, fontWeight: 500 }}>
@@ -8387,8 +8623,67 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
 }
 
 // ---------------- Profile detail ----------------
-function PageProfileDetail({ name, onNavigate }) {
-  const p = profileByName(name) || PROFILES[0];
+function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
+  const rawP = name ? profileByName(name) : null;
+  // Treat just-deleted profiles as not-found so a stale link
+  // (e.g. a notification linking to a profile a colleague just
+  // removed) doesn't render the underlying mock row.
+  const isDeleted = name ? deletedProfiles?.has(name) : false;
+  const p = isDeleted ? null : rawP;
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  // Now that this page has a destructive Delete action, a stale or
+  // typoed route param (e.g. /profiles/<deleted-name>) must NOT
+  // silently render the first profile in the list — otherwise the
+  // user could delete the wrong record. Show a clear not-found
+  // state instead. Two flavors:
+  //   - `name` undefined → the route was opened without a selection
+  //     (e.g. ScreenJumper jump-to-screen): show a "no profile
+  //     selected" prompt rather than an arbitrary record.
+  //   - `name` set but unknown → show the "no such profile" state.
+  if (!name) {
+    return (
+      <div className="page" data-screen-label="14 Profile detail (no selection)">
+        <PageHeader title="No profile selected" sub="Pick a profile to see its details." />
+        <Alert kind="info" title="No profile selected">
+          <span style={{ fontSize: 12.5 }}>
+            Open this page from the Profiles list (or a notification link) to view a specific
+            profile.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="profile-detail-back"
+              onClick={() => onNavigate?.('profiles', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to profiles
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
+  if (!p) {
+    return (
+      <div className="page" data-screen-label="14 Profile detail (not found)">
+        <PageHeader title="Profile not found" sub={`No profile with name "${name}".`} />
+        <Alert kind="warning" title="No such profile">
+          <span style={{ fontSize: 12.5 }}>
+            The profile you tried to open isn't in the local list. It may have been deleted,
+            renamed, or the URL is stale.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="profile-detail-back"
+              onClick={() => onNavigate?.('profiles', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to profiles
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
   return (
     <div className="page" data-screen-label="14 Profile detail">
       <PageHeader
@@ -8408,8 +8703,25 @@ function PageProfileDetail({ name, onNavigate }) {
               <I.Edit size={12} />
               Edit
             </button>
+            <button
+              className="btn sm danger"
+              data-testid="profile-delete-btn"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <I.Trash size={12} />
+              Delete
+            </button>
           </>
         }
+      />
+      <DeleteProfileWizard
+        open={deleteOpen}
+        profileName={p.name}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          onNavigate?.('profiles', {});
+        }}
       />
 
       <div className="split-2-3">
@@ -10523,7 +10835,12 @@ const ROUTES = {
     label: 'Profile detail',
     section: 'Catalog',
     parent: 'profiles',
-    render: (ctx) => <PageProfileDetail {...ctx} name={ctx.params.name || PROFILES[0].name} />,
+    // Do NOT fall back to PROFILES[0].name here: ScreenJumper and other
+    // entrypoints navigate to `profile-detail` with no params, which would
+    // otherwise silently render (and let the user delete) the first
+    // profile. Pass `undefined` and let PageProfileDetail render an
+    // explicit "no profile selected" state.
+    render: (ctx) => <PageProfileDetail {...ctx} name={ctx.params.name} />,
   },
   agents: { label: 'Agents', section: 'Catalog', render: (ctx) => <PageAgents {...ctx} /> },
 
@@ -10608,6 +10925,27 @@ function App() {
   const [mode, setMode] = React.useState('mock'); // mock | live | failed
   const [lastTick, setLastTick] = React.useState(NOW_REF);
   const [signedIn, setSignedIn] = React.useState(true);
+  // Profile deletions broadcast via `aqa:profile-deleted` CustomEvent
+  // and the set lives at App level (not in PageProfiles) so it
+  // survives route changes. PageProfileDetail dispatches the event
+  // before navigating back to /profiles — if the listener lived on
+  // PageProfiles it would miss the event because PageProfiles isn't
+  // mounted yet at dispatch time. App is always mounted while the
+  // user is signed in, so it catches every dispatch.
+  const [deletedProfiles, setDeletedProfiles] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const name = e?.detail?.name;
+      if (typeof name !== 'string') return;
+      setDeletedProfiles((prev) => {
+        const next = new Set(prev);
+        next.add(name);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:profile-deleted', handler);
+    return () => window.removeEventListener('aqa:profile-deleted', handler);
+  }, []);
 
   // Apply theme
   React.useEffect(() => {
@@ -10666,6 +11004,7 @@ function App() {
     params: routeParams,
     theme: tweaks.theme,
     onTheme: (th) => setTweak('theme', th),
+    deletedProfiles,
   };
 
   if (!signedIn) {

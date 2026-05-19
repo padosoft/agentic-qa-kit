@@ -45,7 +45,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 ### Profiles (lines ~5500-5950)
 
-- `5590`, `5745`, `5796` — profile-level actions (save/clone/delete)
+- `5590`, `5745`, `5796` — profile-level actions (save/clone/delete) — **DELETE shipped in PR #29 (slice 4c.1):** Profile detail page now has a Delete button → opens type-to-confirm modal → DELETE `/api/profiles/:name`. Save/Clone still pending.
 - `5927`, `5931`, `5935`, `5939` — pack picker
 
 ### Agents (lines ~6500-6630)
