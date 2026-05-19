@@ -5753,8 +5753,10 @@ function CloneProfileWizard({ open, profile, existingNames, onClose, onCloned })
     >
       <div className="col gap-12">
         {error && (
-          <Alert kind="danger" title="Clone failed" data-testid="profile-clone-error">
-            <span style={{ fontSize: 12 }}>{error}</span>
+          <Alert kind="error" title="Clone failed">
+            <span style={{ fontSize: 12 }} data-testid="profile-clone-error">
+              {error}
+            </span>
           </Alert>
         )}
         <div className="field-row">
