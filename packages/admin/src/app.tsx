@@ -5191,8 +5191,13 @@ function parseSlugList(s) {
 // this UI check a typo (uppercase, spaces, consecutive dashes,
 // over-length) would persist a malformed profile. (Codex review on
 // PR #30.)
+//
+// Length cap mirrors `Slug.max(64)` in `packages/schemas/src/common.ts:26`.
+// (CreatePackWizard caps at 52 instead, but that's a tighter UX cap
+// for new packs, not the schema limit — Profile.packs accepts any
+// existing slug up to 64, and Copilot iter 2 flagged the mismatch.)
 const SLUG_PATTERN = /^[a-z0-9](?:-?[a-z0-9])*$/;
-const MAX_SLUG_LEN = 52;
+const MAX_SLUG_LEN = 64;
 function slugError(s) {
   if (s.length > MAX_SLUG_LEN) return `"${s}" exceeds ${MAX_SLUG_LEN} chars`;
   if (!SLUG_PATTERN.test(s)) return `"${s}" must be lowercase a-z, 0-9, single dashes`;
@@ -5209,7 +5214,16 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
   // every parent re-render (App's 5-second lastTick interval and
   // other state churn would otherwise wipe the user's typed input
   // every tick). Reset only fires on modal-open transitions or when
-  // the profile NAME actually changes. (Copilot review on PR #30.)
+  // the profile NAME actually changes. (Copilot review on PR #30
+  // iter 1.)
+  //
+  // The same ref doubles as the source of truth for the post-fetch
+  // stale-submit guard: inside `handleSubmit`, the captured
+  // `profileName` closure variable always equals `submittedName` for
+  // THAT closure (both came from the same render), so comparing them
+  // is a no-op. We must read the *current* profile name out of the
+  // ref after the await to detect a mid-flight profile swap.
+  // (Copilot review on PR #30 iter 2.)
   const profileRef = React.useRef(profile);
   React.useEffect(() => {
     profileRef.current = profile;
@@ -5308,7 +5322,14 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       } catch {
         parsed = null;
       }
-      const stillCurrent = submittedName === profileName;
+      // Read the CURRENT profile name out of the ref (not the closure
+      // variable `profileName`, which always equals `submittedName`
+      // within this closure — see the ref comment above). This is the
+      // actual stale-submit check: if the parent swapped the profile
+      // while the fetch was in flight, mutating wizard state for the
+      // old submission would corrupt the now-displayed profile's
+      // session.
+      const stillCurrent = submittedName === profileRef.current?.name;
       if (!res.ok) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
         const full = `${submittedName}: ${msg}`;
@@ -5341,9 +5362,9 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       const msg = e instanceof Error ? e.message : String(e);
       const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — no changes were saved.`;
       toast.push({ kind: 'error', title: 'Save profile failed', body: full });
-      if (submittedName === profileName) setError(full);
+      if (submittedName === profileRef.current?.name) setError(full);
     } finally {
-      if (submittedName === profileName) {
+      if (submittedName === profileRef.current?.name) {
         setSubmitting(false);
         inFlightRef.current = false;
       }
@@ -9139,17 +9160,35 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
               <label className="field-label">Name</label>
               <input className="input mono" value={p.name} readOnly />
             </div>
-            <div className="field-row">
+            <div className="field-row" data-testid="profile-detail-execmode">
               <label className="field-label">Execution mode</label>
-              <div className="row gap-12">
-                <label className="row gap-6" style={{ fontSize: 12 }}>
-                  <input type="radio" checked={p.execution_mode === 'sandbox'} readOnly />
-                  sandbox (container-per-scenario)
-                </label>
-                <label className="row gap-6" style={{ fontSize: 12 }}>
-                  <input type="radio" checked={p.execution_mode === 'host'} readOnly />
-                  host (smoke only)
-                </label>
+              <div className="row gap-12" style={{ flexWrap: 'wrap' }}>
+                {/*
+                 * Show all four possible execution modes — the legacy
+                 * mock values (sandbox / host) and the schema values
+                 * (orchestrator / agent). After EditProfileWizard saves
+                 * a profile as `agent`/`orchestrator`, the override
+                 * flows into `p.execution_mode` here; without the
+                 * schema-mode radios this section would render no
+                 * selected mode at all. (Copilot review on PR #30 iter
+                 * 2.)
+                 */}
+                {[
+                  ['sandbox', 'sandbox (container-per-scenario)'],
+                  ['host', 'host (smoke only)'],
+                  ['orchestrator', 'orchestrator (schema mode)'],
+                  ['agent', 'agent (schema mode)'],
+                ].map(([value, label]) => (
+                  <label key={value} className="row gap-6" style={{ fontSize: 12 }}>
+                    <input
+                      type="radio"
+                      data-testid={`profile-detail-execmode-${value}`}
+                      checked={p.execution_mode === value}
+                      readOnly
+                    />
+                    {label}
+                  </label>
+                ))}
               </div>
             </div>
             <div className="field-row">

@@ -255,6 +255,56 @@ test.describe('Profile edit', () => {
     await expect(budget).toHaveValue('42.5');
   });
 
+  test('a 64-char slug is accepted but 65 is rejected (matches Slug.max(64))', async ({
+    page,
+  }) => {
+    // PR #30 iter 3 (Copilot): the wizard previously capped slug
+    // length at 52, but @aqa/schemas Slug allows 64. The form now
+    // mirrors the schema limit so a valid 53–64 char slug isn't
+    // wrongly rejected.
+    await navigateToProfileDetail(page);
+    await page.getByTestId('profile-edit-btn').click();
+    const at64 = `core, ${'a'.repeat(64)}`;
+    const at65 = `core, ${'a'.repeat(65)}`;
+    await page.getByTestId('profile-edit-packs').fill(at64);
+    await expect(page.getByTestId('profile-edit-packs-err')).toHaveCount(0);
+    await expect(page.getByTestId('profile-edit-submit')).toBeEnabled();
+    await page.getByTestId('profile-edit-packs').fill(at65);
+    await expect(page.getByTestId('profile-edit-packs-err')).toContainText(/exceeds 64/);
+    await expect(page.getByTestId('profile-edit-submit')).toBeDisabled();
+  });
+
+  test('Configuration radios reflect schema execution modes after save', async ({ page }) => {
+    // PR #30 iter 3 (Copilot): the detail Configuration section
+    // previously rendered only `sandbox`/`host` radios, so a profile
+    // saved as `agent` (a schema mode) would render with no selected
+    // radio. The section now lists all four possible modes and the
+    // correct one is checked after save.
+    await page.route('**/api/profiles/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: route.request().postDataJSON() }),
+      });
+    });
+    await navigateToProfileDetail(page);
+    // Before save, the mock's `host` radio is checked (the first
+    // profile is `smoke` with execution_mode='host' in the mock).
+    await expect(page.getByTestId('profile-detail-execmode-host')).toBeChecked();
+    await expect(page.getByTestId('profile-detail-execmode-agent')).not.toBeChecked();
+    // Save as `agent`.
+    await page.getByTestId('profile-edit-btn').click();
+    await page.getByTestId('profile-edit-mode').selectOption('agent');
+    await page.getByTestId('profile-edit-submit').click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // After save, the `agent` radio is checked and the legacy `host`
+    // radio is not. Both schema modes must be present (the regression
+    // bug was rendering NO selected mode at all).
+    await expect(page.getByTestId('profile-detail-execmode-agent')).toBeChecked();
+    await expect(page.getByTestId('profile-detail-execmode-host')).not.toBeChecked();
+  });
+
   test('modal close affordances are inert while PUT is in flight', async ({ page }) => {
     // Definite assignment assertion: see profile-delete.e2e.ts for
     // why we capture the resolver this way (TS otherwise narrows the
