@@ -9819,13 +9819,16 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdSc
     const createdRows = [];
     for (const [id, sc] of createdScenarios.entries()) {
       if (existingIds.has(id) || deletedScenarios?.has?.(id)) continue;
+      // Hoist the `pack:` tag lookup so we don't iterate `tags`
+      // twice. PR #37 Copilot iter 8.
+      const packTag = Array.isArray(sc?.tags)
+        ? sc.tags.find((t) => typeof t === 'string' && /^pack:/i.test(t))
+        : undefined;
+      const pack = packTag ? packTag.split(':').slice(1).join(':') : 'core';
       createdRows.push({
         id,
-        // Mock-display defaults: pack-prefix splits cleanly enough for
-        // the tree grouping; oracle/last_status are best-effort.
-        pack: typeof sc?.tags?.find?.((t) => /^pack:/i.test(t)) === 'string'
-          ? sc.tags.find((t) => /^pack:/i.test(t)).split(':').slice(1).join(':')
-          : 'core',
+        category: typeof sc?.category === 'string' ? sc.category : 'misc',
+        pack,
         oracle: 'custom',
         last_status: 'pending',
       });
@@ -10153,8 +10156,16 @@ function PageScenarioDetail({
                 const created = createdScenarios?.get?.(sid);
                 const fromState = override || created;
                 if (fromState) {
+                  // PR #37 Copilot iter 8: chain the split via the
+                  // optional call so a missing __aqaYamlStringify
+                  // doesn't throw (the prior code called .split() on
+                  // undefined). Try/catch still covers true parse
+                  // failures from a malformed override body.
                   try {
-                    return window.__aqaYamlStringify?.(fromState).split('\n') ?? [];
+                    const stringified = window.__aqaYamlStringify?.(fromState);
+                    if (typeof stringified === 'string' && stringified.length > 0) {
+                      return stringified.split('\n');
+                    }
                   } catch {
                     /* fall through to mock preview */
                   }
@@ -12954,10 +12965,14 @@ function App() {
   const [updatedScenarios, setUpdatedScenarios] = React.useState(() => new Map());
   const [createdScenarios, setCreatedScenarios] = React.useState(() => new Map());
   React.useEffect(() => {
+    // Plain-object guard: arrays pass `typeof === 'object'` and would
+    // poison downstream consumers that expect a scenario-shaped body
+    // (yamlStringify, clone-collision checks, …). PR #37 Copilot iter 8.
+    const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
     const onUpdate = (e) => {
       const id = e?.detail?.id;
       const patch = e?.detail?.patch;
-      if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
+      if (typeof id !== 'string' || !isPlainObject(patch)) return;
       setUpdatedScenarios((prev) => {
         const next = new Map(prev);
         // For Scenario edits the `patch` is the FULL PUT body, not a
@@ -12972,7 +12987,7 @@ function App() {
     const onCreate = (e) => {
       const id = e?.detail?.id;
       const scenario = e?.detail?.scenario;
-      if (typeof id !== 'string' || !scenario || typeof scenario !== 'object') return;
+      if (typeof id !== 'string' || !isPlainObject(scenario)) return;
       setCreatedScenarios((prev) => {
         const next = new Map(prev);
         // Sanitize the user-supplied scenario body before stamping it
