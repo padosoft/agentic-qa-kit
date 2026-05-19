@@ -6,6 +6,34 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
+
+// Expose the YAML parser/stringifier on `window` so ScenarioYamlWizard
+// (production) and the e2e tests share a stable symbol for client-side
+// YAML round-trips. Mirrors __aqaApiUrl / __aqaNavigate.
+if (typeof window !== 'undefined') {
+  window.__aqaYamlParse = yamlParse;
+  window.__aqaYamlStringify = yamlStringify;
+}
+
+// Strip prototype-polluting keys before merging user-supplied objects.
+// PR #37 Copilot iter 1: aqa:scenario-updated and similar events carry
+// patches derived from free-form YAML the user typed. A patch with
+// `__proto__: { polluted: true }` would, on plain spread, set Object's
+// prototype — affecting unrelated code. Same risk applies to
+// `constructor` and `prototype`. We strip them at the App-level
+// listener, not in the wizard, so any future event source is safe by
+// default.
+function safeMergeObject(base, patch) {
+  const merged = { ...(base || {}) };
+  if (patch && typeof patch === 'object') {
+    for (const k of Object.keys(patch)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      merged[k] = patch[k];
+    }
+  }
+  return merged;
+}
 const { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Fragment } = React;
 
 // =============================================================
@@ -5451,6 +5479,326 @@ function DeleteScenarioWizard({ open, scenarioId, onClose, onDeleted }) {
 }
 Object.assign(window, { DeleteScenarioWizard });
 
+// v1.7 slice 4c.7-admin / 4c.8-admin — shared YAML-textarea wizard for
+// Scenario Edit (PUT) and Scenario Clone (POST). Both flows operate
+// on a schema-conforming Scenario body; the textarea is seeded with
+// a stub for the current scenario id and the user edits free-form
+// YAML. On Save the body is parsed with the `yaml` package and PUT
+// or POST to the server, which is the actual schema trust boundary.
+function buildScenarioStubYaml(id) {
+  return [
+    'schema_version: "1"',
+    `id: ${id}`,
+    'title: Scenario title (≥ 4 chars)',
+    'risk_refs:',
+    '  - risk-cross-tenant-leak',
+    'invariant_refs: []',
+    'preconditions: []',
+    'steps:',
+    '  - id: probe-1',
+    '    kind: http',
+    '    with: {}',
+    '    timeout_ms: 30000',
+    'oracles:',
+    '  - id: oracle-1',
+    '    kind: http_status',
+    '    with: {}',
+    '    weight: 1',
+    'cleanup: []',
+    'tags: []',
+  ].join('\n');
+}
+
+function ScenarioYamlWizard({
+  open,
+  mode,
+  scenarioId,
+  existingIds,
+  persistedBody,
+  onClose,
+  onDone,
+}) {
+  // mode: 'edit' | 'clone'
+  const [yamlText, setYamlText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (open) {
+      // PR #37 Copilot iter 6: edit mode now seeds from the persisted
+      // body (App-level updatedScenarios/createdScenarios override)
+      // when available, so reopening Edit after a successful save
+      // shows the saved YAML, and a user who clicks Save without
+      // editing doesn't overwrite the body with a stub. Clone mode
+      // always seeds with an empty id to force the user to choose.
+      let seeded = buildScenarioStubYaml(mode === 'clone' ? '' : scenarioId);
+      if (mode === 'edit' && persistedBody && typeof persistedBody === 'object') {
+        try {
+          const stringified = window.__aqaYamlStringify?.(persistedBody);
+          if (typeof stringified === 'string' && stringified.length > 0) {
+            seeded = stringified;
+          }
+        } catch {
+          /* fall through to stub */
+        }
+      }
+      setYamlText(seeded);
+      // Synchronize debouncedYaml with the seed so the parsed body and
+      // UX hints reflect the new session immediately (no 150ms window
+      // of stale warnings from the previous open/close). PR #37
+      // Copilot iter 7.
+      setDebouncedYaml(seeded);
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, scenarioId, mode, persistedBody]);
+
+  function handleClose() {
+    if (submitting) return;
+    setYamlText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  // Parse client-side for an early UX hint. Server is the trust
+  // boundary. PR #37 Copilot iter 5: debounce so a fast typer doesn't
+  // pay an O(yaml-size) parse on every keystroke — wait 150ms after
+  // the last edit. The textarea stays responsive while typing; the
+  // UX-error alert and submit-button enablement settle a tick after.
+  const [debouncedYaml, setDebouncedYaml] = React.useState(yamlText);
+  React.useEffect(() => {
+    const h = setTimeout(() => setDebouncedYaml(yamlText), 150);
+    return () => clearTimeout(h);
+  }, [yamlText]);
+  const { parsedBody, parseError } = React.useMemo(() => {
+    let p = null;
+    let err = null;
+    try {
+      p = window.__aqaYamlParse?.(debouncedYaml);
+    } catch (e) {
+      err = e instanceof Error ? e.message : String(e);
+    }
+    return { parsedBody: p, parseError: err };
+  }, [debouncedYaml]);
+  // Clone mode forces the user to pick an id — YAML parses `id:`
+  // (empty) as `null`, so without this guard canSubmit would be true
+  // and the user could POST a body with `id: null`. The server would
+  // 400 on the Slug check, but failing earlier (and with a clearer
+  // hint) is better UX.
+  const cloneEmptyIdError =
+    mode === 'clone' && (parsedBody?.id == null || parsedBody.id === '')
+      ? 'choose a new id for the clone'
+      : null;
+  const sameAsSourceError =
+    mode === 'clone' && parsedBody?.id && parsedBody.id === scenarioId
+      ? 'new id is the same as the source'
+      : null;
+  const collisionError =
+    mode === 'clone' && parsedBody?.id && existingIds?.has?.(parsedBody.id)
+      ? `id "${parsedBody.id}" already exists`
+      : null;
+  const idMismatchError =
+    mode === 'edit' && parsedBody?.id && parsedBody.id !== scenarioId
+      ? `body id "${parsedBody.id}" does not match the path "${scenarioId}"`
+      : null;
+  // PR #37 Copilot iter 3: parsedBody must be a non-null plain object
+  // with a non-empty string `id`. Without these guards canSubmit could
+  // be true when the YAML parses to a scalar (e.g. `5`), an array,
+  // null, or when __aqaYamlParse is undefined (returns undefined).
+  // Any of those would let the user PUT/POST an invalid body and the
+  // server-side error message wouldn't tell them WHY the body was bad.
+  const isPlainObject = (v) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v);
+  const bodyShapeError =
+    parseError == null && !isPlainObject(parsedBody)
+      ? 'YAML must parse to an object (with id, title, …)'
+      : null;
+  const missingIdError =
+    parseError == null &&
+    isPlainObject(parsedBody) &&
+    (typeof parsedBody.id !== 'string' || parsedBody.id.length === 0)
+      ? 'id must be a non-empty string'
+      : null;
+  // PR #37 Copilot iter 6: enforce the same Slug regex client-side
+  // that the server applies via @aqa/schemas Scenario.id, so the
+  // user gets the rejection in the wizard instead of after a
+  // round-trip. Uppercase, dots, underscores, and length > 64 all
+  // fail server-side anyway.
+  const slugError =
+    parseError == null &&
+    isPlainObject(parsedBody) &&
+    typeof parsedBody.id === 'string' &&
+    parsedBody.id.length > 0
+      ? parsedBody.id.length > MAX_SLUG_LEN
+        ? `id exceeds ${MAX_SLUG_LEN} chars`
+        : !SLUG_PATTERN.test(parsedBody.id)
+          ? 'id must be lowercase letters/digits with dashes between (Slug)'
+          : null
+      : null;
+  const uxError =
+    parseError ||
+    bodyShapeError ||
+    // cloneEmptyIdError takes priority over the generic missingIdError
+    // so clone mode gets a friendlier "choose a new id" instead of
+    // the technical "id must be a non-empty string".
+    cloneEmptyIdError ||
+    missingIdError ||
+    slugError ||
+    sameAsSourceError ||
+    collisionError ||
+    idMismatchError;
+  const canSubmit =
+    !submitting && uxError === null && isPlainObject(parsedBody) && typeof parsedBody?.id === 'string';
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    const submittedSourceId = scenarioId;
+    // Toast and error context should reflect the id the request is
+    // actually about: source for edit (the resource being updated),
+    // new id for clone (the resource being created). PR #37 Copilot
+    // iter 2 — clone errors previously read "<source>: ..." which was
+    // misleading when the server rejected the NEW id (collision /
+    // schema).
+    const subjectId =
+      mode === 'clone' && parsedBody?.id ? parsedBody.id : submittedSourceId;
+    try {
+      const reqUrl =
+        mode === 'edit'
+          ? apiUrl(`/api/scenarios/${encodeURIComponent(submittedSourceId)}`)
+          : apiUrl('/api/scenarios');
+      const res = await fetch(reqUrl, {
+        method: mode === 'edit' ? 'PUT' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsedBody),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        const fullMsg = `${subjectId}: ${msg}`;
+        toast.push({ kind: 'error', title: `Save scenario failed`, body: fullMsg });
+        setError(msg);
+        return;
+      }
+      // PR #37 Copilot iter 3: broadcast the SERVER's response body,
+      // not the client's parsedBody. The server (Zod) applies defaults
+      // (probe/oracle defaults, `invariant_refs: []`, `cleanup: []`,
+      // …) when the user omits optional fields, so parsedBody is a
+      // subset of what's actually stored. Falling back to parsedBody
+      // only when the server didn't echo a `scenario` key (defensive).
+      const persisted = isPlainObject(parsed?.scenario) ? parsed.scenario : parsedBody;
+      const newId = persisted?.id ?? parsedBody.id;
+      toast.push({
+        kind: 'success',
+        title: mode === 'edit' ? 'Scenario saved' : `Scenario "${newId}" created`,
+        body: newId,
+      });
+      try {
+        window.dispatchEvent(
+          new CustomEvent(mode === 'edit' ? 'aqa:scenario-updated' : 'aqa:scenario-created', {
+            detail:
+              mode === 'edit'
+                ? { id: submittedSourceId, patch: persisted }
+                : { id: newId, scenario: persisted },
+          }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+      onDone?.(newId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.push({
+        kind: 'error',
+        title: 'Save scenario failed',
+        body: `${subjectId}: ${msg}`,
+      });
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={submitting ? undefined : handleClose}
+      title={mode === 'edit' ? 'Edit scenario' : 'Clone scenario'}
+      sub={
+        mode === 'edit' ? (
+          <>
+            Editing <code className="mono">{scenarioId}</code>. The body is parsed as YAML and
+            schema-validated server-side. Keep the <code>id</code> field unchanged — changing it
+            here would 400 against the path-id check.
+          </>
+        ) : (
+          <>
+            Cloning <code className="mono">{scenarioId}</code>. Edit the <code>id</code> field to
+            a new slug; the server enforces 409 + EEXIST on collisions.
+          </>
+        )
+      }
+      size="lg"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            data-testid="scenario-yaml-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Saving…' : mode === 'edit' ? 'Save scenario' : 'Clone scenario'}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Save failed">
+            <span data-testid="scenario-yaml-error">{error}</span>
+          </Alert>
+        )}
+        {uxError && !error && (
+          <Alert kind="warning" title="Fix before saving">
+            <span data-testid="scenario-yaml-uxerr">{uxError}</span>
+          </Alert>
+        )}
+        <textarea
+          data-testid="scenario-yaml-textarea"
+          className="input mono"
+          style={{ minHeight: 360, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+          value={yamlText}
+          onChange={(e) => setYamlText(e.target.value)}
+          spellCheck={false}
+        />
+        <div className="field-hint">
+          YAML is parsed client-side for early feedback. The server is the trust boundary — it
+          schema-validates and {mode === 'edit' ? 'rejects path/body id mismatches' : 'rejects collisions with 409'}.
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { ScenarioYamlWizard });
+
 // v1.7 slice 4c.2 — Profile Edit/Save modal wired to PUT
 // /api/profiles/:name. Mirrors the architecture of DeleteProfileWizard
 // (sync in-flight guard, captured submittedName guard, sync handleClose
@@ -9357,76 +9705,143 @@ function PagePackDetail({ slug, onNavigate }) {
 }
 
 // ---------------- Scenarios ----------------
-function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
-  const rawScenarios = [
-    {
-      id: 'api.tenant.cross_tenant_search',
-      pack: 'api',
-      oracle: 'cross_tenant',
-      last_status: 'failed',
-    },
-    {
-      id: 'api.tenant.cross_tenant_invoice',
-      pack: 'api',
-      oracle: 'cross_tenant',
-      last_status: 'failed',
-    },
-    {
-      id: 'auth.jwt.replay_after_logout',
-      pack: 'security-owasp',
-      oracle: 'authn',
-      last_status: 'failed',
-    },
-    { id: 'api.idor.invoice_pdf', pack: 'api', oracle: 'authz', last_status: 'succeeded' },
-    {
-      id: 'security.rate_limit.search',
-      pack: 'security-owasp',
-      oracle: 'rate_limit',
-      last_status: 'failed',
-    },
-    {
-      id: 'agentic.tool_budget.runaway',
-      pack: 'security-agentic',
-      oracle: 'budget',
-      last_status: 'failed',
-    },
-    { id: 'data.pii.logs', pack: 'security-owasp', oracle: 'pii_scan', last_status: 'failed' },
-    {
-      id: 'business.order.total_rounding',
-      pack: 'core',
-      oracle: 'invariant',
-      last_status: 'succeeded',
-    },
-    { id: 'security.csrf.admin', pack: 'security-owasp', oracle: 'csrf', last_status: 'failed' },
-    {
-      id: 'ui.xss.reflected_search',
-      pack: 'web-ui-laravel',
-      oracle: 'xss_scan',
-      last_status: 'succeeded',
-    },
-    {
-      id: 'security.prompt_injection.search_rag',
-      pack: 'security-agentic',
-      oracle: 'llm_judge',
-      last_status: 'failed',
-    },
-    {
-      id: 'migrations.rollback.smoke',
-      pack: 'migrations',
-      oracle: 'rollback_works',
-      last_status: 'succeeded',
-    },
-  ];
+// PR #37 Copilot iter 2: the mock scenario fixtures are referenced
+// from TWO places (PageScenarios for the tree, PageScenarioDetail's
+// `existingIds` for the clone-collision check). Promoting to a module
+// constant keeps them in sync; before the refactor, duplicating the
+// list would have either allowed duplicate clones (id missing from
+// the check) or false-positive collisions (extra id in the check).
+//
+// PR #37 Copilot iter 6: scenario ids must match @aqa/schemas Slug
+// (lowercase alnum + single dashes, max 64) — the previous dot-
+// separated ids would 400 on the real server's PUT/POST routes.
+// Tree grouping used to derive its category from `id.split('.')[0]`;
+// after the dash migration, the explicit `category` field carries
+// the grouping instead.
+const SCENARIO_FIXTURES = [
+  {
+    id: 'api-tenant-cross-tenant-search',
+    category: 'api',
+    pack: 'api',
+    oracle: 'cross_tenant',
+    last_status: 'failed',
+  },
+  {
+    id: 'api-tenant-cross-tenant-invoice',
+    category: 'api',
+    pack: 'api',
+    oracle: 'cross_tenant',
+    last_status: 'failed',
+  },
+  {
+    id: 'auth-jwt-replay-after-logout',
+    category: 'auth',
+    pack: 'security-owasp',
+    oracle: 'authn',
+    last_status: 'failed',
+  },
+  {
+    id: 'api-idor-invoice-pdf',
+    category: 'api',
+    pack: 'api',
+    oracle: 'authz',
+    last_status: 'succeeded',
+  },
+  {
+    id: 'security-rate-limit-search',
+    category: 'security',
+    pack: 'security-owasp',
+    oracle: 'rate_limit',
+    last_status: 'failed',
+  },
+  {
+    id: 'agentic-tool-budget-runaway',
+    category: 'agentic',
+    pack: 'security-agentic',
+    oracle: 'budget',
+    last_status: 'failed',
+  },
+  {
+    id: 'data-pii-logs',
+    category: 'data',
+    pack: 'security-owasp',
+    oracle: 'pii_scan',
+    last_status: 'failed',
+  },
+  {
+    id: 'business-order-total-rounding',
+    category: 'business',
+    pack: 'core',
+    oracle: 'invariant',
+    last_status: 'succeeded',
+  },
+  {
+    id: 'security-csrf-admin',
+    category: 'security',
+    pack: 'security-owasp',
+    oracle: 'csrf',
+    last_status: 'failed',
+  },
+  {
+    id: 'ui-xss-reflected-search',
+    category: 'ui',
+    pack: 'web-ui-laravel',
+    oracle: 'xss_scan',
+    last_status: 'succeeded',
+  },
+  {
+    id: 'security-prompt-injection-search-rag',
+    category: 'security',
+    pack: 'security-agentic',
+    oracle: 'llm_judge',
+    last_status: 'failed',
+  },
+  {
+    id: 'migrations-rollback-smoke',
+    category: 'migrations',
+    pack: 'migrations',
+    oracle: 'rollback_works',
+    last_status: 'succeeded',
+  },
+];
+
+function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdScenarios }) {
+  const rawScenarios = SCENARIO_FIXTURES;
   // v1.7 slice 4c.6 — hide scenarios that the user has deleted via
   // DeleteScenarioWizard. App-level Set survives route changes.
-  const scenarios = deletedScenarios
+  // v1.7 slice 4c.8-admin — also append any clones the user has
+  // created (App-level Map) so the new rows appear in the list.
+  let scenarios = deletedScenarios
     ? rawScenarios.filter((s) => !deletedScenarios.has(s.id))
     : rawScenarios;
+  if (createdScenarios instanceof Map && createdScenarios.size > 0) {
+    const existingIds = new Set(scenarios.map((s) => s.id));
+    const createdRows = [];
+    for (const [id, sc] of createdScenarios.entries()) {
+      if (existingIds.has(id) || deletedScenarios?.has?.(id)) continue;
+      // Hoist the `pack:` tag lookup so we don't iterate `tags`
+      // twice. PR #37 Copilot iter 8.
+      const packTag = Array.isArray(sc?.tags)
+        ? sc.tags.find((t) => typeof t === 'string' && /^pack:/i.test(t))
+        : undefined;
+      const pack = packTag ? packTag.split(':').slice(1).join(':') : 'core';
+      createdRows.push({
+        id,
+        category: typeof sc?.category === 'string' ? sc.category : 'misc',
+        pack,
+        oracle: 'custom',
+        last_status: 'pending',
+      });
+    }
+    scenarios = scenarios.concat(createdRows);
+  }
 
   // Group by pack → category → leaf
   const byPack = {};
   for (const s of scenarios) {
-    const cat = s.id.split('.')[0];
+    // Use the explicit `category` field rather than deriving from the
+    // id — Slug-conforming ids (post-iter 6) can't carry dots.
+    const cat = s.category || s.id.split('-')[0];
     (byPack[s.pack] = byPack[s.pack] || {})[cat] = byPack[s.pack][cat] || [];
     byPack[s.pack][cat].push(s);
   }
@@ -9496,7 +9911,7 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
                                   </span>
                                   <I.Beaker size={11} style={{ color: 'var(--text-tertiary)' }} />
                                   <span className="label mono" style={{ fontSize: 11.5 }}>
-                                    {s.id.split('.').slice(2).join('.') || s.id}
+                                    {s.id}
                                   </span>
                                   <span style={{ marginLeft: 'auto' }}>
                                     {s.last_status === 'failed' ? (
@@ -9562,9 +9977,34 @@ function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
 }
 
 // ---------------- Scenario detail ----------------
-function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
+function PageScenarioDetail({
+  id,
+  onNavigate,
+  deletedScenarios,
+  createdScenarios,
+  updatedScenarios,
+}) {
   const [tab, setTab] = React.useState('spec');
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [cloneOpen, setCloneOpen] = React.useState(false);
+  // Set of every scenario id already taken — feeds the Clone wizard's
+  // collision check. Sourced from the shared SCENARIO_FIXTURES const
+  // (also consumed by PageScenarios) plus any App-level clones.
+  // (Deleted ids are eligible for re-use, same as Profile Clone in
+  // slice 4c.3.)
+  const existingIds = React.useMemo(() => {
+    const s = new Set();
+    for (const fix of SCENARIO_FIXTURES) {
+      if (!deletedScenarios?.has?.(fix.id)) s.add(fix.id);
+    }
+    if (createdScenarios instanceof Map) {
+      for (const k of createdScenarios.keys()) {
+        if (!deletedScenarios?.has?.(k)) s.add(k);
+      }
+    }
+    return s;
+  }, [deletedScenarios, createdScenarios]);
   // PR #34 iter 2 (Copilot): the previous fallback to a hard-coded
   // scenario id meant a user landing here via ScreenJumper with no
   // params could see Delete and accidentally remove that scenario.
@@ -9629,9 +10069,21 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
               <I.Replay size={12} />
               Run this scenario
             </button>
-            <button className="btn sm primary">
+            <button
+              className="btn sm primary"
+              data-testid="scenario-edit-btn"
+              onClick={() => setEditOpen(true)}
+            >
               <I.Edit size={12} />
               Edit
+            </button>
+            <button
+              className="btn sm"
+              data-testid="scenario-clone-btn"
+              onClick={() => setCloneOpen(true)}
+            >
+              <I.Plus size={12} />
+              Clone
             </button>
             <button
               className="btn sm danger"
@@ -9651,6 +10103,27 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
         onDeleted={() => {
           setDeleteOpen(false);
           onNavigate?.('scenarios', {});
+        }}
+      />
+      <ScenarioYamlWizard
+        open={editOpen}
+        mode="edit"
+        scenarioId={sid}
+        existingIds={existingIds}
+        persistedBody={updatedScenarios?.get?.(sid) ?? createdScenarios?.get?.(sid) ?? null}
+        onClose={() => setEditOpen(false)}
+        onDone={() => setEditOpen(false)}
+      />
+      <ScenarioYamlWizard
+        open={cloneOpen}
+        mode="clone"
+        scenarioId={sid}
+        existingIds={existingIds}
+        persistedBody={null}
+        onClose={() => setCloneOpen(false)}
+        onDone={(newId) => {
+          setCloneOpen(false);
+          if (newId) onNavigate?.('scenario-detail', { id: newId });
         }}
       />
 
@@ -9673,31 +10146,69 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
           <div className="split-3-2">
             <EditorYAML
               lang="yaml"
-              lines={[
-                '# scenario.schema.json v1',
-                `id: ${sid}`,
-                'risk_ref: risk-cross-tenant-leak',
-                'description: |',
-                '  Query /api/orders/search as tenant A with a payload that bypasses',
-                '  any naive query parser. Oracle ensures only tenant A rows return.',
-                'probes:',
-                '  - id: baseline_search',
-                '    method: GET',
-                '    url: /api/orders/search?q=test',
-                '    expect: HTTP 200 · only own tenant',
-                '  - id: bypass_search',
-                '    method: GET',
-                '    url: /api/orders/search?q=%27+OR+1%3D1+--',
-                '    expect: HTTP 400 OR (HTTP 200 with own tenant only)',
-                'oracle:',
-                '  kind: cross_tenant',
-                '  expected_tenants: [acme]',
-                '  invariant: no_raw_query_without_tenant_clause',
-                'replay:',
-                '  bug_level: true',
-                '  scenario_level: true',
-                '  agent_level: optional',
-              ]}
+              data-testid="scenario-spec-yaml"
+              lines={(() => {
+                // PR #37 Copilot iter 1: when the user has edited this
+                // scenario in the current session, render the override
+                // (or the created body, for clones) so the YAML preview
+                // reflects the saved state instead of the static mock.
+                const override = updatedScenarios?.get?.(sid);
+                const created = createdScenarios?.get?.(sid);
+                const fromState = override || created;
+                if (fromState) {
+                  // PR #37 Copilot iter 8: chain the split via the
+                  // optional call so a missing __aqaYamlStringify
+                  // doesn't throw (the prior code called .split() on
+                  // undefined). Try/catch still covers true parse
+                  // failures from a malformed override body.
+                  try {
+                    const stringified = window.__aqaYamlStringify?.(fromState);
+                    if (typeof stringified === 'string' && stringified.length > 0) {
+                      return stringified.split('\n');
+                    }
+                  } catch {
+                    /* fall through to mock preview */
+                  }
+                }
+                // PR #37 Copilot iter 5: the static preview must use
+                // the real @aqa/schemas Scenario field names
+                // (risk_refs, steps, oracles, …) so the "schema-
+                // validated" badge isn't misleading when no override
+                // is present.
+                return [
+                  '# scenario.schema.json v1',
+                  'schema_version: "1"',
+                  `id: ${sid}`,
+                  'title: Cross-tenant data leak via raw query',
+                  'risk_refs:',
+                  '  - risk-cross-tenant-leak',
+                  'invariant_refs:',
+                  '  - no-raw-query-without-tenant-clause',
+                  'preconditions: []',
+                  'steps:',
+                  '  - id: baseline-search',
+                  '    kind: http',
+                  '    with:',
+                  '      method: GET',
+                  '      url: /api/orders/search?q=test',
+                  '    timeout_ms: 30000',
+                  '  - id: bypass-search',
+                  '    kind: http',
+                  '    with:',
+                  '      method: GET',
+                  '      url: /api/orders/search?q=%27+OR+1%3D1+--',
+                  '    timeout_ms: 30000',
+                  'oracles:',
+                  '  - id: oracle-cross-tenant',
+                  '    kind: custom',
+                  '    with:',
+                  '      expected_tenants: [acme]',
+                  '      invariant: no-raw-query-without-tenant-clause',
+                  '    weight: 1',
+                  'cleanup: []',
+                  'tags: []',
+                ];
+              })()}
             />
             <div className="col gap-12">
               <div className="card">
@@ -9715,18 +10226,22 @@ function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
                   <h3 className="card-title">Outline</h3>
                 </div>
                 <div className="card-body" style={{ fontSize: 11.5 }}>
+                  <div className="mono">- schema_version</div>
                   <div className="mono">- id</div>
-                  <div className="mono">- risk_ref</div>
-                  <div className="mono">- description</div>
-                  <div className="mono">- probes</div>
+                  <div className="mono">- title</div>
+                  <div className="mono">- risk_refs</div>
+                  <div className="mono">- invariant_refs</div>
+                  <div className="mono">- preconditions</div>
+                  <div className="mono">- steps</div>
                   <div className="mono" style={{ paddingLeft: 12 }}>
-                    - baseline_search
+                    - baseline-search
                   </div>
                   <div className="mono" style={{ paddingLeft: 12 }}>
-                    - bypass_search
+                    - bypass-search
                   </div>
-                  <div className="mono">- oracle</div>
-                  <div className="mono">- replay</div>
+                  <div className="mono">- oracles</div>
+                  <div className="mono">- cleanup</div>
+                  <div className="mono">- tags</div>
                 </div>
               </div>
             </div>
@@ -12423,6 +12938,10 @@ function App() {
   // PageScenarioDetail dispatches the event before navigating back to
   // /scenarios; a listener on PageScenarios would miss it because the
   // list isn't mounted yet at dispatch time.
+  //
+  // Declared BEFORE the edit/create effect below so the
+  // setDeletedScenarios binding is available without crossing a TDZ —
+  // PR #37 Copilot iter 4 flagged the prior ordering.
   const [deletedScenarios, setDeletedScenarios] = React.useState(() => new Set());
   React.useEffect(() => {
     const handler = (e) => {
@@ -12436,6 +12955,62 @@ function App() {
     };
     window.addEventListener('aqa:scenario-deleted', handler);
     return () => window.removeEventListener('aqa:scenario-deleted', handler);
+  }, []);
+
+  // v1.7 slice 4c.7-admin / 4c.8-admin — Scenario edits broadcast
+  // via `aqa:scenario-updated` and clones via `aqa:scenario-created`.
+  // Same lifted-state reasoning as profile and risk: App-level Map
+  // survives route changes and seeds both the Scenarios list and the
+  // detail-page rendering for cloned-but-new ids.
+  const [updatedScenarios, setUpdatedScenarios] = React.useState(() => new Map());
+  const [createdScenarios, setCreatedScenarios] = React.useState(() => new Map());
+  React.useEffect(() => {
+    // Plain-object guard: arrays pass `typeof === 'object'` and would
+    // poison downstream consumers that expect a scenario-shaped body
+    // (yamlStringify, clone-collision checks, …). PR #37 Copilot iter 8.
+    const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const onUpdate = (e) => {
+      const id = e?.detail?.id;
+      const patch = e?.detail?.patch;
+      if (typeof id !== 'string' || !isPlainObject(patch)) return;
+      setUpdatedScenarios((prev) => {
+        const next = new Map(prev);
+        // For Scenario edits the `patch` is the FULL PUT body, not a
+        // delta — replacing instead of merging so removing an optional
+        // field in the YAML (e.g. `seed`) actually drops it from the
+        // override. PR #37 Copilot iter 2. Still strip prototype-
+        // polluting keys from the user-supplied body.
+        next.set(id, safeMergeObject(null, patch));
+        return next;
+      });
+    };
+    const onCreate = (e) => {
+      const id = e?.detail?.id;
+      const scenario = e?.detail?.scenario;
+      if (typeof id !== 'string' || !isPlainObject(scenario)) return;
+      setCreatedScenarios((prev) => {
+        const next = new Map(prev);
+        // Sanitize the user-supplied scenario body before stamping it
+        // into App state (same prototype-pollution rationale as above).
+        next.set(id, safeMergeObject(null, scenario));
+        return next;
+      });
+      // If the user cloned into a previously-deleted id, lift the
+      // tombstone so the new row resolves (same lesson as Profile
+      // Clone in PR #31 iter 1).
+      setDeletedScenarios((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:scenario-updated', onUpdate);
+    window.addEventListener('aqa:scenario-created', onCreate);
+    return () => {
+      window.removeEventListener('aqa:scenario-updated', onUpdate);
+      window.removeEventListener('aqa:scenario-created', onCreate);
+    };
   }, []);
 
   // v1.7 slice 4c.5 — Risk edits broadcast via `aqa:risk-updated` and
@@ -12532,6 +13107,8 @@ function App() {
     deletedRisks,
     updatedRisks,
     deletedScenarios,
+    updatedScenarios,
+    createdScenarios,
   };
 
   if (!signedIn) {
