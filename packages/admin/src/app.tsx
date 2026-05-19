@@ -10846,7 +10846,7 @@ function PageAgents({ onNavigate }) {
     <div className="page" data-screen-label="15 Agents">
       <PageHeader
         title="Agents"
-        sub={`${AGENTS.length} adapters · ${AGENTS.filter((a) => a.installed).length} installed`}
+        sub={`${agents.length} adapters · ${agents.filter((a) => a.installed).length} installed`}
         actions={
           <button className="btn sm">
             <I.Github size={12} />
