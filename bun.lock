@@ -159,6 +159,7 @@
         "@aqa/kit": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "@aqa/store": "workspace:*",
+        "yaml": "^2.9.0",
       },
     },
     "packages/store": {

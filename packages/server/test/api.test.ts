@@ -162,6 +162,116 @@ describe('makeApi', () => {
     assert.deepEqual((res?.body as { orgs: unknown[] }).orgs, []);
   });
 
+  // ============ v1.7 slice 4b — Pack import (admin "Import manifest") ============
+
+  describe('POST /api/packs/import', () => {
+    const VALID_YAML = `schema_version: "1"
+name: pack-imported
+version: 0.1.0
+description: "An imported pack"
+author: "Test"
+license: Apache-2.0
+applies_when:
+  sut_type: [api]
+templates: []
+scenarios: []
+risks: []
+oracles: []
+probes: []
+`;
+    it('parses YAML body, validates, and installs the manifest (201)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      assert.ok(route, 'POST /api/packs/import must exist');
+      const res = await route?.handle({ headers: {}, params: {}, body: { yaml: VALID_YAML } }, c);
+      assert.equal(
+        res?.status,
+        201,
+        `expected 201, got ${res?.status}: ${JSON.stringify(res?.body)}`,
+      );
+      const body = res?.body as { pack: { name: string; version: string } };
+      assert.equal(body.pack.name, 'pack-imported');
+      assert.equal(body.pack.version, '0.1.0');
+      // And the store actually has it.
+      const stored = await c.store.loadPack('pack-imported');
+      assert.ok(stored);
+    });
+
+    it('returns 400 on missing body.yaml (with code=EINVAL)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const res = await route?.handle({ headers: {}, params: {}, body: {} }, c);
+      assert.equal(res?.status, 400);
+      const body = res?.body as { error: string; code: string };
+      assert.equal(body.code, 'EINVAL');
+      assert.match(body.error, /yaml/i);
+    });
+
+    it('returns 400 on YAML that does not parse', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: 'this is: not\n  valid: [yaml' } },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /parse|yaml/i);
+    });
+
+    it('returns 400 on schema-invalid manifest', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      // Missing required `name` field.
+      const yaml = `schema_version: "1"\nversion: 0.1.0\ndescription: missing name\nauthor: X\nlicense: Apache-2.0\napplies_when: { sut_type: [api] }\ntemplates: []\nscenarios: []\nrisks: []\noracles: []\nprobes: []\n`;
+      const res = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /schema|name|required/i);
+    });
+
+    it('returns 409 when a pack with that name already exists', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const first = await route?.handle({ headers: {}, params: {}, body: { yaml: VALID_YAML } }, c);
+      assert.equal(first?.status, 201);
+      const second = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: VALID_YAML } },
+        c,
+      );
+      assert.equal(second?.status, 409);
+      assert.equal((second?.body as { code: string }).code, 'EEXIST');
+    });
+
+    it('overwrites an existing pack when force=true', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      await route?.handle({ headers: {}, params: {}, body: { yaml: VALID_YAML } }, c);
+      const newer = VALID_YAML.replace('version: 0.1.0', 'version: 0.2.0');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: newer, force: true } },
+        c,
+      );
+      assert.equal(res?.status, 201);
+      const stored = await c.store.loadPack('pack-imported');
+      assert.equal(stored?.version, '0.2.0');
+    });
+
+    it('rejects non-boolean force with 400', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const res = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: VALID_YAML, force: 'yes' } },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /force.*boolean/i);
+    });
+
+    it('requires the packs:install permission', () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      assert.equal(route?.requires, 'packs:install');
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {

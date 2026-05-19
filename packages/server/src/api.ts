@@ -1,6 +1,7 @@
 import type { User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
 import type { PackNewErrorCode } from '@aqa/kit';
+import { PackManifest as PackManifestSchema } from '@aqa/schemas';
 import type {
   ApiToken,
   CostSummary,
@@ -16,6 +17,7 @@ import type {
   Tenancy,
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
+import { parse as yamlParse } from 'yaml';
 import type { RunnerQueue } from './runner-queue.js';
 
 export interface ApiContext {
@@ -402,6 +404,84 @@ export function makeApi(): ApiHandler[] {
           );
         }
         return asResponse({ pack_dir: result.packDir, files: result.files ?? [] }, 201);
+      },
+    },
+
+    {
+      // v1.7 slice 4b — admin "Import manifest" wizard:
+      // accepts a YAML manifest as a string, parses + validates it
+      // against `@aqa/schemas/PackManifest`, then installs into the
+      // store via `installPack`. Separate from `POST /api/packs`
+      // (which takes pre-parsed JSON) so the admin can hand the
+      // server a raw `pack.yaml` blob without parsing client-side.
+      method: 'POST',
+      path: '/api/packs/import',
+      requires: 'packs:install',
+      async handle(req, ctx) {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        if (typeof body.yaml !== 'string' || body.yaml.trim() === '') {
+          return asResponse(
+            {
+              error: 'body.yaml is required (non-empty string containing the pack manifest YAML)',
+              code: 'EINVAL' satisfies PackNewErrorCode,
+            },
+            400,
+          );
+        }
+        if (body.force !== undefined && typeof body.force !== 'boolean') {
+          return asResponse(
+            {
+              error: 'force must be a boolean when provided (got non-boolean)',
+              code: 'EINVAL' satisfies PackNewErrorCode,
+            },
+            400,
+          );
+        }
+        let parsed: unknown;
+        try {
+          parsed = yamlParse(body.yaml);
+        } catch (e) {
+          return asResponse(
+            {
+              error: `yaml parse error: ${e instanceof Error ? e.message : String(e)}`,
+              code: 'EINVAL' satisfies PackNewErrorCode,
+            },
+            400,
+          );
+        }
+        const validated = PackManifestSchema.PackManifest.safeParse(parsed);
+        if (!validated.success) {
+          return asResponse(
+            {
+              error: `manifest failed schema validation: ${validated.error.message}`,
+              code: 'EINVAL' satisfies PackNewErrorCode,
+            },
+            400,
+          );
+        }
+        const manifest = validated.data;
+        const existing = await ctx.store.loadPack(manifest.name);
+        if (existing && body.force !== true) {
+          return asResponse(
+            {
+              error: `pack "${manifest.name}" already exists (currently version ${existing.version}); pass force=true to overwrite`,
+              code: 'EEXIST' satisfies PackNewErrorCode,
+            },
+            409,
+          );
+        }
+        try {
+          await ctx.store.installPack(manifest);
+        } catch (e) {
+          return asResponse(
+            {
+              error: `installPack failed: ${e instanceof Error ? e.message : String(e)}`,
+              code: 'EIO' satisfies PackNewErrorCode,
+            },
+            500,
+          );
+        }
+        return asResponse({ pack: manifest }, 201);
       },
     },
 

@@ -4671,6 +4671,219 @@ function CreatePackWizard({ open, onClose }) {
 }
 Object.assign(window, { CreatePackWizard });
 
+// =============================================================
+// Import-manifest wizard (v1.7 slice 4b)
+// =============================================================
+// Front-end for POST /api/packs/import. Lets a maintainer paste a
+// pack.yaml manifest text (or load a file from disk via the native
+// file input), then POSTs the YAML body to the server which parses,
+// validates against `@aqa/schemas/PackManifest`, and installs into
+// the store. The wizard is deliberately thin — the server is the
+// source of truth for validation; client only does empty/whitespace
+// checks to avoid wasting a round-trip on obvious failures.
+function ImportManifestWizard({ open, onClose }) {
+  const [yamlText, setYamlText] = React.useState('');
+  const [force, setForce] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [result, setResult] = React.useState(null);
+  const toast = useToast();
+
+  const trimmed = yamlText.trim();
+  const canSubmit = trimmed !== '' && !submitting;
+
+  function reset() {
+    setYamlText('');
+    setForce(false);
+    setError(null);
+    setResult(null);
+    setSubmitting(false);
+  }
+  function handleClose() {
+    if (submitting) return;
+    reset();
+    onClose?.();
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setYamlText(text);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Could not read file: ${msg}`);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    const reqUrl = apiUrl('/api/packs/import');
+    try {
+      const res = await fetch(reqUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yaml: trimmed, ...(force ? { force: true } : {}) }),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        setError(msg);
+        toast.push({ kind: 'error', title: 'Import manifest failed', body: msg });
+        return;
+      }
+      setResult(parsed);
+      toast.push({
+        kind: 'success',
+        title: 'Pack imported',
+        body: parsed?.pack?.name ?? 'unknown pack',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the manifest was not imported.`;
+      setError(full);
+      toast.push({ kind: 'error', title: 'Import manifest failed', body: full });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={result ? 'Manifest imported' : 'Import pack manifest'}
+      sub={
+        result
+          ? `${result.pack?.name ?? 'unknown'} v${result.pack?.version ?? '?'} is now registered. The pack file tree itself (scenarios, risks) must be in place on disk for aqa run to discover it.`
+          : 'Paste a pack.yaml manifest or load one from disk. The server parses YAML, validates against @aqa/schemas/PackManifest, then installs into the store.'
+      }
+      size="md"
+      footer={
+        result ? (
+          <button className="btn" onClick={handleClose} data-testid="import-manifest-done">
+            Done
+          </button>
+        ) : (
+          <>
+            <button className="btn" onClick={handleClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              data-testid="import-manifest-submit"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+            >
+              {submitting ? (
+                'Importing…'
+              ) : (
+                <>
+                  <I.Upload size={12} />
+                  Import
+                </>
+              )}
+            </button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <div className="col gap-12" data-testid="import-manifest-result">
+          <Alert kind="success" title="Manifest imported">
+            <div className="col gap-4">
+              <div>
+                <strong>Name:</strong>{' '}
+                <span className="mono">{result.pack?.name}</span>
+              </div>
+              <div>
+                <strong>Version:</strong>{' '}
+                <span className="mono">{result.pack?.version}</span>
+              </div>
+            </div>
+          </Alert>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Next: make sure the matching pack directory exists at{' '}
+            <code>&lt;project&gt;/packs/{result.pack?.name}/</code> with scenarios + risks. The
+            store records the manifest; the file tree on disk is what <code>aqa run</code> reads.
+          </div>
+        </div>
+      ) : (
+        <div className="col gap-12">
+          {error && (
+            <Alert kind="error" title="Import failed">
+              {error}
+            </Alert>
+          )}
+          <div className="field-row">
+            <label className="field-label" htmlFor="im-file">
+              Load from disk (optional)
+            </label>
+            <input
+              id="im-file"
+              type="file"
+              accept=".yaml,.yml,application/yaml,text/yaml,text/plain"
+              data-testid="import-manifest-file"
+              onChange={handleFileChange}
+            />
+            <div className="field-hint">
+              Reads the file into the textarea below — submit happens on Import, not on selection.
+            </div>
+          </div>
+          <div className="field-row">
+            <label className="field-label" htmlFor="im-yaml">
+              Manifest YAML *
+            </label>
+            <textarea
+              id="im-yaml"
+              className="textarea mono"
+              data-testid="import-manifest-yaml"
+              placeholder={`schema_version: "1"\nname: pack-myapp\nversion: 0.1.0\ndescription: …\napplies_when:\n  sut_type: [api]\nscenarios: []\nrisks: []`}
+              style={{ minHeight: 220, fontSize: 11.5 }}
+              value={yamlText}
+              onChange={(e) => setYamlText(e.target.value)}
+            />
+            <div className="field-hint">
+              Required. The server validates against{' '}
+              <code>@aqa/schemas/PackManifest</code> — see{' '}
+              <a
+                href="https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md"
+                target="_blank"
+                rel="noreferrer"
+              >
+                docs/PACK-AUTHORING.md
+              </a>{' '}
+              for the schema.
+            </div>
+          </div>
+          <label className="row gap-8" style={{ alignItems: 'center', cursor: 'pointer', fontSize: 12 }}>
+            <input
+              type="checkbox"
+              data-testid="import-manifest-force"
+              checked={force}
+              onChange={(e) => setForce(e.target.checked)}
+            />
+            <span>
+              <strong>Force overwrite</strong> — replace an existing pack with the same{' '}
+              <code>name</code>. Without this, the server returns 409 Conflict for a duplicate.
+            </span>
+          </label>
+        </div>
+      )}
+    </Modal>
+  );
+}
+Object.assign(window, { ImportManifestWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -7419,6 +7632,7 @@ Object.assign(window, { PageFindings, PageFindingDetail, PageRiskMap, PageRiskEd
 // ---------------- Packs ----------------
 function PagePacks({ onNavigate, onOpenPack }) {
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
   return (
     <div className="page" data-screen-label="09 Packs">
       <PageHeader
@@ -7426,7 +7640,11 @@ function PagePacks({ onNavigate, onOpenPack }) {
         sub={`${PACKS.length} installed · ${PACKS.filter((p) => p.signed).length} signed · ${PACKS.filter((p) => !p.signed).length} unsigned`}
         actions={
           <>
-            <button className="btn sm">
+            <button
+              className="btn sm"
+              data-testid="packs-import-btn"
+              onClick={() => setImportOpen(true)}
+            >
               <I.Upload size={12} />
               Import manifest
             </button>
@@ -7442,6 +7660,7 @@ function PagePacks({ onNavigate, onOpenPack }) {
         }
       />
       <CreatePackWizard open={createOpen} onClose={() => setCreateOpen(false)} />
+      <ImportManifestWizard open={importOpen} onClose={() => setImportOpen(false)} />
 
       <Alert kind="warning" title="One pack is unsigned">
         <span className="mono">community-stripe@0.3.1</span> is installed without signature
