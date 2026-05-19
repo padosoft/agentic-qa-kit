@@ -1,7 +1,7 @@
 import type { User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
 import type { PackNewErrorCode } from '@aqa/kit';
-import { PackManifest as PackManifestSchema } from '@aqa/schemas';
+import { PackManifest as PackManifestSchema, Profile as ProfileSchema } from '@aqa/schemas';
 import type {
   ApiToken,
   CostSummary,
@@ -546,7 +546,38 @@ export function makeApi(): ApiHandler[] {
       path: '/api/profiles/:name',
       requires: 'profiles:edit',
       async handle(req, ctx) {
-        const profile = req.body as Profile.Profile;
+        // The path name is the canonical identity for this route —
+        // match the GET/DELETE handlers and 404 when it's missing
+        // instead of letting a body-only request persist `body.name`
+        // without any path identity. (Copilot review on PR #30 iter
+        // 10.)
+        const pathName = req.params.name;
+        if (!pathName) return notFound('profile');
+        // Parse the body against the Profile schema before persisting.
+        // The admin UI does its own client-side validation, but the
+        // server is the trust boundary — any non-UI client (curl, a
+        // stale UI bundle, a custom integration) can otherwise persist
+        // malformed records and break downstream code that relies on
+        // the schema's invariants. (Copilot review on PR #30 iter 9.)
+        const parsed = ProfileSchema.Profile.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `profile failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        const profile = parsed.data;
+        // The route name is the canonical identity; a body that names a
+        // different profile would silently create-or-replace the body's
+        // name instead of the path's, which is a path-confusion class
+        // of bug. Reject mismatches with a 400 instead of trusting one
+        // side.
+        if (profile.name !== pathName) {
+          return asResponse(
+            { error: `profile name mismatch: path "${pathName}" vs body "${profile.name}"` },
+            400,
+          );
+        }
         await ctx.store.saveProfile(profile);
         return asResponse({ profile });
       },
