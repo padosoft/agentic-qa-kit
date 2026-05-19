@@ -6,13 +6,33 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { parse as yamlParse } from 'yaml';
+import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 // Expose the YAML parser on `window` so the test-only ScenarioYamlWizard
 // (and the e2e tests) can drive client-side parsing through a stable
 // symbol. Mirrors __aqaApiUrl / __aqaNavigate.
 if (typeof window !== 'undefined') {
   window.__aqaYamlParse = yamlParse;
+  window.__aqaYamlStringify = yamlStringify;
+}
+
+// Strip prototype-polluting keys before merging user-supplied objects.
+// PR #37 Copilot iter 1: aqa:scenario-updated and similar events carry
+// patches derived from free-form YAML the user typed. A patch with
+// `__proto__: { polluted: true }` would, on plain spread, set Object's
+// prototype — affecting unrelated code. Same risk applies to
+// `constructor` and `prototype`. We strip them at the App-level
+// listener, not in the wizard, so any future event source is safe by
+// default.
+function safeMergeObject(base, patch) {
+  const merged = { ...(base || {}) };
+  if (patch && typeof patch === 'object') {
+    for (const k of Object.keys(patch)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      merged[k] = patch[k];
+    }
+  }
+  return merged;
 }
 const { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Fragment } = React;
 
@@ -5524,6 +5544,15 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
   } catch (e) {
     parseError = e instanceof Error ? e.message : String(e);
   }
+  // Clone mode forces the user to pick an id — YAML parses `id:`
+  // (empty) as `null`, so without this guard canSubmit would be true
+  // and the user could POST a body with `id: null`. The server would
+  // 400 on the Slug check, but failing earlier (and with a clearer
+  // hint) is better UX.
+  const cloneEmptyIdError =
+    mode === 'clone' && (parsedBody?.id == null || parsedBody.id === '')
+      ? 'choose a new id for the clone'
+      : null;
   const sameAsSourceError =
     mode === 'clone' && parsedBody?.id && parsedBody.id === scenarioId
       ? 'new id is the same as the source'
@@ -5536,7 +5565,8 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
     mode === 'edit' && parsedBody?.id && parsedBody.id !== scenarioId
       ? `body id "${parsedBody.id}" does not match the path "${scenarioId}"`
       : null;
-  const uxError = parseError || sameAsSourceError || collisionError || idMismatchError;
+  const uxError =
+    parseError || cloneEmptyIdError || sameAsSourceError || collisionError || idMismatchError;
   const canSubmit = !submitting && uxError === null && parsedBody !== null;
 
   async function handleSubmit() {
@@ -9981,31 +10011,48 @@ function PageScenarioDetail({
           <div className="split-3-2">
             <EditorYAML
               lang="yaml"
-              lines={[
-                '# scenario.schema.json v1',
-                `id: ${sid}`,
-                'risk_ref: risk-cross-tenant-leak',
-                'description: |',
-                '  Query /api/orders/search as tenant A with a payload that bypasses',
-                '  any naive query parser. Oracle ensures only tenant A rows return.',
-                'probes:',
-                '  - id: baseline_search',
-                '    method: GET',
-                '    url: /api/orders/search?q=test',
-                '    expect: HTTP 200 · only own tenant',
-                '  - id: bypass_search',
-                '    method: GET',
-                '    url: /api/orders/search?q=%27+OR+1%3D1+--',
-                '    expect: HTTP 400 OR (HTTP 200 with own tenant only)',
-                'oracle:',
-                '  kind: cross_tenant',
-                '  expected_tenants: [acme]',
-                '  invariant: no_raw_query_without_tenant_clause',
-                'replay:',
-                '  bug_level: true',
-                '  scenario_level: true',
-                '  agent_level: optional',
-              ]}
+              data-testid="scenario-spec-yaml"
+              lines={(() => {
+                // PR #37 Copilot iter 1: when the user has edited this
+                // scenario in the current session, render the override
+                // (or the created body, for clones) so the YAML preview
+                // reflects the saved state instead of the static mock.
+                const override = updatedScenarios?.get?.(sid);
+                const created = createdScenarios?.get?.(sid);
+                const fromState = override || created;
+                if (fromState) {
+                  try {
+                    return window.__aqaYamlStringify?.(fromState).split('\n') ?? [];
+                  } catch {
+                    /* fall through to mock preview */
+                  }
+                }
+                return [
+                  '# scenario.schema.json v1',
+                  `id: ${sid}`,
+                  'risk_ref: risk-cross-tenant-leak',
+                  'description: |',
+                  '  Query /api/orders/search as tenant A with a payload that bypasses',
+                  '  any naive query parser. Oracle ensures only tenant A rows return.',
+                  'probes:',
+                  '  - id: baseline_search',
+                  '    method: GET',
+                  '    url: /api/orders/search?q=test',
+                  '    expect: HTTP 200 · only own tenant',
+                  '  - id: bypass_search',
+                  '    method: GET',
+                  '    url: /api/orders/search?q=%27+OR+1%3D1+--',
+                  '    expect: HTTP 400 OR (HTTP 200 with own tenant only)',
+                  'oracle:',
+                  '  kind: cross_tenant',
+                  '  expected_tenants: [acme]',
+                  '  invariant: no_raw_query_without_tenant_clause',
+                  'replay:',
+                  '  bug_level: true',
+                  '  scenario_level: true',
+                  '  agent_level: optional',
+                ];
+              })()}
             />
             <div className="col gap-12">
               <div className="card">
@@ -12739,7 +12786,7 @@ function App() {
       if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
       setUpdatedScenarios((prev) => {
         const next = new Map(prev);
-        next.set(id, { ...(prev.get(id) || {}), ...patch });
+        next.set(id, safeMergeObject(prev.get(id), patch));
         return next;
       });
     };
@@ -12749,7 +12796,9 @@ function App() {
       if (typeof id !== 'string' || !scenario || typeof scenario !== 'object') return;
       setCreatedScenarios((prev) => {
         const next = new Map(prev);
-        next.set(id, scenario);
+        // Sanitize the user-supplied scenario body before stamping it
+        // into App state (same prototype-pollution rationale as above).
+        next.set(id, safeMergeObject(null, scenario));
         return next;
       });
       // If the user cloned into a previously-deleted id, lift the

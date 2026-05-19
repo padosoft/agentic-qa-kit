@@ -142,6 +142,47 @@ test.describe('Scenario YAML edit/clone', () => {
     await expect(page.locator('h1 .mono').first()).toContainText('cloned-scenario-1');
   });
 
+  test('Clone with empty id is blocked by an explicit "choose a new id" hint', async ({ page }) => {
+    // PR #37 Copilot iter 1: clone-mode stub seeds `id: ` (empty).
+    // YAML parses that as `id: null`. Without an explicit guard the
+    // user could POST a null id and only learn from the server's
+    // schema rejection. Surface the warning client-side.
+    await openFirstScenarioDetail(page);
+    await page.getByTestId('scenario-clone-btn').click();
+    const textarea = page.getByTestId('scenario-yaml-textarea');
+    await expect(textarea).not.toHaveValue('');
+    await expect(page.getByTestId('scenario-yaml-uxerr')).toContainText(/choose a new id/i);
+    await expect(page.getByTestId('scenario-yaml-submit')).toBeDisabled();
+  });
+
+  test('Successful edit re-renders the spec YAML preview from the override', async ({ page }) => {
+    // PR #37 Copilot iter 1: previously updatedScenarios was set in
+    // App state but never read by any page, so successful edits left
+    // the static mock preview unchanged. The spec tab now stringifies
+    // the override (or the created body) into the EditorYAML lines.
+    await page.route('**/api/scenarios/**', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ scenario: route.request().postDataJSON() }),
+      });
+    });
+    await openFirstScenarioDetail(page);
+    await page.getByTestId('scenario-edit-btn').click();
+    const textarea = page.getByTestId('scenario-yaml-textarea');
+    await expect(textarea).not.toHaveValue('');
+    const seeded = await textarea.inputValue();
+    await textarea.fill(seeded.replace(/^title:.*/m, 'title: Edited via the YAML wizard'));
+    await page.getByTestId('scenario-yaml-submit').click();
+    await expect(page.locator('.toast.success', { hasText: /Scenario saved/i })).toBeVisible();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // The spec tab's editor body now reflects the override.
+    await expect(
+      page.locator('.editor-content', { hasText: /Edited via the YAML wizard/i }),
+    ).toBeVisible();
+  });
+
   test('4xx keeps the modal open with the server error inline', async ({ page }) => {
     await page.route('**/api/scenarios/**', async (route) => {
       if (route.request().method() !== 'PUT') return route.continue();
