@@ -12812,6 +12812,31 @@ function App() {
     return () => window.removeEventListener('aqa:risk-deleted', handler);
   }, []);
 
+  // v1.7 slice 4c.6 — Scenario deletions broadcast via
+  // `aqa:scenario-deleted` and the Set lives at App level for the
+  // same lifted-state reason as `deletedProfiles`/`deletedRisks`.
+  // PageScenarioDetail dispatches the event before navigating back to
+  // /scenarios; a listener on PageScenarios would miss it because the
+  // list isn't mounted yet at dispatch time.
+  //
+  // Declared BEFORE the edit/create effect below so the
+  // setDeletedScenarios binding is available without crossing a TDZ —
+  // PR #37 Copilot iter 4 flagged the prior ordering.
+  const [deletedScenarios, setDeletedScenarios] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      if (typeof id !== 'string') return;
+      setDeletedScenarios((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:scenario-deleted', handler);
+    return () => window.removeEventListener('aqa:scenario-deleted', handler);
+  }, []);
+
   // v1.7 slice 4c.7-admin / 4c.8-admin — Scenario edits broadcast
   // via `aqa:scenario-updated` and clones via `aqa:scenario-created`.
   // Same lifted-state reasoning as profile and risk: App-level Map
@@ -12862,27 +12887,6 @@ function App() {
       window.removeEventListener('aqa:scenario-updated', onUpdate);
       window.removeEventListener('aqa:scenario-created', onCreate);
     };
-  }, []);
-
-  // v1.7 slice 4c.6 — Scenario deletions broadcast via
-  // `aqa:scenario-deleted` and the Set lives at App level for the
-  // same lifted-state reason as `deletedProfiles`/`deletedRisks`.
-  // PageScenarioDetail dispatches the event before navigating back to
-  // /scenarios; a listener on PageScenarios would miss it because the
-  // list isn't mounted yet at dispatch time.
-  const [deletedScenarios, setDeletedScenarios] = React.useState(() => new Set());
-  React.useEffect(() => {
-    const handler = (e) => {
-      const id = e?.detail?.id;
-      if (typeof id !== 'string') return;
-      setDeletedScenarios((prev) => {
-        const next = new Set(prev);
-        next.add(id);
-        return next;
-      });
-    };
-    window.addEventListener('aqa:scenario-deleted', handler);
-    return () => window.removeEventListener('aqa:scenario-deleted', handler);
   }, []);
 
   // v1.7 slice 4c.5 — Risk edits broadcast via `aqa:risk-updated` and
