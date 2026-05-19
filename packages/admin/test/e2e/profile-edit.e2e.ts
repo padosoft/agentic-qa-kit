@@ -419,6 +419,48 @@ test.describe('Profile edit', () => {
     await expect(budgetB).not.toHaveValue('77.7');
   });
 
+  test('cancel + reopen on the same profile drops abandoned edits', async ({ page }) => {
+    // PR #30 iter 7 (Copilot): `handleClose` cleared error/submitting
+    // but left `form` untouched. On close+reopen for the SAME profile
+    // (the `key={p.name}` remount only fires across profile boundaries
+    // and the open-effect deps `[open, profileName]` would not refresh
+    // the form value synchronously) the wizard would briefly render
+    // the previous session's edits, and a very fast Save could submit
+    // those stale values. `handleClose` now re-seeds `form` from the
+    // current profile synchronously.
+    type Req = { body: unknown };
+    const calls: Req[] = [];
+    await page.route('**/api/profiles/*', async (route) => {
+      const method = route.request().method();
+      if (method !== 'PUT') return route.continue();
+      calls.push({ body: route.request().postDataJSON() });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: route.request().postDataJSON() }),
+      });
+    });
+    await navigateToProfileDetail(page);
+    await page.getByTestId('profile-edit-btn').click();
+    const budget = page.getByTestId('profile-edit-budget');
+    // Mock smoke profile budget_usd=5; pollute with 99.99 then Cancel.
+    await budget.fill('99.99');
+    await expect(budget).toHaveValue('99.99');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Reopen on the same profile — the wizard must show the source
+    // value (5), not the cancelled-edit value (99.99).
+    await page.getByTestId('profile-edit-btn').click();
+    await expect(page.getByTestId('profile-edit-budget')).toHaveValue('5');
+    // Save without changing anything — the PUT body must carry the
+    // source value (5), not the abandoned 99.99.
+    await page.getByTestId('profile-edit-submit').click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    expect(calls.length).toBe(1);
+    const body = calls[0]?.body as Record<string, unknown>;
+    expect(body.llm_budget_usd).toBe(5);
+  });
+
   test('modal close affordances are inert while PUT is in flight', async ({ page }) => {
     // Definite assignment assertion: see profile-delete.e2e.ts for
     // why we capture the resolver this way (TS otherwise narrows the

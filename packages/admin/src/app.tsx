@@ -5290,6 +5290,16 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     // Synchronous reset same as DeleteProfileWizard.handleClose so
     // close+reopen on the same profile doesn't flash stale error /
     // submitting / inFlightRef state (slice 4c.1 iter 9 lesson).
+    //
+    // Also re-seed `form` from the current profile so abandoned
+    // edits are dropped at close time. Without this, close+reopen
+    // on the same profile (the `profileName`/`open` effect won't
+    // re-fire because deps haven't changed in a meaningful way for
+    // re-open within the same React render cycle) shows the
+    // previous session's typed values on the first paint, and a
+    // very fast click on Save before the open-effect commits could
+    // submit those stale values. (Copilot review on PR #30 iter 7.)
+    setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
     setError(null);
     setSubmitting(false);
     inFlightRef.current = false;
