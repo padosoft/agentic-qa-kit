@@ -559,6 +559,71 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.7 — PUT /api/scenarios/:id (Scenario Edit) ============
+
+  describe('PUT /api/scenarios/:id', () => {
+    const validScenario = {
+      schema_version: '1' as const,
+      id: 'sc-edit',
+      title: 'Editable scenario',
+      risk_refs: ['risk-cross-tenant-leak'],
+      invariant_refs: [],
+      preconditions: [],
+      steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
+      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
+      cleanup: [],
+      tags: [],
+    };
+
+    it('persists a schema-conforming body whose id matches the path', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/scenarios/:id');
+      const res = await route?.handle(
+        { headers: {}, params: { id: 'sc-edit' }, body: validScenario },
+        c,
+      );
+      assert.equal(res?.status, 200);
+      assert.equal((res?.body as { scenario: { id: string } }).scenario.id, 'sc-edit');
+    });
+
+    it('rejects a body that fails Scenario schema parsing (400)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/scenarios/:id');
+      // Empty steps array fails the schema's min(1) on steps.
+      const bad = { ...validScenario, steps: [] };
+      const res = await route?.handle({ headers: {}, params: { id: 'sc-edit' }, body: bad }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /scenario failed schema validation/i);
+    });
+
+    it('rejects a body whose id does not match the path (400)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/scenarios/:id');
+      const mismatched = { ...validScenario, id: 'attacker-owned' };
+      const res = await route?.handle(
+        { headers: {}, params: { id: 'sc-edit' }, body: mismatched },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match(
+        (res?.body as { error: string }).error,
+        /id mismatch.*"sc-edit".*"attacker-owned"/i,
+      );
+    });
+
+    it('404s when the path id is missing', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/scenarios/:id');
+      const res = await route?.handle({ headers: {}, params: {}, body: validScenario }, c);
+      assert.equal(res?.status, 404);
+    });
+
+    it('requires the risk-map:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/scenarios/:id');
+      assert.equal(route?.requires, 'risk-map:edit');
+    });
+  });
+
   // ============ v1.7 slice 4c.6 — DELETE /api/scenarios/:id (Scenario Delete) ============
 
   describe('DELETE /api/scenarios/:id', () => {
@@ -571,12 +636,8 @@ probes: []
       risk_refs: ['risk-cross-tenant-leak'],
       invariant_refs: [],
       preconditions: [],
-      steps: [
-        { id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 },
-      ],
-      oracles: [
-        { id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 },
-      ],
+      steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
+      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
       cleanup: [],
       tags: [],
     };

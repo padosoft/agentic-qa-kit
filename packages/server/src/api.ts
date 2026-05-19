@@ -5,6 +5,7 @@ import {
   PackManifest as PackManifestSchema,
   Profile as ProfileSchema,
   RiskMap as RiskMapSchema,
+  Scenario as ScenarioSchema,
 } from '@aqa/schemas';
 import type {
   ApiToken,
@@ -731,7 +732,25 @@ export function makeApi(): ApiHandler[] {
       path: '/api/scenarios/:id',
       requires: 'risk-map:edit',
       async handle(req, ctx) {
-        const scenario = req.body as Scenario.Scenario;
+        // Trust-boundary checks (mirror PUT /api/risks/:id and PUT
+        // /api/profiles/:name): missing path id → 404, body must
+        // schema-parse, body.id must match path id.
+        const pathId = req.params.id;
+        if (!pathId) return notFound('scenario');
+        const parsed = ScenarioSchema.Scenario.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `scenario failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        const scenario = parsed.data;
+        if (scenario.id !== pathId) {
+          return asResponse(
+            { error: `scenario id mismatch: path "${pathId}" vs body "${scenario.id}"` },
+            400,
+          );
+        }
         await ctx.store.saveScenario(scenario);
         return asResponse({ scenario });
       },
