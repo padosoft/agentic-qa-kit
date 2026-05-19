@@ -211,6 +211,9 @@ export class MemoryStore implements StoreProvider {
   async saveScenario(scenario: Scenario.Scenario): Promise<void> {
     this.scenarios.set(scenario.id, scenario);
   }
+  async deleteScenario(id: string): Promise<void> {
+    this.scenarios.delete(id);
+  }
 
   // ----- Notifications -----
   async listNotifications(opts: {

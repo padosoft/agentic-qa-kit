@@ -559,6 +559,63 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.6 — DELETE /api/scenarios/:id (Scenario Delete) ============
+
+  describe('DELETE /api/scenarios/:id', () => {
+    // Schema-conforming fixture matching @aqa/schemas Scenario:
+    // includes the required schema_version/title/steps/oracles.
+    const validScenario = {
+      schema_version: '1' as const,
+      id: 'sc-x',
+      title: 'Verify cross-tenant isolation',
+      risk_refs: ['risk-cross-tenant-leak'],
+      invariant_refs: [],
+      preconditions: [],
+      steps: [
+        { id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 },
+      ],
+      oracles: [
+        { id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 },
+      ],
+      cleanup: [],
+      tags: [],
+    };
+
+    it('removes the scenario and returns { id, deleted: true }', async () => {
+      const c = ctx();
+      await c.store.saveScenario(validScenario);
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/scenarios/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'sc-x' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { id: string; deleted: boolean };
+      assert.equal(body.id, 'sc-x');
+      assert.equal(body.deleted, true);
+      assert.equal(await c.store.loadScenario('sc-x'), null);
+    });
+
+    it('404s when the path id is missing', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/scenarios/:id');
+      const res = await route?.handle({ headers: {}, params: {}, body: {} }, c);
+      assert.equal(res?.status, 404);
+    });
+
+    it('is idempotent — re-deleting a missing id still 200s with { id, deleted: true }', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/scenarios/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'nope' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { id: string; deleted: boolean };
+      assert.equal(body.id, 'nope');
+      assert.equal(body.deleted, true);
+    });
+
+    it('requires the risk-map:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/scenarios/:id');
+      assert.equal(route?.requires, 'risk-map:edit');
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {

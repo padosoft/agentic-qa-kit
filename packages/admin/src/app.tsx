@@ -5302,6 +5302,155 @@ function DeleteRiskWizard({ open, riskId, onClose, onDeleted }) {
 }
 Object.assign(window, { DeleteRiskWizard });
 
+// v1.7 slice 4c.6 — Scenario delete wizard wired to DELETE
+// /api/scenarios/:id. Mirrors DeleteRiskWizard's architecture
+// (type-the-id-to-confirm, inFlightRef, captured submittedId,
+// sync handleClose reset, modal close-affordance inertness).
+function DeleteScenarioWizard({ open, scenarioId, onClose, onDeleted }) {
+  const [confirmText, setConfirmText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (open) {
+      setConfirmText('');
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, scenarioId]);
+
+  const canSubmit = confirmText === scenarioId && !submitting;
+
+  function handleClose() {
+    if (submitting) return;
+    setConfirmText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    const submittedId = scenarioId;
+    const reqUrl = apiUrl(`/api/scenarios/${encodeURIComponent(submittedId)}`);
+    try {
+      const res = await fetch(reqUrl, { method: 'DELETE' });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const stillCurrent = submittedId === scenarioId;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        toast.push({ kind: 'error', title: 'Delete scenario failed', body: `${submittedId}: ${msg}` });
+        if (stillCurrent) setError(msg);
+        return;
+      }
+      toast.push({ kind: 'success', title: 'Scenario deleted', body: submittedId });
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:scenario-deleted', { detail: { id: submittedId } }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+      if (stillCurrent) onDeleted?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the scenario was not deleted.`;
+      toast.push({
+        kind: 'error',
+        title: 'Delete scenario failed',
+        body: `${submittedId}: ${full}`,
+      });
+      if (submittedId === scenarioId) setError(full);
+    } finally {
+      if (submittedId === scenarioId) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={submitting ? undefined : handleClose}
+      title="Delete scenario"
+      sub={
+        <>
+          This permanently removes the "<span className="mono">{scenarioId}</span>" scenario.
+          Existing run records, findings, and audit events that reference it are unaffected.
+        </>
+      }
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn danger"
+            data-testid="scenario-delete-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? (
+              'Deleting…'
+            ) : (
+              <>
+                <I.Trash size={12} />
+                Delete scenario
+              </>
+            )}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Delete failed">
+            <span data-testid="scenario-delete-error">{error}</span>
+          </Alert>
+        )}
+        <Alert kind="warning" title="This is destructive">
+          Removing a scenario drops it from the catalog. Run-history records that referenced it stay
+          intact for audit purposes.
+        </Alert>
+        <div className="field-row">
+          <label className="field-label" htmlFor="ds-confirm">
+            Type <code className="mono">{scenarioId}</code> to confirm *
+          </label>
+          <input
+            id="ds-confirm"
+            className="input mono"
+            data-testid="scenario-delete-confirm"
+            placeholder={scenarioId}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoFocus
+          />
+          <div className="field-hint">
+            The Delete button stays disabled until the typed text matches the scenario id exactly.
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { DeleteScenarioWizard });
+
 // v1.7 slice 4c.2 — Profile Edit/Save modal wired to PUT
 // /api/profiles/:name. Mirrors the architecture of DeleteProfileWizard
 // (sync in-flight guard, captured submittedName guard, sync handleClose
@@ -9208,8 +9357,8 @@ function PagePackDetail({ slug, onNavigate }) {
 }
 
 // ---------------- Scenarios ----------------
-function PageScenarios({ onNavigate, onOpenScenario }) {
-  const scenarios = [
+function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios }) {
+  const rawScenarios = [
     {
       id: 'api.tenant.cross_tenant_search',
       pack: 'api',
@@ -9268,6 +9417,11 @@ function PageScenarios({ onNavigate, onOpenScenario }) {
       last_status: 'succeeded',
     },
   ];
+  // v1.7 slice 4c.6 — hide scenarios that the user has deleted via
+  // DeleteScenarioWizard. App-level Set survives route changes.
+  const scenarios = deletedScenarios
+    ? rawScenarios.filter((s) => !deletedScenarios.has(s.id))
+    : rawScenarios;
 
   // Group by pack → category → leaf
   const byPack = {};
@@ -9408,9 +9562,58 @@ function PageScenarios({ onNavigate, onOpenScenario }) {
 }
 
 // ---------------- Scenario detail ----------------
-function PageScenarioDetail({ id, onNavigate }) {
-  const sid = id || 'api.tenant.cross_tenant_search';
+function PageScenarioDetail({ id, onNavigate, deletedScenarios }) {
   const [tab, setTab] = React.useState('spec');
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  // PR #34 iter 2 (Copilot): the previous fallback to a hard-coded
+  // scenario id meant a user landing here via ScreenJumper with no
+  // params could see Delete and accidentally remove that scenario.
+  // Show an explicit "no scenario selected" state instead.
+  if (!id) {
+    return (
+      <div className="page" data-screen-label="12 Scenario detail (no selection)">
+        <PageHeader title="No scenario selected" sub="Pick a scenario to see its details." />
+        <Alert kind="info" title="No scenario selected">
+          <span style={{ fontSize: 12.5 }}>
+            Open this page from the Scenarios catalog or a notification link to view a specific
+            scenario.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="scenario-detail-back"
+              onClick={() => onNavigate?.('scenarios', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to scenarios
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
+  const sid = id;
+  const isDeleted = deletedScenarios?.has?.(sid) ?? false;
+  if (isDeleted) {
+    return (
+      <div className="page" data-screen-label="12 Scenario detail (not found)">
+        <PageHeader title="Scenario not found" sub={`No scenario with id "${sid}".`} />
+        <Alert kind="warning" title="No such scenario">
+          <span style={{ fontSize: 12.5 }}>
+            The scenario has been deleted.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="scenario-detail-back"
+              onClick={() => onNavigate?.('scenarios', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to scenarios
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
   return (
     <div className="page" data-screen-label="12 Scenario detail">
       <PageHeader
@@ -9430,8 +9633,25 @@ function PageScenarioDetail({ id, onNavigate }) {
               <I.Edit size={12} />
               Edit
             </button>
+            <button
+              className="btn sm danger"
+              data-testid="scenario-delete-btn"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <I.Trash size={12} />
+              Delete
+            </button>
           </>
         }
+      />
+      <DeleteScenarioWizard
+        open={deleteOpen}
+        scenarioId={sid}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          onNavigate?.('scenarios', {});
+        }}
       />
 
       <div className="tabs">
@@ -12197,6 +12417,27 @@ function App() {
     return () => window.removeEventListener('aqa:risk-deleted', handler);
   }, []);
 
+  // v1.7 slice 4c.6 — Scenario deletions broadcast via
+  // `aqa:scenario-deleted` and the Set lives at App level for the
+  // same lifted-state reason as `deletedProfiles`/`deletedRisks`.
+  // PageScenarioDetail dispatches the event before navigating back to
+  // /scenarios; a listener on PageScenarios would miss it because the
+  // list isn't mounted yet at dispatch time.
+  const [deletedScenarios, setDeletedScenarios] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      if (typeof id !== 'string') return;
+      setDeletedScenarios((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:scenario-deleted', handler);
+    return () => window.removeEventListener('aqa:scenario-deleted', handler);
+  }, []);
+
   // v1.7 slice 4c.5 — Risk edits broadcast via `aqa:risk-updated` and
   // the override map lives at App level (same lifted-state reasoning
   // as `updatedProfiles`). PageRiskEditor dispatches the event on PUT
@@ -12290,6 +12531,7 @@ function App() {
     createdProfiles,
     deletedRisks,
     updatedRisks,
+    deletedScenarios,
   };
 
   if (!signedIn) {
