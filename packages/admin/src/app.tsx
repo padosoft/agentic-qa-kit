@@ -9174,6 +9174,15 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
         }}
       />
       <EditProfileWizard
+        // Re-key by profile name so navigating from one profile to
+        // another (even with the modal closed) remounts the wizard
+        // with a fresh form state seeded from the current profile.
+        // Without this, the closed wizard retains the previous
+        // profile's form values until the open-time reset effect
+        // commits, briefly flashing stale data on the first open
+        // frame for the new profile. (Copilot review on PR #30
+        // iter 6.)
+        key={p.name}
         open={editOpen}
         profile={p}
         onClose={() => setEditOpen(false)}

@@ -379,6 +379,46 @@ test.describe('Profile edit', () => {
     ).toEqual([]);
   });
 
+  test('navigating between profiles seeds the wizard from the current profile', async ({
+    page,
+  }) => {
+    // PR #30 iter 6 (Copilot): the wizard's reset effect is gated on
+    // `open`, so a profileName change while the modal is closed
+    // doesn't refresh the form state. Then opening the modal for the
+    // new profile briefly flashes the previous profile's values
+    // before the effect commits. Re-keying the wizard by `p.name` at
+    // the call site forces a fresh mount across profile boundaries
+    // so the first frame is already seeded from the current profile.
+    //
+    // Mock has `smoke` (budget 5) at row 0 and `exploratory`
+    // (budget 25) at row 1. Open smoke's wizard, pollute the form
+    // state by typing a sentinel and cancelling, then navigate to
+    // exploratory and assert its wizard shows budget '25' — not the
+    // sentinel from the previous mount.
+    await page.goto('/');
+    await page
+      .locator('.nav-item', { hasText: /^Profiles/i })
+      .first()
+      .click();
+    await page.locator('table.tbl tbody tr').first().click();
+    await page.getByTestId('profile-edit-btn').click();
+    const budgetA = page.getByTestId('profile-edit-budget');
+    await budgetA.fill('77.7');
+    await expect(budgetA).toHaveValue('77.7');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Navigate back to the profiles list and open the second profile.
+    await page
+      .locator('.nav-item', { hasText: /^Profiles/i })
+      .first()
+      .click();
+    await page.locator('table.tbl tbody tr').nth(1).click();
+    await page.getByTestId('profile-edit-btn').click();
+    const budgetB = page.getByTestId('profile-edit-budget');
+    await expect(budgetB).toHaveValue('25');
+    await expect(budgetB).not.toHaveValue('77.7');
+  });
+
   test('modal close affordances are inert while PUT is in flight', async ({ page }) => {
     // Definite assignment assertion: see profile-delete.e2e.ts for
     // why we capture the resolver this way (TS otherwise narrows the
