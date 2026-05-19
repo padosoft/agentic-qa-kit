@@ -4918,6 +4918,13 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
   const [confirmText, setConfirmText] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
+  // Synchronous in-flight guard: `submitting` state doesn't flip until
+  // the next render, so two rapid clicks on the disabled-soon button
+  // could both pass the `submitting` check and fire two DELETE
+  // requests. The ref is mutated inline before any await, so the
+  // second call short-circuits immediately. Same pattern as the
+  // kanban's pendingRef (slice 4a iter 4).
+  const inFlightRef = React.useRef(false);
   const toast = useToast();
 
   // Reset when modal opens for a new profile (the parent re-uses the
@@ -4943,6 +4950,8 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
 
   async function handleSubmit() {
     if (!canSubmit) return;
+    if (inFlightRef.current) return; // synchronous double-click guard
+    inFlightRef.current = true;
     setSubmitting(true);
     setError(null);
     const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`);
@@ -4987,6 +4996,7 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
       toast.push({ kind: 'error', title: 'Delete profile failed', body: full });
     } finally {
       setSubmitting(false);
+      inFlightRef.current = false;
     }
   }
 
@@ -8563,8 +8573,35 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
 
 // ---------------- Profile detail ----------------
 function PageProfileDetail({ name, onNavigate }) {
-  const p = profileByName(name) || PROFILES[0];
+  const p = profileByName(name);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  // Now that this page has a destructive Delete action, a stale or
+  // typoed route param (e.g. /profiles/<deleted-name>) must NOT
+  // silently render the first profile in the list — otherwise the
+  // user could delete the wrong record. Show a clear not-found
+  // state instead.
+  if (!p) {
+    return (
+      <div className="page" data-screen-label="14 Profile detail (not found)">
+        <PageHeader title="Profile not found" sub={`No profile with name "${name}".`} />
+        <Alert kind="warning" title="No such profile">
+          <span style={{ fontSize: 12.5 }}>
+            The profile you tried to open isn't in the local list. It may have been deleted,
+            renamed, or the URL is stale.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="profile-detail-back"
+              onClick={() => onNavigate?.('profiles', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to profiles
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
   return (
     <div className="page" data-screen-label="14 Profile detail">
       <PageHeader
