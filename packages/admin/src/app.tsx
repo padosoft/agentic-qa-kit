@@ -9184,15 +9184,16 @@ function PageProfileDetail({ name, onNavigate, deletedProfiles, updatedProfiles 
         }}
       />
       <EditProfileWizard
-        // Re-key by profile name so navigating from one profile to
-        // another (even with the modal closed) remounts the wizard
-        // with a fresh form state seeded from the current profile.
-        // Without this, the closed wizard retains the previous
-        // profile's form values until the open-time reset effect
-        // commits, briefly flashing stale data on the first open
-        // frame for the new profile. (Copilot review on PR #30
-        // iter 6.)
-        key={p.name}
+        // Navigation between profiles always passes through the
+        // PageProfiles list (sidebar → Profiles → row click), which
+        // unmounts and remounts PageProfileDetail — and with it the
+        // wizard — so we get a fresh form state on every profile
+        // transition without needing `key={p.name}`. The wizard's
+        // internal stale-submit guard (profileRef compared at PUT
+        // resolve time) depends on a stable instance across renders
+        // of the SAME profile (e.g. App's 5s tick); a profile-
+        // keyed remount would unmount the wizard mid-flight and
+        // detach the guard. (Copilot review on PR #30 iter 8.)
         open={editOpen}
         profile={p}
         onClose={() => setEditOpen(false)}
