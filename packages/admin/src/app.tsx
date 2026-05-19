@@ -5185,32 +5185,52 @@ function parseSlugList(s) {
     .filter((x) => x.length > 0);
 }
 
+// Mirror @aqa/schemas Slug regex so we can flag invalid pack slugs in
+// the form before the user hits Save. The server PUT handler casts
+// `req.body` as Profile.Profile without re-validating, so without
+// this UI check a typo (uppercase, spaces, consecutive dashes,
+// over-length) would persist a malformed profile. (Codex review on
+// PR #30.)
+const SLUG_PATTERN = /^[a-z0-9](?:-?[a-z0-9])*$/;
+const MAX_SLUG_LEN = 52;
+function slugError(s) {
+  if (s.length > MAX_SLUG_LEN) return `"${s}" exceeds ${MAX_SLUG_LEN} chars`;
+  if (!SLUG_PATTERN.test(s)) return `"${s}" must be lowercase a-z, 0-9, single dashes`;
+  return null;
+}
+
 function EditProfileWizard({ open, profile, onClose, onSaved }) {
-  const initial = React.useMemo(() => deriveProfileForm(profile), [profile]);
-  const [form, setForm] = React.useState(initial ?? deriveProfileForm({ packs: [], tags: [] }));
+  const [form, setForm] = React.useState(() => deriveProfileForm(profile ?? { packs: [], tags: [] }));
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
+  // Keep the latest profile in a ref so the reset effect can read it
+  // without listing `profile` in deps — the wizard must NOT reset on
+  // every parent re-render (App's 5-second lastTick interval and
+  // other state churn would otherwise wipe the user's typed input
+  // every tick). Reset only fires on modal-open transitions or when
+  // the profile NAME actually changes. (Copilot review on PR #30.)
+  const profileRef = React.useRef(profile);
+  React.useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
   const toast = useToast();
   const profileName = profile?.name;
 
-  // Whenever the wizard opens (or the source profile swaps under us),
-  // re-seed the form to the current display values. Same dual-trigger
-  // dependency as DeleteProfileWizard's reset effect, and same
-  // inFlightRef-with-submitting reset (slice 4c.1 iter 5 lesson).
   React.useEffect(() => {
     if (open) {
-      setForm(initial ?? deriveProfileForm({ packs: [], tags: [] }));
+      setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
       setError(null);
       setSubmitting(false);
       inFlightRef.current = false;
     }
-  }, [open, initial]);
+  }, [open, profileName]);
 
   // Inline validation: parallelism must be a positive integer ≤ 64
   // (matches Zod schema), llm_budget_usd must be non-negative when
-  // set. Both checks mirror the schema so the user gets immediate
-  // feedback instead of a server round-trip rejection.
+  // set, and every pack entry must be a valid slug. All three mirror
+  // the Zod schema so the user gets immediate feedback instead of a
+  // server round-trip rejection / silently-persisted bad data.
   const parallelismError = (() => {
     const n = form.parallelism;
     if (!Number.isInteger(n) || n < 1 || n > 64) return '1..64 integer';
@@ -5222,7 +5242,15 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 'must be ≥ 0';
     return null;
   })();
-  const canSubmit = !submitting && parallelismError === null && budgetError === null;
+  const packsError = (() => {
+    for (const s of parseSlugList(form.packs)) {
+      const err = slugError(s);
+      if (err) return err;
+    }
+    return null;
+  })();
+  const canSubmit =
+    !submitting && parallelismError === null && budgetError === null && packsError === null;
 
   function handleClose() {
     if (submitting) return;
@@ -5253,6 +5281,14 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       execution_mode: form.execution_mode,
       llm_usage: Array.isArray(profile?.llm_usage) ? profile.llm_usage : [],
       llm_budget_usd: form.llm_budget_usd,
+      // Preserve the optional `budget_minutes` wall-clock guard from
+      // the source profile if it was set — the form doesn't expose it
+      // and `MemoryStore.saveProfile` writes the submitted object as
+      // the replacement profile, so omitting the key would silently
+      // strip the user's existing wall-clock budget. (Codex review.)
+      ...(typeof profile?.budget_minutes === 'number'
+        ? { budget_minutes: profile.budget_minutes }
+        : {}),
       parallelism: form.parallelism,
       require_deterministic_replay: form.require_deterministic_replay,
       packs: parseSlugList(form.packs),
@@ -5410,9 +5446,14 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
             value={form.parallelism}
             onChange={(e) => {
               const v = e.target.value;
+              // Preserve decimal entries with `Number(v)` (not
+              // `parseInt`) so non-integer input like "1.5" stays in
+              // form state as 1.5 and fails the integer validation
+              // — `parseInt` would silently truncate to 1 and slip
+              // past the check. (Copilot review on PR #30.)
               setForm((f) => ({
                 ...f,
-                parallelism: v === '' ? 0 : Number.parseInt(v, 10),
+                parallelism: v === '' ? 0 : Number(v),
               }));
             }}
           />
@@ -5448,6 +5489,11 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
             value={form.packs}
             onChange={(e) => setForm((f) => ({ ...f, packs: e.target.value }))}
           />
+          {packsError && (
+            <div className="field-hint danger" data-testid="profile-edit-packs-err">
+              {packsError}
+            </div>
+          )}
         </div>
         <div className="field-row">
           <label className="field-label" htmlFor="ep-tags">
