@@ -8350,18 +8350,30 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
     setSaving(true);
     setSaveError(null);
     const submittedId = riskId;
-    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(submittedId)}`);
+    // Schema's Slug regex rejects underscores; legacy mock risk and
+    // invariant ids (e.g. `risk_cross_tenant_leak`) use them, so
+    // submitting them as-is would 400 on the server's parse step
+    // before the id-match check. Normalize underscores → dashes for
+    // both the path and the body.id so the two stay in sync.
+    const toSlug = (s) =>
+      typeof s === 'string' ? s.replace(/_/g, '-').toLowerCase() : s;
+    const normalizedId = toSlug(submittedId);
+    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(normalizedId)}`);
     // Build a schema-conforming Risk body. Invariants on the mock are
     // bare slug strings, but the schema requires { id, statement }
-    // objects — coerce so the server doesn't 400 on a legacy mock row
-    // when the user only edited title/severity/etc.
+    // objects — coerce (and slugify the id) so the server doesn't 400
+    // on a legacy mock row when the user only edited title/severity.
     const body = {
       ...r,
+      id: normalizedId,
       invariants: Array.isArray(r.invariants)
         ? r.invariants.map((inv) =>
             typeof inv === 'string'
-              ? { id: inv, statement: `Invariant: ${inv.replace(/_/g, ' ')}` }
-              : inv,
+              ? {
+                  id: toSlug(inv),
+                  statement: `Invariant: ${inv.replace(/_/g, ' ')}`,
+                }
+              : { ...inv, id: toSlug(inv.id) },
           )
         : [],
     };
@@ -8386,9 +8398,21 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
         return;
       }
       toast.push({ kind: 'success', title: 'Risk saved', body: submittedId });
+      // The body sent to the server has schema-coerced fields (slugified
+      // id, { id, statement } invariant objects). Re-merging that into
+      // the editor's UI state would break the bare-string invariant
+      // renderer and silently change the displayed risk id. Broadcast
+      // only the fields the user can actually edit in this page so
+      // the override merge stays UI-safe.
+      const uiPatch = {
+        title: r.title,
+        category: r.category,
+        severity: r.severity,
+        likelihood: r.likelihood,
+      };
       try {
         window.dispatchEvent(
-          new CustomEvent('aqa:risk-updated', { detail: { id: submittedId, patch: body } }),
+          new CustomEvent('aqa:risk-updated', { detail: { id: submittedId, patch: uiPatch } }),
         );
       } catch {
         // CustomEvent unsupported — non-fatal.

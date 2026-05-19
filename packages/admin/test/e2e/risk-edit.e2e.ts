@@ -71,17 +71,22 @@ test.describe('Risk edit', () => {
     await expect(page.locator('.toast.success', { hasText: /Risk saved/i })).toBeVisible();
     expect(calls.length).toBe(1);
     expect(calls[0]?.method).toBe('PUT');
-    expect(calls[0]?.url).toMatch(new RegExp(`/api/risks/${id}$`));
+    // The wizard slugifies underscores to dashes so the body.id and
+    // path id stay schema-compliant (Slug regex rejects underscores).
+    const slugId = id.replace(/_/g, '-');
+    expect(calls[0]?.url).toMatch(new RegExp(`/api/risks/${slugId}$`));
     const body = calls[0]?.body as Record<string, unknown>;
-    expect(body.id).toBe(id);
+    expect(body.id).toBe(slugId);
     expect(body.title).toBe('Edited risk title');
     expect(body.severity).toBe('low');
     // Bare-string invariants on the mock row are coerced to { id,
-    // statement } objects so the server's schema-validation doesn't
-    // 400 when the user only edited the title/severity.
+    // statement } objects (with slugified ids) so the server's
+    // schema-validation doesn't 400 when the user only edited
+    // title/severity.
     const invariants = body.invariants as Array<{ id: string; statement: string }>;
     if (invariants.length > 0) {
       expect(typeof invariants[0]?.id).toBe('string');
+      expect(invariants[0]?.id).not.toMatch(/_/);
       expect(typeof invariants[0]?.statement).toBe('string');
     }
     // Navigate away then back via the test-only navigate hook — the
@@ -96,6 +101,46 @@ test.describe('Risk edit', () => {
     }, id);
     await expect(page.getByTestId('risk-edit-title')).toHaveValue('Edited risk title');
     await expect(page.getByTestId('risk-edit-severity')).toHaveValue('low');
+  });
+
+  test('saving a legacy-id risk does not break the invariants render on re-open', async ({
+    page,
+  }) => {
+    // PR #33 iter 1 (Copilot/Codex P1): the body PUT to the server has
+    // schema-coerced invariants ({ id, statement } objects), but the
+    // editor renders r.invariants as bare strings. If we merged that
+    // coerced shape back into updatedRisks, re-opening would crash
+    // with "Objects are not valid as a React child". Broadcasting
+    // only the user-facing fields (title/category/severity/likelihood)
+    // sidesteps the issue. This test exercises the re-open path
+    // against a risk that originally had non-empty invariants.
+    await page.route('**/api/risks/**', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ risk: route.request().postDataJSON() }),
+      });
+    });
+    const id = await openFirstRiskEditor(page);
+    await page.getByTestId('risk-edit-title').fill('Edited again');
+    await page.getByTestId('risk-save-btn').click();
+    await expect(page.locator('.toast.success', { hasText: /Risk saved/i })).toBeVisible();
+    // Re-open: the editor must still render without console errors.
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    await page.evaluate((riskId) => {
+      // biome-ignore lint/suspicious/noExplicitAny: test-only hook
+      const nav = (window as any).__aqaNavigate;
+      nav?.('risk-map', {});
+      nav?.('risk-edit', { riskId });
+    }, id);
+    await expect(page.getByTestId('risk-edit-title')).toHaveValue('Edited again');
+    // No "Objects are not valid as a React child" or similar render
+    // crash should appear in the console.
+    expect(consoleErrors.filter((m) => /not valid as a React child/i.test(m))).toEqual([]);
   });
 
   test('4xx surfaces the server error in an inline alert without leaving the page', async ({
