@@ -8350,30 +8350,26 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
     setSaving(true);
     setSaveError(null);
     const submittedId = riskId;
-    // Schema's Slug regex rejects underscores; legacy mock risk and
-    // invariant ids (e.g. `risk_cross_tenant_leak`) use them, so
-    // submitting them as-is would 400 on the server's parse step
-    // before the id-match check. Normalize underscores → dashes for
-    // both the path and the body.id so the two stay in sync.
-    const toSlug = (s) =>
-      typeof s === 'string' ? s.replace(/_/g, '-').toLowerCase() : s;
-    const normalizedId = toSlug(submittedId);
-    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(normalizedId)}`);
-    // Build a schema-conforming Risk body. Invariants on the mock are
-    // bare slug strings, but the schema requires { id, statement }
-    // objects — coerce (and slugify the id) so the server doesn't 400
-    // on a legacy mock row when the user only edited title/severity.
+    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(submittedId)}`);
+    // Build a Risk body. Invariants on the mock are bare slug strings
+    // but the schema requires { id, statement } objects — coerce so
+    // the server's schema-validation reaches the id-match check on
+    // legacy rows. The risk id itself (and invariant ids) ARE passed
+    // through unchanged: if the displayed id (e.g. legacy
+    // `risk_cross_tenant_leak`) fails the schema's Slug regex, the
+    // server returns 400 and we surface the error inline. We DO NOT
+    // silently slugify — that would create a separate server-side
+    // entry under the dashed id while the UI still shows the
+    // underscored one, leaving later reads/deletes fragmented (PR #33
+    // Copilot iter 2). Migrating the mock fixtures to dashed slugs is
+    // a separate hygiene task.
     const body = {
       ...r,
-      id: normalizedId,
       invariants: Array.isArray(r.invariants)
         ? r.invariants.map((inv) =>
             typeof inv === 'string'
-              ? {
-                  id: toSlug(inv),
-                  statement: `Invariant: ${inv.replace(/_/g, ' ')}`,
-                }
-              : { ...inv, id: toSlug(inv.id) },
+              ? { id: inv, statement: `Invariant: ${inv.replace(/_/g, ' ')}` }
+              : inv,
           )
         : [],
     };

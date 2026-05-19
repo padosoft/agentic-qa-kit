@@ -71,22 +71,19 @@ test.describe('Risk edit', () => {
     await expect(page.locator('.toast.success', { hasText: /Risk saved/i })).toBeVisible();
     expect(calls.length).toBe(1);
     expect(calls[0]?.method).toBe('PUT');
-    // The wizard slugifies underscores to dashes so the body.id and
-    // path id stay schema-compliant (Slug regex rejects underscores).
-    const slugId = id.replace(/_/g, '-');
-    expect(calls[0]?.url).toMatch(new RegExp(`/api/risks/${slugId}$`));
+    // Path id is the displayed (and stored) id — no client-side
+    // slugification (see app.tsx handleSave comment for rationale).
+    expect(calls[0]?.url).toMatch(new RegExp(`/api/risks/${id}$`));
     const body = calls[0]?.body as Record<string, unknown>;
-    expect(body.id).toBe(slugId);
+    expect(body.id).toBe(id);
     expect(body.title).toBe('Edited risk title');
     expect(body.severity).toBe('low');
-    // Bare-string invariants on the mock row are coerced to { id,
-    // statement } objects (with slugified ids) so the server's
-    // schema-validation doesn't 400 when the user only edited
-    // title/severity.
+    // Bare-string invariants on the mock row are coerced to
+    // { id, statement } objects so the server's schema-validation
+    // reaches the id-match check.
     const invariants = body.invariants as Array<{ id: string; statement: string }>;
     if (invariants.length > 0) {
       expect(typeof invariants[0]?.id).toBe('string');
-      expect(invariants[0]?.id).not.toMatch(/_/);
       expect(typeof invariants[0]?.statement).toBe('string');
     }
     // Navigate away then back via the test-only navigate hook — the
