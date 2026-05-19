@@ -5193,11 +5193,12 @@ function parseSlugList(s) {
 }
 
 // Mirror @aqa/schemas Slug regex so we can flag invalid pack slugs in
-// the form before the user hits Save. The server PUT handler casts
-// `req.body` as Profile.Profile without re-validating, so without
-// this UI check a typo (uppercase, spaces, consecutive dashes,
-// over-length) would persist a malformed profile. (Codex review on
-// PR #30.)
+// the form before the user hits Save. The server PUT handler is now
+// the trust boundary (it runs `ProfileSchema.Profile.safeParse` and
+// rejects malformed bodies with a 400, added in PR #30 iter 10), so
+// this UI check exists purely for immediate user feedback — catching
+// the typo before a round-trip rather than relying on the server's
+// rejection toast.
 //
 // Length cap mirrors `Slug.max(64)` in `packages/schemas/src/common.ts:26`.
 // (CreatePackWizard caps at 52 instead, but that's a tighter UX cap

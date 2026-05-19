@@ -546,6 +546,13 @@ export function makeApi(): ApiHandler[] {
       path: '/api/profiles/:name',
       requires: 'profiles:edit',
       async handle(req, ctx) {
+        // The path name is the canonical identity for this route —
+        // match the GET/DELETE handlers and 404 when it's missing
+        // instead of letting a body-only request persist `body.name`
+        // without any path identity. (Copilot review on PR #30 iter
+        // 10.)
+        const pathName = req.params.name;
+        if (!pathName) return notFound('profile');
         // Parse the body against the Profile schema before persisting.
         // The admin UI does its own client-side validation, but the
         // server is the trust boundary — any non-UI client (curl, a
@@ -565,11 +572,9 @@ export function makeApi(): ApiHandler[] {
         // name instead of the path's, which is a path-confusion class
         // of bug. Reject mismatches with a 400 instead of trusting one
         // side.
-        if (req.params.name && profile.name !== req.params.name) {
+        if (profile.name !== pathName) {
           return asResponse(
-            {
-              error: `profile name mismatch: path "${req.params.name}" vs body "${profile.name}"`,
-            },
+            { error: `profile name mismatch: path "${pathName}" vs body "${profile.name}"` },
             400,
           );
         }

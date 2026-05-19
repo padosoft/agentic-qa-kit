@@ -342,6 +342,17 @@ probes: []
       );
     });
 
+    it('404s when the path name is missing (matches GET/DELETE)', async () => {
+      // PR #30 iter 10 (Copilot): the mismatch check was conditional
+      // on `req.params.name`, so a body-only request would persist
+      // `body.name` without any path identity — inconsistent with
+      // the GET/DELETE profile handlers that 404 on missing names.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      const res = await route?.handle({ headers: {}, params: {}, body: validProfile }, c);
+      assert.equal(res?.status, 404);
+    });
+
     it('requires the profiles:edit permission', () => {
       const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
       assert.equal(route?.requires, 'profiles:edit');
