@@ -4933,11 +4933,22 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
   // mounted across a profile switch (e.g. parent re-uses the wizard
   // with a different name) — otherwise the typed confirm text from
   // the previous profile would stick around.
+  //
+  // CRITICAL: reset `inFlightRef.current` together with `submitting`.
+  // Otherwise a profile switch mid-flight would re-enable the Delete
+  // button (submitting=false) while the ref stays true — the user
+  // could click Delete and the new submit would silently no-op via
+  // the synchronous guard. Keeping both in sync means the old
+  // request's finally block becomes a no-op assignment, and the user
+  // can issue a fresh delete on the new profile. (The old request's
+  // success path would still toast against the old profileName,
+  // which is acceptable — the user just changed context.)
   React.useEffect(() => {
     if (open) {
       setConfirmText('');
       setError(null);
       setSubmitting(false);
+      inFlightRef.current = false;
     }
   }, [open, profileName]);
 
