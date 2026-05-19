@@ -138,12 +138,8 @@ describe('PostgresStore (v0.3 scaffold)', () => {
           risk_refs: ['risk-x'],
           invariant_refs: [],
           preconditions: [],
-          steps: [
-            { id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 },
-          ],
-          oracles: [
-            { id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 },
-          ],
+          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
+          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
           cleanup: [],
           tags: [],
         }),
