@@ -34,6 +34,28 @@ test.describe('Agents page', () => {
     await expect(page.getByTestId('agent-install-copilot')).toBeVisible();
   });
 
+  test('empty server payload is authoritative — replaces the fixture with []', async ({
+    page,
+  }) => {
+    // PR #38 Copilot iter 1: an empty `agents` array from the server
+    // must NOT fall back to the local fixture, otherwise a fresh
+    // deploy with no discovered adapters would look like it had the
+    // fixture agents installed.
+    await page.route('**/api/agents', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ agents: [] }),
+      });
+    });
+    await gotoAgents(page);
+    // No agent cards (fixture's claude/codex/gemini/copilot all gone).
+    await expect(page.getByTestId('agent-install-claude')).toHaveCount(0);
+    await expect(page.getByTestId('agent-uninstall-claude')).toHaveCount(0);
+    await expect(page.getByTestId('agent-install-copilot')).toHaveCount(0);
+  });
+
   test('replaces the fixture with the server payload when GET succeeds', async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       if (route.request().method() !== 'GET') return route.continue();

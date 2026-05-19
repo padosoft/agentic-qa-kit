@@ -380,6 +380,7 @@ export class MemoryStore implements StoreProvider {
     this.profiles.clear();
     this.risks.clear();
     this.scenarios.clear();
+    this.agents.clear();
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();

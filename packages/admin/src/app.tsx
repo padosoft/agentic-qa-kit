@@ -10763,7 +10763,12 @@ function PageAgents({ onNavigate }) {
         if (!res.ok) return; // mock mode / dev — keep the fixture
         const body = await res.json();
         const list = body?.agents;
-        if (!Array.isArray(list) || list.length === 0 || cancelled) return;
+        if (!Array.isArray(list) || cancelled) return;
+        // PR #38 Copilot iter 1: an EMPTY agents array is a legitimate
+        // payload (fresh deploy with no adapters discovered yet);
+        // adopt it instead of silently keeping the local fixture,
+        // which would otherwise make the page look like the fixture
+        // agents were installed when they weren't.
         setAgents(list);
       } catch {
         // Mock data mode — leave the fixture in place. The toast bus
