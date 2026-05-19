@@ -8,9 +8,9 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
-// Expose the YAML parser on `window` so the test-only ScenarioYamlWizard
-// (and the e2e tests) can drive client-side parsing through a stable
-// symbol. Mirrors __aqaApiUrl / __aqaNavigate.
+// Expose the YAML parser/stringifier on `window` so ScenarioYamlWizard
+// (production) and the e2e tests share a stable symbol for client-side
+// YAML round-trips. Mirrors __aqaApiUrl / __aqaNavigate.
 if (typeof window !== 'undefined') {
   window.__aqaYamlParse = yamlParse;
   window.__aqaYamlStringify = yamlStringify;
@@ -5545,6 +5545,11 @@ function ScenarioYamlWizard({
         }
       }
       setYamlText(seeded);
+      // Synchronize debouncedYaml with the seed so the parsed body and
+      // UX hints reflect the new session immediately (no 150ms window
+      // of stale warnings from the previous open/close). PR #37
+      // Copilot iter 7.
+      setDebouncedYaml(seeded);
       setError(null);
       setSubmitting(false);
       inFlightRef.current = false;
