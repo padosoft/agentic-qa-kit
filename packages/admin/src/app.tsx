@@ -5536,14 +5536,18 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
   }
 
   // Parse client-side for an early UX hint. Server is the trust
-  // boundary.
-  let parsedBody = null;
-  let parseError = null;
-  try {
-    parsedBody = window.__aqaYamlParse?.(yamlText);
-  } catch (e) {
-    parseError = e instanceof Error ? e.message : String(e);
-  }
+  // boundary. Memoize so unrelated state changes (submitting,
+  // scenarioId, etc.) don't re-trigger a parse that's O(yaml-size).
+  const { parsedBody, parseError } = React.useMemo(() => {
+    let p = null;
+    let err = null;
+    try {
+      p = window.__aqaYamlParse?.(yamlText);
+    } catch (e) {
+      err = e instanceof Error ? e.message : String(e);
+    }
+    return { parsedBody: p, parseError: err };
+  }, [yamlText]);
   // Clone mode forces the user to pick an id — YAML parses `id:`
   // (empty) as `null`, so without this guard canSubmit would be true
   // and the user could POST a body with `id: null`. The server would
@@ -5576,6 +5580,14 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
     setSubmitting(true);
     setError(null);
     const submittedSourceId = scenarioId;
+    // Toast and error context should reflect the id the request is
+    // actually about: source for edit (the resource being updated),
+    // new id for clone (the resource being created). PR #37 Copilot
+    // iter 2 — clone errors previously read "<source>: ..." which was
+    // misleading when the server rejected the NEW id (collision /
+    // schema).
+    const subjectId =
+      mode === 'clone' && parsedBody?.id ? parsedBody.id : submittedSourceId;
     try {
       const reqUrl =
         mode === 'edit'
@@ -5595,7 +5607,7 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
       }
       if (!res.ok) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
-        const fullMsg = `${submittedSourceId}: ${msg}`;
+        const fullMsg = `${subjectId}: ${msg}`;
         toast.push({ kind: 'error', title: `Save scenario failed`, body: fullMsg });
         setError(msg);
         return;
@@ -5624,7 +5636,7 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
       toast.push({
         kind: 'error',
         title: 'Save scenario failed',
-        body: `${submittedSourceId}: ${msg}`,
+        body: `${subjectId}: ${msg}`,
       });
       setError(msg);
     } finally {
@@ -9604,66 +9616,74 @@ function PagePackDetail({ slug, onNavigate }) {
 }
 
 // ---------------- Scenarios ----------------
+// PR #37 Copilot iter 2: the mock scenario fixtures are referenced
+// from TWO places (PageScenarios for the tree, PageScenarioDetail's
+// `existingIds` for the clone-collision check). Promoting to a module
+// constant keeps them in sync; before the refactor, duplicating the
+// list would have either allowed duplicate clones (id missing from
+// the check) or false-positive collisions (extra id in the check).
+const SCENARIO_FIXTURES = [
+  {
+    id: 'api.tenant.cross_tenant_search',
+    pack: 'api',
+    oracle: 'cross_tenant',
+    last_status: 'failed',
+  },
+  {
+    id: 'api.tenant.cross_tenant_invoice',
+    pack: 'api',
+    oracle: 'cross_tenant',
+    last_status: 'failed',
+  },
+  {
+    id: 'auth.jwt.replay_after_logout',
+    pack: 'security-owasp',
+    oracle: 'authn',
+    last_status: 'failed',
+  },
+  { id: 'api.idor.invoice_pdf', pack: 'api', oracle: 'authz', last_status: 'succeeded' },
+  {
+    id: 'security.rate_limit.search',
+    pack: 'security-owasp',
+    oracle: 'rate_limit',
+    last_status: 'failed',
+  },
+  {
+    id: 'agentic.tool_budget.runaway',
+    pack: 'security-agentic',
+    oracle: 'budget',
+    last_status: 'failed',
+  },
+  { id: 'data.pii.logs', pack: 'security-owasp', oracle: 'pii_scan', last_status: 'failed' },
+  {
+    id: 'business.order.total_rounding',
+    pack: 'core',
+    oracle: 'invariant',
+    last_status: 'succeeded',
+  },
+  { id: 'security.csrf.admin', pack: 'security-owasp', oracle: 'csrf', last_status: 'failed' },
+  {
+    id: 'ui.xss.reflected_search',
+    pack: 'web-ui-laravel',
+    oracle: 'xss_scan',
+    last_status: 'succeeded',
+  },
+  {
+    id: 'security.prompt_injection.search_rag',
+    pack: 'security-agentic',
+    oracle: 'llm_judge',
+    last_status: 'failed',
+  },
+  {
+    id: 'migrations.rollback.smoke',
+    pack: 'migrations',
+    oracle: 'rollback_works',
+    last_status: 'succeeded',
+  },
+];
+
 function PageScenarios({ onNavigate, onOpenScenario, deletedScenarios, createdScenarios }) {
-  const rawScenarios = [
-    {
-      id: 'api.tenant.cross_tenant_search',
-      pack: 'api',
-      oracle: 'cross_tenant',
-      last_status: 'failed',
-    },
-    {
-      id: 'api.tenant.cross_tenant_invoice',
-      pack: 'api',
-      oracle: 'cross_tenant',
-      last_status: 'failed',
-    },
-    {
-      id: 'auth.jwt.replay_after_logout',
-      pack: 'security-owasp',
-      oracle: 'authn',
-      last_status: 'failed',
-    },
-    { id: 'api.idor.invoice_pdf', pack: 'api', oracle: 'authz', last_status: 'succeeded' },
-    {
-      id: 'security.rate_limit.search',
-      pack: 'security-owasp',
-      oracle: 'rate_limit',
-      last_status: 'failed',
-    },
-    {
-      id: 'agentic.tool_budget.runaway',
-      pack: 'security-agentic',
-      oracle: 'budget',
-      last_status: 'failed',
-    },
-    { id: 'data.pii.logs', pack: 'security-owasp', oracle: 'pii_scan', last_status: 'failed' },
-    {
-      id: 'business.order.total_rounding',
-      pack: 'core',
-      oracle: 'invariant',
-      last_status: 'succeeded',
-    },
-    { id: 'security.csrf.admin', pack: 'security-owasp', oracle: 'csrf', last_status: 'failed' },
-    {
-      id: 'ui.xss.reflected_search',
-      pack: 'web-ui-laravel',
-      oracle: 'xss_scan',
-      last_status: 'succeeded',
-    },
-    {
-      id: 'security.prompt_injection.search_rag',
-      pack: 'security-agentic',
-      oracle: 'llm_judge',
-      last_status: 'failed',
-    },
-    {
-      id: 'migrations.rollback.smoke',
-      pack: 'migrations',
-      oracle: 'rollback_works',
-      last_status: 'succeeded',
-    },
-  ];
+  const rawScenarios = SCENARIO_FIXTURES;
   // v1.7 slice 4c.6 — hide scenarios that the user has deleted via
   // DeleteScenarioWizard. App-level Set survives route changes.
   // v1.7 slice 4c.8-admin — also append any clones the user has
@@ -9841,29 +9861,14 @@ function PageScenarioDetail({
   const [editOpen, setEditOpen] = React.useState(false);
   const [cloneOpen, setCloneOpen] = React.useState(false);
   // Set of every scenario id already taken — feeds the Clone wizard's
-  // collision check. Built from the PageScenarios mock list + any
-  // App-level created scenarios. (Deleted ids are eligible for re-use,
-  // same as Profile Clone in slice 4c.3.)
+  // collision check. Sourced from the shared SCENARIO_FIXTURES const
+  // (also consumed by PageScenarios) plus any App-level clones.
+  // (Deleted ids are eligible for re-use, same as Profile Clone in
+  // slice 4c.3.)
   const existingIds = React.useMemo(() => {
     const s = new Set();
-    // Re-derive from the PageScenarios mock list (kept inline there
-    // for v1.7; a future slice can promote both to a shared module).
-    const mockIds = [
-      'api.tenant.cross_tenant_search',
-      'api.tenant.cross_tenant_invoice',
-      'auth.jwt.replay_after_logout',
-      'api.idor.invoice_pdf',
-      'security.rate_limit.search',
-      'agentic.tool_budget.runaway',
-      'data.pii.logs',
-      'business.order.total_rounding',
-      'security.csrf.admin',
-      'ui.xss.reflected_search',
-      'security.prompt_injection.search_rag',
-      'migrations.rollback.smoke',
-    ];
-    for (const m of mockIds) {
-      if (!deletedScenarios?.has?.(m)) s.add(m);
+    for (const fix of SCENARIO_FIXTURES) {
+      if (!deletedScenarios?.has?.(fix.id)) s.add(fix.id);
     }
     if (createdScenarios instanceof Map) {
       for (const k of createdScenarios.keys()) {
@@ -12786,7 +12791,12 @@ function App() {
       if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
       setUpdatedScenarios((prev) => {
         const next = new Map(prev);
-        next.set(id, safeMergeObject(prev.get(id), patch));
+        // For Scenario edits the `patch` is the FULL PUT body, not a
+        // delta — replacing instead of merging so removing an optional
+        // field in the YAML (e.g. `seed`) actually drops it from the
+        // override. PR #37 Copilot iter 2. Still strip prototype-
+        // polluting keys from the user-supplied body.
+        next.set(id, safeMergeObject(null, patch));
         return next;
       });
     };
