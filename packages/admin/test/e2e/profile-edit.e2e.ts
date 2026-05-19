@@ -241,17 +241,23 @@ test.describe('Profile edit', () => {
     // silently wiped. The fix re-keys the effect to `[open,
     // profileName]` and reads the latest profile via a ref.
     //
-    // We wait through 2 ticks (~11s) and assert the typed value is
-    // still there.
+    // PR #30 iter 11 (Copilot): the original test slept 11s of real
+    // wall-clock time waiting for two intervals to fire — slow and
+    // timing-sensitive under parallel-worker CI load. We now install
+    // Playwright's clock mock BEFORE navigation so App's
+    // `setInterval` registers against the fake clock, then advance
+    // 11 virtual seconds synchronously after typing. Same two ticks
+    // exercised, ~10s faster, no real timers depended on.
+    await page.clock.install();
     await navigateToProfileDetail(page);
     await page.getByTestId('profile-edit-btn').click();
     const budget = page.getByTestId('profile-edit-budget');
     await budget.fill('42.5');
     await expect(budget).toHaveValue('42.5');
-    // Two App-level ticks fire here. Without the fix, the budget
-    // input would re-seed to the mock value (5) after the first
-    // tick.
-    await page.waitForTimeout(11_000);
+    // Two App-level ticks fire here (virtual time). Without the fix,
+    // the budget input would re-seed to the mock value (5) after the
+    // first tick.
+    await page.clock.runFor(11_000);
     await expect(budget).toHaveValue('42.5');
   });
 
