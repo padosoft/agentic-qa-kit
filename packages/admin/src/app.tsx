@@ -8484,27 +8484,14 @@ function PageScenarioDetail({ id, onNavigate }) {
 }
 
 // ---------------- Profiles ----------------
-function PageProfiles({ onNavigate, onOpenProfile }) {
-  // Subscribe to delete events so the just-deleted profile drops out
-  // of the rendered list. In mock-data mode the PROFILES array is a
-  // static constant — without this subscription, navigating back to
-  // /profiles after a successful delete would still show the entry.
-  // In a live deployment with a real backend the page would refetch;
-  // the event-driven local state makes both behaviors match.
-  const [deletedNames, setDeletedNames] = React.useState(() => new Set());
-  React.useEffect(() => {
-    const handler = (e) => {
-      const name = e?.detail?.name;
-      if (typeof name !== 'string') return;
-      setDeletedNames((prev) => {
-        const next = new Set(prev);
-        next.add(name);
-        return next;
-      });
-    };
-    window.addEventListener('aqa:profile-deleted', handler);
-    return () => window.removeEventListener('aqa:profile-deleted', handler);
-  }, []);
+function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
+  // `deletedProfiles` is owned by App (lifted state) so it survives
+  // route changes. PageProfileDetail dispatches `aqa:profile-deleted`
+  // BEFORE navigating back here, so a listener on PageProfiles itself
+  // would miss the event (we weren't mounted at dispatch time). The
+  // App-level listener catches every dispatch and the Set drips down
+  // through props.
+  const deletedNames = deletedProfiles ?? new Set();
   const visible = PROFILES.filter((p) => !deletedNames.has(p.name));
   return (
     <div className="page" data-screen-label="13 Profiles">
@@ -8572,8 +8559,13 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
 }
 
 // ---------------- Profile detail ----------------
-function PageProfileDetail({ name, onNavigate }) {
-  const p = profileByName(name);
+function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
+  const rawP = profileByName(name);
+  // Treat just-deleted profiles as not-found so a stale link
+  // (e.g. a notification linking to a profile a colleague just
+  // removed) doesn't render the underlying mock row.
+  const isDeleted = deletedProfiles?.has(name);
+  const p = isDeleted ? null : rawP;
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   // Now that this page has a destructive Delete action, a stale or
   // typoed route param (e.g. /profiles/<deleted-name>) must NOT
@@ -10838,6 +10830,27 @@ function App() {
   const [mode, setMode] = React.useState('mock'); // mock | live | failed
   const [lastTick, setLastTick] = React.useState(NOW_REF);
   const [signedIn, setSignedIn] = React.useState(true);
+  // Profile deletions broadcast via `aqa:profile-deleted` CustomEvent
+  // and the set lives at App level (not in PageProfiles) so it
+  // survives route changes. PageProfileDetail dispatches the event
+  // before navigating back to /profiles — if the listener lived on
+  // PageProfiles it would miss the event because PageProfiles isn't
+  // mounted yet at dispatch time. App is always mounted while the
+  // user is signed in, so it catches every dispatch.
+  const [deletedProfiles, setDeletedProfiles] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const name = e?.detail?.name;
+      if (typeof name !== 'string') return;
+      setDeletedProfiles((prev) => {
+        const next = new Set(prev);
+        next.add(name);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:profile-deleted', handler);
+    return () => window.removeEventListener('aqa:profile-deleted', handler);
+  }, []);
 
   // Apply theme
   React.useEffect(() => {
@@ -10896,6 +10909,7 @@ function App() {
     params: routeParams,
     theme: tweaks.theme,
     onTheme: (th) => setTweak('theme', th),
+    deletedProfiles,
   };
 
   if (!signedIn) {
