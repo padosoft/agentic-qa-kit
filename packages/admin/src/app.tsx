@@ -4906,6 +4906,137 @@ function ImportManifestWizard({ open, onClose }) {
 }
 Object.assign(window, { ImportManifestWizard });
 
+// =============================================================
+// Delete-profile wizard (v1.7 slice 4c)
+// =============================================================
+// Front-end for DELETE /api/profiles/:name. Deleting a profile is
+// destructive (it removes the configuration that drives `aqa run
+// --profile <name>`) so the modal requires the user to type the
+// profile name as confirmation, mirroring the GitHub repo-delete
+// confirmation pattern. The server endpoint exists since v1.4.
+function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
+  const [confirmText, setConfirmText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const toast = useToast();
+
+  // Reset when modal opens for a new profile (the parent re-uses the
+  // same component for every profile it renders detail for).
+  React.useEffect(() => {
+    if (open) {
+      setConfirmText('');
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const canSubmit = confirmText === profileName && !submitting;
+
+  function handleClose() {
+    if (submitting) return;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`);
+    try {
+      const res = await fetch(reqUrl, { method: 'DELETE' });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        setError(msg);
+        toast.push({ kind: 'error', title: 'Delete profile failed', body: msg });
+        return;
+      }
+      toast.push({
+        kind: 'success',
+        title: 'Profile deleted',
+        body: profileName,
+      });
+      onDeleted?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the profile was not deleted.`;
+      setError(full);
+      toast.push({ kind: 'error', title: 'Delete profile failed', body: full });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Delete profile"
+      sub={`This permanently removes the "${profileName}" profile. \`aqa run --profile ${profileName}\` will start failing immediately. The action cannot be undone from the admin (you'd need to re-create the profile from scratch).`}
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn danger"
+            data-testid="profile-delete-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? (
+              'Deleting…'
+            ) : (
+              <>
+                <I.Trash size={12} />
+                Delete profile
+              </>
+            )}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Delete failed">
+            {error}
+          </Alert>
+        )}
+        <Alert kind="warning" title="This is destructive">
+          Removing a profile drops every run configuration that uses it. Existing run records,
+          findings, and audit events are unaffected — only the profile definition is removed.
+        </Alert>
+        <div className="field-row">
+          <label className="field-label" htmlFor="dp-confirm">
+            Type <code className="mono">{profileName}</code> to confirm *
+          </label>
+          <input
+            id="dp-confirm"
+            className="input mono"
+            data-testid="profile-delete-confirm"
+            placeholder={profileName}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoFocus
+          />
+          <div className="field-hint">
+            The Delete button stays disabled until the typed text matches the profile name
+            exactly. Stops accidental clicks on the wrong profile in a list.
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { DeleteProfileWizard });
+
 // ============ shell.jsx ============
 // =============================================================
 // agentic-qa-kit · admin panel — Shell (Sidebar + TopBar + Palette)
@@ -8389,6 +8520,7 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
 // ---------------- Profile detail ----------------
 function PageProfileDetail({ name, onNavigate }) {
   const p = profileByName(name) || PROFILES[0];
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   return (
     <div className="page" data-screen-label="14 Profile detail">
       <PageHeader
@@ -8408,8 +8540,25 @@ function PageProfileDetail({ name, onNavigate }) {
               <I.Edit size={12} />
               Edit
             </button>
+            <button
+              className="btn sm danger"
+              data-testid="profile-delete-btn"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <I.Trash size={12} />
+              Delete
+            </button>
           </>
         }
+      />
+      <DeleteProfileWizard
+        open={deleteOpen}
+        profileName={p.name}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          onNavigate?.('profiles', {});
+        }}
       />
 
       <div className="split-2-3">
