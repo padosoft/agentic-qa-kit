@@ -980,8 +980,18 @@ function Alert({ kind = 'info', title, children, icon }) {
     ) : (
       <I.AlertCircle size={14} />
     ));
+  // Screen-reader semantics:
+  //  - `error` and `warning` use role="alert" (implicit aria-live="assertive"
+  //    + aria-atomic) so an alert that appears AFTER initial render
+  //    (e.g. an inline error rendered when a form submit fails) is
+  //    announced to assistive tech.
+  //  - `success` uses role="status" (aria-live="polite") because confirmations
+  //    are useful to announce but should not interrupt the user.
+  //  - `info` and `ai` get no live region — they're decorative banners
+  //    rendered with the page and announced by the surrounding context.
+  const role = kind === 'error' || kind === 'warning' ? 'alert' : kind === 'success' ? 'status' : undefined;
   return (
-    <div className={`alert ${kind}`}>
+    <div className={`alert ${kind}`} role={role}>
       <span className="icon">{iconEl}</span>
       <div>
         {title && <b>{title}</b>}
@@ -3990,11 +4000,51 @@ test('${f.id} — ${f.title}', async ({ page, context }) => {
 // -------------------------------------------------------------
 // FindingsKanban — 5 columns, drag-drop, terminal confirmation
 // -------------------------------------------------------------
+// API base URL: when the admin is deployed alongside @aqa/server the
+// admin can fetch the same origin (relative paths). When running the
+// Vite dev server against a separate @aqa/server (the documented
+// deployment, see docs/design/admin-panel-spec-v2.md:379), Vite has
+// no `/api` proxy, so admin code must build an absolute URL using
+// `VITE_AQA_SERVER_URL`. Falling back to relative paths keeps the
+// "admin served by server" case working without configuration.
+function apiUrl(path) {
+  const base =
+    typeof import.meta !== 'undefined' && (import.meta).env
+      ? ((import.meta).env.VITE_AQA_SERVER_URL || '')
+      : '';
+  // Trim trailing slash on base + leading slash collision.
+  const cleanBase = base.replace(/\/+$/, '');
+  return `${cleanBase}${path.startsWith('/') ? path : `/${path}`}`;
+}
+Object.assign(window, { __aqaApiUrl: apiUrl });
+
 function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   const [items, setItems] = React.useState(initialFindings);
   const [dragId, setDragId] = React.useState(null);
   const [dropCol, setDropCol] = React.useState(null);
   const [confirm, setConfirm] = React.useState(null);
+  // Per-finding in-flight set. A card whose status POST is still in
+  // flight is locked: its `draggable` is dropped and re-dragging is
+  // a no-op. Prevents the "two concurrent transitions for the same
+  // finding, last response wins" race that an unguarded background
+  // POST would otherwise allow.
+  //
+  // We carry the set in BOTH a React state (for re-renders / data
+  // attributes / draggable toggle) AND a ref (for the synchronous
+  // re-entrancy gate inside doMove). The state-only approach
+  // doesn't reject double-submits fired within the same tick because
+  // `setPending(prev => prev.add(id))` doesn't update `pending` until
+  // the next render — two quick drags would both observe `pending`
+  // without the id and proceed. The ref is mutated inline, before
+  // any await, so the second call short-circuits immediately.
+  const [pending, setPending] = React.useState(() => new Set());
+  const pendingRef = React.useRef(new Set());
+  // Captured by the confirmation textarea — required for terminal
+  // transitions because POST /api/findings/:id/status rejects an
+  // empty reason at the server (see api.test.ts).
+  const [reason, setReason] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState(null);
   const toast = useToast();
 
   const cols = [
@@ -4025,16 +4075,112 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return;
     }
     if (col.terminal) {
+      setReason('');
+      setSubmitError(null);
       setConfirm({ finding: f, toCol: col });
     } else {
-      doMove(f.id, col.key);
+      // Non-terminal moves (only `draft` today) don't require a reason —
+      // we still POST so the change persists to the store, but the body
+      // uses a default reason. State is intentionally NOT routed through
+      // the shared modal `submitting`/`submitError` — that state belongs
+      // to the terminal-transition modal, and a slow / failing
+      // non-terminal POST shouldn't disable a different terminal modal
+      // the user might open while the drag-to-draft request is in
+      // flight. Failures surface via toast only.
+      void doMove(f.id, col.key, '(non-terminal move from kanban drag)', false);
     }
     setDragId(null);
   };
-  const doMove = (id, status) => {
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)));
-    toast.push({ title: 'Status updated', body: `${id} → ${status}`, kind: 'success' });
-  };
+  // v1.7 slice 4a — wire kanban status transitions to the real
+  // POST /api/findings/:id/status endpoint. Optimistic local update
+  // happens AFTER the server confirms, so a 4xx/5xx response leaves
+  // the card in its original column with a clear error to the user.
+  //
+  // The server today only mutates `status` on the finding record —
+  // appending a `finding.status_changed` event to the audit chain is
+  // a v1.7.x follow-up (EventKind enum + store wiring). This function
+  // POSTs the change but does NOT claim audit-chain coverage yet.
+  //
+  // `setOnModal` lets the caller route submit-state into either the
+  // shared modal state (for terminal transitions, where the user is
+  // staring at a wizard and wants disabled/error feedback there) or
+  // toast-only (for drag-to-draft non-terminal moves, which happen in
+  // the background and shouldn't disable a different unrelated modal
+  // the user might open while the request is in flight).
+  async function doMove(id, status, reasonText, setOnModal) {
+    // Resolve the request URL up front so the same string is used by
+    // both the fetch call and any error/toast surfaces — otherwise a
+    // VITE_AQA_SERVER_URL-configured deployment would hit one URL but
+    // show a different (hardcoded relative) URL in the error message,
+    // making debugging harder.
+    const reqUrl = apiUrl(`/api/findings/${encodeURIComponent(id)}/status`);
+    // Reject re-entrant transitions for the same finding while a POST
+    // is already in flight. Without this guard, two drags in quick
+    // succession could submit competing transitions and the slower
+    // response would silently overwrite the faster one on both the
+    // client (setItems) and the server (last write wins).
+    //
+    // The check uses `pendingRef.current` (mutated synchronously
+    // below) rather than the `pending` state, which is stale within
+    // the same tick. The state copy is also updated so React re-
+    // renders pick up the `data-finding-pending` attribute change.
+    if (pendingRef.current.has(id)) {
+      toast.push({
+        kind: 'warning',
+        title: 'Status change skipped',
+        body: `${id} already has a transition in flight — wait for it to land before retrying.`,
+      });
+      return false;
+    }
+    if (setOnModal) {
+      setSubmitting(true);
+      setSubmitError(null);
+    }
+    pendingRef.current.add(id);
+    setPending((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    try {
+      const res = await fetch(reqUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, reason: reasonText }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = `HTTP ${res.status}`;
+        try {
+          const parsed = text ? JSON.parse(text) : null;
+          if (parsed?.error) msg = parsed.error;
+        } catch {
+          // raw text fallback
+          if (text) msg = text.slice(0, 200);
+        }
+        if (setOnModal) setSubmitError(msg);
+        toast.push({ kind: 'error', title: 'Status change failed', body: msg });
+        return false;
+      }
+      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)));
+      toast.push({ title: 'Status updated', body: `${id} → ${status}`, kind: 'success' });
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the status change was not persisted.`;
+      if (setOnModal) setSubmitError(full);
+      toast.push({ kind: 'error', title: 'Status change failed', body: full });
+      return false;
+    } finally {
+      if (setOnModal) setSubmitting(false);
+      pendingRef.current.delete(id);
+      setPending((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
 
   return (
     <>
@@ -4044,6 +4190,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
             key={col.key}
             className="kanban-col"
             data-col={col.key}
+            data-testid={`kanban-col-${col.key}`}
             onDragOver={onDragOver(col)}
             onDragLeave={() => setDropCol(null)}
             onDrop={onDrop(col)}
@@ -4061,9 +4208,14 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               {byCol(col.key).map((f) => (
                 <div
                   key={f.id}
-                  className={`kanban-card ${dragId === f.id ? 'dragging' : ''}`}
-                  draggable
-                  onDragStart={onDragStart(f.id)}
+                  className={`kanban-card ${dragId === f.id ? 'dragging' : ''} ${pending.has(f.id) ? 'pending' : ''}`}
+                  draggable={!pending.has(f.id)}
+                  onDragStart={!pending.has(f.id) ? onDragStart(f.id) : undefined}
+                  data-testid={`kanban-card-${f.id}`}
+                  data-finding-id={f.id}
+                  data-finding-status={f.status}
+                  data-finding-pending={pending.has(f.id) ? 'true' : 'false'}
+                  title={pending.has(f.id) ? 'Status change in flight…' : undefined}
                 >
                   <div className="kanban-card-head">
                     <SevBadge sev={f.severity} />
@@ -4103,22 +4255,35 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
 
       <Modal
         open={!!confirm}
-        onClose={() => setConfirm(null)}
+        onClose={() => {
+          if (submitting) return;
+          setConfirm(null);
+        }}
         title={`Confirm transition to ${confirm?.toCol.label}`}
-        sub={`Moving "${confirm?.finding?.title}" to a terminal status. Provide a reason — this will be logged to the audit chain.`}
+        sub={`Moving "${confirm?.finding?.title}" to a terminal status. The server requires a non-empty reason to accept the request, but neither persisting that reason on the finding record nor emitting a matching audit-chain event is wired yet — both are v1.7.x follow-ups.`}
         footer={
           <>
-            <button className="btn" onClick={() => setConfirm(null)}>
+            <button
+              className="btn"
+              onClick={() => setConfirm(null)}
+              disabled={submitting}
+              data-testid="kanban-confirm-cancel"
+            >
               Cancel
             </button>
             <button
               className="btn primary"
-              onClick={() => {
-                doMove(confirm.finding.id, confirm.toCol.key);
-                setConfirm(null);
+              data-testid="kanban-confirm-submit"
+              disabled={submitting || reason.trim() === ''}
+              onClick={async () => {
+                const ok = await doMove(confirm.finding.id, confirm.toCol.key, reason.trim(), true);
+                if (ok) setConfirm(null);
+                // On failure: keep the modal open so the user can fix
+                // the reason / retry. doMove already set submitError.
               }}
             >
-              <I.Check size={12} /> Confirm transition
+              <I.Check size={12} />
+              {submitting ? 'Submitting…' : 'Confirm transition'}
             </button>
           </>
         }
@@ -4133,15 +4298,52 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               <span className="mono">{confirm.finding.id}</span>
               <span style={{ flex: 1 }}>{confirm.finding.title}</span>
             </div>
+            {submitError && (
+              <Alert kind="error" title="Status change failed">
+                {submitError}
+              </Alert>
+            )}
+            {confirm.toCol.key === 'duplicate' || confirm.toCol.key === 'verified' ? (
+              <Alert kind="warning" title={`${confirm.toCol.label}: extra fields not yet collected`}>
+                <span style={{ fontSize: 12 }}>
+                  The Finding schema requires{' '}
+                  {confirm.toCol.key === 'duplicate' ? (
+                    <>
+                      <code>duplicate_of</code> (the canonical finding ID this one duplicates)
+                    </>
+                  ) : (
+                    <>
+                      <code>verification.deterministic === true</code> with at least one verified
+                      attempt
+                    </>
+                  )}{' '}
+                  for this transition to be schema-valid. Today the API only persists{' '}
+                  <code>status</code> on the finding record (the <code>reason</code> is required
+                  by the endpoint but dropped by the store) — the extra fields aren't yet wired
+                  through the wizard or the server endpoint, so the resulting finding may fail
+                  re-validation. Tracked as a v1.7.x follow-up. You can still proceed; the status
+                  change will land in the store and you can fill in the missing fields via the
+                  YAML editor.
+                </span>
+              </Alert>
+            ) : null}
             <div className="field-row">
-              <label className="field-label">Reason</label>
+              <label className="field-label" htmlFor="kanban-reason">
+                Reason *
+              </label>
               <textarea
+                id="kanban-reason"
+                data-testid="kanban-confirm-reason"
                 className="textarea"
                 placeholder="e.g. Verified manually with curl, matches AQA-2026-0001 cluster — confirming finding is reproducible."
                 style={{ minHeight: 90 }}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
               />
               <div className="field-hint">
-                Recorded as <code>finding.status_changed</code> event in the audit chain.
+                Required by the server. Confirm is disabled until you provide a non-empty reason.
+                See the subtitle above for the (current) caveats around reason persistence and the
+                audit-chain follow-up.
               </div>
             </div>
           </div>

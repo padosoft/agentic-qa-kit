@@ -29,7 +29,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 - `3521`, `3524` — verify / reject row actions
 - `3609` — open detail
-- `3837`, `3840` — kanban card actions
+- ~~`3837`, `3840` — kanban card actions~~ **DONE (slice 4a, PR #27):** the kanban confirm-transition modal is now wired to `POST /api/findings/:id/status` with required reason input + error alert + disabled-until-reason submit. Drag-and-drop opens the modal (terminal columns) or POSTs directly with a default reason (non-terminal `draft` column); happy-path closes the modal and moves the card; 4xx/5xx keeps the modal open with the server's error message and leaves the card in its original column. 11 Playwright e2e tests cover the flow (4 terminal + 2 non-terminal + 2 schema-invariant warnings for Duplicate/Verified targets + 1 apiUrl helper composition + 1 per-finding pending lock + 1 synchronous re-entrancy guard). **Not yet wired (both v1.7.x follow-ups):** (a) `MemoryStore.updateFindingStatus` ignores the `reason` parameter — only `status` is mutated, the reason text is dropped after the API validates non-emptiness; (b) the server-side hook that would append a `finding.status_changed` event to the audit chain. The wizard makes both gaps explicit in its subtitle so users aren't misled about what gets persisted.
 - `3967`, `3970` — cluster expand
 
 ### Risks (lines ~4660-4730)
@@ -71,7 +71,7 @@ Not yet line-counted — comes after the first 49 fit.
 
 Doing all 81 in one PR is unreviewable. Plan: **one PR per page** so each is a manageable review surface.
 
-1. **slice 4a — Findings page actions** (verify, reject, mark-fixed, mark-duplicate row actions). Needs `PATCH /api/findings/:id/status` (already exists in `packages/server` from v1.4). Just wire the UI buttons.
+1. ~~**slice 4a — Findings page actions** (verify, reject, mark-fixed, mark-duplicate row actions). Needs `PATCH /api/findings/:id/status` (already exists in `packages/server` from v1.4). Just wire the UI buttons.~~ **SHIPPED (PR #27).** Kanban terminal-transition modal wired to `POST /api/findings/:id/status`. Drag-and-drop, required-reason capture, error-on-fail, optimistic UI only after server confirmation. The server *persists* the new status to the store; appending a corresponding `finding.status_changed` event to the audit chain is a separate task tracked as a v1.7.x follow-up (requires extending the `EventKind` enum in `@aqa/schemas` and the store's `updateFindingStatus` to append the event). Remaining row actions in clusters/list views (verify/reject inline buttons) also deferred to a follow-up PR — today the kanban is the canonical status-change surface.
 2. **slice 4b — Packs page** (Import manifest, Install pack). "Install pack" delegates to the wizard from slice 3; "Import manifest" needs a `POST /api/packs/import` route.
 3. **slice 4c — Scenarios / Risks / Profiles CRUD** (edit/save/clone/delete). Heaviest slice — needs full CRUD flows on three resources.
 4. **slice 4d — Agents page** (install-instructions copy, "Install for X"). Mostly client-side (copy to clipboard, download files).
