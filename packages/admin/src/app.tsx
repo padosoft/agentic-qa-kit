@@ -1414,186 +1414,192 @@ const RISK_CATEGORIES = [
 const LIKELIHOODS = ['rare', 'unlikely', 'possible', 'likely', 'almost_certain'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'];
 
+// v1.7 slice 4c.5 iter 3 (PR #33 Copilot): risk and invariant ids
+// were migrated from underscored mock slugs to schema-conforming
+// dashed slugs so PageRiskEditor's PUT /api/risks/:id reaches the
+// id-match check instead of being rejected by the shared Slug regex.
+// Categories/severities/likelihoods are NOT slugs and stay snake_case
+// (they're enums on Risk schema).
 const RISKS = [
   {
-    id: 'risk_cross_tenant_leak',
+    id: 'risk-cross-tenant-leak',
     category: 'confidentiality',
     severity: 'critical',
     likelihood: 'likely',
     title: 'Cross-tenant data leak via raw query',
-    invariants: ['no_raw_query_without_tenant_clause', 'tenant_id_present_in_session'],
+    invariants: ['no-raw-query-without-tenant-clause', 'tenant-id-present-in-session'],
     owners: ['usr_marco', 'usr_sara'],
     tags: ['owasp:a01', 'stride:spoofing', 'owasp-agentic:a02'],
     description:
       'A raw SQL query in `OrderController@search` does not filter by `tenant_id`. Confirmed by AQA-2026-0001 with 3/3 deterministic replays.',
   },
   {
-    id: 'risk_prompt_injection_search',
+    id: 'risk-prompt-injection-search',
     category: 'agentic',
     severity: 'high',
     likelihood: 'almost_certain',
     title: 'Prompt injection on /search RAG',
-    invariants: ['rag_query_sanitised', 'tool_call_budget_enforced'],
+    invariants: ['rag-query-sanitised', 'tool-call-budget-enforced'],
     owners: ['usr_marco'],
     tags: ['owasp-agentic:a01', 'stride:tampering'],
   },
   {
-    id: 'risk_jwt_replay',
+    id: 'risk-jwt-replay',
     category: 'auth',
     severity: 'high',
     likelihood: 'possible',
     title: 'JWT replay after logout',
-    invariants: ['jwt_blacklist_on_logout', 'jti_revocation_within_60s'],
+    invariants: ['jwt-blacklist-on-logout', 'jti-revocation-within-60s'],
     owners: ['usr_marco'],
     tags: ['owasp:a07', 'stride:elevation'],
   },
   {
-    id: 'risk_csrf_double_submit',
+    id: 'risk-csrf-double-submit',
     category: 'auth',
     severity: 'medium',
     likelihood: 'unlikely',
     title: 'CSRF double-submit missing on /api/admin',
-    invariants: ['csrf_token_required_admin'],
+    invariants: ['csrf-token-required-admin'],
     owners: ['usr_marco'],
     tags: ['owasp:a01'],
   },
   {
-    id: 'risk_idor_invoice',
+    id: 'risk-idor-invoice',
     category: 'data',
     severity: 'high',
     likelihood: 'likely',
     title: 'IDOR on /invoices/{id}/pdf',
-    invariants: ['invoice_owner_check_in_handler'],
+    invariants: ['invoice-owner-check-in-handler'],
     owners: ['usr_marco', 'usr_davide'],
     tags: ['owasp:a01'],
   },
   {
-    id: 'risk_unbounded_tool_budget',
+    id: 'risk-unbounded-tool-budget',
     category: 'agentic',
     severity: 'high',
     likelihood: 'possible',
     title: 'Agent loops without tool-call budget',
-    invariants: ['max_tool_calls_per_session'],
+    invariants: ['max-tool-calls-per-session'],
     owners: ['usr_marco', 'usr_ada'],
     tags: ['owasp-agentic:a06'],
   },
   {
-    id: 'risk_no_rate_limit_search',
+    id: 'risk-no-rate-limit-search',
     category: 'availability',
     severity: 'medium',
     likelihood: 'likely',
     title: 'No rate limit on /api/search',
-    invariants: ['rate_limit_per_ip'],
+    invariants: ['rate-limit-per-ip'],
     owners: ['usr_marco'],
     tags: ['owasp:a04'],
   },
   {
-    id: 'risk_migration_no_rollback',
+    id: 'risk-migration-no-rollback',
     category: 'integrity',
     severity: 'high',
     likelihood: 'possible',
     title: 'Migrations without rollback path',
-    invariants: ['every_migration_has_down'],
+    invariants: ['every-migration-has-down'],
     owners: ['usr_davide'],
     tags: [],
   },
   {
-    id: 'risk_pii_in_logs',
+    id: 'risk-pii-in-logs',
     category: 'compliance',
     severity: 'medium',
     likelihood: 'likely',
     title: 'PII in structured logs',
-    invariants: ['no_pii_in_log_payload'],
+    invariants: ['no-pii-in-log-payload'],
     owners: ['usr_marco'],
     tags: ['owasp:a02'],
   },
   {
-    id: 'risk_admin_session_no_2fa',
+    id: 'risk-admin-session-no-2fa',
     category: 'auth',
     severity: 'high',
     likelihood: 'possible',
     title: 'Admin session without 2FA enforcement',
-    invariants: ['admin_session_requires_totp'],
+    invariants: ['admin-session-requires-totp'],
     owners: ['usr_marco'],
     tags: ['owasp:a07'],
   },
   {
-    id: 'risk_xss_search_field',
+    id: 'risk-xss-search-field',
     category: 'ui_ux',
     severity: 'medium',
     likelihood: 'possible',
     title: 'Reflected XSS on /search?q=',
-    invariants: ['blade_escape_default'],
+    invariants: ['blade-escape-default'],
     owners: ['usr_sara'],
     tags: ['owasp:a03'],
   },
   {
-    id: 'risk_pack_unsigned',
+    id: 'risk-pack-unsigned',
     category: 'integration',
     severity: 'high',
     likelihood: 'unlikely',
     title: 'Pack manifest installed without signature verify',
-    invariants: ['pack_signature_required'],
+    invariants: ['pack-signature-required'],
     owners: ['usr_ada'],
     tags: ['stride:tampering'],
   },
   {
-    id: 'risk_runner_egress_open',
+    id: 'risk-runner-egress-open',
     category: 'availability',
     severity: 'medium',
     likelihood: 'possible',
     title: 'Runner sandbox has unrestricted egress',
-    invariants: ['runner_egress_allowlist'],
+    invariants: ['runner-egress-allowlist'],
     owners: ['usr_ada'],
     tags: ['stride:information_disclosure'],
   },
   {
-    id: 'risk_oracle_judge_biased',
+    id: 'risk-oracle-judge-biased',
     category: 'agentic',
     severity: 'medium',
     likelihood: 'likely',
     title: 'LLM judge biased by phrasing',
-    invariants: ['judge_ensemble_min_3'],
+    invariants: ['judge-ensemble-min-3'],
     owners: ['usr_marco'],
     tags: ['owasp-agentic:a04'],
   },
   {
-    id: 'risk_lost_audit_event',
+    id: 'risk-lost-audit-event',
     category: 'compliance',
     severity: 'high',
     likelihood: 'rare',
     title: 'Audit chain event dropped under load',
-    invariants: ['hash_chain_continuous'],
+    invariants: ['hash-chain-continuous'],
     owners: ['usr_ada'],
     tags: ['stride:repudiation'],
   },
   {
-    id: 'risk_business_total_round',
+    id: 'risk-business-total-round',
     category: 'business_logic',
     severity: 'low',
     likelihood: 'likely',
     title: 'Order total rounding loses 1 cent',
-    invariants: ['order_total_equals_sum_lines'],
+    invariants: ['order-total-equals-sum-lines'],
     owners: ['usr_davide'],
     tags: [],
   },
   {
-    id: 'risk_session_fixation',
+    id: 'risk-session-fixation',
     category: 'auth',
     severity: 'medium',
     likelihood: 'unlikely',
     title: 'Session ID not rotated on login',
-    invariants: ['session_id_rotated_on_login'],
+    invariants: ['session-id-rotated-on-login'],
     owners: ['usr_marco'],
     tags: ['owasp:a07'],
   },
   {
-    id: 'risk_n_plus_1_orders',
+    id: 'risk-n-plus-1-orders',
     category: 'availability',
     severity: 'low',
     likelihood: 'almost_certain',
     title: 'N+1 queries on /orders index',
-    invariants: ['orders_index_uses_eager_load'],
+    invariants: ['orders-index-uses-eager-load'],
     owners: ['usr_davide'],
     tags: [],
   },
@@ -1904,7 +1910,7 @@ const FINDINGS = [
     id: 'AQA-2026-0001',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'api.tenant.cross_tenant_search',
-    risk_id: 'risk_cross_tenant_leak',
+    risk_id: 'risk-cross-tenant-leak',
     severity: 'critical',
     status: 'verified',
     title: 'Cross-tenant data leak via /api/orders/search',
@@ -1945,7 +1951,7 @@ const FINDINGS = [
     id: 'AQA-2026-0002',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'api.tenant.cross_tenant_invoice',
-    risk_id: 'risk_cross_tenant_leak',
+    risk_id: 'risk-cross-tenant-leak',
     severity: 'critical',
     status: 'verified',
     title: 'Cross-tenant data leak on /api/invoices/{id}/pdf',
@@ -1986,7 +1992,7 @@ const FINDINGS = [
     id: 'AQA-2026-0003',
     run_id: 'run_2026_0517_2200_e6a9',
     scenario_id: 'security.prompt_injection.search_rag',
-    risk_id: 'risk_prompt_injection_search',
+    risk_id: 'risk-prompt-injection-search',
     severity: 'high',
     status: 'draft',
     title: 'Prompt injection via /search RAG context',
@@ -2027,7 +2033,7 @@ const FINDINGS = [
     id: 'AQA-2026-0004',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'auth.jwt.replay_after_logout',
-    risk_id: 'risk_jwt_replay',
+    risk_id: 'risk-jwt-replay',
     severity: 'high',
     status: 'verified',
     title: 'JWT remains valid 4 minutes after logout',
@@ -2068,7 +2074,7 @@ const FINDINGS = [
     id: 'AQA-2026-0005',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'api.idor.invoice_pdf',
-    risk_id: 'risk_idor_invoice',
+    risk_id: 'risk-idor-invoice',
     severity: 'high',
     status: 'fixed',
     title: 'IDOR on /invoices/{id}/pdf (fixed in PR #842)',
@@ -2109,7 +2115,7 @@ const FINDINGS = [
     id: 'AQA-2026-0006',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'security.rate_limit.search',
-    risk_id: 'risk_no_rate_limit_search',
+    risk_id: 'risk-no-rate-limit-search',
     severity: 'medium',
     status: 'draft',
     title: 'No rate limit on /api/search',
@@ -2149,7 +2155,7 @@ const FINDINGS = [
     id: 'AQA-2026-0007',
     run_id: 'run_2026_0518_1335_a3f8',
     scenario_id: 'agentic.tool_budget.runaway',
-    risk_id: 'risk_unbounded_tool_budget',
+    risk_id: 'risk-unbounded-tool-budget',
     severity: 'high',
     status: 'verified',
     title: 'Agent /chat session can issue 500+ tool calls before budget kicks in',
@@ -2190,7 +2196,7 @@ const FINDINGS = [
     id: 'AQA-2026-0008',
     run_id: 'run_2026_0517_2200_e6a9',
     scenario_id: 'security.csrf.admin',
-    risk_id: 'risk_csrf_double_submit',
+    risk_id: 'risk-csrf-double-submit',
     severity: 'medium',
     status: 'draft',
     title: 'CSRF token not enforced on /api/admin/users/promote',
@@ -2230,7 +2236,7 @@ const FINDINGS = [
     id: 'AQA-2026-0009',
     run_id: 'run_2026_0518_0911_c4d1',
     scenario_id: 'business.order.total_rounding',
-    risk_id: 'risk_business_total_round',
+    risk_id: 'risk-business-total-round',
     severity: 'low',
     status: 'rejected',
     title: 'Order total off by €0.01 on 3-decimal VAT rates',
@@ -2271,7 +2277,7 @@ const FINDINGS = [
     id: 'AQA-2026-0010',
     run_id: 'run_2026_0518_0911_c4d1',
     scenario_id: 'data.pii.logs',
-    risk_id: 'risk_pii_in_logs',
+    risk_id: 'risk-pii-in-logs',
     severity: 'medium',
     status: 'verified',
     title: 'PII (email) leaked in structured logs of LoginController',
@@ -2311,7 +2317,7 @@ const FINDINGS = [
     id: 'AQA-2026-0011',
     run_id: 'run_2026_0516_1812_h7d4',
     scenario_id: 'ui.xss.reflected_search',
-    risk_id: 'risk_xss_search_field',
+    risk_id: 'risk-xss-search-field',
     severity: 'medium',
     status: 'fixed',
     title: 'Reflected XSS on /search?q= (fixed)',
@@ -2351,7 +2357,7 @@ const FINDINGS = [
     id: 'AQA-2026-0012',
     run_id: 'run_2026_0516_1812_h7d4',
     scenario_id: 'auth.admin.no_2fa',
-    risk_id: 'risk_admin_session_no_2fa',
+    risk_id: 'risk-admin-session-no-2fa',
     severity: 'high',
     status: 'verified',
     title: 'Admin login does not require 2FA when SSO is enabled',
@@ -8119,7 +8125,7 @@ function PageFindingDetail({ findingId, onNavigate }) {
 }
 
 // ---------------- Risk map ----------------
-function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
+function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks, updatedRisks }) {
   const [view, setView] = React.useState('matrix');
   const [selCell, setSelCell] = React.useState(null);
   const [filterCat, setFilterCat] = React.useState(new Set());
@@ -8128,9 +8134,18 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
   // from every view (matrix, category, list). App-level Set survives
   // route changes; the wizard dispatches `aqa:risk-deleted` after a
   // successful DELETE /api/risks/:id.
-  const liveRisks = deletedRisks
-    ? RISKS.filter((r) => !deletedRisks.has(r.id))
-    : RISKS;
+  // v1.7 slice 4c.5 — risks edited via PageRiskEditor are merged on
+  // top of the mock row via `updatedRisks` (Map<id, patch>) so a
+  // successful PUT updates the matrix/category views without a
+  // reload.
+  const liveRisks = React.useMemo(() => {
+    const filtered = deletedRisks ? RISKS.filter((r) => !deletedRisks.has(r.id)) : RISKS;
+    if (!(updatedRisks instanceof Map) || updatedRisks.size === 0) return filtered;
+    return filtered.map((r) => {
+      const patch = updatedRisks.get(r.id);
+      return patch ? { ...r, ...patch } : r;
+    });
+  }, [deletedRisks, updatedRisks]);
   const visible = liveRisks.filter((r) => filterCat.size === 0 || filterCat.has(r.category));
   const cellFiltered = selCell
     ? visible.filter((r) => r.likelihood === selCell.likelihood && r.severity === selCell.severity)
@@ -8294,10 +8309,14 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
 }
 
 // ---------------- Risk editor ----------------
-function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
+function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const isNew = riskId === 'new';
   const isDeleted = !isNew && (deletedRisks?.has?.(riskId) ?? false);
-  const risk = isNew
+  // Merge any user-saved overrides from a prior PUT on top of the mock
+  // row so a refreshed editor reflects what's actually been persisted
+  // (server-side state isn't read back in mock mode). Same pattern as
+  // EditProfileWizard's `updatedProfiles` Map.
+  const baseRisk = isNew
     ? {
         id: 'risk_new_draft',
         title: '',
@@ -8310,8 +8329,107 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
         description: '',
       }
     : riskById(riskId) || RISKS[0];
+  const overrides = !isNew && riskId ? updatedRisks?.get?.(riskId) : null;
+  const risk = overrides ? { ...baseRisk, ...overrides } : baseRisk;
   const [r, setR] = React.useState(risk);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  // Render-time ref so the stale-submit guard sees the LATEST riskId
+  // after an in-flight PUT resolves. Matches EditProfileWizard's
+  // render-time profileRef pattern from PR #30 iter 8.
+  const riskIdRef = React.useRef(riskId);
+  riskIdRef.current = riskId;
+  const toast = useToast();
+
+  // Inline UX validation mirrors the @aqa/schemas Risk shape so the
+  // user gets immediate feedback. The server is the actual trust
+  // boundary (PUT /api/risks/:id schema-validates the body).
+  const titleError = r.title.trim().length < 4 ? 'min 4 chars' : null;
+  const canSave = !isNew && titleError === null && !saving;
+
+  async function handleSave() {
+    if (!canSave) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    const submittedId = riskId;
+    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(submittedId)}`);
+    // Build a Risk body. Invariants on the mock are bare slug strings
+    // but the schema requires { id, statement } objects — coerce so
+    // the server's schema-validation reaches the id-match check.
+    // Mock risk/invariant ids were migrated to dashed slugs in PR
+    // #33 iter 3 so the body validates as-is without any client-side
+    // slugification (which would have fragmented server state between
+    // displayed-vs-stored ids — see PR #33 Copilot iter 2).
+    const body = {
+      ...r,
+      invariants: Array.isArray(r.invariants)
+        ? r.invariants.map((inv) =>
+            typeof inv === 'string'
+              ? { id: inv, statement: `Invariant: ${inv.replace(/-/g, ' ')}` }
+              : inv,
+          )
+        : [],
+    };
+    try {
+      const res = await fetch(reqUrl, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const stillCurrent = submittedId === riskIdRef.current;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        toast.push({ kind: 'error', title: 'Save risk failed', body: `${submittedId}: ${msg}` });
+        if (stillCurrent) setSaveError(msg);
+        return;
+      }
+      toast.push({ kind: 'success', title: 'Risk saved', body: submittedId });
+      // The body sent to the server has schema-coerced fields (slugified
+      // id, { id, statement } invariant objects). Re-merging that into
+      // the editor's UI state would break the bare-string invariant
+      // renderer and silently change the displayed risk id. Broadcast
+      // only the fields the user can actually edit in this page so
+      // the override merge stays UI-safe.
+      const uiPatch = {
+        title: r.title,
+        category: r.category,
+        severity: r.severity,
+        likelihood: r.likelihood,
+      };
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:risk-updated', { detail: { id: submittedId, patch: uiPatch } }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the risk was not saved.`;
+      toast.push({
+        kind: 'error',
+        title: 'Save risk failed',
+        body: `${submittedId}: ${full}`,
+      });
+      if (submittedId === riskIdRef.current) setSaveError(full);
+    } finally {
+      if (submittedId === riskIdRef.current) {
+        setSaving(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
   if (isDeleted) {
     return (
       <div className="page" data-screen-label="08 Risk editor (not found)">
@@ -8360,19 +8478,35 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
         sub={isNew ? 'Create a new risk · STRIDE/FMEA preview updates live' : r.title}
         actions={
           <>
-            <button className="btn sm ghost" onClick={() => onNavigate('risk-map')}>
+            <button
+              className="btn sm ghost"
+              onClick={() => onNavigate('risk-map')}
+              disabled={saving}
+            >
               <I.X size={12} />
               Cancel
             </button>
-            <button className="btn sm primary">
-              <I.Check size={12} />
-              Save
+            <button
+              className="btn sm primary"
+              data-testid="risk-save-btn"
+              disabled={!canSave}
+              onClick={handleSave}
+            >
+              {saving ? (
+                'Saving…'
+              ) : (
+                <>
+                  <I.Check size={12} />
+                  Save
+                </>
+              )}
             </button>
             {!isNew && (
               <button
                 className="btn sm danger"
                 data-testid="risk-delete-btn"
                 onClick={() => setDeleteOpen(true)}
+                disabled={saving}
               >
                 <I.Trash size={12} />
                 Delete
@@ -8411,16 +8545,28 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
               <label className="field-label">Title</label>
               <input
                 className="input"
+                data-testid="risk-edit-title"
                 placeholder="e.g. Cross-tenant data leak via raw query"
                 value={r.title}
                 onChange={(e) => setR({ ...r, title: e.target.value })}
               />
+              {titleError && (
+                <div className="field-hint danger" data-testid="risk-edit-title-err">
+                  {titleError}
+                </div>
+              )}
             </div>
+            {saveError && (
+              <Alert kind="error" title="Save failed">
+                <span data-testid="risk-edit-error">{saveError}</span>
+              </Alert>
+            )}
             <div className="row gap-12">
               <div className="field-row" style={{ flex: 1 }}>
                 <label className="field-label">Category</label>
                 <select
                   className="select"
+                  data-testid="risk-edit-category"
                   value={r.category}
                   onChange={(e) => setR({ ...r, category: e.target.value })}
                 >
@@ -8433,6 +8579,7 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
                 <label className="field-label">Severity</label>
                 <select
                   className="select"
+                  data-testid="risk-edit-severity"
                   value={r.severity}
                   onChange={(e) => setR({ ...r, severity: e.target.value })}
                 >
@@ -9309,7 +9456,7 @@ function PageScenarioDetail({ id, onNavigate }) {
               lines={[
                 '# scenario.schema.json v1',
                 `id: ${sid}`,
-                'risk_ref: risk_cross_tenant_leak',
+                'risk_ref: risk-cross-tenant-leak',
                 'description: |',
                 '  Query /api/orders/search as tenant A with a payload that bypasses',
                 '  any naive query parser. Oracle ensures only tenant A rows return.',
@@ -12050,6 +12197,27 @@ function App() {
     return () => window.removeEventListener('aqa:risk-deleted', handler);
   }, []);
 
+  // v1.7 slice 4c.5 — Risk edits broadcast via `aqa:risk-updated` and
+  // the override map lives at App level (same lifted-state reasoning
+  // as `updatedProfiles`). PageRiskEditor dispatches the event on PUT
+  // success — PageRiskMap and the editor itself consume the map to
+  // shadow the static mock display with the user's latest save.
+  const [updatedRisks, setUpdatedRisks] = React.useState(() => new Map());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      const patch = e?.detail?.patch;
+      if (typeof id !== 'string' || !patch || typeof patch !== 'object') return;
+      setUpdatedRisks((prev) => {
+        const next = new Map(prev);
+        next.set(id, { ...(prev.get(id) || {}), ...patch });
+        return next;
+      });
+    };
+    window.addEventListener('aqa:risk-updated', handler);
+    return () => window.removeEventListener('aqa:risk-updated', handler);
+  }, []);
+
   // Apply theme
   React.useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
@@ -12121,6 +12289,7 @@ function App() {
     updatedProfiles,
     createdProfiles,
     deletedRisks,
+    updatedRisks,
   };
 
   if (!signedIn) {
