@@ -247,10 +247,11 @@ export class MemoryStore implements StoreProvider {
     this.agents.set(id, updated);
     return updated;
   }
-  // Test-only: seed an Agent without going through the install flow.
-  // The admin's GET /api/agents endpoint surfaces what this seeds; in
-  // production a separate adapter-discovery flow would populate this.
-  seedAgent(a: Agent.Agent): void {
+  // __test-namespaced helpers — only for unit/integration tests. They
+  // sit OUTSIDE the StoreProvider contract so production code can't
+  // import them inadvertently (a future TypeScript-strict consumer
+  // would flag the access). PR #38 Copilot iter 2.
+  __test_seedAgent(a: Agent.Agent): void {
     this.agents.set(a.id, a);
   }
 

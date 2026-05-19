@@ -753,7 +753,7 @@ probes: []
 
     it('GET /api/agents returns the seeded list', async () => {
       const c = ctx();
-      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent(sampleAgent);
+      (c.store as unknown as { __test_seedAgent: (a: typeof sampleAgent) => void }).__test_seedAgent(sampleAgent);
       const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/agents');
       const res = await route?.handle({ headers: {}, params: {} }, c);
       assert.equal(res?.status, 200);
@@ -771,7 +771,7 @@ probes: []
 
     it('POST /api/agents/:id/install flips installed=true and stamps last_updated', async () => {
       const c = ctx();
-      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent(sampleAgent);
+      (c.store as unknown as { __test_seedAgent: (a: typeof sampleAgent) => void }).__test_seedAgent(sampleAgent);
       const route = makeApi().find(
         (r) => r.method === 'POST' && r.path === '/api/agents/:id/install',
       );
@@ -784,7 +784,7 @@ probes: []
 
     it('POST /api/agents/:id/uninstall flips installed=false (idempotent)', async () => {
       const c = ctx();
-      (c.store as unknown as { seedAgent: (a: typeof sampleAgent) => void }).seedAgent({
+      (c.store as unknown as { __test_seedAgent: (a: typeof sampleAgent) => void }).__test_seedAgent({
         ...sampleAgent,
         installed: true,
         last_updated: '2026-05-19T12:00:00Z',

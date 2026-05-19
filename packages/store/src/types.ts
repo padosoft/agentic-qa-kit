@@ -111,11 +111,15 @@ export interface StoreProvider {
   // ----- Agents (v1.7 slice 4d) -----
   listAgents(): Promise<Agent.Agent[]>;
   loadAgent(id: string): Promise<Agent.Agent | null>;
-  // Idempotent install: marks installed=true and stamps last_updated.
-  // Returns the resulting Agent record (so the admin can correlate).
+  // Safe to call repeatedly: marks installed=true and stamps
+  // last_updated with the current time on every call. (Not strictly
+  // idempotent because last_updated changes — but the observable
+  // `installed` state converges.) Returns the resulting Agent so the
+  // admin can correlate the response.
   installAgent(id: string): Promise<Agent.Agent | null>;
-  // Idempotent uninstall: marks installed=false, leaves last_updated
-  // as a record of the last install. Returns the resulting Agent.
+  // Idempotent uninstall: marks installed=false and leaves
+  // last_updated alone as a record of the last install. Returns the
+  // resulting Agent.
   uninstallAgent(id: string): Promise<Agent.Agent | null>;
 
   // ----- Notifications -----

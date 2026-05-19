@@ -10760,7 +10760,21 @@ function PageAgents({ onNavigate }) {
     (async () => {
       try {
         const res = await fetch(apiUrl('/api/agents'));
-        if (!res.ok) return; // mock mode / dev — keep the fixture
+        if (cancelled) return;
+        if (!res.ok) {
+          // PR #38 Copilot iter 2: distinguish "no such route" (older
+          // server) from a real error. 404 → silent fixture fallback
+          // (the route doesn't exist yet). Any other non-2xx → toast
+          // so operators don't see fixture agents masking real auth/
+          // 5xx failures.
+          if (res.status === 404) return;
+          toast.push({
+            kind: 'error',
+            title: 'Could not load agents',
+            body: `HTTP ${res.status} — showing local fixture`,
+          });
+          return;
+        }
         const body = await res.json();
         const list = body?.agents;
         if (!Array.isArray(list) || cancelled) return;
@@ -10916,7 +10930,13 @@ function PageAgents({ onNavigate }) {
                 <button
                   className={`btn sm ${a.installed ? '' : 'primary'}`}
                   data-testid={`agent-${a.installed ? 'uninstall' : 'install'}-${a.id}`}
-                  disabled={pendingId === a.id}
+                  // PR #38 Copilot iter 2: disable ALL install/
+                  // uninstall buttons while ANY agent action is in
+                  // flight (matches the existing global pendingId
+                  // guard inside toggleInstall, which previously left
+                  // unrelated buttons looking clickable but doing
+                  // nothing).
+                  disabled={pendingId !== null}
                   onClick={() => toggleInstall(a)}
                 >
                   {pendingId === a.id ? (
