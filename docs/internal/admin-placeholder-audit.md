@@ -54,7 +54,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 ### Packs (lines ~6850-7040)
 
-- ~~`6850`, `6853` — top-bar "Import manifest" / "Install pack"~~ **DONE:** "Install pack" → "Create pack" wizard (slice 3, PR #26) wired to `POST /api/packs/scaffold`; "Import manifest" wired in slice 4b (PR #28) to a new `<ImportManifestWizard>` that POSTs to `POST /api/packs/import` — server parses YAML, validates against `@aqa/schemas/PackManifest`, installs via store. 4 Playwright e2e tests cover open/disabled, happy-path 201, schema-validation 400, 409-duplicate-with-force-retry path. 8 server unit tests cover the endpoint contract.
+- ~~`6850`, `6853` — top-bar "Import manifest" / "Install pack"~~ **DONE:** "Install pack" → "Create pack" wizard (slice 3, PR #26) wired to `POST /api/packs/scaffold`; "Import manifest" wired in slice 4b (PR #28) to a new `<ImportManifestWizard>` that calls `POST /api/packs/import` — server parses YAML, validates against `@aqa/schemas/PackManifest`, installs via store. 4 Playwright e2e tests cover open/disabled, happy-path 201, schema-validation 400, 409-duplicate-with-force-retry path. 8 server unit tests cover the endpoint contract.
 - `6910`, `6914`, `6925` — pack row actions (toggle / inspect)
 - `6986` — pack detail actions
 - `7028`, `7033`, `7038` — scenario picker inside pack detail

@@ -207,7 +207,7 @@ probes: []
       assert.match(body.error, /yaml/i);
     });
 
-    it('returns 400 on YAML that does not parse', async () => {
+    it('returns 400 on YAML that does not parse (code=EINVAL)', async () => {
       const c = ctx();
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
       const res = await route?.handle(
@@ -215,17 +215,29 @@ probes: []
         c,
       );
       assert.equal(res?.status, 400);
-      assert.match((res?.body as { error: string }).error, /parse|yaml/i);
+      const body = res?.body as { error: string; code: string };
+      assert.match(body.error, /parse|yaml/i);
+      assert.equal(body.code, 'EINVAL');
     });
 
-    it('returns 400 on schema-invalid manifest', async () => {
+    it('returns 400 on schema-invalid manifest (code=EINVAL, concise path:msg list)', async () => {
       const c = ctx();
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
       // Missing required `name` field.
       const yaml = `schema_version: "1"\nversion: 0.1.0\ndescription: missing name\nauthor: X\nlicense: Apache-2.0\napplies_when: { sut_type: [api] }\ntemplates: []\nscenarios: []\nrisks: []\noracles: []\nprobes: []\n`;
       const res = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
       assert.equal(res?.status, 400);
-      assert.match((res?.body as { error: string }).error, /schema|name|required/i);
+      const body = res?.body as { error: string; code: string };
+      assert.match(body.error, /schema|name|required/i);
+      assert.equal(body.code, 'EINVAL');
+      // The improved error format walks Zod issues into `path: message`
+      // pairs separated by `; ` — much more actionable than the default
+      // multi-line Zod dump. Assert the format so a regression to the
+      // verbose form is caught.
+      assert.ok(
+        !body.error.includes('\n') || body.error.split('\n').length <= 2,
+        `error should be concise, got multi-line dump: ${body.error}`,
+      );
     });
 
     it('returns 409 when a pack with that name already exists', async () => {

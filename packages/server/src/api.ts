@@ -89,6 +89,29 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
   }
 }
 
+/**
+ * Format a Zod safeParse failure as a concise list of `path: message`
+ * lines. The default `error.message` is the full Zod dump (multi-line
+ * JSON-ish output), which is verbose and hard to read in the admin's
+ * inline alert. Walking `error.issues` lets us surface just the
+ * actionable bits: "applies_when.sut_type: Required", etc.
+ *
+ * Falls back to the original message if `issues` is empty or malformed
+ * — the message is then truncated to a sane length so we don't dump a
+ * 5KB Zod blob into a toast.
+ */
+function formatZodError(err: {
+  issues?: Array<{ path: Array<string | number>; message: string }>;
+  message?: string;
+}): string {
+  if (Array.isArray(err.issues) && err.issues.length > 0) {
+    return err.issues
+      .map((iss) => `${iss.path.length > 0 ? iss.path.join('.') : '<root>'}: ${iss.message}`)
+      .join('; ');
+  }
+  return (err.message ?? 'unknown schema error').slice(0, 500);
+}
+
 function requireScope(req: ApiRequest): { org: string; project: string } | ApiResponse {
   const s = scope(req);
   if (!s.org || !s.project) {
@@ -269,6 +292,17 @@ export function makeApi(): ApiHandler[] {
       path: '/api/packs',
       requires: 'packs:install',
       async handle(req, ctx) {
+        // NOTE: this v1.4 endpoint accepts a pre-parsed JSON manifest
+        // and currently does NOT validate against the schema or
+        // detect duplicates — `MemoryStore.installPack` silently
+        // overwrites. The newer `POST /api/packs/import` (slice 4b)
+        // adds full validation + conflict detection on a YAML body.
+        // Consolidating both onto a shared helper (validate-then-
+        // install, with `force` semantics) is tracked as a v1.7.x
+        // follow-up; doing it here would change long-standing
+        // behavior callers may depend on, so it's intentionally
+        // out of scope for this slice. Until then, callers wanting
+        // safety guarantees should prefer `/api/packs/import`.
         const manifest = req.body as PackManifest.PackManifest;
         await ctx.store.installPack(manifest);
         return asResponse({ pack: manifest }, 201);
@@ -453,7 +487,7 @@ export function makeApi(): ApiHandler[] {
         if (!validated.success) {
           return asResponse(
             {
-              error: `manifest failed schema validation: ${validated.error.message}`,
+              error: `manifest failed schema validation: ${formatZodError(validated.error)}`,
               code: 'EINVAL' satisfies PackNewErrorCode,
             },
             400,

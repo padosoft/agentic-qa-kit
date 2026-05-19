@@ -4434,7 +4434,7 @@ function CreatePackWizard({ open, onClose }) {
         ...(license.trim() ? { license: license.trim() } : {}),
         ...(force ? { force: true } : {}),
       };
-      const res = await fetch('/api/packs/scaffold', {
+      const res = await fetch(apiUrl('/api/packs/scaffold'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
