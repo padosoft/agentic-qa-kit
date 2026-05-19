@@ -4965,7 +4965,16 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
     inFlightRef.current = true;
     setSubmitting(true);
     setError(null);
-    const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`);
+    // Capture the profile name we're submitting against. If the parent
+    // swaps `profileName` while the fetch is in flight (e.g. user
+    // navigates to a different profile-detail page that reuses this
+    // wizard mount), the in-flight resolve must NOT mutate the
+    // wizard's UI state for the OLD profile. The post-fetch code
+    // checks `submittedName === profileName` before calling any
+    // setState / onDeleted. This is the "stale closure" guard
+    // Copilot flagged in iter 7 review.
+    const submittedName = profileName;
+    const reqUrl = apiUrl(`/api/profiles/${encodeURIComponent(submittedName)}`);
     try {
       const res = await fetch(reqUrl, { method: 'DELETE' });
       const text = await res.text();
@@ -4975,39 +4984,68 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
       } catch {
         parsed = null;
       }
+      // Stale-submit guard: if the user switched profiles while this
+      // fetch was in flight, we still toast/broadcast the *correct*
+      // event for `submittedName` (the action did happen server-side
+      // and the user deserves the feedback), but we do NOT mutate
+      // the wizard's UI state for the NEW profile (setError /
+      // onDeleted). The wizard belongs to the new profile now.
+      const stillCurrent = submittedName === profileName;
       if (!res.ok) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
-        setError(msg);
-        toast.push({ kind: 'error', title: 'Delete profile failed', body: msg });
+        // Toast carries the submittedName so the user knows which
+        // delete attempt failed, even after switching.
+        toast.push({
+          kind: 'error',
+          title: 'Delete profile failed',
+          body: `${submittedName}: ${msg}`,
+        });
+        if (stillCurrent) setError(msg);
         return;
       }
       toast.push({
         kind: 'success',
         title: 'Profile deleted',
-        body: profileName,
+        body: submittedName,
       });
-      // Broadcast the deletion so the list page (or any other view
-      // showing this profile) can drop it from its local state.
-      // Without this, navigating back to /profiles would still show
-      // the just-deleted entry (in mock-data mode the PROFILES array
-      // is a static module constant; in live mode the page would
-      // refetch — the event makes both cases consistent).
+      // Broadcast the deletion regardless of stale-submit state —
+      // App-level listener filters PROFILES, and that's true whether
+      // the user is on the old or new detail page. The event uses
+      // submittedName, not profileName.
       try {
         window.dispatchEvent(
-          new CustomEvent('aqa:profile-deleted', { detail: { name: profileName } }),
+          new CustomEvent('aqa:profile-deleted', { detail: { name: submittedName } }),
         );
       } catch {
         // CustomEvent unsupported in this runtime — non-fatal.
       }
-      onDeleted?.();
+      // onDeleted (which navigates back to /profiles) only makes
+      // sense when the wizard still belongs to the deleted profile.
+      // If the user already moved on, don't yank them back.
+      if (stillCurrent) onDeleted?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the profile was not deleted.`;
-      setError(full);
-      toast.push({ kind: 'error', title: 'Delete profile failed', body: full });
+      // Same stale-submit guard as the success path: toast against
+      // the submitted name so the user gets the right context, but
+      // only mutate wizard error state if it still belongs to that
+      // profile.
+      toast.push({
+        kind: 'error',
+        title: 'Delete profile failed',
+        body: `${submittedName}: ${full}`,
+      });
+      if (submittedName === profileName) setError(full);
     } finally {
-      setSubmitting(false);
-      inFlightRef.current = false;
+      // Only flip submitting/inFlightRef when the wizard still
+      // belongs to the submitted profile — otherwise a stale resolve
+      // could re-enable the Delete button for an unrelated profile
+      // mid-flight (the user's current submit might still be in
+      // progress on the new profile).
+      if (submittedName === profileName) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
     }
   }
 
