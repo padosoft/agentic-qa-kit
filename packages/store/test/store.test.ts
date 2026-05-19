@@ -124,7 +124,24 @@ describe('PostgresStore (v0.3 scaffold)', () => {
       /not implemented/,
     );
     await assert.rejects(() => s.deleteProfile('p'), /not implemented/);
-    // Scenario CRUD (v1.7 slice 4c.6)
+    // Scenario CRUD (v1.7 slice 4c.6) — assert the whole scenario
+    // surface so the scaffold contract stays accurate as the
+    // interface evolves.
+    await assert.rejects(() => s.listScenarios(), /not implemented/);
+    await assert.rejects(() => s.loadScenario('s'), /not implemented/);
+    await assert.rejects(
+      () =>
+        s.saveScenario({
+          schema_version: '1',
+          id: 's',
+          pack: 'core',
+          level: 'scenario_level',
+          risk_refs: [],
+          goal: 'g',
+          probes: [],
+        }),
+      /not implemented/,
+    );
     await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
   });
 });

@@ -743,10 +743,13 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('scenario');
-        // Idempotent — mirrors DELETE /api/risks/:id and the profile
-        // delete. Returns { id, deleted: true } regardless of whether
-        // the row was actually there, so the admin can correlate the
-        // response and toast against the submitted id.
+        // Idempotent — mirrors DELETE /api/risks/:id (slice 4c.4).
+        // Returns { id, deleted: true } regardless of whether the row
+        // was actually there, so the admin can correlate the response
+        // and toast against the submitted id. (Profile delete still
+        // returns the older { ok: true } shape — its admin wizard
+        // doesn't need correlation since it always navigates back to
+        // the profiles list.)
         await ctx.store.deleteScenario(id);
         return asResponse({ id, deleted: true });
       },
