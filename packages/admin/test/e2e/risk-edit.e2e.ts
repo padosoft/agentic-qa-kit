@@ -25,7 +25,7 @@ async function openFirstRiskEditor(page: import('@playwright/test').Page): Promi
   await expect(page.locator('.page-title, h1').first()).toContainText(/Risk map/i);
   const firstRow = page
     .locator('.card-body .row.gap-10 .mono.tertiary')
-    .filter({ hasText: /^risk_/ })
+    .filter({ hasText: /^risk-/ })
     .first();
   await expect(firstRow).toBeVisible();
   const idText = (await firstRow.innerText()).split('·')[0]?.trim() ?? '';
