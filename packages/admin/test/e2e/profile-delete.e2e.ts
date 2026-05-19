@@ -179,7 +179,12 @@ test.describe('Profile delete confirmation', () => {
     // We hold the DELETE open by deferring `route.fulfill` until the
     // test resolves a promise, giving us a deterministic in-flight
     // window in which to assert.
-    let resolveDelete: (() => void) | null = null;
+    // Definite assignment assertion: the Promise executor runs
+    // synchronously inside the constructor, so `resolveDelete` is
+    // guaranteed to be set before the next statement. TS otherwise
+    // narrows the union to `null` because the assignment is inside
+    // a closure and refuses to call it.
+    let resolveDelete!: () => void;
     const deleteHeld = new Promise<void>((r) => {
       resolveDelete = r;
     });
@@ -208,7 +213,7 @@ test.describe('Profile delete confirmation', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('.modal-title')).toContainText(/Delete profile/i);
     // Release the DELETE — modal should now close on success.
-    resolveDelete?.();
+    resolveDelete();
     await expect(page.locator('.modal-title')).toHaveCount(0);
   });
 
