@@ -124,5 +124,7 @@ describe('PostgresStore (v0.3 scaffold)', () => {
       /not implemented/,
     );
     await assert.rejects(() => s.deleteProfile('p'), /not implemented/);
+    // Scenario CRUD (v1.7 slice 4c.6)
+    await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
   });
 });

@@ -100,6 +100,7 @@ export interface StoreProvider {
   }): Promise<Scenario.Scenario[]>;
   loadScenario(id: string): Promise<Scenario.Scenario | null>;
   saveScenario(scenario: Scenario.Scenario): Promise<void>;
+  deleteScenario(id: string): Promise<void>;
 
   // ----- Notifications -----
   listNotifications(opts: {

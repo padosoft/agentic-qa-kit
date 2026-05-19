@@ -736,6 +736,21 @@ export function makeApi(): ApiHandler[] {
         return asResponse({ scenario });
       },
     },
+    {
+      method: 'DELETE',
+      path: '/api/scenarios/:id',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('scenario');
+        // Idempotent — mirrors DELETE /api/risks/:id and the profile
+        // delete. Returns { id, deleted: true } regardless of whether
+        // the row was actually there, so the admin can correlate the
+        // response and toast against the submitted id.
+        await ctx.store.deleteScenario(id);
+        return asResponse({ id, deleted: true });
+      },
+    },
 
     // ============ Audit ============
     {

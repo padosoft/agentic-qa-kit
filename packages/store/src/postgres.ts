@@ -117,6 +117,9 @@ export class PostgresStore implements StoreProvider {
   async saveScenario(_s: Scenario.Scenario): Promise<void> {
     this.notImpl('saveScenario');
   }
+  async deleteScenario(_id: string): Promise<void> {
+    this.notImpl('deleteScenario');
+  }
 
   async listNotifications(): Promise<Notification.Notification[]> {
     this.notImpl('listNotifications');
