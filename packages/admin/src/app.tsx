@@ -4956,6 +4956,16 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
 
   function handleClose() {
     if (submitting) return;
+    // Reset state synchronously on close — don't rely solely on the
+    // open-true effect. If the user closes the modal and reopens it
+    // for the same profile (no `profileName` change to retrigger
+    // the effect), the first render after reopening would otherwise
+    // briefly show stale `confirmText` / `error` from the prior
+    // session before the next effect tick clears them.
+    setConfirmText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
     onClose?.();
   }
 

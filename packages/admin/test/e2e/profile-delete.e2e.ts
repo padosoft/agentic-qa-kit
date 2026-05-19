@@ -46,6 +46,31 @@ test.describe('Profile delete confirmation', () => {
     await expect(page.getByTestId('profile-delete-submit')).toBeDisabled();
   });
 
+  test('close+reopen clears the typed confirm text (no stale state flash)', async ({ page }) => {
+    // Regression test for PR #29 iter 8 (Copilot):
+    // The reset effect runs only when `open` becomes true OR
+    // `profileName` changes. Closing and reopening on the SAME
+    // profile wouldn't fire either trigger, so the first render
+    // after reopening could briefly show stale `confirmText` /
+    // `error` from the prior session. handleClose now resets state
+    // synchronously to avoid the flicker.
+    const name = await navigateToProfileDetail(page);
+    await page.getByTestId('profile-delete-btn').click();
+    const confirm = page.getByTestId('profile-delete-confirm');
+    await confirm.fill(name); // type the exact name → Delete enables
+    await expect(page.getByTestId('profile-delete-submit')).toBeEnabled();
+    // Close via the Cancel button (calls handleClose).
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    // Reopen the same profile's delete modal.
+    await page.getByTestId('profile-delete-btn').click();
+    // The confirm input must be empty — no stale value, no enabled
+    // Delete button (which would mean a misclick could fire DELETE
+    // without re-typing).
+    await expect(page.getByTestId('profile-delete-confirm')).toHaveValue('');
+    await expect(page.getByTestId('profile-delete-submit')).toBeDisabled();
+  });
+
   test('typing a non-matching name leaves Delete disabled', async ({ page }) => {
     const name = await navigateToProfileDetail(page);
     await page.getByTestId('profile-delete-btn').click();
