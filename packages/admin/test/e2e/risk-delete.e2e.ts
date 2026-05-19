@@ -127,6 +127,40 @@ test.describe('Risk delete', () => {
     await expect(page.locator('.modal-title')).toContainText(/Delete risk/i);
   });
 
+  test('navigating back to a deleted risk renders the "Risk not found" state', async ({ page }) => {
+    // After a successful DELETE, the App-level deletedRisks Set keeps
+    // the id tombstoned. A stale link or programmatic navigation to
+    // /risk-edit with that id must show the "no such risk" state
+    // instead of silently re-rendering the underlying mock row — so a
+    // user clicking an old notification/audit-log link sees the
+    // tombstone, not the dead profile. There's no URL-based routing
+    // in this SPA so we drive the navigation through the test-only
+    // window.__aqaNavigate hook (mirrors __aqaApiUrl).
+    await page.route('**/api/risks/**', async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: route.request().url().split('/').pop(), deleted: true }),
+      });
+    });
+    const id = await openFirstRiskEditor(page);
+    await page.getByTestId('risk-delete-btn').click();
+    await page.getByTestId('risk-delete-confirm').fill(id);
+    await page.getByTestId('risk-delete-submit').click();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+    await expect(page.locator('.page-title, h1').first()).toContainText(/Risk map/i);
+    // Programmatically re-navigate to the deleted risk — the only
+    // path users could otherwise reach is through an external link
+    // or browser-back (neither is testable in this SPA).
+    await page.evaluate((riskId) => {
+      // biome-ignore lint/suspicious/noExplicitAny: test-only hook
+      (window as any).__aqaNavigate?.('risk-edit', { riskId });
+    }, id);
+    await expect(page.locator('h1', { hasText: /Risk not found/i })).toBeVisible();
+    await expect(page.locator('[data-testid="risk-detail-back"]')).toBeVisible();
+  });
+
   test('modal close affordances are inert while DELETE is in flight', async ({ page }) => {
     let resolveDelete!: () => void;
     const deleteHeld = new Promise<void>((r) => {

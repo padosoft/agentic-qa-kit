@@ -431,11 +431,15 @@ probes: []
   // ============ v1.7 slice 4c.4 — DELETE /api/risks/:id (Risk Delete) ============
 
   describe('DELETE /api/risks/:id', () => {
+    // Schema-conforming fixture: RiskCategory enum is the OWASP-ish
+    // grouping (auth/data/...), Severity is the common shared enum,
+    // and invariants are { id, statement } objects, NOT strings.
+    // Title must be ≥ 4 chars per the schema. We don't include
+    // schema_version on Risk (it lives on the outer RiskMap envelope).
     const validRisk = {
-      schema_version: '1' as const,
       id: 'risk-x',
       title: 'Test risk',
-      category: 'STRIDE' as const,
+      category: 'auth' as const,
       severity: 'medium' as const,
       likelihood: 'possible' as const,
       invariants: [],
@@ -465,14 +469,19 @@ probes: []
       assert.equal(res?.status, 404);
     });
 
-    it('is idempotent — deleting a non-existent id still returns 200', async () => {
+    it('is idempotent — deleting a non-existent id still returns 200 with { id, deleted: true }', async () => {
       // REST DELETE semantics: an already-gone resource is the desired
       // state, so we don't 404. The admin UI treats 200 as success and
-      // surfaces the toast either way.
+      // surfaces the toast either way. Locking in the response-body
+      // contract here ensures the admin's correlate-by-id flow keeps
+      // working even when the underlying store is missing the row.
       const c = ctx();
       const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/risks/:id');
       const res = await route?.handle({ headers: {}, params: { id: 'nope' }, body: {} }, c);
       assert.equal(res?.status, 200);
+      const body = res?.body as { id: string; deleted: boolean };
+      assert.equal(body.id, 'nope');
+      assert.equal(body.deleted, true);
     });
 
     it('requires the risk-map:edit permission', () => {

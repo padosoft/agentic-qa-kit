@@ -12101,6 +12101,16 @@ function App() {
       setRoute('error-404');
     }
   };
+  // Exposed for e2e tests so we can drive route+params changes that
+  // aren't reachable through normal clicks — e.g. landing on a
+  // tombstoned risk-edit url to verify the "Risk not found" branch.
+  // Mirrors the `__aqaApiUrl` test hook below the App component.
+  React.useEffect(() => {
+    window.__aqaNavigate = navigate;
+    return () => {
+      delete window.__aqaNavigate;
+    };
+  });
 
   const ctx = {
     onNavigate: navigate,
