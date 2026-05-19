@@ -559,6 +559,67 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.8 — POST /api/scenarios (Scenario Clone) ============
+
+  describe('POST /api/scenarios', () => {
+    const validScenario = {
+      schema_version: '1' as const,
+      id: 'sc-new',
+      title: 'New scenario',
+      risk_refs: ['risk-cross-tenant-leak'],
+      invariant_refs: [],
+      preconditions: [],
+      steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
+      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
+      cleanup: [],
+      tags: [],
+    };
+
+    it('creates a new scenario with 201 when the id is unused', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/scenarios');
+      const res = await route?.handle({ headers: {}, params: {}, body: validScenario }, c);
+      assert.equal(res?.status, 201);
+      assert.equal((res?.body as { scenario: { id: string } }).scenario.id, 'sc-new');
+      const stored = await c.store.loadScenario('sc-new');
+      assert.equal(stored?.id, 'sc-new');
+    });
+
+    it('rejects a body that fails Scenario schema parsing (400)', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/scenarios');
+      const bad = { ...validScenario, oracles: [] };
+      const res = await route?.handle({ headers: {}, params: {}, body: bad }, c);
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /scenario failed schema validation/i);
+    });
+
+    it('409s with code=EEXIST when a scenario with that id already exists', async () => {
+      const c = ctx();
+      await c.store.saveScenario(validScenario);
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/scenarios');
+      const res = await route?.handle({ headers: {}, params: {}, body: validScenario }, c);
+      assert.equal(res?.status, 409);
+      assert.equal((res?.body as { code: string }).code, 'EEXIST');
+    });
+
+    it('uses atomic createScenario so concurrent same-id POSTs do not both succeed', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/scenarios');
+      const [a, b] = await Promise.all([
+        route?.handle({ headers: {}, params: {}, body: validScenario }, c),
+        route?.handle({ headers: {}, params: {}, body: validScenario }, c),
+      ]);
+      const statuses = [a?.status, b?.status].sort();
+      assert.deepEqual(statuses, [201, 409]);
+    });
+
+    it('requires the risk-map:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/scenarios');
+      assert.equal(route?.requires, 'risk-map:edit');
+    });
+  });
+
   // ============ v1.7 slice 4c.7 — PUT /api/scenarios/:id (Scenario Edit) ============
 
   describe('PUT /api/scenarios/:id', () => {

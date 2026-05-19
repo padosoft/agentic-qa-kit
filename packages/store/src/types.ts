@@ -100,6 +100,11 @@ export interface StoreProvider {
   }): Promise<Scenario.Scenario[]>;
   loadScenario(id: string): Promise<Scenario.Scenario | null>;
   saveScenario(scenario: Scenario.Scenario): Promise<void>;
+  // Atomic create: { created: true } on insert, { created: false } if a
+  // scenario with the same id already exists. Mirrors createProfile —
+  // used by POST /api/scenarios to avoid a TOCTOU race between
+  // loadScenario + saveScenario.
+  createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }>;
   deleteScenario(id: string): Promise<void>;
 
   // ----- Notifications -----
