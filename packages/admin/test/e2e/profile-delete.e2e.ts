@@ -53,7 +53,9 @@ test.describe('Profile delete confirmation', () => {
     await expect(page.getByTestId('profile-delete-submit')).toBeDisabled();
   });
 
-  test('exact-match name enables Delete and DELETE fires on click', async ({ page }) => {
+  test('exact-match name enables Delete; DELETE fires; toast shown; navigates to /profiles; row drops from list', async ({
+    page,
+  }) => {
     type Req = { url: string; method: string };
     const calls: Req[] = [];
     await page.route('**/api/profiles/*', async (route) => {
@@ -65,12 +67,20 @@ test.describe('Profile delete confirmation', () => {
     await page.getByTestId('profile-delete-confirm').fill(name);
     await expect(page.getByTestId('profile-delete-submit')).toBeEnabled();
     await page.getByTestId('profile-delete-submit').click();
-    // On success the modal closes (we navigate back to /profiles).
+    // (1) On success the modal closes.
     await expect(page.locator('.modal-title')).toHaveCount(0);
-    // Exactly one DELETE call to /api/profiles/<name>.
+    // (2) Exactly one DELETE call to /api/profiles/<name>.
     const deletes = calls.filter((c) => c.method === 'DELETE');
     expect(deletes.length).toBe(1);
     expect(deletes[0]?.url).toContain(`/api/profiles/${encodeURIComponent(name)}`);
+    // (3) Success toast appears with the right title.
+    await expect(page.locator('.toast.success', { hasText: 'Profile deleted' })).toBeVisible();
+    // (4) After navigating back to /profiles, the just-deleted row
+    //     no longer appears in the list (window event drops it).
+    await expect(page.locator('.page-title, h1').first()).toContainText(/Profiles/i);
+    await expect(
+      page.locator('table.tbl tbody tr td.mono', { hasText: new RegExp(`^${name}$`) }),
+    ).toHaveCount(0);
   });
 
   test('4xx keeps modal open and surfaces the server error', async ({ page }) => {

@@ -4922,13 +4922,17 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
 
   // Reset when modal opens for a new profile (the parent re-uses the
   // same component for every profile it renders detail for).
+  // Include `profileName` so the reset also fires if the modal stays
+  // mounted across a profile switch (e.g. parent re-uses the wizard
+  // with a different name) — otherwise the typed confirm text from
+  // the previous profile would stick around.
   React.useEffect(() => {
     if (open) {
       setConfirmText('');
       setError(null);
       setSubmitting(false);
     }
-  }, [open]);
+  }, [open, profileName]);
 
   const canSubmit = confirmText === profileName && !submitting;
 
@@ -4962,6 +4966,19 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
         title: 'Profile deleted',
         body: profileName,
       });
+      // Broadcast the deletion so the list page (or any other view
+      // showing this profile) can drop it from its local state.
+      // Without this, navigating back to /profiles would still show
+      // the just-deleted entry (in mock-data mode the PROFILES array
+      // is a static module constant; in live mode the page would
+      // refetch — the event makes both cases consistent).
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:profile-deleted', { detail: { name: profileName } }),
+        );
+      } catch {
+        // CustomEvent unsupported in this runtime — non-fatal.
+      }
       onDeleted?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -4978,7 +4995,13 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
       open={open}
       onClose={handleClose}
       title="Delete profile"
-      sub={`This permanently removes the "${profileName}" profile. \`aqa run --profile ${profileName}\` will start failing immediately. The action cannot be undone from the admin (you'd need to re-create the profile from scratch).`}
+      sub={
+        <>
+          This permanently removes the "<span className="mono">{profileName}</span>" profile.{' '}
+          <code>aqa run --profile {profileName}</code> will start failing immediately. The action
+          cannot be undone from the admin (you'd need to re-create the profile from scratch).
+        </>
+      }
       size="md"
       footer={
         <>
@@ -8452,11 +8475,32 @@ function PageScenarioDetail({ id, onNavigate }) {
 
 // ---------------- Profiles ----------------
 function PageProfiles({ onNavigate, onOpenProfile }) {
+  // Subscribe to delete events so the just-deleted profile drops out
+  // of the rendered list. In mock-data mode the PROFILES array is a
+  // static constant — without this subscription, navigating back to
+  // /profiles after a successful delete would still show the entry.
+  // In a live deployment with a real backend the page would refetch;
+  // the event-driven local state makes both behaviors match.
+  const [deletedNames, setDeletedNames] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const name = e?.detail?.name;
+      if (typeof name !== 'string') return;
+      setDeletedNames((prev) => {
+        const next = new Set(prev);
+        next.add(name);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:profile-deleted', handler);
+    return () => window.removeEventListener('aqa:profile-deleted', handler);
+  }, []);
+  const visible = PROFILES.filter((p) => !deletedNames.has(p.name));
   return (
     <div className="page" data-screen-label="13 Profiles">
       <PageHeader
         title="Profiles"
-        sub={`${PROFILES.length} configured · execution mode mix: ${PROFILES.filter((p) => p.execution_mode === 'sandbox').length} sandbox · ${PROFILES.filter((p) => p.execution_mode === 'host').length} host`}
+        sub={`${visible.length} configured · execution mode mix: ${visible.filter((p) => p.execution_mode === 'sandbox').length} sandbox · ${visible.filter((p) => p.execution_mode === 'host').length} host`}
         actions={
           <button className="btn sm primary">
             <I.Plus size={12} />
@@ -8479,7 +8523,7 @@ function PageProfiles({ onNavigate, onOpenProfile }) {
               </tr>
             </thead>
             <tbody>
-              {PROFILES.map((p) => (
+              {visible.map((p) => (
                 <tr key={p.name} onClick={() => onOpenProfile(p.name)}>
                   <td>
                     <span className="id-link mono" style={{ fontSize: 12.5, fontWeight: 500 }}>
