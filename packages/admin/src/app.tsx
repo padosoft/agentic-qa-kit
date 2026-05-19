@@ -4028,7 +4028,17 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   // a no-op. Prevents the "two concurrent transitions for the same
   // finding, last response wins" race that an unguarded background
   // POST would otherwise allow.
+  //
+  // We carry the set in BOTH a React state (for re-renders / data
+  // attributes / draggable toggle) AND a ref (for the synchronous
+  // re-entrancy gate inside doMove). The state-only approach
+  // doesn't reject double-submits fired within the same tick because
+  // `setPending(prev => prev.add(id))` doesn't update `pending` until
+  // the next render — two quick drags would both observe `pending`
+  // without the id and proceed. The ref is mutated inline, before
+  // any await, so the second call short-circuits immediately.
   const [pending, setPending] = React.useState(() => new Set());
+  const pendingRef = React.useRef(new Set());
   // Captured by the confirmation textarea — required for terminal
   // transitions because POST /api/findings/:id/status rejects an
   // empty reason at the server (see api.test.ts).
@@ -4103,7 +4113,12 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
     // succession could submit competing transitions and the slower
     // response would silently overwrite the faster one on both the
     // client (setItems) and the server (last write wins).
-    if (pending.has(id)) {
+    //
+    // The check uses `pendingRef.current` (mutated synchronously
+    // below) rather than the `pending` state, which is stale within
+    // the same tick. The state copy is also updated so React re-
+    // renders pick up the `data-finding-pending` attribute change.
+    if (pendingRef.current.has(id)) {
       toast.push({
         kind: 'warning',
         title: 'Status change skipped',
@@ -4115,6 +4130,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       setSubmitting(true);
       setSubmitError(null);
     }
+    pendingRef.current.add(id);
     setPending((prev) => {
       const next = new Set(prev);
       next.add(id);
@@ -4151,6 +4167,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
       return false;
     } finally {
       if (setOnModal) setSubmitting(false);
+      pendingRef.current.delete(id);
       setPending((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -4237,7 +4254,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
           setConfirm(null);
         }}
         title={`Confirm transition to ${confirm?.toCol.label}`}
-        sub={`Moving "${confirm?.finding?.title}" to a terminal status. Provide a reason — it will be persisted on the finding record. (The matching audit-chain event is a v1.7.x follow-up.)`}
+        sub={`Moving "${confirm?.finding?.title}" to a terminal status. The server requires a non-empty reason to accept the request, but neither persisting that reason on the finding record nor emitting a matching audit-chain event is wired yet — both are v1.7.x follow-ups.`}
         footer={
           <>
             <button
@@ -4295,10 +4312,12 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
                     </>
                   )}{' '}
                   for this transition to be schema-valid. Today the API only persists{' '}
-                  <code>status</code> and <code>reason</code> — the extra fields aren't yet wired
+                  <code>status</code> on the finding record (the <code>reason</code> is required
+                  by the endpoint but dropped by the store) — the extra fields aren't yet wired
                   through the wizard or the server endpoint, so the resulting finding may fail
-                  re-validation. Tracked as a v1.7.x follow-up. You can still proceed; the change
-                  will land in the store and you can fill in the missing fields via the YAML editor.
+                  re-validation. Tracked as a v1.7.x follow-up. You can still proceed; the status
+                  change will land in the store and you can fill in the missing fields via the
+                  YAML editor.
                 </span>
               </Alert>
             ) : null}
@@ -4317,8 +4336,8 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
               />
               <div className="field-hint">
                 Required by the server. Confirm is disabled until you provide a non-empty reason.
-                The reason is stored on the finding record; see the subtitle above for the
-                audit-chain caveat.
+                See the subtitle above for the (current) caveats around reason persistence and the
+                audit-chain follow-up.
               </div>
             </div>
           </div>

@@ -219,6 +219,45 @@ test.describe('Findings kanban status change', () => {
     ).toBeVisible();
   });
 
+  test('synchronous re-entrancy guard: rapid double-submit produces only one POST', async ({
+    page,
+  }) => {
+    // Regression test for PR #27 iter 4 (Copilot):
+    // The earlier guard checked `pending.has(id)` (React state) which
+    // is stale within the same tick — two `doMove` calls in the same
+    // microtask would both see `pending` empty and both fire a POST.
+    // The fix moves the truth-of-pending to a `useRef<Set>` mutated
+    // synchronously. This test rapidly clicks Confirm twice (the
+    // second click while the modal is still mounted, before the
+    // server response) and asserts exactly ONE POST hit the network.
+    let callCount = 0;
+    let releaseFirst: () => void = () => {};
+    const firstHold = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+    await page.route('**/api/findings/*/status', async (route) => {
+      callCount += 1;
+      if (callCount === 1) {
+        await firstHold;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await navigateToFindings(page);
+    const firstCard = page.locator('[data-testid^="kanban-card-"]').first();
+    await firstCard.dragTo(page.getByTestId('kanban-col-fixed'));
+    await page.getByTestId('kanban-confirm-reason').fill('Patch deployed to staging.');
+    // Fire the submit but don't await — the response is held.
+    void page.getByTestId('kanban-confirm-submit').click();
+    // The submit button should disable while the request is in flight.
+    await expect(page.getByTestId('kanban-confirm-submit')).toBeDisabled();
+    // Even if a phantom synchronous double-click slipped through, the
+    // synchronous ref guard prevents a second POST. Release and check.
+    releaseFirst();
+    // Wait for callCount to settle.
+    await page.waitForTimeout(150);
+    expect(callCount).toBe(1);
+  });
+
   test('dragging to Duplicate shows the schema-invariant warning', async ({ page }) => {
     // Regression test for PR #27 iter 2 (Copilot):
     // `duplicate` status requires `duplicate_of` per the Finding
