@@ -5569,9 +5569,37 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
     mode === 'edit' && parsedBody?.id && parsedBody.id !== scenarioId
       ? `body id "${parsedBody.id}" does not match the path "${scenarioId}"`
       : null;
+  // PR #37 Copilot iter 3: parsedBody must be a non-null plain object
+  // with a non-empty string `id`. Without these guards canSubmit could
+  // be true when the YAML parses to a scalar (e.g. `5`), an array,
+  // null, or when __aqaYamlParse is undefined (returns undefined).
+  // Any of those would let the user PUT/POST an invalid body and the
+  // server-side error message wouldn't tell them WHY the body was bad.
+  const isPlainObject = (v) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v);
+  const bodyShapeError =
+    parseError == null && !isPlainObject(parsedBody)
+      ? 'YAML must parse to an object (with id, title, …)'
+      : null;
+  const missingIdError =
+    parseError == null &&
+    isPlainObject(parsedBody) &&
+    (typeof parsedBody.id !== 'string' || parsedBody.id.length === 0)
+      ? 'id must be a non-empty string'
+      : null;
   const uxError =
-    parseError || cloneEmptyIdError || sameAsSourceError || collisionError || idMismatchError;
-  const canSubmit = !submitting && uxError === null && parsedBody !== null;
+    parseError ||
+    bodyShapeError ||
+    // cloneEmptyIdError takes priority over the generic missingIdError
+    // so clone mode gets a friendlier "choose a new id" instead of
+    // the technical "id must be a non-empty string".
+    cloneEmptyIdError ||
+    missingIdError ||
+    sameAsSourceError ||
+    collisionError ||
+    idMismatchError;
+  const canSubmit =
+    !submitting && uxError === null && isPlainObject(parsedBody) && typeof parsedBody?.id === 'string';
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -5612,7 +5640,14 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
         setError(msg);
         return;
       }
-      const newId = parsed?.scenario?.id ?? parsedBody.id;
+      // PR #37 Copilot iter 3: broadcast the SERVER's response body,
+      // not the client's parsedBody. The server (Zod) applies defaults
+      // (probe/oracle defaults, `invariant_refs: []`, `cleanup: []`,
+      // …) when the user omits optional fields, so parsedBody is a
+      // subset of what's actually stored. Falling back to parsedBody
+      // only when the server didn't echo a `scenario` key (defensive).
+      const persisted = isPlainObject(parsed?.scenario) ? parsed.scenario : parsedBody;
+      const newId = persisted?.id ?? parsedBody.id;
       toast.push({
         kind: 'success',
         title: mode === 'edit' ? 'Scenario saved' : `Scenario "${newId}" created`,
@@ -5623,8 +5658,8 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
           new CustomEvent(mode === 'edit' ? 'aqa:scenario-updated' : 'aqa:scenario-created', {
             detail:
               mode === 'edit'
-                ? { id: submittedSourceId, patch: parsedBody }
-                : { id: newId, scenario: parsedBody },
+                ? { id: submittedSourceId, patch: persisted }
+                : { id: newId, scenario: persisted },
           }),
         );
       } catch {
