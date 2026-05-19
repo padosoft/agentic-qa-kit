@@ -52,9 +52,10 @@ test.describe('Import-manifest wizard', () => {
   });
 
   test('happy-path 201 renders success panel with pack name + version', async ({ page }) => {
-    let postedBody: { yaml?: string; force?: boolean } | null = null;
+    type PostedBody = { yaml?: string; force?: boolean };
+    const captured: { value: PostedBody | null } = { value: null };
     await page.route('**/api/packs/import', async (route) => {
-      postedBody = route.request().postDataJSON();
+      captured.value = route.request().postDataJSON() as PostedBody;
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
@@ -71,7 +72,31 @@ test.describe('Import-manifest wizard', () => {
     await expect(result).toBeVisible();
     await expect(result).toContainText('pack-imported-e2e');
     await expect(result).toContainText('0.1.0');
-    expect(postedBody?.yaml).toContain('pack-imported-e2e');
+    expect(captured.value?.yaml).toContain('pack-imported-e2e');
+  });
+
+  test('2xx response with empty/non-JSON body is treated as failure', async ({ page }) => {
+    // Regression test for PR #28 iter 1 (Copilot):
+    // A 200 response with empty/non-JSON body used to set
+    // result=null (falsy), leaving the wizard in form-state while
+    // toasting success. Now the wizard explicitly checks for the
+    // `pack` object in the response and surfaces an error if it's
+    // missing.
+    await page.route('**/api/packs/import', async (route) => {
+      // 200 OK but the body is empty — not what the documented
+      // contract returns.
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '' });
+    });
+    await navigateToPacks(page);
+    await page.getByTestId('packs-import-btn').click();
+    await page.getByTestId('import-manifest-yaml').fill(VALID_YAML);
+    await page.getByTestId('import-manifest-submit').click();
+    // Wizard stays open with an explicit error explaining the
+    // missing `pack` field — not a success panel.
+    await expect(
+      page.locator('.modal-body .alert', { hasText: /missing the expected `pack`/i }),
+    ).toBeVisible();
+    await expect(page.getByTestId('import-manifest-result')).toHaveCount(0);
   });
 
   test('schema-validation 400 keeps wizard open with error inline', async ({ page }) => {
@@ -96,11 +121,12 @@ test.describe('Import-manifest wizard', () => {
   });
 
   test('409 duplicate: user can toggle force and retry', async ({ page }) => {
+    type PostedBody = { yaml?: string; force?: boolean };
     let callCount = 0;
-    let lastBody: { yaml?: string; force?: boolean } | null = null;
+    const last: { value: PostedBody | null } = { value: null };
     await page.route('**/api/packs/import', async (route) => {
       callCount += 1;
-      lastBody = route.request().postDataJSON();
+      last.value = route.request().postDataJSON() as PostedBody;
       if (callCount === 1) {
         await route.fulfill({
           status: 409,
@@ -125,12 +151,12 @@ test.describe('Import-manifest wizard', () => {
     await page.getByTestId('import-manifest-submit').click();
     // First call: 409 — error visible, wizard still open.
     await expect(page.locator('.modal-body .alert', { hasText: /already exists/i })).toBeVisible();
-    expect(lastBody?.force).toBeUndefined();
+    expect(last.value?.force).toBeUndefined();
     // Toggle force and resubmit.
     await page.getByTestId('import-manifest-force').check();
     await page.getByTestId('import-manifest-submit').click();
     await expect(page.getByTestId('import-manifest-result')).toBeVisible();
-    expect(lastBody?.force).toBe(true);
+    expect(last.value?.force).toBe(true);
     expect(callCount).toBe(2);
   });
 });

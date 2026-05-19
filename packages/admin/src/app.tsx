@@ -4706,14 +4706,25 @@ function ImportManifestWizard({ open, onClose }) {
   }
 
   async function handleFileChange(e) {
-    const file = e.target.files?.[0];
+    const fileInput = e.target;
+    const file = fileInput.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
       setYamlText(text);
+      // Clear any stale "could not read file" error from a previous
+      // failed selection so the user isn't confused by an obsolete
+      // message that's no longer relevant.
+      setError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`Could not read file: ${msg}`);
+    } finally {
+      // Reset the input value so selecting the same file again
+      // reliably re-fires `onChange` in every browser. Without this,
+      // Chrome/Edge skip the event on identical re-selection (the
+      // input still references the previous File object).
+      fileInput.value = '';
     }
   }
 
@@ -4737,6 +4748,17 @@ function ImportManifestWizard({ open, onClose }) {
       }
       if (!res.ok) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
+        setError(msg);
+        toast.push({ kind: 'error', title: 'Import manifest failed', body: msg });
+        return;
+      }
+      // 2xx but body is empty / not JSON / missing the documented
+      // `pack` shape is treated as an integration failure rather
+      // than silently dropping to the form state. Otherwise the
+      // toast would announce success while the wizard stays in
+      // form mode (since `result` is falsy), confusing the user.
+      if (!parsed || typeof parsed !== 'object' || !('pack' in parsed)) {
+        const msg = `Server returned ${res.status} but the response body is missing the expected \`pack\` object (got ${text ? text.slice(0, 80) : 'empty body'}).`;
         setError(msg);
         toast.push({ kind: 'error', title: 'Import manifest failed', body: msg });
         return;
