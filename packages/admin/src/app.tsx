@@ -5139,6 +5139,163 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
 }
 Object.assign(window, { DeleteProfileWizard });
 
+// v1.7 slice 4c.4 — Risk delete confirmation wizard wired to DELETE
+// /api/risks/:id. Mirrors DeleteProfileWizard's architecture: type-the-
+// id-to-confirm gating, synchronous in-flight guard, captured
+// submittedId stale-submit guard, sync handleClose reset, modal close-
+// affordance inertness during submit. The risk_id is a slug-ish string
+// (e.g. R-AUTH-001) so typing it is reasonable; if a risk's id changes
+// across renders, the reset effect catches it.
+function DeleteRiskWizard({ open, riskId, onClose, onDeleted }) {
+  const [confirmText, setConfirmText] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const inFlightRef = React.useRef(false);
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (open) {
+      setConfirmText('');
+      setError(null);
+      setSubmitting(false);
+      inFlightRef.current = false;
+    }
+  }, [open, riskId]);
+
+  const canSubmit = confirmText === riskId && !submitting;
+
+  function handleClose() {
+    if (submitting) return;
+    setConfirmText('');
+    setError(null);
+    setSubmitting(false);
+    inFlightRef.current = false;
+    onClose?.();
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    const submittedId = riskId;
+    const reqUrl = apiUrl(`/api/risks/${encodeURIComponent(submittedId)}`);
+    try {
+      const res = await fetch(reqUrl, { method: 'DELETE' });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const stillCurrent = submittedId === riskId;
+      if (!res.ok) {
+        const msg = parsed?.error ?? `HTTP ${res.status}`;
+        toast.push({
+          kind: 'error',
+          title: 'Delete risk failed',
+          body: `${submittedId}: ${msg}`,
+        });
+        if (stillCurrent) setError(msg);
+        return;
+      }
+      toast.push({ kind: 'success', title: 'Risk deleted', body: submittedId });
+      try {
+        window.dispatchEvent(
+          new CustomEvent('aqa:risk-deleted', { detail: { id: submittedId } }),
+        );
+      } catch {
+        // CustomEvent unsupported — non-fatal.
+      }
+      if (stillCurrent) onDeleted?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const full = `Could not reach ${reqUrl} (${msg}). The admin is in mock-data mode or the server is down — the risk was not deleted.`;
+      toast.push({
+        kind: 'error',
+        title: 'Delete risk failed',
+        body: `${submittedId}: ${full}`,
+      });
+      if (submittedId === riskId) setError(full);
+    } finally {
+      if (submittedId === riskId) {
+        setSubmitting(false);
+        inFlightRef.current = false;
+      }
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={submitting ? undefined : handleClose}
+      title="Delete risk"
+      sub={
+        <>
+          This permanently removes the "<span className="mono">{riskId}</span>" risk from the risk
+          map. Scenarios that target this risk will lose their backreference and report-rendering
+          will fall back to the literal id.
+        </>
+      }
+      size="md"
+      footer={
+        <>
+          <button className="btn" onClick={handleClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button
+            className="btn danger"
+            data-testid="risk-delete-submit"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+          >
+            {submitting ? (
+              'Deleting…'
+            ) : (
+              <>
+                <I.Trash size={12} />
+                Delete risk
+              </>
+            )}
+          </button>
+        </>
+      }
+    >
+      <div className="col gap-12">
+        {error && (
+          <Alert kind="error" title="Delete failed">
+            <span data-testid="risk-delete-error">{error}</span>
+          </Alert>
+        )}
+        <Alert kind="warning" title="This is destructive">
+          Removing a risk drops it from the risk map. Existing run records, findings, and audit
+          events that reference the id are unaffected — only the risk definition is removed.
+        </Alert>
+        <div className="field-row">
+          <label className="field-label" htmlFor="dr-confirm">
+            Type <code className="mono">{riskId}</code> to confirm *
+          </label>
+          <input
+            id="dr-confirm"
+            className="input mono"
+            data-testid="risk-delete-confirm"
+            placeholder={riskId}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoFocus
+          />
+          <div className="field-hint">
+            The Delete button stays disabled until the typed text matches the risk id exactly.
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+Object.assign(window, { DeleteRiskWizard });
+
 // v1.7 slice 4c.2 — Profile Edit/Save modal wired to PUT
 // /api/profiles/:name. Mirrors the architecture of DeleteProfileWizard
 // (sync in-flight guard, captured submittedName guard, sync handleClose
@@ -7962,12 +8119,19 @@ function PageFindingDetail({ findingId, onNavigate }) {
 }
 
 // ---------------- Risk map ----------------
-function PageRiskMap({ onNavigate, onOpenRisk }) {
+function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks }) {
   const [view, setView] = React.useState('matrix');
   const [selCell, setSelCell] = React.useState(null);
   const [filterCat, setFilterCat] = React.useState(new Set());
 
-  const visible = RISKS.filter((r) => filterCat.size === 0 || filterCat.has(r.category));
+  // v1.7 slice 4c.4 — risks deleted via DeleteRiskWizard are hidden
+  // from every view (matrix, category, list). App-level Set survives
+  // route changes; the wizard dispatches `aqa:risk-deleted` after a
+  // successful DELETE /api/risks/:id.
+  const liveRisks = deletedRisks
+    ? RISKS.filter((r) => !deletedRisks.has(r.id))
+    : RISKS;
+  const visible = liveRisks.filter((r) => filterCat.size === 0 || filterCat.has(r.category));
   const cellFiltered = selCell
     ? visible.filter((r) => r.likelihood === selCell.likelihood && r.severity === selCell.severity)
     : visible;
@@ -7976,7 +8140,7 @@ function PageRiskMap({ onNavigate, onOpenRisk }) {
     <div className="page" data-screen-label="07 Risk map">
       <PageHeader
         title="Risk map"
-        sub={`${RISKS.length} risks · ${RISKS.filter((r) => r.severity === 'critical' || r.severity === 'high').length} severe`}
+        sub={`${liveRisks.length} risks · ${liveRisks.filter((r) => r.severity === 'critical' || r.severity === 'high').length} severe`}
         actions={
           <>
             <span className="seg">
@@ -8021,7 +8185,7 @@ function PageRiskMap({ onNavigate, onOpenRisk }) {
             }}
           >
             {c.replace('_', ' ')}
-            <span className="count">{RISKS.filter((r) => r.category === c).length}</span>
+            <span className="count">{liveRisks.filter((r) => r.category === c).length}</span>
           </button>
         ))}
       </div>
@@ -8087,7 +8251,7 @@ function PageRiskMap({ onNavigate, onOpenRisk }) {
       {view === 'category' && (
         <div className="dash-grid">
           {RISK_CATEGORIES.map((c) => {
-            const list = RISKS.filter((r) => r.category === c);
+            const list = liveRisks.filter((r) => r.category === c);
             if (list.length === 0) return null;
             return (
               <div key={c} className="card span-6">
@@ -8130,8 +8294,9 @@ function PageRiskMap({ onNavigate, onOpenRisk }) {
 }
 
 // ---------------- Risk editor ----------------
-function PageRiskEditor({ riskId, onNavigate }) {
+function PageRiskEditor({ riskId, onNavigate, deletedRisks }) {
   const isNew = riskId === 'new';
+  const isDeleted = !isNew && (deletedRisks?.has?.(riskId) ?? false);
   const risk = isNew
     ? {
         id: 'risk_new_draft',
@@ -8146,6 +8311,28 @@ function PageRiskEditor({ riskId, onNavigate }) {
       }
     : riskById(riskId) || RISKS[0];
   const [r, setR] = React.useState(risk);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  if (isDeleted) {
+    return (
+      <div className="page" data-screen-label="08 Risk editor (not found)">
+        <PageHeader title="Risk not found" sub={`No risk with id "${riskId}".`} />
+        <Alert kind="warning" title="No such risk">
+          <span style={{ fontSize: 12.5 }}>
+            The risk has been deleted.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="risk-detail-back"
+              onClick={() => onNavigate?.('risk-map', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to risk map
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
 
   const rpn =
     severityRank(r.severity) *
@@ -8181,8 +8368,27 @@ function PageRiskEditor({ riskId, onNavigate }) {
               <I.Check size={12} />
               Save
             </button>
+            {!isNew && (
+              <button
+                className="btn sm danger"
+                data-testid="risk-delete-btn"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <I.Trash size={12} />
+                Delete
+              </button>
+            )}
           </>
         }
+      />
+      <DeleteRiskWizard
+        open={deleteOpen}
+        riskId={r.id}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          onNavigate?.('risk-map', {});
+        }}
       />
 
       <div className="split-3-2">
@@ -11824,6 +12030,26 @@ function App() {
     return () => window.removeEventListener('aqa:profile-created', handler);
   }, []);
 
+  // v1.7 slice 4c.4 — Risk deletions broadcast via `aqa:risk-deleted`
+  // and the Set lives at App level for the same lifted-state reason as
+  // `deletedProfiles`. PageRiskEditor dispatches the event before
+  // navigating back to /risk-map; a listener on PageRiskMap would miss
+  // it because the map isn't mounted yet at dispatch time.
+  const [deletedRisks, setDeletedRisks] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      if (typeof id !== 'string') return;
+      setDeletedRisks((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    };
+    window.addEventListener('aqa:risk-deleted', handler);
+    return () => window.removeEventListener('aqa:risk-deleted', handler);
+  }, []);
+
   // Apply theme
   React.useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
@@ -11875,6 +12101,16 @@ function App() {
       setRoute('error-404');
     }
   };
+  // Exposed for e2e tests so we can drive route+params changes that
+  // aren't reachable through normal clicks — e.g. landing on a
+  // tombstoned risk-edit url to verify the "Risk not found" branch.
+  // Mirrors the `__aqaApiUrl` test hook below the App component.
+  React.useEffect(() => {
+    window.__aqaNavigate = navigate;
+    return () => {
+      delete window.__aqaNavigate;
+    };
+  });
 
   const ctx = {
     onNavigate: navigate,
@@ -11884,6 +12120,7 @@ function App() {
     deletedProfiles,
     updatedProfiles,
     createdProfiles,
+    deletedRisks,
   };
 
   if (!signedIn) {

@@ -668,8 +668,12 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('risk');
+        // DELETE is idempotent — we don't 404 on already-gone, the
+        // desired end state is "no risk with this id" regardless of
+        // whether one was there to begin with. The admin UI treats
+        // 200 as success either way.
         await ctx.store.deleteRisk(id);
-        return asResponse({ ok: true });
+        return asResponse({ id, deleted: true });
       },
     },
 
