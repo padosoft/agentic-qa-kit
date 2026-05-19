@@ -728,6 +728,36 @@ export function makeApi(): ApiHandler[] {
       },
     },
     {
+      method: 'POST',
+      path: '/api/scenarios',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        // Create-new semantics with atomic Store.createScenario —
+        // two concurrent POSTs for the same id can't both observe
+        // "missing" and overwrite each other. Mirrors POST
+        // /api/profiles (slice 4c.3).
+        const parsed = ScenarioSchema.Scenario.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `scenario failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        const scenario = parsed.data;
+        const { created } = await ctx.store.createScenario(scenario);
+        if (!created) {
+          return asResponse(
+            {
+              error: `scenario "${scenario.id}" already exists; PUT /api/scenarios/${encodeURIComponent(scenario.id)} to update or pick a different id`,
+              code: 'EEXIST',
+            },
+            409,
+          );
+        }
+        return asResponse({ scenario }, 201);
+      },
+    },
+    {
       method: 'PUT',
       path: '/api/scenarios/:id',
       requires: 'risk-map:edit',

@@ -145,6 +145,22 @@ describe('PostgresStore (v0.3 scaffold)', () => {
         }),
       /not implemented/,
     );
+    await assert.rejects(
+      () =>
+        s.createScenario({
+          schema_version: '1',
+          id: 's',
+          title: 'A scaffold-test scenario',
+          risk_refs: ['risk-x'],
+          invariant_refs: [],
+          preconditions: [],
+          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
+          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
+          cleanup: [],
+          tags: [],
+        }),
+      /not implemented/,
+    );
     await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
   });
 });
