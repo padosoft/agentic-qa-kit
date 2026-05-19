@@ -328,7 +328,10 @@ test.describe('Profile edit', () => {
     // first row is `host`-mode `smoke` profile, now overridden to
     // `agent`, so the summary should be "4 sandbox · 1 agent" (host
     // count goes to 0 and disappears).
-    await page.locator('.nav-item', { hasText: /^Profiles/i }).first().click();
+    await page
+      .locator('.nav-item', { hasText: /^Profiles/i })
+      .first()
+      .click();
     const sub = page.locator('.page-sub, .page-header').first();
     await expect(sub).toContainText(/1 agent/);
     await expect(sub).toContainText(/4 sandbox/);

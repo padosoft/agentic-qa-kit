@@ -5157,6 +5157,13 @@ Object.assign(window, { DeleteProfileWizard });
 // falls back to 'orchestrator' on initial render, missing parallelism
 // defaults to 1, etc. The user's edited body is what hits the server.
 const PROFILE_EXECUTION_MODES = ['orchestrator', 'agent'];
+// Numeric form fields are kept as RAW STRINGS in form state, not as
+// `number`. A `<input type="number">` lets the browser hold transient
+// values like `"-"` or `"1.5e"` mid-edit; coercing those with
+// `Number(v)` in onChange produces `NaN`, and `NaN` fed back through
+// the controlled `value={...}` triggers a React warning and breaks
+// editing. Coercion happens only at validation/submit time. (Copilot
+// review on PR #30 iter 4.)
 function deriveProfileForm(profile) {
   if (!profile) return null;
   const mode = PROFILE_EXECUTION_MODES.includes(profile.execution_mode)
@@ -5170,8 +5177,8 @@ function deriveProfileForm(profile) {
         : null;
   return {
     execution_mode: mode,
-    llm_budget_usd: budget,
-    parallelism: typeof profile.parallelism === 'number' ? profile.parallelism : 1,
+    llm_budget_usd: budget != null ? String(budget) : '',
+    parallelism: typeof profile.parallelism === 'number' ? String(profile.parallelism) : '1',
     require_deterministic_replay: profile.require_deterministic_replay === true,
     packs: Array.isArray(profile.packs) ? profile.packs.join(', ') : '',
     tags: Array.isArray(profile.tags) ? profile.tags.join(', ') : '',
@@ -5251,15 +5258,21 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
   // set, and every pack entry must be a valid slug. All three mirror
   // the Zod schema so the user gets immediate feedback instead of a
   // server round-trip rejection / silently-persisted bad data.
+  // Validation parses the raw input string at check time so transient
+  // states like `"-"` or `""` surface the hint without polluting form
+  // state with `NaN`.
   const parallelismError = (() => {
-    const n = form.parallelism;
-    if (!Number.isInteger(n) || n < 1 || n > 64) return '1..64 integer';
+    const raw = form.parallelism;
+    if (raw === '') return '1..64 integer';
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 64) return '1..64 integer';
     return null;
   })();
   const budgetError = (() => {
-    const v = form.llm_budget_usd;
-    if (v == null) return null;
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 'must be ≥ 0';
+    const raw = form.llm_budget_usd;
+    if (raw === '') return null; // blank = unlimited, valid
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v < 0) return 'must be ≥ 0';
     return null;
   })();
   const packsError = (() => {
@@ -5295,12 +5308,17 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     // dispatch the broadcast for the OLD submission — never for the
     // new profile that's now in scope. (Slice 4c.1 iter 8 lesson.)
     const submittedName = profileName;
+    // Coerce raw string form values to the numeric schema shape only
+    // at submit time. Validation has already rejected non-numeric /
+    // out-of-range entries, so `Number()` here is safe.
+    const parallelismNum = Number(form.parallelism);
+    const budgetNum = form.llm_budget_usd === '' ? null : Number(form.llm_budget_usd);
     const body = {
       schema_version: '1',
       name: submittedName,
       execution_mode: form.execution_mode,
       llm_usage: Array.isArray(profile?.llm_usage) ? profile.llm_usage : [],
-      llm_budget_usd: form.llm_budget_usd,
+      llm_budget_usd: budgetNum,
       // Preserve the optional `budget_minutes` wall-clock guard from
       // the source profile if it was set — the form doesn't expose it
       // and `MemoryStore.saveProfile` writes the submitted object as
@@ -5309,7 +5327,7 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       ...(typeof profile?.budget_minutes === 'number'
         ? { budget_minutes: profile.budget_minutes }
         : {}),
-      parallelism: form.parallelism,
+      parallelism: parallelismNum,
       require_deterministic_replay: form.require_deterministic_replay,
       packs: parseSlugList(form.packs),
       tags: parseSlugList(form.tags),
@@ -5443,14 +5461,12 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
             step="0.01"
             min="0"
             data-testid="profile-edit-budget"
-            value={form.llm_budget_usd ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              setForm((f) => ({
-                ...f,
-                llm_budget_usd: v === '' ? null : Number(v),
-              }));
-            }}
+            // Raw string passthrough so `-` and other transient
+            // browser-input states never become `NaN` in form state.
+            value={form.llm_budget_usd}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, llm_budget_usd: e.target.value }))
+            }
           />
           {budgetError && (
             <div className="field-hint danger" data-testid="profile-edit-budget-err">
@@ -5470,19 +5486,13 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
             min="1"
             max="64"
             data-testid="profile-edit-parallelism"
+            // Same raw-string passthrough as the budget input. The
+            // validation block above parses with `Number(v)` and
+            // checks `Number.isInteger`, so `"1.5"` and `"1.5e"` are
+            // both rejected without polluting form state with `NaN`.
+            // (Copilot review on PR #30 iter 4.)
             value={form.parallelism}
-            onChange={(e) => {
-              const v = e.target.value;
-              // Preserve decimal entries with `Number(v)` (not
-              // `parseInt`) so non-integer input like "1.5" stays in
-              // form state as 1.5 and fails the integer validation
-              // — `parseInt` would silently truncate to 1 and slip
-              // past the check. (Copilot review on PR #30.)
-              setForm((f) => ({
-                ...f,
-                parallelism: v === '' ? 0 : Number(v),
-              }));
-            }}
+            onChange={(e) => setForm((f) => ({ ...f, parallelism: e.target.value }))}
           />
           {parallelismError && (
             <div className="field-hint danger" data-testid="profile-edit-parallelism-err">
