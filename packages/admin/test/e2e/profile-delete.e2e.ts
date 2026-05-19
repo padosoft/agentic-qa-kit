@@ -87,11 +87,25 @@ test.describe('Profile delete confirmation', () => {
     // (3) Success toast appears with the right title.
     await expect(page.locator('.toast.success', { hasText: 'Profile deleted' })).toBeVisible();
     // (4) After navigating back to /profiles, the just-deleted row
-    //     no longer appears in the list (window event drops it).
+    //     no longer appears in the list (window event drops it via
+    //     the App-level lifted deletedProfiles set).
+    //
+    // Selector: the profile name renders as <span class="id-link mono">
+    // inside a <td>. An earlier version of this test used `td.mono`,
+    // which matches nothing (the class is on the span, not the td)
+    // so the count was always 0 and the assertion silently passed
+    // even if the row was still present (Copilot caught this in
+    // iter 6 review). Now we target the span directly within a row
+    // AND assert the table still has other rows so the check isn't
+    // vacuously satisfied by an empty table.
     await expect(page.locator('.page-title, h1').first()).toContainText(/Profiles/i);
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     await expect(
-      page.locator('table.tbl tbody tr td.mono', { hasText: new RegExp(`^${name}$`) }),
+      page.locator('table.tbl tbody tr', {
+        has: page.locator('span.id-link.mono', { hasText: new RegExp(`^${escaped}$`) }),
+      }),
     ).toHaveCount(0);
+    await expect(page.locator('table.tbl tbody tr')).not.toHaveCount(0);
   });
 
   test('4xx keeps modal open and surfaces the server error', async ({ page }) => {
