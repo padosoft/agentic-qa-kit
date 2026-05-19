@@ -5536,18 +5536,25 @@ function ScenarioYamlWizard({ open, mode, scenarioId, existingIds, onClose, onDo
   }
 
   // Parse client-side for an early UX hint. Server is the trust
-  // boundary. Memoize so unrelated state changes (submitting,
-  // scenarioId, etc.) don't re-trigger a parse that's O(yaml-size).
+  // boundary. PR #37 Copilot iter 5: debounce so a fast typer doesn't
+  // pay an O(yaml-size) parse on every keystroke — wait 150ms after
+  // the last edit. The textarea stays responsive while typing; the
+  // UX-error alert and submit-button enablement settle a tick after.
+  const [debouncedYaml, setDebouncedYaml] = React.useState(yamlText);
+  React.useEffect(() => {
+    const h = setTimeout(() => setDebouncedYaml(yamlText), 150);
+    return () => clearTimeout(h);
+  }, [yamlText]);
   const { parsedBody, parseError } = React.useMemo(() => {
     let p = null;
     let err = null;
     try {
-      p = window.__aqaYamlParse?.(yamlText);
+      p = window.__aqaYamlParse?.(debouncedYaml);
     } catch (e) {
       err = e instanceof Error ? e.message : String(e);
     }
     return { parsedBody: p, parseError: err };
-  }, [yamlText]);
+  }, [debouncedYaml]);
   // Clone mode forces the user to pick an id — YAML parses `id:`
   // (empty) as `null`, so without this guard canSubmit would be true
   // and the user could POST a body with `id: null`. The server would
@@ -10067,30 +10074,43 @@ function PageScenarioDetail({
                     /* fall through to mock preview */
                   }
                 }
+                // PR #37 Copilot iter 5: the static preview must use
+                // the real @aqa/schemas Scenario field names
+                // (risk_refs, steps, oracles, …) so the "schema-
+                // validated" badge isn't misleading when no override
+                // is present.
                 return [
                   '# scenario.schema.json v1',
+                  'schema_version: "1"',
                   `id: ${sid}`,
-                  'risk_ref: risk-cross-tenant-leak',
-                  'description: |',
-                  '  Query /api/orders/search as tenant A with a payload that bypasses',
-                  '  any naive query parser. Oracle ensures only tenant A rows return.',
-                  'probes:',
-                  '  - id: baseline_search',
-                  '    method: GET',
-                  '    url: /api/orders/search?q=test',
-                  '    expect: HTTP 200 · only own tenant',
-                  '  - id: bypass_search',
-                  '    method: GET',
-                  '    url: /api/orders/search?q=%27+OR+1%3D1+--',
-                  '    expect: HTTP 400 OR (HTTP 200 with own tenant only)',
-                  'oracle:',
-                  '  kind: cross_tenant',
-                  '  expected_tenants: [acme]',
-                  '  invariant: no_raw_query_without_tenant_clause',
-                  'replay:',
-                  '  bug_level: true',
-                  '  scenario_level: true',
-                  '  agent_level: optional',
+                  'title: Cross-tenant data leak via raw query',
+                  'risk_refs:',
+                  '  - risk-cross-tenant-leak',
+                  'invariant_refs:',
+                  '  - no-raw-query-without-tenant-clause',
+                  'preconditions: []',
+                  'steps:',
+                  '  - id: baseline-search',
+                  '    kind: http',
+                  '    with:',
+                  '      method: GET',
+                  '      url: /api/orders/search?q=test',
+                  '    timeout_ms: 30000',
+                  '  - id: bypass-search',
+                  '    kind: http',
+                  '    with:',
+                  '      method: GET',
+                  '      url: /api/orders/search?q=%27+OR+1%3D1+--',
+                  '    timeout_ms: 30000',
+                  'oracles:',
+                  '  - id: oracle-cross-tenant',
+                  '    kind: custom',
+                  '    with:',
+                  '      expected_tenants: [acme]',
+                  '      invariant: no-raw-query-without-tenant-clause',
+                  '    weight: 1',
+                  'cleanup: []',
+                  'tags: []',
                 ];
               })()}
             />
@@ -10110,18 +10130,22 @@ function PageScenarioDetail({
                   <h3 className="card-title">Outline</h3>
                 </div>
                 <div className="card-body" style={{ fontSize: 11.5 }}>
+                  <div className="mono">- schema_version</div>
                   <div className="mono">- id</div>
-                  <div className="mono">- risk_ref</div>
-                  <div className="mono">- description</div>
-                  <div className="mono">- probes</div>
+                  <div className="mono">- title</div>
+                  <div className="mono">- risk_refs</div>
+                  <div className="mono">- invariant_refs</div>
+                  <div className="mono">- preconditions</div>
+                  <div className="mono">- steps</div>
                   <div className="mono" style={{ paddingLeft: 12 }}>
-                    - baseline_search
+                    - baseline-search
                   </div>
                   <div className="mono" style={{ paddingLeft: 12 }}>
-                    - bypass_search
+                    - bypass-search
                   </div>
-                  <div className="mono">- oracle</div>
-                  <div className="mono">- replay</div>
+                  <div className="mono">- oracles</div>
+                  <div className="mono">- cleanup</div>
+                  <div className="mono">- tags</div>
                 </div>
               </div>
             </div>
