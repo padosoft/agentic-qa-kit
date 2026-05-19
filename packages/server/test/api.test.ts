@@ -428,6 +428,59 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4c.4 — DELETE /api/risks/:id (Risk Delete) ============
+
+  describe('DELETE /api/risks/:id', () => {
+    const validRisk = {
+      schema_version: '1' as const,
+      id: 'risk-x',
+      title: 'Test risk',
+      category: 'STRIDE' as const,
+      severity: 'medium' as const,
+      likelihood: 'possible' as const,
+      invariants: [],
+      owners: [],
+      tags: [],
+    };
+
+    it('removes the risk from the store and returns { id, deleted: true }', async () => {
+      const c = ctx();
+      await c.store.saveRisk(validRisk);
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/risks/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'risk-x' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { id: string; deleted: boolean };
+      assert.equal(body.id, 'risk-x');
+      assert.equal(body.deleted, true);
+      const stillThere = await c.store.loadRisk('risk-x');
+      assert.equal(stillThere, null);
+    });
+
+    it('404s when the path id is missing', async () => {
+      // Mirrors the GET/PUT/DELETE profile handlers: a route without an
+      // id is not a no-op delete, it's a malformed request.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/risks/:id');
+      const res = await route?.handle({ headers: {}, params: {}, body: {} }, c);
+      assert.equal(res?.status, 404);
+    });
+
+    it('is idempotent — deleting a non-existent id still returns 200', async () => {
+      // REST DELETE semantics: an already-gone resource is the desired
+      // state, so we don't 404. The admin UI treats 200 as success and
+      // surfaces the toast either way.
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/risks/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'nope' }, body: {} }, c);
+      assert.equal(res?.status, 200);
+    });
+
+    it('requires the risk-map:edit permission', () => {
+      const route = makeApi().find((r) => r.method === 'DELETE' && r.path === '/api/risks/:id');
+      assert.equal(route?.requires, 'risk-map:edit');
+    });
+  });
+
   // ============ v1.7 slice 3 — Pack scaffolding (Admin Create-pack wizard) ============
 
   describe('POST /api/packs/scaffold', () => {
