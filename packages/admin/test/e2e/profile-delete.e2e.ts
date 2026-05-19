@@ -133,6 +133,85 @@ test.describe('Profile delete confirmation', () => {
     await expect(page.locator('table.tbl tbody tr')).not.toHaveCount(0);
   });
 
+  test('opening profile-detail with no params shows "no profile selected" (not the first profile)', async ({
+    page,
+  }) => {
+    // Regression test for PR #29 iter 10 (Copilot):
+    // The route definition previously defaulted `name` to
+    // `PROFILES[0].name`, so ScreenJumper (which navigates without
+    // params) would silently land the user on — and let them delete —
+    // the first profile. The route now passes `undefined` and the
+    // page renders an explicit no-selection state.
+    await page.goto('/');
+    await expect(page.locator('.sidebar')).toBeVisible();
+    // Open the ScreenJumper and pick "Profile detail" — this is the
+    // exact code path that exposes the bypass: onNavigate(key) with
+    // no params.
+    await page.locator('button[title="Jump to screen"]').click();
+    // Each popup row has a numeric-index span and a label span; target
+    // the label span by exact text and let the click bubble to the
+    // clickable parent div.
+    await page
+      .locator('span')
+      .filter({ hasText: /^Profile detail$/ })
+      .first()
+      .click();
+    // Should land on the no-selection state, NOT a profile name.
+    await expect(page.locator('.page-title, h1').first()).toContainText(/No profile selected/i);
+    // Crucially: no Delete button must be present on this state, so
+    // a stray click can't delete the first profile.
+    await expect(page.getByTestId('profile-delete-btn')).toHaveCount(0);
+    // "Back to profiles" returns the user to the list.
+    await page.getByTestId('profile-detail-back').click();
+    await expect(page.locator('.page-title, h1').first()).toContainText(/Profiles/i);
+  });
+
+  test('modal close affordances (overlay, X, Escape) are inert while DELETE is in flight', async ({
+    page,
+  }) => {
+    // Regression test for PR #29 iter 10 (Copilot):
+    // While `submitting` is true the Cancel button is disabled, but
+    // earlier the Modal's backdrop and "X" close button (and the
+    // Escape key handler) still fired onClose — looking broken and
+    // letting the user dismiss the wizard mid-request. The fix
+    // passes `onClose={submitting ? undefined : handleClose}`.
+    //
+    // We hold the DELETE open by deferring `route.fulfill` until the
+    // test resolves a promise, giving us a deterministic in-flight
+    // window in which to assert.
+    let resolveDelete: (() => void) | null = null;
+    const deleteHeld = new Promise<void>((r) => {
+      resolveDelete = r;
+    });
+    await page.route('**/api/profiles/*', async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      await deleteHeld;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+    const name = await navigateToProfileDetail(page);
+    await page.getByTestId('profile-delete-btn').click();
+    await page.getByTestId('profile-delete-confirm').fill(name);
+    await page.getByTestId('profile-delete-submit').click();
+    // Button now reads "Deleting…" — confirms we're in the in-flight
+    // window before we assert close-affordance inertness.
+    await expect(page.getByTestId('profile-delete-submit')).toContainText(/Deleting/i);
+    // Try every dismissal vector while in flight. Each one must be a
+    // no-op: the modal must still be present after the click/keypress.
+    await page.locator('.overlay').click({ force: true });
+    await expect(page.locator('.modal-title')).toContainText(/Delete profile/i);
+    await page.locator('.modal-head .iconbtn').click(); // the X button
+    await expect(page.locator('.modal-title')).toContainText(/Delete profile/i);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.modal-title')).toContainText(/Delete profile/i);
+    // Release the DELETE — modal should now close on success.
+    resolveDelete?.();
+    await expect(page.locator('.modal-title')).toHaveCount(0);
+  });
+
   test('4xx keeps modal open and surfaces the server error', async ({ page }) => {
     await page.route('**/api/profiles/*', async (route) => {
       if (route.request().method() !== 'DELETE') return route.continue();

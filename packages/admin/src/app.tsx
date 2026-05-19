@@ -5062,7 +5062,12 @@ function DeleteProfileWizard({ open, profileName, onClose, onDeleted }) {
   return (
     <Modal
       open={open}
-      onClose={handleClose}
+      // While the DELETE is in flight, neutralize Modal close affordances
+      // (Escape, overlay click, X button) by passing undefined. Otherwise
+      // the user could dismiss the modal mid-request and miss the result
+      // toast / error state, and the Cancel button being disabled while
+      // the X close still works would look inconsistent.
+      onClose={submitting ? undefined : handleClose}
       title="Delete profile"
       sub={
         <>
@@ -8619,18 +8624,44 @@ function PageProfiles({ onNavigate, onOpenProfile, deletedProfiles }) {
 
 // ---------------- Profile detail ----------------
 function PageProfileDetail({ name, onNavigate, deletedProfiles }) {
-  const rawP = profileByName(name);
+  const rawP = name ? profileByName(name) : null;
   // Treat just-deleted profiles as not-found so a stale link
   // (e.g. a notification linking to a profile a colleague just
   // removed) doesn't render the underlying mock row.
-  const isDeleted = deletedProfiles?.has(name);
+  const isDeleted = name ? deletedProfiles?.has(name) : false;
   const p = isDeleted ? null : rawP;
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   // Now that this page has a destructive Delete action, a stale or
   // typoed route param (e.g. /profiles/<deleted-name>) must NOT
   // silently render the first profile in the list — otherwise the
   // user could delete the wrong record. Show a clear not-found
-  // state instead.
+  // state instead. Two flavors:
+  //   - `name` undefined → the route was opened without a selection
+  //     (e.g. ScreenJumper jump-to-screen): show a "no profile
+  //     selected" prompt rather than an arbitrary record.
+  //   - `name` set but unknown → show the "no such profile" state.
+  if (!name) {
+    return (
+      <div className="page" data-screen-label="14 Profile detail (no selection)">
+        <PageHeader title="No profile selected" sub="Pick a profile to see its details." />
+        <Alert kind="info" title="No profile selected">
+          <span style={{ fontSize: 12.5 }}>
+            Open this page from the Profiles list (or a notification link) to view a specific
+            profile.{' '}
+            <button
+              className="btn xs ghost"
+              data-testid="profile-detail-back"
+              onClick={() => onNavigate?.('profiles', {})}
+              style={{ marginLeft: 8 }}
+            >
+              <I.ArrowLeft size={11} />
+              Back to profiles
+            </button>
+          </span>
+        </Alert>
+      </div>
+    );
+  }
   if (!p) {
     return (
       <div className="page" data-screen-label="14 Profile detail (not found)">
@@ -10804,7 +10835,12 @@ const ROUTES = {
     label: 'Profile detail',
     section: 'Catalog',
     parent: 'profiles',
-    render: (ctx) => <PageProfileDetail {...ctx} name={ctx.params.name || PROFILES[0].name} />,
+    // Do NOT fall back to PROFILES[0].name here: ScreenJumper and other
+    // entrypoints navigate to `profile-detail` with no params, which would
+    // otherwise silently render (and let the user delete) the first
+    // profile. Pass `undefined` and let PageProfileDetail render an
+    // explicit "no profile selected" state.
+    render: (ctx) => <PageProfileDetail {...ctx} name={ctx.params.name} />,
   },
   agents: { label: 'Agents', section: 'Catalog', render: (ctx) => <PageAgents {...ctx} /> },
 
