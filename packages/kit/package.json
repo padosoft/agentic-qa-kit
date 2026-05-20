@@ -20,10 +20,11 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/pack-new.test.ts test/report-cmd.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/pack-new.test.ts test/install-agent-files-cmd.test.ts test/report-cmd.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
+    "@aqa/adapters": "workspace:*",
     "@aqa/pack-loader": "workspace:*",
     "@aqa/reporter": "workspace:*",
     "@aqa/runner": "workspace:*",
