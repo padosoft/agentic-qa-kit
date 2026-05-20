@@ -137,13 +137,13 @@ bun --filter @aqa/admin dev
 
 Then open the local URL shown by Vite (normally `http://127.0.0.1:5173`) and inspect runs, findings, replay artifacts, and audit chain state.
 
-### 7. Replay a finding to confirm
+### 7. Reproduce from generated artifacts
 
 ```bash
-bunx aqa replay AQA-2026-0001
+ls .aqa/runs/<run-id>/
 ```
 
-Re-runs the deterministic bug reproduction (curl / Playwright / SQL) and tells you if it still reproduces. If it doesn't, the bug is fixed — closes the loop.
+Each run stores replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`) so you can reproduce findings deterministically and confirm fixes.
 
 ## The mental model in 7 words
 
