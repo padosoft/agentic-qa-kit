@@ -34,9 +34,7 @@ test.describe('Agents page', () => {
     await expect(page.getByTestId('agent-install-copilot')).toBeVisible();
   });
 
-  test('empty server payload is authoritative — replaces the fixture with []', async ({
-    page,
-  }) => {
+  test('empty server payload is authoritative — replaces the fixture with []', async ({ page }) => {
     // PR #38 Copilot iter 1: an empty `agents` array from the server
     // must NOT fall back to the local fixture, otherwise a fresh
     // deploy with no discovered adapters would look like it had the
