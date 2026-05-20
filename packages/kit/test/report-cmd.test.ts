@@ -17,9 +17,15 @@ import { describe, it } from 'node:test';
 import { runReport } from '../dist/commands/report.js';
 
 const RUN_ID = '20260520-000000-runabcdef';
-const ALT_RUN_ID = '20260520-010000-runzzzzzz';
 const STARTED_AT = '2026-05-20T00:00:00.000Z';
 const FINISHED_AT = '2026-05-20T00:00:30.000Z';
+
+// Slight sleep used to put a real mtime delta between consecutive run dirs
+// in the "latest run" test. Some filesystems otherwise group rapid mkdirs
+// under the same mtimeMs and force the tie-breaker into action.
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function makeTempRoot(): string {
   return mkdtempSync(join(tmpdir(), 'aqa-report-'));
@@ -83,13 +89,13 @@ function writeEvents(
   );
 }
 
-function writeFindings(runDir: string, count: number): void {
+function writeFindings(runDir: string, count: number, runId: string = RUN_ID): void {
   const lines: string[] = [];
   for (let i = 0; i < count; i++) {
     const finding = {
       schema_version: '1',
       id: `AQA-2026-${String(i + 1).padStart(4, '0')}`,
-      run_id: RUN_ID,
+      run_id: runId,
       risk_id: 'r-example',
       scenario_id: 'scn-example-demo',
       title: `Synthetic finding ${i + 1}`,
@@ -150,25 +156,38 @@ describe('aqa report — happy path', () => {
     assert.equal(json.summary.severities.low, 1);
   });
 
-  it('defaults to the latest run when --run-id is omitted (lexical sort)', () => {
+  it('defaults to the latest run by file mtime, not lexical name (Copilot iter 1 P2)', async () => {
+    // Critical correctness: `aqa run --seed` produces hash-based IDs
+    // (run-<sha>) that do NOT sort by recency. Picking by mtime keeps
+    // "latest" honest in mixed-naming directories. Here we intentionally
+    // create the lexically-EARLIER name LAST so a name-based sort would
+    // pick the wrong dir.
     const root = makeTempRoot();
-    // Older run first; alt run lexically later so it should be chosen.
-    const olderDir = makeRunDir(root, RUN_ID);
-    writeEvents(olderDir, { runId: RUN_ID, profile: 'smoke', project: 'demo', findingsCount: 1 });
-    writeFindings(olderDir, 1);
-    const newerDir = makeRunDir(root, ALT_RUN_ID);
+    const earlierName = 'run-aaaa-but-newer'; // lexically earlier
+    const olderName = 'run-zzzz-but-older'; // lexically later
+    const olderDir = makeRunDir(root, olderName);
+    writeEvents(olderDir, {
+      runId: olderName,
+      profile: 'smoke',
+      project: 'demo',
+      findingsCount: 1,
+    });
+    writeFindings(olderDir, 1, olderName);
+    await sleep(20);
+    const newerDir = makeRunDir(root, earlierName);
     writeEvents(newerDir, {
-      runId: ALT_RUN_ID,
+      runId: earlierName,
       profile: 'release-gate',
       project: 'demo',
       findingsCount: 3,
     });
-    writeFindings(newerDir, 3);
+    writeFindings(newerDir, 3, earlierName);
 
     const result = runReport({ root });
     assert.equal(result.ok, true);
     if (!result.ok) return;
-    assert.equal(result.runId, ALT_RUN_ID);
+    // mtime-newer dir wins even though its name sorts EARLIER lexically.
+    assert.equal(result.runId, earlierName);
     assert.equal(result.findingsCount, 3);
   });
 
@@ -250,6 +269,181 @@ describe('aqa report — error cases', () => {
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.match(result.error, /cannot read events\.jsonl/);
+  });
+
+  it('returns error when events.jsonl is missing (Copilot iter 1 P1)', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    // findings.jsonl present, events.jsonl missing
+    writeFileSync(join(runDir, 'findings.jsonl'), '', 'utf8');
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /events\.jsonl is missing/);
+  });
+
+  it('returns error when findings.jsonl is missing (Copilot iter 1 P1)', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeEvents(runDir, { runId: RUN_ID, profile: 'smoke', project: 'demo', findingsCount: 0 });
+    // findings.jsonl intentionally not created
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /findings\.jsonl is missing/);
+  });
+
+  it('rejects a --run-id that would escape .aqa/runs via traversal (Copilot iter 1)', () => {
+    const root = makeTempRoot();
+    // .aqa/runs has to exist or we hit the prior guard first
+    mkdirSync(join(root, '.aqa', 'runs'), { recursive: true });
+    const result = runReport({ root, runId: '../../etc/passwd' });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /invalid run id/);
+  });
+
+  it('rejects a --run-id containing characters outside [a-z0-9-]', () => {
+    const root = makeTempRoot();
+    mkdirSync(join(root, '.aqa', 'runs'), { recursive: true });
+    const result = runReport({ root, runId: 'NOT_A_SLUG' });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /invalid run id/);
+  });
+});
+
+describe('aqa report — state reconstruction (Copilot iter 1 P1)', () => {
+  it('marks state=failed when run_finished payload has pack_errors > 0', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    // Custom events with non-zero pack_errors
+    const events = [
+      {
+        schema_version: '1',
+        seq: 0,
+        prev_hash: null,
+        hash: '0'.repeat(64),
+        ts: STARTED_AT,
+        run_id: RUN_ID,
+        kind: 'run_started',
+        actor: { type: 'orchestrator', id: 'aqa-cli' },
+        payload: { profile: 'smoke', project: 'demo' },
+      },
+      {
+        schema_version: '1',
+        seq: 1,
+        prev_hash: '0'.repeat(64),
+        hash: '1'.repeat(64),
+        ts: FINISHED_AT,
+        run_id: RUN_ID,
+        kind: 'run_finished',
+        actor: { type: 'orchestrator', id: 'aqa-cli' },
+        payload: {
+          scenarios_run: 0,
+          findings: 0,
+          pack_errors: 1,
+          scenario_errors: 0,
+          missing_scenarios: 0,
+          unsafe_paths: 0,
+          runtime_errors: 0,
+        },
+      },
+    ];
+    writeFileSync(
+      join(runDir, 'events.jsonl'),
+      `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
+      'utf8',
+    );
+    writeFindings(runDir, 0);
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, true);
+    const json = JSON.parse(readFileSync(join(runDir, 'report.json'), 'utf8')) as {
+      run: { state: string };
+    };
+    assert.equal(json.run.state, 'failed');
+  });
+
+  it('marks state=failed when scenarios_run is 0 even with no error counters', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeEvents(runDir, { runId: RUN_ID, profile: 'smoke', project: 'demo', findingsCount: 0 });
+    // writeEvents above sets scenarios_run: 2 — override with a custom file
+    const events = [
+      {
+        schema_version: '1',
+        seq: 0,
+        prev_hash: null,
+        hash: '0'.repeat(64),
+        ts: STARTED_AT,
+        run_id: RUN_ID,
+        kind: 'run_started',
+        actor: { type: 'orchestrator', id: 'aqa-cli' },
+        payload: { profile: 'smoke', project: 'demo' },
+      },
+      {
+        schema_version: '1',
+        seq: 1,
+        prev_hash: '0'.repeat(64),
+        hash: '1'.repeat(64),
+        ts: FINISHED_AT,
+        run_id: RUN_ID,
+        kind: 'run_finished',
+        actor: { type: 'orchestrator', id: 'aqa-cli' },
+        payload: {
+          scenarios_run: 0,
+          findings: 0,
+          pack_errors: 0,
+          scenario_errors: 0,
+          missing_scenarios: 0,
+          unsafe_paths: 0,
+          runtime_errors: 0,
+        },
+      },
+    ];
+    writeFileSync(
+      join(runDir, 'events.jsonl'),
+      `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
+      'utf8',
+    );
+    writeFindings(runDir, 0);
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, true);
+    const json = JSON.parse(readFileSync(join(runDir, 'report.json'), 'utf8')) as {
+      run: { state: string };
+    };
+    assert.equal(json.run.state, 'failed');
+  });
+
+  it('marks state=running when no run_finished event is present', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    const events = [
+      {
+        schema_version: '1',
+        seq: 0,
+        prev_hash: null,
+        hash: '0'.repeat(64),
+        ts: STARTED_AT,
+        run_id: RUN_ID,
+        kind: 'run_started',
+        actor: { type: 'orchestrator', id: 'aqa-cli' },
+        payload: { profile: 'smoke', project: 'demo' },
+      },
+    ];
+    writeFileSync(
+      join(runDir, 'events.jsonl'),
+      `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
+      'utf8',
+    );
+    writeFindings(runDir, 0);
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, true);
+    const json = JSON.parse(readFileSync(join(runDir, 'report.json'), 'utf8')) as {
+      run: { state: string; finished_at?: string };
+    };
+    assert.equal(json.run.state, 'running');
+    assert.equal(json.run.finished_at, undefined);
   });
 
   it('returns error on schema-invalid finding', () => {
