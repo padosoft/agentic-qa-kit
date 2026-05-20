@@ -3544,6 +3544,19 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
 
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
 
+  React.useEffect(() => {
+    if (!Array.isArray(initialChain)) return;
+    setChain(initialChain);
+    setRawText(
+      `# Loaded initial chain — ${initialChain.length} events\n# Press "Verify chain" to walk the sha256 chain.`,
+    );
+    setVerifyState('idle');
+    setProgress(0);
+    setVerifiedCount(0);
+    setFirstMismatch(null);
+    setExpanded(null);
+  }, [initialChain]);
+
   const loadDemo = (which) => {
     const data = which === 'good' ? demoGood : demoBad;
     setChain(data);
@@ -11270,6 +11283,7 @@ function PageAudit({ onNavigate }) {
         }
       />
       <AuditChainViewer
+        initialChain={liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : undefined}
         demoGood={
           liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
         }
@@ -12949,6 +12963,7 @@ function PageAdminAudit({ onNavigate }) {
         }
       />
       <AuditChainViewer
+        initialChain={liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : undefined}
         demoGood={
           liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
         }
