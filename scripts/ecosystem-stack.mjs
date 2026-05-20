@@ -22,7 +22,7 @@ const SANDBOX = mkdtempSync(join(tmpdir(), 'aqa-ecosystem-e2e-'));
 const FIXTURE = join(SANDBOX, 'bun-api');
 const API_PORT = 7777;
 const SUT_PORT = 3901;
-const ADMIN_PORT = 5173;
+const ADMIN_PORT = 5174;
 let shutdownStarted = false;
 
 const AQA_BIN = join(ROOT, 'packages', 'kit', 'dist', 'cli', 'aqa.js');

@@ -15,6 +15,7 @@ export default defineConfig({
   // monorepo's bun-test runner doesn't try to execute these — bun's
   // built-in glob picks up `*.{test,spec}.ts`.
   testMatch: ['**/*.e2e.ts'],
+  testIgnore: ['**/ecosystem-live.e2e.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 2,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5174',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -18,7 +18,7 @@ export default defineConfig({
   webServer: {
     command: 'node scripts/ecosystem-stack.mjs',
     cwd: '../..',
-    url: 'http://127.0.0.1:5173',
+    url: 'http://127.0.0.1:5174',
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: 'pipe',
