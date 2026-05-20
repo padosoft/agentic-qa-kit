@@ -18,11 +18,8 @@
 
 ```bash
 cd path/to/your/project
-bun add -D @aqa/kit @aqa/schemas
+bun add -D agentic-qa-kit
 ```
-
-> Until v0.1.0 publishes to npm, consume the kit via this monorepo's workspace:
-> `"@aqa/kit": "workspace:*"`.
 
 ## 2. Bootstrap `.aqa/` (1 min)
 
@@ -52,9 +49,11 @@ bunx aqa validate    # schema-check .aqa/* against @aqa/schemas (CI-safe)
 
 ## 4. Install agent instruction files (2 min)
 
-> `aqa install-agent-files` lands with the Task 4 follow-up. Until then, copy
-> the templates from `packages/adapters/src/*.ts` into your repo manually
-> (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`).
+```bash
+bunx aqa install-agent-files --targets claude,codex,gemini,copilot
+```
+
+This generates agent-specific instruction files and skills in your repo.
 
 ## 5. Define one real risk (3 min)
 
@@ -76,24 +75,21 @@ implementation**.
 
 ## 6. Run the smoke profile (3 min)
 
-> Full `aqa run --profile smoke` lands with the Task 5 HTTP-probe-driver
-> follow-up. Until then, exercise the runner programmatically:
-
-```ts
-import { runScenario, EventChainWriter } from '@aqa/runner';
-
-const events = new EventChainWriter('.aqa/runs/demo/events.jsonl');
-const result = await runScenario({
-  scenario, run_id: 'demo',
-  probeRunner: async (p) => ({ probe_id: p.id, status: 401 }), // mocked
-  events,
-});
-console.info(result.finding ? 'FAIL' : 'PASS');
+```bash
+bunx aqa run --profile smoke
 ```
 
-The runner appends a hash-chained event log under `.aqa/runs/demo/` and emits
-a Finding when an oracle fails. That Finding is the smallest unit your CI gate
-will fail on.
+Optional immediate report:
+
+```bash
+bunx aqa report
+```
+
+Then open the admin panel:
+
+```bash
+bun --filter @aqa/admin dev
+```
 
 ## Where to go next
 
