@@ -1,0 +1,61 @@
+{
+  "$ref": "#/definitions/sso-config",
+  "definitions": {
+    "sso-config": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "provider": {
+          "type": "string",
+          "const": "oidc"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "issuer_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "client_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "client_secret_set": {
+          "type": "boolean"
+        },
+        "allowed_email_domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "claim_mappings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "propertyNames": {
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "provider",
+        "enabled",
+        "issuer_url",
+        "client_id",
+        "client_secret_set",
+        "claim_mappings"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

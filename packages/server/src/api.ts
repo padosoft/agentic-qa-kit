@@ -7,6 +7,7 @@ import {
   Profile as ProfileSchema,
   RiskMap as RiskMapSchema,
   Scenario as ScenarioSchema,
+  SsoConfig as SsoConfigSchema,
 } from '@aqa/schemas';
 import type {
   Agent,
@@ -21,6 +22,7 @@ import type {
   Run,
   SavedView,
   Scenario,
+  SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
@@ -882,6 +884,26 @@ export function makeApi(): ApiHandler[] {
         // every time the enum gained an entry.
         const all_permissions = Permission.options as ReadonlyArray<PermissionType>;
         return asResponse({ roles, all_permissions });
+      },
+    },
+    {
+      // v1.7 slice 4h — SSO live config for the Admin SSO page.
+      // The secret never leaves the server; only `client_secret_set`
+      // is exposed for write-once UI affordance.
+      method: 'GET',
+      path: '/api/sso/config',
+      requires: 'settings:read',
+      async handle(_req, ctx) {
+        const config = await ctx.store.loadSsoConfig();
+        if (!config) return asResponse({ config: null } satisfies { config: null });
+        const parsed = SsoConfigSchema.SsoConfig.safeParse(config);
+        if (!parsed.success) {
+          return {
+            status: 500,
+            body: { error: `sso config failed schema validation: ${formatZodError(parsed.error)}` },
+          };
+        }
+        return asResponse({ config: parsed.data } satisfies { config: SsoConfig.SsoConfig | null });
       },
     },
 

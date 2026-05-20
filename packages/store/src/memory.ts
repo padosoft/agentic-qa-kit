@@ -11,6 +11,7 @@ import type {
   Run,
   SavedView,
   Scenario,
+  SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
 import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
@@ -35,6 +36,7 @@ export class MemoryStore implements StoreProvider {
   private tokens = new Map<string, ApiToken.ApiToken>();
   private orgs = new Map<string, Tenancy.Org>();
   private projects = new Map<string, Tenancy.ProjectRef>();
+  private ssoConfig: SsoConfig.SsoConfig | null = null;
   // v1.7 slice 4g — directory snapshot of users known to the admin.
   // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
   private users: StoreUserDirectoryEntry[] = [];
@@ -266,6 +268,15 @@ export class MemoryStore implements StoreProvider {
     return [...this.users];
   }
 
+  // ----- SSO config (v1.7 slice 4h) -----
+  async loadSsoConfig(): Promise<SsoConfig.SsoConfig | null> {
+    return this.ssoConfig;
+  }
+
+  __test_seedSsoConfig(config: SsoConfig.SsoConfig): void {
+    this.ssoConfig = config;
+  }
+
   // ----- Notifications -----
   async listNotifications(opts: {
     org: string;
@@ -399,5 +410,6 @@ export class MemoryStore implements StoreProvider {
     this.tokens.clear();
     this.orgs.clear();
     this.projects.clear();
+    this.ssoConfig = null;
   }
 }

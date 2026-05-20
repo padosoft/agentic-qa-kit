@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test';
 
 /**
  * v1.7 slice 4g — admin Users and Roles pages wired to
- * GET /api/users and GET /api/roles. SSO is still fixture-rendered
- * for v1.7 (no SSO-config schema yet).
+ * GET /api/users and GET /api/roles.
  */
 
 async function gotoNav(page: import('@playwright/test').Page, label: string): Promise<void> {

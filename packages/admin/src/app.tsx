@@ -1244,6 +1244,22 @@ const USERS = [
 
 const SESSION_USER = USERS[0]; // Sara — the QA lead
 
+const SSO_CONFIG_FALLBACK = {
+  schema_version: '1',
+  provider: 'oidc',
+  enabled: true,
+  issuer_url: 'https://auth.padosoft.com/realms/padosoft',
+  client_id: 'aqa-admin',
+  client_secret_set: true,
+  allowed_email_domains: ['padosoft.com', 'external.eu'],
+  claim_mappings: {
+    'user.id': 'sub',
+    'user.email': 'email',
+    'user.name': 'name',
+    'user.role': 'groups[0] -> mapped via roles.yaml',
+  },
+};
+
 const PACKS = [
   {
     slug: 'core',
@@ -12310,12 +12326,64 @@ function PageRoles({ onNavigate }) {
 
 // ---------------- SSO ----------------
 function PageSSO({ onNavigate }) {
+  // v1.7 slice 4h — wire to /api/sso/config. Live settings
+  // replace the fixture when available; otherwise keep the local
+  // fallback so mock mode still renders an operable view.
+  const [ssoConfig, setSsoConfig] = React.useState(SSO_CONFIG_FALLBACK);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/sso/config'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (body?.config === null) return;
+        if (
+          body?.config &&
+          typeof body.config === 'object' &&
+          body.config.provider === 'oidc' &&
+          typeof body.config.issuer_url === 'string' &&
+          typeof body.config.client_id === 'string'
+        ) {
+          const next = body.config;
+          const domains = Array.isArray(next.allowed_email_domains) ? next.allowed_email_domains : [];
+          const claims = typeof next.claim_mappings === 'object' &&
+            next.claim_mappings !== null &&
+            !Array.isArray(next.claim_mappings)
+            ? next.claim_mappings
+            : SSO_CONFIG_FALLBACK.claim_mappings;
+          setSsoConfig({ ...SSO_CONFIG_FALLBACK, ...next, allowed_email_domains: domains, claim_mappings: claims });
+        }
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const domains = Array.isArray(ssoConfig.allowed_email_domains)
+    ? ssoConfig.allowed_email_domains
+    : [];
+  const claims = ssoConfig.claim_mappings && typeof ssoConfig.claim_mappings === 'object'
+    ? Object.entries(ssoConfig.claim_mappings)
+    : [];
+  const secretLabel = ssoConfig.client_secret_set ? '••••••••••••••••' : 'not configured';
+  const [firstDomain] = domains;
+  const alertKind = ssoConfig.enabled ? 'success' : 'warning';
+  const alertTitle = ssoConfig.enabled ? 'SSO is active' : 'SSO is not configured';
   return (
     <div className="page page-narrow" data-screen-label="23 SSO">
       <PageHeader title="Single Sign-On" sub="OIDC configuration" />
-      <Alert kind="success" title="SSO is active">
-        Users at <code>@padosoft.com</code> sign in through your IdP. Local credentials are
-        disabled.
+      <Alert kind={alertKind} title={alertTitle}>
+        <span
+          dangerouslySetInnerHTML={{
+            __html: ssoConfig.enabled
+              ? `Users at <code>@${firstDomain ?? 'padosoft.com'}</code> sign in through your IdP. Local credentials are disabled.`
+              : 'Enable SSO in your identity provider settings before saving.',
+          }}
+        />
       </Alert>
       <div className="card">
         <div className="card-head">
@@ -12324,34 +12392,28 @@ function PageSSO({ onNavigate }) {
         <div className="card-body">
           <div className="field-row">
             <label className="field-label">Issuer URL</label>
-            <input
-              className="input mono"
-              value="https://auth.padosoft.com/realms/padosoft"
-              readOnly
-            />
+            <input className="input mono" value={ssoConfig.issuer_url} readOnly />
           </div>
           <div className="field-row">
             <label className="field-label">Client ID</label>
-            <input className="input mono" value="aqa-admin" />
+            <input className="input mono" value={ssoConfig.client_id} readOnly />
           </div>
           <div className="field-row">
             <label className="field-label">Client secret</label>
             <div className="input-with-suffix">
-              <input className="input mono" type="password" value="••••••••••••••••" readOnly />
+              <input className="input mono" type="password" value={secretLabel} readOnly />
               <span className="suffix">write-only</span>
             </div>
           </div>
           <div className="field-row">
             <label className="field-label">Allowed email domains</label>
             <div className="row gap-4">
-              <span className="chip solid">
-                padosoft.com
-                <I.X size={10} style={{ cursor: 'pointer' }} />
-              </span>
-              <span className="chip solid">
-                external.eu
-                <I.X size={10} style={{ cursor: 'pointer' }} />
-              </span>
+              {domains.map((domain) => (
+                <span className="chip solid" key={domain}>
+                  {domain}
+                  <I.X size={10} style={{ cursor: 'pointer' }} />
+                </span>
+              ))}
               <button className="chip">
                 <I.Plus size={10} />
                 Add
@@ -12368,22 +12430,12 @@ function PageSSO({ onNavigate }) {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="mono">user.id</td>
-                  <td className="mono">sub</td>
-                </tr>
-                <tr>
-                  <td className="mono">user.email</td>
-                  <td className="mono">email</td>
-                </tr>
-                <tr>
-                  <td className="mono">user.name</td>
-                  <td className="mono">name</td>
-                </tr>
-                <tr>
-                  <td className="mono">user.role</td>
-                  <td className="mono">groups[0] → mapped via roles.yaml</td>
-                </tr>
+                {claims.map(([aqaField, oidcClaim]) => (
+                  <tr key={`${aqaField}->${oidcClaim}`}>
+                    <td className="mono">{aqaField}</td>
+                    <td className="mono">{oidcClaim}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

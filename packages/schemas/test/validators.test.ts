@@ -17,6 +17,7 @@ import {
   SCHEMA_VERSION,
   SavedView,
   Scenario,
+  SsoConfig,
   Tenancy,
 } from '../dist/index.js';
 
@@ -54,6 +55,7 @@ const validators = {
   'cost-summary': CostSummary.CostSummary,
   org: Tenancy.Org,
   'project-ref': Tenancy.ProjectRef,
+  'sso-config': SsoConfig.SsoConfig,
 } as const;
 
 describe('schema version', () => {
