@@ -11267,8 +11267,12 @@ function PageCost({ onNavigate }) {
         const from = monthStart.toISOString();
         const to = now.toISOString();
         const url = `${apiUrl('/api/cost/summary')}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        // Tenant headers must match the admin's selected project so
+        // the server scopes correctly. The mock fixtures use
+        // `gescat`; a future tenant-switcher hook can swap this.
+        // PR #39 Copilot iter 2.
         const res = await fetch(url, {
-          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' },
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
@@ -11815,8 +11819,10 @@ function PageNotifications({ onNavigate }) {
   // @aqa/schemas Notification ({id, kind, summary, actor, read_by,
   // at, …}); UI expects fixture shape ({id, kind, title, body,
   // unread, link, at}). Normalize so unread counts + rendering work
-  // against the live payload. PR #39 Copilot iter 1.
-  const SELF = 'usr_self';
+  // against the live payload. PR #39 Copilot iter 1. SELF tracks
+  // the actual session user so read_by membership checks resolve
+  // correctly (iter 2 — previously was a hardcoded `usr_self`).
+  const SELF = SESSION_USER.id;
   const [items, setItems] = React.useState(NOTIFICATIONS);
   React.useEffect(() => {
     let cancelled = false;
@@ -11848,15 +11854,29 @@ function PageNotifications({ onNavigate }) {
       cancelled = true;
     };
   }, []);
-  const kinds = [
-    'all',
-    'finding.critical',
-    'run.failed',
-    'run.completed',
-    'budget.threshold',
-    'pack.signed',
-    'audit.verified',
-  ];
+  // PR #39 Copilot iter 2: derive kinds dynamically (fixture +
+  // server kinds + whatever's actually in items[]) so a live
+  // notifications payload doesn't hide rows for kinds the static
+  // list didn't anticipate (audit.chain_broken, pack.install_failed,
+  // queue.stuck, user.invited, …).
+  const kinds = React.useMemo(() => {
+    const set = new Set([
+      'finding.critical',
+      'run.failed',
+      'run.completed',
+      'budget.threshold',
+      'pack.signed',
+      'audit.verified',
+      'audit.chain_broken',
+      'pack.install_failed',
+      'queue.stuck',
+      'user.invited',
+    ]);
+    for (const n of items) {
+      if (typeof n.kind === 'string') set.add(n.kind);
+    }
+    return ['all', ...[...set].sort()];
+  }, [items]);
   const filtered = filter === 'all' ? items : items.filter((n) => n.kind === filter);
 
   return (

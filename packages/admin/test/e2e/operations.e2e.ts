@@ -26,16 +26,38 @@ async function gotoNav(page: import('@playwright/test').Page, label: string): Pr
 test.describe('Operations pages wire-up', () => {
   test('Audit page fetches /api/audit with x-aqa-org and renders live count', async ({ page }) => {
     let captured: { url: string; org: string | null } | null = null;
-    await page.route('**/api/audit', async (route) => {
+    // PR #39 Copilot iter 2: use **/api/audit** so the matcher stays
+    // resilient to future querystring additions.
+    await page.route('**/api/audit**', async (route) => {
       const req = route.request();
       captured = { url: req.url(), org: req.headers()['x-aqa-org'] ?? null };
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
+        // Schema-conforming Event payload: seq, ts, actor:{type,id},
+        // prev_hash, hash, run_id.
         body: JSON.stringify({
           events: [
-            { schema_version: '1', ts: '2026-05-19T10:00:00Z', kind: 'run.started', payload: {} },
-            { schema_version: '1', ts: '2026-05-19T10:05:00Z', kind: 'run.finished', payload: {} },
+            {
+              schema_version: '1',
+              seq: 1,
+              ts: '2026-05-19T10:00:00Z',
+              actor: { type: 'system', id: 'runner' },
+              kind: 'run.started',
+              payload: { run_id: 'r-1' },
+              prev_hash: '0'.repeat(64),
+              hash: 'a'.repeat(64),
+            },
+            {
+              schema_version: '1',
+              seq: 2,
+              ts: '2026-05-19T10:05:00Z',
+              actor: { type: 'system', id: 'runner' },
+              kind: 'run.finished',
+              payload: { run_id: 'r-1' },
+              prev_hash: 'a'.repeat(64),
+              hash: 'b'.repeat(64),
+            },
           ],
         }),
       });
@@ -43,12 +65,12 @@ test.describe('Operations pages wire-up', () => {
     await gotoNav(page, 'Audit log');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Audit log/i);
     await expect(page.locator('text=2 events · live from /api/audit')).toBeVisible();
-    expect(captured?.url).toMatch(/\/api\/audit$/);
+    expect(captured?.url).toMatch(/\/api\/audit(\?|$)/);
     expect(captured?.org).toBe('padosoft');
   });
 
   test('Audit falls back to the fixture when the endpoint fails', async ({ page }) => {
-    await page.route('**/api/audit', (route) => route.abort('failed'));
+    await page.route('**/api/audit**', (route) => route.abort('failed'));
     await gotoNav(page, 'Audit log');
     // Fixture-mode sub-header (no "live from" claim).
     await expect(page.locator('text=Hash-chained, tamper-evident')).toBeVisible();
@@ -56,8 +78,11 @@ test.describe('Operations pages wire-up', () => {
 
   test('Queue page fetches /api/queue and renders the live jobs', async ({ page }) => {
     let hit = false;
-    await page.route('**/api/queue', async (route) => {
+    await page.route('**/api/queue**', async (route) => {
       hit = true;
+      // PR #39 Copilot iter 2: use the SERVER's EnqueuedJob shape
+      // ({status, leased_until, payload}) so the test actually
+      // exercises PageQueue's adapter logic.
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -65,10 +90,10 @@ test.describe('Operations pages wire-up', () => {
           jobs: [
             {
               id: 'job-live-1',
-              kind: 'aqa.run',
               enqueued_at: '2026-05-19T11:00:00Z',
-              leased_by: null,
-              stuck: false,
+              payload: { kind: 'aqa.run', profile: 'smoke' },
+              status: 'queued',
+              leased_until: null,
             },
           ],
         }),
@@ -120,13 +145,28 @@ test.describe('Operations pages wire-up', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ summary: { total_usd: 123.45, by_profile: [], by_model: [] } }),
+        // PR #39 Copilot iter 2: schema-conforming CostSummary
+        // (schema_version + tenant scope echoed back).
+        body: JSON.stringify({
+          summary: {
+            schema_version: '1',
+            org: 'padosoft',
+            project: 'gescat',
+            from: '2026-05-01T00:00:00.000Z',
+            to: '2026-05-19T23:00:00.000Z',
+            total_usd: 123.45,
+            by_profile: [],
+            currency: 'USD',
+          },
+        }),
       });
     });
     await gotoNav(page, 'Cost');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Cost/i);
     expect(captured?.org).toBe('padosoft');
-    expect(captured?.project).toBe('demo');
+    // PR #39 Copilot iter 2: project is now `gescat` (matches the
+    // admin's selected project).
+    expect(captured?.project).toBe('gescat');
     // `from` is the first of the current month at 00:00 UTC.
     expect(captured?.from).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/);
     expect(captured?.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
