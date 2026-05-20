@@ -11169,6 +11169,33 @@ function PageReplay({ onNavigate }) {
 
 // ---------------- Audit log ----------------
 function PageAudit({ onNavigate }) {
+  // v1.7 slice 4e — wire to /api/audit (audit:read). The server
+  // route returns Event records as-stored — hash verification is the
+  // CLIENT'S job (AuditChainViewer recomputes hashes in the browser
+  // via Web Crypto). In mock mode the fixture fallback keeps the
+  // page usable when no server is reachable.
+  // PR #39 Copilot iter 6: re-check the cancellation guard AFTER
+  // await res.json() so an unmount mid-parse can't setState.
+  const [liveEvents, setLiveEvents] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/audit'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.events)) setLiveEvents(body.events);
+      } catch {
+        /* mock mode — leave the fixtures */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="17 Audit log">
       <PageHeader
@@ -11178,10 +11205,17 @@ function PageAudit({ onNavigate }) {
             Audit log
           </span>
         }
-        sub="Hash-chained, tamper-evident event log · verify in-browser with Web Crypto"
+        sub={
+          // PR #39 Copilot iter 3: use the same "loaded" signal as
+          // the viewer below (`!== null`) — an empty server list
+          // is a valid loaded state, not a fixture-fallback.
+          liveEvents !== null
+            ? `${liveEvents.length} events · live from /api/audit`
+            : 'Hash-chained, tamper-evident event log · verify in-browser with Web Crypto'
+        }
         actions={
           <>
-            <button className="btn sm">
+            <button className="btn sm" data-testid="audit-download">
               <I.Download size={12} />
               Download .jsonl
             </button>
@@ -11192,15 +11226,85 @@ function PageAudit({ onNavigate }) {
           </>
         }
       />
-      <AuditChainViewer demoGood={AUDIT_EVENTS_GOOD} demoBad={AUDIT_EVENTS_BAD} />
+      <AuditChainViewer
+        // PR #39 Copilot iter 1: server Event has {ts, actor:{type,id},
+        // prev_hash} but AuditChainViewer's demo shape is {at, actor:
+        // string, prev_hash}. Normalize the server response before
+        // handing it to the viewer; otherwise the viewer breaks on
+        // actor.toLowerCase() / reads ev.at. An empty live array is
+        // ALSO a valid loaded state (no fixture fallback) — use
+        // liveEvents !== null as the "loaded" signal.
+        demoGood={
+          liveEvents !== null
+            ? liveEvents.map((ev) => ({
+                at: ev.ts ?? ev.at ?? '',
+                actor:
+                  typeof ev.actor === 'string'
+                    ? ev.actor
+                    : ev.actor?.id || ev.actor?.type || 'system',
+                kind: ev.kind ?? 'event',
+                payload: ev.payload ?? {},
+                prev_hash: ev.prev_hash ?? '0'.repeat(64),
+                hash: ev.hash ?? '0'.repeat(64),
+              }))
+            : AUDIT_EVENTS_GOOD
+        }
+        demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
+      />
     </div>
   );
 }
 
 // ---------------- Cost ----------------
 function PageCost({ onNavigate }) {
-  const mtd = COST_DAYS.reduce((a, d) => a + d.usd, 0);
-  const dayCount = COST_DAYS.length;
+  // v1.7 slice 4e — wire to /api/cost/summary. The server default is
+  // a rolling 30-day window; the page's KPI labels say "MTD spend",
+  // so pass explicit `from`/`to` aligned to the current calendar
+  // month. PR #39 Copilot iter 1.
+  const [summary, setSummary] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const from = monthStart.toISOString();
+        const to = now.toISOString();
+        const url = `${apiUrl('/api/cost/summary')}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        // Tenant headers must match the admin's selected project so
+        // the server scopes correctly. The mock fixtures use
+        // `gescat`; a future tenant-switcher hook can swap this.
+        // PR #39 Copilot iter 2.
+        const res = await fetch(url, {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (body?.summary) setSummary(body.summary);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const mtd = summary?.total_usd ?? COST_DAYS.reduce((a, d) => a + d.usd, 0);
+  // PR #39 Copilot iter 6: when a live summary is loaded, derive
+  // dayCount from its [from,to] window so avgDay/projected/cum
+  // curves stay consistent with the server's requested range.
+  // Falls back to COST_DAYS.length in mock mode.
+  const dayCount = (() => {
+    if (summary?.from && summary?.to) {
+      const fromMs = new Date(summary.from).getTime();
+      const toMs = new Date(summary.to).getTime();
+      if (Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs >= fromMs) {
+        const days = Math.max(1, Math.ceil((toMs - fromMs) / 86_400_000));
+        return days;
+      }
+    }
+    return COST_DAYS.length;
+  })();
   const avgDay = mtd / dayCount;
   const budget = 250;
   const projection = budget * 1.18; // 18% over by month-end
@@ -11215,11 +11319,16 @@ function PageCost({ onNavigate }) {
     cum: (cum += d.usd),
     projected: false,
   }));
-  // Append projection
+  // Append projection. Anchor the date to the last entry of
+  // COST_DAYS (the mock fixture's last realized day) regardless of
+  // dayCount — when dayCount is derived from a live summary window
+  // it can be larger than COST_DAYS.length and indexing past the
+  // end would crash. PR #39 Copilot iter 6 (regression fix).
   const projDays = [];
   const remaining = daysInMonth - dayCount;
+  const lastDayDate = COST_DAYS[COST_DAYS.length - 1].date;
   for (let i = 1; i <= remaining; i++) {
-    const date = new Date(COST_DAYS[dayCount - 1].date);
+    const date = new Date(lastDayDate);
     date.setUTCDate(date.getUTCDate() + i);
     cum += avgDay;
     projDays.push({ date: date.toISOString().slice(0, 10), usd: avgDay, cum, projected: true });
@@ -11429,11 +11538,56 @@ function PageCost({ onNavigate }) {
 
 // ---------------- Queue ----------------
 function PageQueue({ onNavigate }) {
-  const pending = QUEUE_JOBS.filter((j) => !j.leased_by).length;
-  const inflight = QUEUE_JOBS.filter((j) => j.leased_by).length;
-  const oldestPending = QUEUE_JOBS.find((j) => !j.leased_by);
+  // v1.7 slice 4e — wire to /api/queue. Server returns EnqueuedJob
+  // ({id, enqueued_at, payload, status, leased_until}) but the page
+  // renders fixture fields (kind, leased_by, attempts, stuck,
+  // payload_summary). Normalize the server payload to the UI shape
+  // so KPIs and the table render correctly when live. PR #39 Copilot
+  // iter 1.
+  const [jobs, setJobs] = React.useState(QUEUE_JOBS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/queue'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!Array.isArray(body?.jobs)) return;
+        // PR #39 Copilot iter 3: filter out terminal `done` jobs
+        // before mapping — they'd otherwise be counted as "pending"
+        // (no leased_by) on the KPI grid.
+        const adapted = body.jobs
+          .filter((j) => j.status !== 'done')
+          .map((j) => ({
+            id: j.id,
+            kind:
+              (j.payload && typeof j.payload === 'object' ? j.payload.kind : null) ?? 'aqa.run',
+            enqueued_at: j.enqueued_at ?? new Date().toISOString(),
+            leased_by: j.status === 'in_flight' ? (j.leased_by ?? 'runner') : null,
+            attempts: j.attempts ?? 0,
+            stuck:
+              typeof j.leased_until === 'string'
+                ? new Date(j.leased_until).getTime() < Date.now()
+                : false,
+            payload_summary:
+              j.payload && typeof j.payload === 'object'
+                ? JSON.stringify(j.payload).slice(0, 80)
+                : '',
+          }));
+        setJobs(adapted);
+      } catch {
+        /* mock mode — keep the fixture */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const pending = jobs.filter((j) => !j.leased_by).length;
+  const inflight = jobs.filter((j) => j.leased_by).length;
+  const oldestPending = jobs.find((j) => !j.leased_by);
   const onlineRunners = RUNNERS.filter((r) => r.online).length;
-  const stuck = QUEUE_JOBS.find((j) => j.stuck);
+  const stuck = jobs.find((j) => j.stuck);
 
   return (
     <div className="page" data-screen-label="19 Queue">
@@ -11487,7 +11641,7 @@ function PageQueue({ onNavigate }) {
             Stuck jobs
           </div>
           <div className="kpi-value" style={{ color: stuck ? 'var(--status-failed)' : null }}>
-            {QUEUE_JOBS.filter((j) => j.stuck).length}
+            {jobs.filter((j) => j.stuck).length}
           </div>
           {stuck ? (
             <div className="kpi-delta down">
@@ -11522,7 +11676,7 @@ function PageQueue({ onNavigate }) {
                 </tr>
               </thead>
               <tbody>
-                {QUEUE_JOBS.map((j) => (
+                {jobs.map((j) => (
                   <tr key={j.id} className={j.stuck ? 'selected' : ''}>
                     <td>
                       <span className="mono" style={{ fontSize: 11 }}>
@@ -11690,23 +11844,78 @@ function PageQueue({ onNavigate }) {
 // ---------------- Notifications ----------------
 function PageNotifications({ onNavigate }) {
   const [filter, setFilter] = React.useState('all');
-  const kinds = [
-    'all',
-    'finding.critical',
+  // v1.7 slice 4e — wire to /api/notifications. Server returns
+  // @aqa/schemas Notification ({id, kind, summary, actor, read_by,
+  // at, …}); UI expects fixture shape ({id, kind, title, body,
+  // unread, link, at}). Normalize so unread counts + rendering work
+  // against the live payload. PR #39 Copilot iter 1. SELF tracks
+  // the actual session user so read_by membership checks resolve
+  // correctly (iter 2 — previously was a hardcoded `usr_self`).
+  const SELF = SESSION_USER.id;
+  const [items, setItems] = React.useState(NOTIFICATIONS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/notifications'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!Array.isArray(body?.notifications)) return;
+        const adapted = body.notifications.map((n) => ({
+          id: n.id,
+          // Fallback to a schema-valid NotificationKind (the server
+          // always returns a valid kind, but stay defensive against
+          // malformed payloads). PR #39 Copilot iter 5.
+          kind: n.kind ?? 'run.failed',
+          // Title falls back to a humanized kind so we always render
+          // something even when the server omits `summary`.
+          title: n.summary ?? n.title ?? (n.kind ?? 'event').replace(/\./g, ' ').toUpperCase(),
+          body: n.body ?? '',
+          unread: Array.isArray(n.read_by) ? !n.read_by.includes(SELF) : (n.unread ?? false),
+          link: n.link ?? null,
+          at: n.at ?? n.ts ?? new Date().toISOString(),
+        }));
+        setItems(adapted);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // PR #39 Copilot iter 4: filter base is the @aqa/schemas
+  // NotificationKind enum (the contract the server commits to).
+  // Then union with whatever's actually in items[] so any extras
+  // (legacy fixture rows, future enum additions) still show up.
+  // Previously this mixed fixture-only kinds with server kinds and
+  // presented filters that the server would never produce.
+  const SERVER_NOTIFICATION_KINDS = [
     'run.failed',
-    'run.completed',
+    'finding.critical',
+    'finding.verified',
     'budget.threshold',
-    'pack.signed',
-    'audit.verified',
+    'audit.chain_broken',
+    'pack.install_failed',
+    'queue.stuck',
+    'user.invited',
   ];
-  const filtered =
-    filter === 'all' ? NOTIFICATIONS : NOTIFICATIONS.filter((n) => n.kind === filter);
+  const kinds = React.useMemo(() => {
+    const set = new Set(SERVER_NOTIFICATION_KINDS);
+    for (const n of items) {
+      if (typeof n.kind === 'string') set.add(n.kind);
+    }
+    return ['all', ...[...set].sort()];
+  }, [items]);
+  const filtered = filter === 'all' ? items : items.filter((n) => n.kind === filter);
 
   return (
     <div className="page" data-screen-label="20 Notifications">
       <PageHeader
         title="Notifications"
-        sub={`${NOTIFICATIONS.filter((n) => n.unread).length} unread of ${NOTIFICATIONS.length}`}
+        sub={`${items.filter((n) => n.unread).length} unread of ${items.length}`}
         actions={
           <>
             <button className="btn sm">
@@ -11730,9 +11939,7 @@ function PageNotifications({ onNavigate }) {
           >
             {k === 'all' ? 'All' : k}
             <span className="count">
-              {k === 'all'
-                ? NOTIFICATIONS.length
-                : NOTIFICATIONS.filter((n) => n.kind === k).length}
+              {k === 'all' ? items.length : items.filter((n) => n.kind === k).length}
             </span>
           </button>
         ))}
