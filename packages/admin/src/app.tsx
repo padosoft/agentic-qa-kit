@@ -12338,7 +12338,17 @@ function PageSSO({ onNavigate }) {
         if (cancelled || !res.ok) return;
         const body = await res.json();
         if (cancelled) return;
-        if (body?.config === null) return;
+        if (body?.config === null) {
+          setSsoConfig({
+            ...SSO_CONFIG_FALLBACK,
+            enabled: false,
+            issuer_url: '',
+            client_id: '',
+            client_secret_set: false,
+            allowed_email_domains: [],
+          });
+          return;
+        }
         if (
           body?.config &&
           typeof body.config === 'object' &&
@@ -12377,13 +12387,14 @@ function PageSSO({ onNavigate }) {
     <div className="page page-narrow" data-screen-label="23 SSO">
       <PageHeader title="Single Sign-On" sub="OIDC configuration" />
       <Alert kind={alertKind} title={alertTitle}>
-        <span
-          dangerouslySetInnerHTML={{
-            __html: ssoConfig.enabled
-              ? `Users at <code>@${firstDomain ?? 'padosoft.com'}</code> sign in through your IdP. Local credentials are disabled.`
-              : 'Enable SSO in your identity provider settings before saving.',
-          }}
-        />
+        {ssoConfig.enabled ? (
+          <>
+            Users at <code>@{firstDomain ?? 'padosoft.com'}</code> sign in through your IdP. Local
+            credentials are disabled.
+          </>
+        ) : (
+          'Enable SSO in your identity provider settings before saving.'
+        )}
       </Alert>
       <div className="card">
         <div className="card-head">
@@ -12408,8 +12419,8 @@ function PageSSO({ onNavigate }) {
           <div className="field-row">
             <label className="field-label">Allowed email domains</label>
             <div className="row gap-4">
-              {domains.map((domain) => (
-                <span className="chip solid" key={domain}>
+              {domains.map((domain, idx) => (
+                <span className="chip solid" key={`${domain}-${idx}`}>
                   {domain}
                   <I.X size={10} style={{ cursor: 'pointer' }} />
                 </span>

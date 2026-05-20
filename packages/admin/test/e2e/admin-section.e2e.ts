@@ -171,4 +171,25 @@ test.describe('Admin-section wire-up', () => {
       page.locator('input[value*="https://auth.padosoft.com/realms/padosoft"]'),
     ).toBeVisible();
   });
+
+  test('SSO page renders explicit not-configured state when /api/sso/config returns null', async ({
+    page,
+  }) => {
+    await page.route('**/api/sso/config**', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: null }),
+      });
+    });
+    await gotoNav(page, 'SSO');
+    await expect(page.locator('h1, .page-title').first()).toContainText(/Single Sign-On/i);
+    await expect(page.locator('text=SSO is not configured')).toBeVisible();
+    await expect(
+      page.locator('text=Enable SSO in your identity provider settings before saving.'),
+    ).toBeVisible();
+    await expect(page.locator('input[value=""]')).toHaveCount(2);
+    await expect(page.locator('input[value="not configured"]')).toBeVisible();
+  });
 });
