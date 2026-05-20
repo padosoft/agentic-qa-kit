@@ -769,6 +769,26 @@ probes: []
       assert.equal(res?.status, 404);
     });
 
+    it('GET /api/agents/:id returns 200 with the seeded agent body', async () => {
+      // PR #38 Copilot iter 7: the detail route only had a 404 test;
+      // adding a success-path assertion guards against regressions
+      // in the detail handler (e.g. accidentally returning the
+      // wrong agent / a degenerate body).
+      const c = ctx();
+      (c.store as unknown as { __test_seedAgent: (a: typeof sampleAgent) => void }).__test_seedAgent(
+        sampleAgent,
+      );
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/agents/:id');
+      const res = await route?.handle({ headers: {}, params: { id: 'claude' } }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as {
+        agent: { id: string; installed: boolean; last_updated: string | null };
+      };
+      assert.equal(body.agent.id, 'claude');
+      assert.equal(body.agent.installed, false);
+      assert.equal(body.agent.last_updated, null);
+    });
+
     it('POST /api/agents/:id/install flips installed=true and stamps last_updated', async () => {
       const c = ctx();
       (c.store as unknown as { __test_seedAgent: (a: typeof sampleAgent) => void }).__test_seedAgent(sampleAgent);
