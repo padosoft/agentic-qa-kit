@@ -23,6 +23,7 @@
 
 ## 2026-05-20
 
+- **E2E CLI smoke should be self-contained and network-real, not command-only.** A stable pattern is: bootstrap a temp sandbox with `aqa init`, overwrite `.aqa/project.yaml` + `profiles.yaml` with schema-valid minimal config, create a local `packs/pack-local-smoke` scenario, boot a local HTTP server (`/healthz`), run `aqa run --profile smoke`, and assert `.aqa/runs/<id>/events.jsonl` + `findings.jsonl` exist. This catches orchestration regressions without external services and without adding root-level test dependencies.
 - **Hash-chain verifier and writer must share the exact same canonical body contract.** `EventChainWriter` hashes `sha256(prev_hash || canonical(rest_without_prev_hash_and_hash))` while persisted events expose `prev_hash: null` on the first record. A verifier that re-hashes including `prev_hash` (or expects the first record to carry the all-zero seed literal in `prev_hash`) will produce false mismatches on valid logs. Keep one canonical rule across writer and verifier, and treat the all-zero seed as internal hash input only.
 
 ## 2026-05-18 (v1.0 → v1.1 retrospective — patterns across the full 24-task roadmap)
