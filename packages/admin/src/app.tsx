@@ -11205,7 +11205,10 @@ function PageAudit({ onNavigate }) {
           </span>
         }
         sub={
-          liveEvents
+          // PR #39 Copilot iter 3: use the same "loaded" signal as
+          // the viewer below (`!== null`) — an empty server list
+          // is a valid loaded state, not a fixture-fallback.
+          liveEvents !== null
             ? `${liveEvents.length} events · live from /api/audit`
             : 'Hash-chained, tamper-evident event log · verify in-browser with Web Crypto'
         }
@@ -11530,21 +11533,27 @@ function PageQueue({ onNavigate }) {
         if (cancelled || !res.ok) return;
         const body = await res.json();
         if (!Array.isArray(body?.jobs)) return;
-        const adapted = body.jobs.map((j) => ({
-          id: j.id,
-          kind: (j.payload && typeof j.payload === 'object' ? j.payload.kind : null) ?? 'aqa.run',
-          enqueued_at: j.enqueued_at ?? new Date().toISOString(),
-          leased_by: j.status === 'in_flight' ? (j.leased_by ?? 'runner') : null,
-          attempts: j.attempts ?? 0,
-          stuck:
-            typeof j.leased_until === 'string'
-              ? new Date(j.leased_until).getTime() < Date.now()
-              : false,
-          payload_summary:
-            j.payload && typeof j.payload === 'object'
-              ? JSON.stringify(j.payload).slice(0, 80)
-              : '',
-        }));
+        // PR #39 Copilot iter 3: filter out terminal `done` jobs
+        // before mapping — they'd otherwise be counted as "pending"
+        // (no leased_by) on the KPI grid.
+        const adapted = body.jobs
+          .filter((j) => j.status !== 'done')
+          .map((j) => ({
+            id: j.id,
+            kind:
+              (j.payload && typeof j.payload === 'object' ? j.payload.kind : null) ?? 'aqa.run',
+            enqueued_at: j.enqueued_at ?? new Date().toISOString(),
+            leased_by: j.status === 'in_flight' ? (j.leased_by ?? 'runner') : null,
+            attempts: j.attempts ?? 0,
+            stuck:
+              typeof j.leased_until === 'string'
+                ? new Date(j.leased_until).getTime() < Date.now()
+                : false,
+            payload_summary:
+              j.payload && typeof j.payload === 'object'
+                ? JSON.stringify(j.payload).slice(0, 80)
+                : '',
+          }));
         setJobs(adapted);
       } catch {
         /* mock mode — keep the fixture */

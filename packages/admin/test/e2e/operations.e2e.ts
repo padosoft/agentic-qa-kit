@@ -102,7 +102,9 @@ test.describe('Operations pages wire-up', () => {
     await gotoNav(page, 'Queue');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Queue/i);
     expect(hit).toBe(true);
-    // Live job id appears in the table (last 12 chars).
+    // Live job id appears in the table. The UI renders only the last
+    // 12 chars in the id column, but `job-live-1` is already <12 so
+    // the full string matches the table's mono cell.
     await expect(page.locator('table.tbl', { hasText: 'job-live-1' })).toBeVisible();
   });
 
