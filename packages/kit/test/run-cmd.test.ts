@@ -522,12 +522,7 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /execution_mode|orchestrator/i);
   });
 
-  it('release-gate profile does NOT fail on findings while using the no-network probe stub', async () => {
-    // Once a real probe runner ships, `require_deterministic_replay: true`
-    // re-engages the iter-10 strict semantics (any finding → ok=false).
-    // Until then, every finding the stub produces is synthetic, so we
-    // surface findingsCount but don't fail the run — otherwise a fresh
-    // `aqa run --profile release-gate` would be unusable out of the box.
+  it('release-gate profile fails when findings are emitted', async () => {
     const { root, packDir } = fixtureProject();
     const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
     writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
@@ -544,11 +539,8 @@ describe('aqa run', () => {
 
     const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
     assert.equal(result.findingsCount, 1, 'expected 1 finding from a failing oracle');
-    assert.equal(
-      result.ok,
-      true,
-      'release-gate strict semantics are deferred until real probes ship',
-    );
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /requires deterministic replay|finding/i);
   });
 
   it('smoke profile reports ok=true even when findings are emitted (informational)', async () => {

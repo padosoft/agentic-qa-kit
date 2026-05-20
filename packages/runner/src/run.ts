@@ -30,6 +30,65 @@ const NO_NETWORK_PROBE: ProbeRunner = async (p) => ({
   body: null,
 });
 
+export interface HttpProbeRunnerOptions {
+  baseUrl: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
+  const base = opts.baseUrl.replace(/\/+$/, '');
+  return async (probe) => {
+    if (probe.kind !== 'http') {
+      return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
+    }
+    const withCfg = asRecord(probe.with);
+    const rawUrl = typeof withCfg.url === 'string' ? withCfg.url : '';
+    if (!rawUrl) return { probe_id: probe.id, error: 'http probe missing with.url' };
+    const method = typeof withCfg.method === 'string' ? withCfg.method.toUpperCase() : 'GET';
+    const headers =
+      withCfg.headers && typeof withCfg.headers === 'object'
+        ? (withCfg.headers as Record<string, string>)
+        : {};
+    const body =
+      withCfg.body === undefined
+        ? undefined
+        : typeof withCfg.body === 'string'
+          ? withCfg.body
+          : JSON.stringify(withCfg.body);
+    const url = /^https?:\/\//i.test(rawUrl)
+      ? rawUrl
+      : `${base}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), probe.timeout_ms);
+    try {
+      const res = await fetch(url, { method, headers, body, signal: controller.signal });
+      const rawBody = await res.text();
+      let parsedBody: unknown = rawBody;
+      try {
+        parsedBody = rawBody ? JSON.parse(rawBody) : rawBody;
+      } catch {
+        // keep text body
+      }
+      return {
+        probe_id: probe.id,
+        status: res.status,
+        body: parsedBody,
+        headers: Object.fromEntries(res.headers.entries()),
+      };
+    } catch (e) {
+      return {
+        probe_id: probe.id,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+}
+
 export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRunResult> {
   const runner = opts.probeRunner ?? NO_NETWORK_PROBE;
   const probeResults: ProbeRunResult[] = [];

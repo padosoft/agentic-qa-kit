@@ -39,7 +39,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
-import { EventChainWriter, FindingsWriter, runScenario } from '@aqa/runner';
+import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 
@@ -448,6 +448,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // executed and audited twice. First-seen wins, so the priority order
   // matches the discovery order above: project > node_modules > bundled.
   const seenPackNames = new Set<string>();
+  const probeRunner = project.sut.base_url
+    ? makeHttpProbeRunner({ baseUrl: project.sut.base_url })
+    : undefined;
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -519,6 +522,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           run_id: runId,
           events,
           findings,
+          ...(probeRunner ? { probeRunner } : {}),
           findingIdSeed: scenariosRun,
         });
       } catch (e) {
@@ -633,14 +637,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
     );
   }
-  // Release-gate semantics (`require_deterministic_replay: true` → "fail on
-  // any finding"): intentionally disabled while the runner uses the
-  // no-network probe stub. Every finding the stub produces is synthetic —
-  // surface them via `findingsCount` + findings.jsonl, but don't treat
-  // them as regressions. The check re-engages naturally once a real
-  // probe runner is wired in and findings reflect actual SUT behavior;
-  // until then there's no honest signal for the merge gate to enforce.
   const findingsCount = findings.snapshot().length;
+  if (profile.require_deterministic_replay && findingsCount > 0) {
+    reasons.push(
+      `profile "${profileKey}" requires deterministic replay; failing run because ${findingsCount} finding(s) were emitted`,
+    );
+  }
   if (finalizationError) reasons.push(finalizationError);
 
   // Warnings: anything we observed that didn't make `ok: false` but is
