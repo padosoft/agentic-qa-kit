@@ -10,7 +10,14 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -310,6 +317,75 @@ describe('aqa report — error cases', () => {
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.match(result.error, /invalid run id/);
+  });
+
+  it('rejects a --run-id with leading/trailing dashes (LongSlug parity — Copilot iter 2)', () => {
+    const root = makeTempRoot();
+    mkdirSync(join(root, '.aqa', 'runs'), { recursive: true });
+    for (const bad of ['-leading', 'trailing-', 'double--dash']) {
+      const result = runReport({ root, runId: bad });
+      assert.equal(result.ok, false, `${bad} must be rejected`);
+      if (result.ok) continue;
+      assert.match(result.error, /invalid run id/);
+    }
+  });
+
+  it('rejects a --run-id longer than 256 chars (LongSlug cap — Copilot iter 2)', () => {
+    const root = makeTempRoot();
+    mkdirSync(join(root, '.aqa', 'runs'), { recursive: true });
+    const result = runReport({ root, runId: 'a'.repeat(257) });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /exceeds 256-char/);
+  });
+
+  it('refuses a run dir that is actually a symlink (Copilot iter 2)', () => {
+    const root = makeTempRoot();
+    const runsRoot = join(root, '.aqa', 'runs');
+    mkdirSync(runsRoot, { recursive: true });
+    const realDir = makeRunDir(root, 'real-target');
+    writeEvents(realDir, {
+      runId: 'real-target',
+      profile: 'smoke',
+      project: 'demo',
+      findingsCount: 0,
+    });
+    writeFindings(realDir, 0, 'real-target');
+    const linkPath = join(runsRoot, 'sneaky-link');
+    try {
+      symlinkSync(realDir, linkPath, 'dir');
+    } catch {
+      // Windows without dev-mode / non-admin can't create symlinks —
+      // skip this guard by returning instead of asserting; the
+      // production behaviour is exercised on Linux CI anyway.
+      return;
+    }
+    const result = runReport({ root, runId: 'sneaky-link' });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /symlinked run directory/);
+  });
+
+  it('rejects a JSONL line that is valid JSON but not a plain object (Copilot iter 2)', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeFileSync(join(runDir, 'events.jsonl'), 'null\n', 'utf8');
+    writeFileSync(join(runDir, 'findings.jsonl'), '', 'utf8');
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /expected a JSON object, got null/);
+  });
+
+  it('rejects a JSONL line that parses as a JSON array (Copilot iter 2)', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeFileSync(join(runDir, 'events.jsonl'), '[1, 2, 3]\n', 'utf8');
+    writeFileSync(join(runDir, 'findings.jsonl'), '', 'utf8');
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /expected a JSON object, got array/);
   });
 });
 

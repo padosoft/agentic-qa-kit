@@ -14,18 +14,22 @@
  *    findings, replay artifacts, plus the rendered report).
  */
 
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderJson, renderMarkdown } from '@aqa/reporter';
 import { Finding, type Run } from '@aqa/schemas';
 
 export type ReportFormat = 'md' | 'json' | 'both';
 
-// LongSlug (per @aqa/schemas) cap. Reject anything that would let `runId`
-// escape `.aqa/runs/` via traversal (`../..`, absolute paths, backslashes).
-// The schema's own LongSlug also enforces ^[a-z0-9-]+$ — we mirror that
-// here rather than import to keep the report command self-contained.
-const RUN_ID_RE = /^[a-z0-9-]{1,80}$/;
+// Mirrors @aqa/schemas LongSlug exactly: SlugPattern + max length 256.
+// Previous v1.9 iteration used a looser /^[a-z0-9-]{1,80}$/ that both
+// capped at 80 instead of 256 AND allowed leading/trailing dashes plus
+// `--` runs — so a malformed --run-id could pass this guard yet later
+// fail at a Finding.parse() site. Pattern + length checked separately
+// so the error message can distinguish "bad characters" from "too long"
+// (helpful for hash-suffixed run ids on the edge of the cap).
+const RUN_ID_RE = /^[a-z0-9](?:-?[a-z0-9])*$/;
+const RUN_ID_MAX_LEN = 256;
 
 export interface ReportOptions {
   root: string;
@@ -77,6 +81,12 @@ export function runReport(opts: ReportOptions): ReportResult {
   // IDs as LongSlug; mirror that constraint at the CLI boundary so a
   // typo or malicious input can't drive writes anywhere outside the
   // intended directory.
+  if (runIdResolved.length > RUN_ID_MAX_LEN) {
+    return {
+      ok: false,
+      error: `report: invalid run id — exceeds ${RUN_ID_MAX_LEN}-char LongSlug cap (got ${runIdResolved.length})`,
+    };
+  }
   if (!RUN_ID_RE.test(runIdResolved)) {
     return {
       ok: false,
@@ -86,6 +96,24 @@ export function runReport(opts: ReportOptions): ReportResult {
   const runDir = join(runsRoot, runIdResolved);
   if (!safeIsDir(runDir)) {
     return { ok: false, error: `report: run directory not found: ${runDir}` };
+  }
+  // Refuse symlinked run dirs. A previous run (or an attacker with FS
+  // write under .aqa/runs/) could leave a symlink pointing outside the
+  // project; `report.md` / `report.json` writes would then land
+  // wherever the link points. lstatSync (not statSync) so the test
+  // doesn't transparently follow the link.
+  try {
+    if (lstatSync(runDir).isSymbolicLink()) {
+      return {
+        ok: false,
+        error: `report: refusing to write into symlinked run directory ${runDir}`,
+      };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: cannot stat run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 
   const eventsPath = join(runDir, 'events.jsonl');
@@ -215,6 +243,10 @@ function readJsonl(path: string): Array<Record<string, unknown>> {
   // Caller has already confirmed the file exists — this helper only
   // returns [] for an empty file (legitimate "zero events" case),
   // never for a missing one.
+  // Strict: a non-empty line that parses as valid JSON but isn't a
+  // plain object (e.g. `null`, `[]`, `"x"`, `42`) is rejected. Silently
+  // dropping such lines would turn a corrupted file into a seemingly
+  // successful report.
   const text = readFileSync(path, 'utf8');
   const out: Array<Record<string, unknown>> = [];
   let lineNo = 0;
@@ -222,14 +254,18 @@ function readJsonl(path: string): Array<Record<string, unknown>> {
     lineNo += 1;
     const line = raw.trim();
     if (!line) continue;
+    let parsed: unknown;
     try {
-      const obj = JSON.parse(line) as unknown;
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        out.push(obj as Record<string, unknown>);
-      }
+      parsed = JSON.parse(line);
     } catch (e) {
       throw new Error(`${path} line ${lineNo}: ${e instanceof Error ? e.message : String(e)}`);
     }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      // typeof null === 'object', so explicit null branch.
+      const got = parsed === null ? 'null' : Array.isArray(parsed) ? 'array' : typeof parsed;
+      throw new Error(`${path} line ${lineNo}: expected a JSON object, got ${got}`);
+    }
+    out.push(parsed as Record<string, unknown>);
   }
   return out;
 }
@@ -272,8 +308,14 @@ function reconstructRun(input: ReconstructInput): Run.Run {
       profile,
       execution_mode: 'orchestrator',
       packs: [],
-      // Deterministic dummy: this report path doesn't recompute the config
-      // hash from disk. The admin UI keys on `run.id`, not `config_hash`.
+      // Synthetic placeholder: this report path doesn't recompute the
+      // config hash from disk (the canonical hash is computed by the
+      // runner at run-time). The admin UI displays config_hash in
+      // replay copy, so an all-zeros value will be visible — users
+      // viewing a CLI-rendered report.json should treat this hash as
+      // a "not computed" sentinel, not a real digest. Encoded as 64
+      // zeros (a valid Sha256 by shape) so the JSON still passes
+      // Run.parse().
       config_hash: '0'.repeat(64),
     },
     totals: {
