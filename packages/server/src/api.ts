@@ -1,7 +1,7 @@
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
-import { runPackNew } from '@aqa/kit';
-import type { PackNewErrorCode } from '@aqa/kit';
+import { runPackNew } from '@aqa/pack-author';
+import type { PackNewErrorCode } from '@aqa/pack-author';
 import {
   PackManifest as PackManifestSchema,
   Profile as ProfileSchema,

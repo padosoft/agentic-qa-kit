@@ -1,0 +1,101 @@
+name: Publish to GitHub Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Concurrency: one publish at a time per tag.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+# Workflow-level minimal permissions. `packages: write` is what
+# `npm publish --registry=https://npm.pkg.github.com` actually needs;
+# `contents: read` lets actions/checkout fetch the tagged commit.
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish @padosoft/agentic-qa-kit to GitHub Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v4
+        with:
+          # The tag itself, not the default branch, so the published
+          # artifact matches the release notes.
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Pin Bun version
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Setup Node 22 (publisher)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          # Configure npm for GitHub Packages auth — actions/setup-node
+          # writes an .npmrc with the right token + registry.
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@padosoft'
+          always-auth: true
+
+      - name: Verify tag matches packages/kit version
+        # The publish workflow is tag-triggered. The kit's package.json
+        # version MUST match the tag (modulo a leading 'v') so the
+        # published tarball's metadata aligns with the release.
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          TAG_VERSION="${TAG#v}"
+          PKG_VERSION="$(node -e "console.log(require('./packages/kit/package.json').version)")"
+          echo "tag=$TAG_VERSION  pkg=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $TAG_VERSION does not match packages/kit/package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Install workspaces
+        run: bun install --frozen-lockfile
+
+      - name: Build the whole monorepo (so kit's bundle has all deps available)
+        run: bun run build
+
+      - name: Verify built bundle exists
+        # The build step writes dist/cli.cjs + dist/cli.bundle.meta.json
+        # via packages/kit/scripts/build-bundle.mjs. Fail fast if not.
+        run: |
+          if [ ! -f packages/kit/dist/cli.cjs ]; then
+            echo "::error::packages/kit/dist/cli.cjs missing — build-bundle.mjs did not run"
+            exit 1
+          fi
+          if [ ! -f packages/kit/dist/cli.bundle.meta.json ]; then
+            echo "::error::publish bundle meta missing — partial build"
+            exit 1
+          fi
+          ls -lh packages/kit/dist/cli.cjs
+          cat packages/kit/dist/cli.bundle.meta.json
+
+      - name: Rewrite name + workspace:* deps for publish
+        # publish-prep.mjs swaps @aqa/kit → @padosoft/agentic-qa-kit and
+        # pins every workspace:* dep to the kit's current version. The
+        # rewrite is local to this CI checkout and never committed back.
+        run: node packages/kit/scripts/publish-prep.mjs
+
+      - name: npm publish (GitHub Packages)
+        working-directory: packages/kit
+        env:
+          # actions/setup-node@v4 wires NODE_AUTH_TOKEN into the .npmrc
+          # it generated; npm picks it up automatically when publishing
+          # to a scope-bound registry.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # --provenance + --access public + the GH-Packages registry is
+        # the complete publish contract. The kit's package.json already
+        # carries publishConfig.access=public + publishConfig.registry.
+        run: npm publish --provenance --access public
