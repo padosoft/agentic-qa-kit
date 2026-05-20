@@ -738,6 +738,56 @@ probes: []
     });
   });
 
+  // ============ v1.7 slice 4g — Users & Roles ============
+
+  describe('Users & Roles (slice 4g)', () => {
+    const sampleUser = {
+      id: 'usr-sara',
+      email: 'sara@padosoft.com',
+      display_name: 'Sara Conti',
+      roles: ['admin' as const],
+      status: 'active' as const,
+      last_active_at: '2026-05-20T08:00:00Z',
+    };
+
+    it('GET /api/users returns the seeded directory snapshot', async () => {
+      const c = ctx();
+      (c.store as unknown as { __test_seedUser: (u: typeof sampleUser) => void }).__test_seedUser(
+        sampleUser,
+      );
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/users');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { users: Array<{ id: string }> };
+      assert.equal(body.users.length, 1);
+      assert.equal(body.users[0]?.id, 'usr-sara');
+    });
+
+    it('GET /api/roles returns the rolePermissions matrix from @aqa/auth', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/roles');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { roles: Array<{ role: string; permissions: string[] }> };
+      const names = body.roles.map((r) => r.role).sort();
+      assert.deepEqual(names, ['admin', 'developer', 'maintainer', 'viewer']);
+      const adminRow = body.roles.find((r) => r.role === 'admin');
+      assert.ok(adminRow?.permissions.includes('admin:everything'));
+    });
+
+    it('both routes require settings:read', () => {
+      const api = makeApi();
+      assert.equal(
+        api.find((r) => r.method === 'GET' && r.path === '/api/users')?.requires,
+        'settings:read',
+      );
+      assert.equal(
+        api.find((r) => r.method === 'GET' && r.path === '/api/roles')?.requires,
+        'settings:read',
+      );
+    });
+  });
+
   // ============ v1.7 slice 4d — Agents ============
 
   describe('Agents (slice 4d)', () => {

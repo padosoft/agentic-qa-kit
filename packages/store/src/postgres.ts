@@ -13,7 +13,7 @@ import type {
   Scenario,
   Tenancy,
 } from '@aqa/schemas';
-import type { StoreProvider } from './types.js';
+import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
 
 /**
  * Postgres adapter scaffold — concrete implementation lands with the
@@ -137,6 +137,10 @@ export class PostgresStore implements StoreProvider {
   }
   async uninstallAgent(_id: string): Promise<Agent.Agent | null> {
     this.notImpl('uninstallAgent');
+  }
+
+  async listUsers(): Promise<StoreUserDirectoryEntry[]> {
+    this.notImpl('listUsers');
   }
 
   async listNotifications(): Promise<Notification.Notification[]> {

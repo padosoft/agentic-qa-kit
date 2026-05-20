@@ -13,7 +13,7 @@ import type {
   Scenario,
   Tenancy,
 } from '@aqa/schemas';
-import type { StoreProvider } from './types.js';
+import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
 
 /**
  * In-memory StoreProvider — the v0.3 default. Useful for tests, smoke runs,
@@ -35,6 +35,9 @@ export class MemoryStore implements StoreProvider {
   private tokens = new Map<string, ApiToken.ApiToken>();
   private orgs = new Map<string, Tenancy.Org>();
   private projects = new Map<string, Tenancy.ProjectRef>();
+  // v1.7 slice 4g — directory snapshot of users known to the admin.
+  // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
+  private users: StoreUserDirectoryEntry[] = [];
 
   // ----- Runs -----
   async saveRun(run: Run.Run): Promise<void> {
@@ -254,6 +257,14 @@ export class MemoryStore implements StoreProvider {
   __test_seedAgent(a: Agent.Agent): void {
     this.agents.set(a.id, a);
   }
+  __test_seedUser(u: StoreUserDirectoryEntry): void {
+    this.users.push(u);
+  }
+
+  // ----- Users (v1.7 slice 4g) -----
+  async listUsers(): Promise<StoreUserDirectoryEntry[]> {
+    return [...this.users];
+  }
 
   // ----- Notifications -----
   async listNotifications(opts: {
@@ -382,6 +393,7 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.agents.clear();
+    this.users = [];
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();

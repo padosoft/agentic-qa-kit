@@ -12015,11 +12015,67 @@ Object.assign(window, { PageReplay, PageAudit, PageCost, PageQueue, PageNotifica
 
 // ---------------- Users ----------------
 function PageUsers({ onNavigate }) {
+  // v1.7 slice 4g — wire to GET /api/users. Server returns the
+  // directory snapshot (id/email/display_name/roles/status/
+  // last_active_at). Falls back to the local USERS fixture so
+  // mock-data mode still renders.
+  const [users, setUsers] = React.useState(USERS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/users'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (!Array.isArray(body?.users)) return;
+        // Adapt server User to the page's fixture shape:
+        // display_name → name; roles[0] → role; initials from
+        // display_name; status defaults to 'active'.
+        const adapted = body.users.map((u) => {
+          const name = u.display_name ?? u.name ?? u.email ?? u.id;
+          const initials =
+            typeof name === 'string'
+              ? name
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase() ?? '')
+                  .join('') || '?'
+              : '?';
+          // PR #42 Copilot iter 2: map server's `suspended` to the
+          // UI's `disabled` (StatusBadge has explicit styling for
+          // disabled, not suspended).
+          const status =
+            u.status === 'suspended'
+              ? 'disabled'
+              : typeof u.status === 'string'
+                ? u.status
+                : 'active';
+          return {
+            id: u.id,
+            name,
+            initials,
+            email: u.email ?? '',
+            role: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles[0] : 'viewer',
+            status,
+            last_active_at: u.last_active_at ?? null,
+          };
+        });
+        setUsers(adapted);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="21 Users">
       <PageHeader
         title="Users"
-        sub={`${USERS.length} users · ${USERS.filter((u) => u.status === 'active').length} active`}
+        sub={`${users.length} users · ${users.filter((u) => u.status === 'active').length} active`}
         actions={
           <button className="btn sm primary">
             <I.Plus size={12} />
@@ -12041,7 +12097,7 @@ function PageUsers({ onNavigate }) {
               </tr>
             </thead>
             <tbody>
-              {USERS.map((u) => (
+              {users.map((u) => (
                 <tr key={u.id}>
                   <td>
                     <div className="row gap-8">
@@ -12078,6 +12134,111 @@ function PageUsers({ onNavigate }) {
 
 // ---------------- Roles ----------------
 function PageRoles({ onNavigate }) {
+  // v1.7 slice 4g — wire to GET /api/roles. Server returns the
+  // rolePermissions matrix from @aqa/auth. When live data arrives,
+  // swap the static fixture grid for a row-per-permission matrix
+  // derived from the response. Mock-data mode keeps the legacy
+  // {role: capabilities-bitmap} fixture.
+  const [liveRoles, setLiveRoles] = React.useState(null);
+  const [allPermissions, setAllPermissions] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/roles'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.roles)) {
+          // PR #42 Copilot iter 1: normalize each role entry — the
+          // server is the trust boundary, but untyped JSON could
+          // still arrive with a missing/null `permissions`.
+          const normalized = body.roles
+            .filter((r) => r && typeof r.role === 'string')
+            .map((r) => ({
+              role: r.role,
+              permissions: Array.isArray(r.permissions) ? r.permissions : [],
+            }));
+          setLiveRoles(normalized);
+          if (Array.isArray(body.all_permissions)) {
+            setAllPermissions(body.all_permissions.filter((p) => typeof p === 'string'));
+          }
+        }
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (liveRoles !== null) {
+    // Live mode: render the actual permissions matrix from @aqa/auth.
+    const roleNames = liveRoles.map((r) => r.role);
+    // Prefer the server's `all_permissions` (full Permission enum, so
+    // wildcard-only perms like settings:edit appear as rows); fall
+    // back to the union of explicit grants. PR #42 Copilot iter 1.
+    let allPerms;
+    if (Array.isArray(allPermissions) && allPermissions.length > 0) {
+      allPerms = [...allPermissions].sort();
+    } else {
+      const permSet = new Set();
+      for (const r of liveRoles) {
+        for (const p of r.permissions) permSet.add(p);
+      }
+      allPerms = [...permSet].sort();
+    }
+    return (
+      <div className="page" data-screen-label="22 Roles">
+        <PageHeader
+          title="Roles"
+          sub={`${roleNames.length} roles · live from /api/roles`}
+          actions={
+            <button className="btn sm primary">
+              <I.Plus size={12} />
+              Custom role
+            </button>
+          }
+        />
+        <div className="card">
+          <div className="card-body flush">
+            <table className="tbl" data-testid="roles-live-matrix">
+              <thead>
+                <tr>
+                  <th>Permission / Role</th>
+                  {roleNames.map((r) => (
+                    <th key={r} style={{ textAlign: 'center' }}>
+                      <span className="mono">{r}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {allPerms.map((perm) => (
+                  <tr key={perm}>
+                    <td className="mono" style={{ fontSize: 11 }}>
+                      {perm}
+                    </td>
+                    {liveRoles.map((r) => (
+                      <td key={r.role} style={{ textAlign: 'center' }}>
+                        {/* admin:everything is treated as wildcard. */}
+                        {r.permissions.includes(perm) ||
+                        r.permissions.includes('admin:everything') ? (
+                          <I.Check size={14} style={{ color: 'var(--status-success)' }} />
+                        ) : (
+                          <I.X size={14} style={{ color: 'var(--text-disabled)' }} />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const roles = ['viewer', 'qa-lead', 'sec-architect', 'sre', 'auditor', 'admin'];
   const actions = [
     'view dashboard',
