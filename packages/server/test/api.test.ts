@@ -853,6 +853,46 @@ probes: []
         'settings:read',
       );
     });
+
+    it('PUT /api/sso/config persists schema-valid config', async () => {
+      const c = ctx();
+      const putRoute = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/sso/config');
+      const put = await putRoute?.handle({ headers: {}, params: {}, body: sampleConfig }, c);
+      assert.equal(put?.status, 200);
+      const body = put?.body as { config: typeof sampleConfig };
+      assert.deepEqual(body.config, sampleConfig);
+
+      const getRoute = makeApi().find((r) => r.method === 'GET' && r.path === '/api/sso/config');
+      const get = await getRoute?.handle({ headers: {}, params: {} }, c);
+      assert.equal(get?.status, 200);
+      assert.deepEqual((get?.body as { config: typeof sampleConfig | null }).config, sampleConfig);
+    });
+
+    it('PUT /api/sso/config rejects schema-invalid body', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/sso/config');
+      const res = await route?.handle(
+        {
+          headers: {},
+          params: {},
+          body: {
+            ...sampleConfig,
+            issuer_url: 'not-a-url',
+          },
+        },
+        c,
+      );
+      assert.equal(res?.status, 400);
+      assert.match((res?.body as { error: string }).error, /schema validation/i);
+    });
+
+    it('PUT /api/sso/config requires settings:edit', () => {
+      const api = makeApi();
+      assert.equal(
+        api.find((r) => r.method === 'PUT' && r.path === '/api/sso/config')?.requires,
+        'settings:edit',
+      );
+    });
   });
 
   // ============ v1.7 slice 4d — Agents ============

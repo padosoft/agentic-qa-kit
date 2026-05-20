@@ -192,4 +192,53 @@ test.describe('Admin-section wire-up', () => {
     await expect(page.locator('input[value=""]')).toHaveCount(2);
     await expect(page.locator('input[value="not configured"]')).toBeVisible();
   });
+
+  test('SSO page saves edited config via PUT /api/sso/config', async ({ page }) => {
+    let putBody: unknown = null;
+    await page.route('**/api/sso/config**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            config: {
+              schema_version: '1',
+              provider: 'oidc',
+              enabled: true,
+              issuer_url: 'https://id.example.com/realms/main',
+              client_id: 'aqa-admin-live',
+              client_secret_set: true,
+              allowed_email_domains: ['example.com'],
+              claim_mappings: {
+                'user.id': 'sub',
+                'user.email': 'email',
+                'user.role': 'roles[0]',
+              },
+            },
+          }),
+        });
+        return;
+      }
+      if (route.request().method() === 'PUT') {
+        putBody = route.request().postDataJSON();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ config: putBody }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await gotoNav(page, 'SSO');
+    await page
+      .locator('input[value="https://id.example.com/realms/main"]')
+      .fill('https://id.changed/realm');
+    await page.locator('input[value="aqa-admin-live"]').fill('aqa-admin-updated');
+    await page.locator('.btn.primary', { hasText: /save changes/i }).click();
+    await expect(page.locator('.toast.success')).toContainText(/SSO config saved/i);
+    const body = putBody as { issuer_url?: string; client_id?: string };
+    expect(body?.issuer_url).toBe('https://id.changed/realm');
+    expect(body?.client_id).toBe('aqa-admin-updated');
+  });
 });
