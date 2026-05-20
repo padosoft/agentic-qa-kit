@@ -21,6 +21,10 @@
 - Topic / context — what was learned + why it matters. Reference files/commits when useful.
 ```
 
+## 2026-05-20
+
+- **Hash-chain verifier and writer must share the exact same canonical body contract.** `EventChainWriter` hashes `sha256(prev_hash || canonical(rest_without_prev_hash_and_hash))` while persisted events expose `prev_hash: null` on the first record. A verifier that re-hashes including `prev_hash` (or expects the first record to carry the all-zero seed literal in `prev_hash`) will produce false mismatches on valid logs. Keep one canonical rule across writer and verifier, and treat the all-zero seed as internal hash input only.
+
 ## 2026-05-18 (v1.0 → v1.1 retrospective — patterns across the full 24-task roadmap)
 
 - **Bundle 2-4 tasks per minor-version PR.** Once the validation loop is

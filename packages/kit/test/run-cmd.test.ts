@@ -33,12 +33,9 @@ import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
 
 /**
- * Re-walk the writer's hash chain. We can't share `@aqa/compliance.verifyEventChain`
- * directly because the two implementations differ slightly on canonical form
- * (writer omits prev_hash from the canonical body, verifier includes it) and on
- * seq=0 (writer emits null, verifier expects all-zero hash). Reconciling the
- * two formats is tracked as a separate cleanup; this local verifier mirrors
- * `packages/runner/src/events.ts` exactly.
+ * Re-walk the writer's hash chain. This mirrors `packages/runner/src/events.ts`
+ * (and now also the compliance verifier logic), but stays local to avoid
+ * pulling an extra cross-workspace runtime dependency into @aqa/kit tests.
  */
 function canonicalise(value: unknown): string {
   return JSON.stringify(value, (_k, v) => {
