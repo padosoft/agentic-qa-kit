@@ -103,10 +103,12 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     };
   }
 
-  // Lazy dynamic imports break what would otherwise be a static dependency
-  // cycle: @aqa/server depends on @aqa/kit (for runPackNew). Dynamic import
-  // keeps the cycle out of the module-load graph and out of any future
-  // esbuild bundle that doesn't statically follow these specifiers.
+  // Dynamic imports keep the bundle slim: makeApi() + RunnerQueue +
+  // MemoryStore are only needed when `aqa admin` is actually invoked.
+  // (The kit↔server static cycle that motivated this pattern in an
+  // earlier iteration was resolved by extracting `runPackNew` into
+  // `@aqa/pack-author`; the dynamic import is now an optimisation, not
+  // a workaround.)
   const { makeApi, RunnerQueue } = await import('@aqa/server');
   const { MemoryStore } = await import('@aqa/store');
 

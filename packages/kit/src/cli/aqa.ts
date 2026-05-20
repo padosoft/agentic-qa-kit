@@ -102,7 +102,11 @@ ${bold('Common options')}
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
-  --host <h>             (admin) bind host (default 127.0.0.1; use 0.0.0.0 to expose on LAN)
+  --host <h>             (admin) bind host (default 127.0.0.1 — recommended)
+                         WARNING: \`aqa admin\` runs WITHOUT real authentication.
+                         Binding to 0.0.0.0 exposes the in-memory store and
+                         makeApi() to any host on the same network — only do
+                         this on a trusted dev VM or isolated CI runner.
   --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
   --description <text>   (pack new) one-line summary written into the manifest
   --author <name>        (pack new) manifest author field
