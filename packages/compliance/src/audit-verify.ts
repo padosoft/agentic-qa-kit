@@ -6,10 +6,12 @@ import { createHash } from 'node:crypto';
  * Each event line is a JSON object containing at minimum:
  *   - `prev_hash`: sha256 of the previous record (or `null` on the
  *     first record)
- *   - `hash`: sha256(prev_hash || canonical(rest)) of the current record
+ *   - `hash`: sha256(seed_prev_hash || canonical(rest_without_prev_hash_and_hash))
+ *     of the current record. The first event uses an internal all-zero
+ *     seed as `seed_prev_hash`.
  *
- * `verifyEventChain(lines)` re-walks the chain and returns the index of
- * the first mismatch, or -1 if the chain is intact.
+ * `verifyEventChain(events)` re-walks the chain and returns a structured
+ * result (`ok`, `bad_index`, `reason`, `count`).
  *
  * Why this exists: SOC2 CC7.1/CC7.2 and ISO A.8.15 ask for tamper-evident
  * logging. A hash chain is mechanically verifiable — auditors do not need
