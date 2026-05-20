@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bundles the `aqa` CLI into a single ESM file at `dist/cli.js`.
+ * Bundles the `aqa` CLI into a single CommonJS file at `dist/cli.cjs`.
  *
  * Why bundle: `@padosoft/agentic-qa-kit` ships to GitHub Packages as a
  * single tarball. Internal workspace deps (@aqa/runner, @aqa/schemas,
@@ -11,11 +11,18 @@
  *
  * esbuild walks the import graph, inlines every @aqa/* + every regular
  * npm dep (yaml, kleur, zod, …) into one file, and externalises only
- * Node built-ins (`node:fs`, `node:http`, …). The resulting `dist/cli.js`
+ * Node built-ins (`node:fs`, `node:http`, …). The resulting `dist/cli.cjs`
  * is the only JS artifact shipped in the npm tarball — alongside the
  * static `dist/packs/` (bundled by bundle-packs.mjs) and `dist/admin/`
  * (bundled by bundle-admin.mjs) data directories that the CLI loads at
  * runtime via fs paths.
+ *
+ * Why CJS-in-.cjs instead of ESM-in-.js: some bundled CJS deps (yaml,
+ * ajv) call `require('process')` etc. inside their compiled output.
+ * esbuild's ESM bundler rewrites those into a `__require` helper that
+ * throws at runtime; CJS output keeps Node's native `require`. The
+ * `.cjs` extension makes Node load this file as CJS even though the
+ * kit's package.json sets `"type": "module"`.
  *
  * Sourcemap is emitted so `node --enable-source-maps` and crash stacks
  * point back at the original TypeScript source files (under each

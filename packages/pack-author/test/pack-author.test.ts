@@ -2,8 +2,9 @@
  * @aqa/pack-author smoke — the heavy behaviour coverage stays in
  * `packages/kit/test/pack-new.test.ts`, which exercises `runPackNew`
  * end-to-end through the CLI re-export. This file just guards the
- * package contract: `runPackNew` is the default-export shape and
- * accepts the `PackNewOptions` interface as documented.
+ * package contract: `runPackNew` is exposed as a NAMED export, accepts
+ * the `PackNewOptions` interface as documented, and returns the
+ * `PackNewResult` shape on both happy + error paths.
  */
 
 import assert from 'node:assert/strict';

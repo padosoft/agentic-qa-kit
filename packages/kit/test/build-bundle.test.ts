@@ -2,8 +2,9 @@
  * v1.9 — bundling + publish-prep smoke.
  *
  * Verifies the two scripts the publish workflow depends on:
- *   - scripts/build-bundle.mjs emits dist/cli.js (executable, non-empty).
- *   - scripts/publish-prep.mjs rewrites name + workspace:* deps.
+ *   - scripts/build-bundle.mjs emits dist/cli.cjs (CJS, executable, non-empty).
+ *   - scripts/publish-prep.mjs rewrites name, strips @aqa/* deps, pins
+ *     remaining workspace:* deps.
  *
  * Bundle assertions only run if the bundle has already been built (the
  * test isn't a `bun run build` invocation — that would be circular,
@@ -67,7 +68,7 @@ describe('publish-prep — package.json rewrite', () => {
   // to a temp dir, point the script at it via cwd, then assert the
   // result. This keeps the test hermetic — never modifies the real
   // packages/kit/package.json even if assertions fail mid-run.
-  it('substitutes name from aqa.publishName and pins workspace:* deps', async () => {
+  it('substitutes name, strips @aqa/* deps, pins remaining workspace:* deps', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aqa-publish-prep-'));
     const fakePkg = {
       name: '@aqa/kit',
@@ -75,6 +76,7 @@ describe('publish-prep — package.json rewrite', () => {
       dependencies: {
         '@aqa/runner': 'workspace:*',
         '@aqa/schemas': 'workspace:*',
+        'some-third-party-workspace': 'workspace:^1.0.0',
         yaml: '^2.6.0',
       },
       devDependencies: {
@@ -108,12 +110,23 @@ describe('publish-prep — package.json rewrite', () => {
       dependencies: Record<string, string>;
     };
     assert.equal(rewritten.name, '@padosoft/agentic-qa-kit');
+    // @aqa/* must be GONE entirely — they're bundled into dist/cli.cjs
+    // and don't exist on any registry, so leaving them would make `bun
+    // add @padosoft/agentic-qa-kit` fail with "404 — @aqa/runner not
+    // found on registry" (Copilot iter 1 P1 on PR #55).
     assert.equal(
       rewritten.dependencies['@aqa/runner'],
-      '1.9.0',
-      'workspace:* must be pinned to the kit version',
+      undefined,
+      '@aqa/* deps must be stripped (they are bundled, not published)',
     );
-    assert.equal(rewritten.dependencies['@aqa/schemas'], '1.9.0');
+    assert.equal(rewritten.dependencies['@aqa/schemas'], undefined);
+    // Non-@aqa workspace:* deps still get pinned to the kit version
+    // (kept in case the kit ever depends on a non-aqa workspace).
+    assert.equal(
+      rewritten.dependencies['some-third-party-workspace'],
+      '1.9.0',
+      'non-@aqa workspace:* must be pinned to the kit version',
+    );
     assert.equal(rewritten.dependencies.yaml, '^2.6.0', 'non-workspace deps must be left alone');
   });
 
