@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test": "node -e \"console.log('[@aqa/admin] no unit tests; e2e suite under test:e2e (Playwright).')\"",
     "test:e2e": "playwright test --reporter=line",
+    "test:e2e:ecosystem": "playwright test -c playwright.ecosystem.config.ts --reporter=line",
     "test:e2e:headed": "playwright test --headed",
     "test:install-browsers": "playwright install --with-deps chromium",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo','node_modules/.vite','playwright-report','test-results']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""

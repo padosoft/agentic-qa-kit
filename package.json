@@ -27,6 +27,7 @@
     "build": "node scripts/run-workspace-script.mjs build",
     "clean": "node scripts/run-workspace-script.mjs clean",
     "e2e": "node scripts/run-tool.mjs playwright test",
+    "e2e:ecosystem": "bun --filter @aqa/admin test:e2e:ecosystem",
     "e2e:install": "node scripts/run-tool.mjs playwright install --with-deps chromium",
     "docs:linkcheck": "node scripts/run-tool.mjs markdown-link-check '**/*.md' --quiet",
     "prepare": "node -e \"\""
