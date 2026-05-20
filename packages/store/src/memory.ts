@@ -272,6 +272,9 @@ export class MemoryStore implements StoreProvider {
   async loadSsoConfig(): Promise<SsoConfig.SsoConfig | null> {
     return this.ssoConfig;
   }
+  async saveSsoConfig(config: SsoConfig.SsoConfig): Promise<void> {
+    this.ssoConfig = config;
+  }
 
   __test_seedSsoConfig(config: SsoConfig.SsoConfig): void {
     this.ssoConfig = config;

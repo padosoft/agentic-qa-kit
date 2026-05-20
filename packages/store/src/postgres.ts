@@ -147,6 +147,9 @@ export class PostgresStore implements StoreProvider {
   async loadSsoConfig(): Promise<SsoConfig.SsoConfig | null> {
     this.notImpl('loadSsoConfig');
   }
+  async saveSsoConfig(_config: SsoConfig.SsoConfig): Promise<void> {
+    this.notImpl('saveSsoConfig');
+  }
 
   async listNotifications(): Promise<Notification.Notification[]> {
     this.notImpl('listNotifications');

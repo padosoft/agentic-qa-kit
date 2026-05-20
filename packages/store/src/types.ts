@@ -172,6 +172,7 @@ export interface StoreProvider {
   // Backing config for the Admin SSO page. The secret is intentionally
   // not modeled as writable output from this method.
   loadSsoConfig(): Promise<SsoConfig.SsoConfig | null>;
+  saveSsoConfig(config: SsoConfig.SsoConfig): Promise<void>;
 
   // ----- Tenancy -----
   listOrgs(): Promise<Tenancy.Org[]>;

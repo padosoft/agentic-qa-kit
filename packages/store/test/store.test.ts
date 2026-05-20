@@ -101,6 +101,26 @@ describe('MemoryStore', () => {
     await s.close();
     assert.equal(await s.loadSsoConfig(), null);
   });
+
+  it('persists SSO config through saveSsoConfig()', async () => {
+    const s = new MemoryStore();
+    const sampleConfig = {
+      schema_version: '1' as const,
+      provider: 'oidc',
+      enabled: false,
+      issuer_url: 'https://id.example.com/realms/main',
+      client_id: 'aqa-admin',
+      client_secret_set: false,
+      allowed_email_domains: ['example.com'],
+      claim_mappings: {
+        'user.id': 'sub',
+        'user.email': 'email',
+        'user.role': 'groups[0]',
+      },
+    };
+    await s.saveSsoConfig(sampleConfig);
+    assert.deepEqual(await s.loadSsoConfig(), sampleConfig);
+  });
 });
 
 describe('PostgresStore (v0.3 scaffold)', () => {
@@ -186,5 +206,19 @@ describe('PostgresStore (v0.3 scaffold)', () => {
     );
     await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
     await assert.rejects(() => s.loadSsoConfig(), /not implemented/);
+    await assert.rejects(
+      () =>
+        s.saveSsoConfig({
+          schema_version: '1',
+          provider: 'oidc',
+          enabled: true,
+          issuer_url: 'https://id.example.com/realms/main',
+          client_id: 'aqa-admin',
+          client_secret_set: true,
+          allowed_email_domains: ['example.com'],
+          claim_mappings: { 'user.id': 'sub' },
+        }),
+      /not implemented/,
+    );
   });
 });

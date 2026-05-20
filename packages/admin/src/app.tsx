@@ -12330,6 +12330,8 @@ function PageSSO({ onNavigate }) {
   // replace the fixture when available; otherwise keep the local
   // fallback so mock mode still renders an operable view.
   const [ssoConfig, setSsoConfig] = React.useState(SSO_CONFIG_FALLBACK);
+  const [saving, setSaving] = React.useState(false);
+  const toast = useToast();
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -12383,6 +12385,46 @@ function PageSSO({ onNavigate }) {
   const [firstDomain] = domains;
   const alertKind = ssoConfig.enabled ? 'success' : 'warning';
   const alertTitle = ssoConfig.enabled ? 'SSO is active' : 'SSO is not configured';
+  async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch(apiUrl('/api/sso/config'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ssoConfig),
+      });
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        toast.push({
+          kind: 'error',
+          title: 'Save SSO config failed',
+          body: parsed?.error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      toast.push({
+        kind: 'success',
+        title: 'SSO config saved',
+        body: ssoConfig.enabled ? 'SSO active' : 'SSO disabled',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.push({
+        kind: 'error',
+        title: 'Save SSO config failed',
+        body: `Could not reach /api/sso/config (${msg})`,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <div className="page page-narrow" data-screen-label="23 SSO">
       <PageHeader title="Single Sign-On" sub="OIDC configuration" />
@@ -12402,12 +12444,31 @@ function PageSSO({ onNavigate }) {
         </div>
         <div className="card-body">
           <div className="field-row">
+            <label className="field-label">Enabled</label>
+            <label className="row gap-8">
+              <input
+                type="checkbox"
+                checked={!!ssoConfig.enabled}
+                onChange={(e) => setSsoConfig((cfg) => ({ ...cfg, enabled: e.target.checked }))}
+              />
+              <span>{ssoConfig.enabled ? 'on' : 'off'}</span>
+            </label>
+          </div>
+          <div className="field-row">
             <label className="field-label">Issuer URL</label>
-            <input className="input mono" value={ssoConfig.issuer_url} readOnly />
+            <input
+              className="input mono"
+              value={ssoConfig.issuer_url}
+              onChange={(e) => setSsoConfig((cfg) => ({ ...cfg, issuer_url: e.target.value }))}
+            />
           </div>
           <div className="field-row">
             <label className="field-label">Client ID</label>
-            <input className="input mono" value={ssoConfig.client_id} readOnly />
+            <input
+              className="input mono"
+              value={ssoConfig.client_id}
+              onChange={(e) => setSsoConfig((cfg) => ({ ...cfg, client_id: e.target.value }))}
+            />
           </div>
           <div className="field-row">
             <label className="field-label">Client secret</label>
@@ -12455,9 +12516,9 @@ function PageSSO({ onNavigate }) {
               <I.PlayCircle size={12} />
               Test sign-in flow
             </button>
-            <button className="btn primary">
+            <button className="btn primary" onClick={handleSave} disabled={saving}>
               <I.Check size={12} />
-              Save changes
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </div>

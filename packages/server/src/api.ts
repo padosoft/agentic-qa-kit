@@ -906,6 +906,22 @@ export function makeApi(): ApiHandler[] {
         return asResponse({ config: parsed.data } satisfies { config: SsoConfig.SsoConfig | null });
       },
     },
+    {
+      method: 'PUT',
+      path: '/api/sso/config',
+      requires: 'settings:edit',
+      async handle(req, ctx) {
+        const parsed = SsoConfigSchema.SsoConfig.safeParse(req.body);
+        if (!parsed.success) {
+          return asResponse(
+            { error: `sso config failed schema validation: ${formatZodError(parsed.error)}` },
+            400,
+          );
+        }
+        await ctx.store.saveSsoConfig(parsed.data);
+        return asResponse({ config: parsed.data } satisfies { config: SsoConfig.SsoConfig });
+      },
+    },
 
     // ============ Audit ============
     {
