@@ -11319,11 +11319,16 @@ function PageCost({ onNavigate }) {
     cum: (cum += d.usd),
     projected: false,
   }));
-  // Append projection
+  // Append projection. Anchor the date to the last entry of
+  // COST_DAYS (the mock fixture's last realized day) regardless of
+  // dayCount — when dayCount is derived from a live summary window
+  // it can be larger than COST_DAYS.length and indexing past the
+  // end would crash. PR #39 Copilot iter 6 (regression fix).
   const projDays = [];
   const remaining = daysInMonth - dayCount;
+  const lastDayDate = COST_DAYS[COST_DAYS.length - 1].date;
   for (let i = 1; i <= remaining; i++) {
-    const date = new Date(COST_DAYS[dayCount - 1].date);
+    const date = new Date(lastDayDate);
     date.setUTCDate(date.getUTCDate() + i);
     cum += avgDay;
     projDays.push({ date: date.toISOString().slice(0, 10), usd: avgDay, cum, projected: true });
