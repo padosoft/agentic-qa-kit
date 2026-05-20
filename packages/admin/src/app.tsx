@@ -11169,6 +11169,32 @@ function PageReplay({ onNavigate }) {
 
 // ---------------- Audit log ----------------
 function PageAudit({ onNavigate }) {
+  // v1.7 slice 4e — wire to /api/audit (audit:read). The server route
+  // returns chain-verified events; in mock mode we fall back to the
+  // hardcoded fixtures (AUDIT_EVENTS_GOOD / _BAD) so the demo stays
+  // usable when no server is reachable. The AuditChainViewer's
+  // schema is whatever the server returns plus its existing demo
+  // demoGood/demoBad shape — we pass the live events as `demoGood`
+  // and clear the bad demo to avoid mixing concerns.
+  const [liveEvents, setLiveEvents] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/audit'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (Array.isArray(body?.events)) setLiveEvents(body.events);
+      } catch {
+        /* mock mode — leave the fixtures */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="17 Audit log">
       <PageHeader
@@ -11178,10 +11204,14 @@ function PageAudit({ onNavigate }) {
             Audit log
           </span>
         }
-        sub="Hash-chained, tamper-evident event log · verify in-browser with Web Crypto"
+        sub={
+          liveEvents
+            ? `${liveEvents.length} events · live from /api/audit`
+            : 'Hash-chained, tamper-evident event log · verify in-browser with Web Crypto'
+        }
         actions={
           <>
-            <button className="btn sm">
+            <button className="btn sm" data-testid="audit-download">
               <I.Download size={12} />
               Download .jsonl
             </button>
@@ -11192,14 +11222,41 @@ function PageAudit({ onNavigate }) {
           </>
         }
       />
-      <AuditChainViewer demoGood={AUDIT_EVENTS_GOOD} demoBad={AUDIT_EVENTS_BAD} />
+      <AuditChainViewer
+        demoGood={liveEvents && liveEvents.length > 0 ? liveEvents : AUDIT_EVENTS_GOOD}
+        demoBad={liveEvents ? [] : AUDIT_EVENTS_BAD}
+      />
     </div>
   );
 }
 
 // ---------------- Cost ----------------
 function PageCost({ onNavigate }) {
-  const mtd = COST_DAYS.reduce((a, d) => a + d.usd, 0);
+  // v1.7 slice 4e — wire to /api/cost/summary. The endpoint returns
+  // an aggregated summary (totals, breakdown by profile/model); the
+  // page's MTD curve and projection still draw from the local
+  // COST_DAYS fixture for now (no per-day endpoint yet). Pulling the
+  // summary lets the header KPIs reflect live state when available.
+  const [summary, setSummary] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/cost/summary'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (body?.summary) setSummary(body.summary);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const mtd = summary?.total_usd ?? COST_DAYS.reduce((a, d) => a + d.usd, 0);
   const dayCount = COST_DAYS.length;
   const avgDay = mtd / dayCount;
   const budget = 250;
@@ -11429,11 +11486,32 @@ function PageCost({ onNavigate }) {
 
 // ---------------- Queue ----------------
 function PageQueue({ onNavigate }) {
-  const pending = QUEUE_JOBS.filter((j) => !j.leased_by).length;
-  const inflight = QUEUE_JOBS.filter((j) => j.leased_by).length;
-  const oldestPending = QUEUE_JOBS.find((j) => !j.leased_by);
+  // v1.7 slice 4e — wire to /api/queue. Server returns the live jobs;
+  // the runners panel stays on the local RUNNERS fixture for v1.7
+  // (no /api/runners endpoint yet). Falls back to QUEUE_JOBS on
+  // error so mock-data mode still renders the page.
+  const [jobs, setJobs] = React.useState(QUEUE_JOBS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/queue'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (Array.isArray(body?.jobs)) setJobs(body.jobs);
+      } catch {
+        /* mock mode — keep the fixture */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const pending = jobs.filter((j) => !j.leased_by).length;
+  const inflight = jobs.filter((j) => j.leased_by).length;
+  const oldestPending = jobs.find((j) => !j.leased_by);
   const onlineRunners = RUNNERS.filter((r) => r.online).length;
-  const stuck = QUEUE_JOBS.find((j) => j.stuck);
+  const stuck = jobs.find((j) => j.stuck);
 
   return (
     <div className="page" data-screen-label="19 Queue">
@@ -11487,7 +11565,7 @@ function PageQueue({ onNavigate }) {
             Stuck jobs
           </div>
           <div className="kpi-value" style={{ color: stuck ? 'var(--status-failed)' : null }}>
-            {QUEUE_JOBS.filter((j) => j.stuck).length}
+            {jobs.filter((j) => j.stuck).length}
           </div>
           {stuck ? (
             <div className="kpi-delta down">
@@ -11522,7 +11600,7 @@ function PageQueue({ onNavigate }) {
                 </tr>
               </thead>
               <tbody>
-                {QUEUE_JOBS.map((j) => (
+                {jobs.map((j) => (
                   <tr key={j.id} className={j.stuck ? 'selected' : ''}>
                     <td>
                       <span className="mono" style={{ fontSize: 11 }}>
@@ -11690,6 +11768,28 @@ function PageQueue({ onNavigate }) {
 // ---------------- Notifications ----------------
 function PageNotifications({ onNavigate }) {
   const [filter, setFilter] = React.useState('all');
+  // v1.7 slice 4e — wire to /api/notifications (with x-aqa-org).
+  // Fall back to the NOTIFICATIONS fixture if the server is
+  // unreachable so mock-data mode still renders.
+  const [items, setItems] = React.useState(NOTIFICATIONS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/notifications'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (Array.isArray(body?.notifications)) setItems(body.notifications);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const kinds = [
     'all',
     'finding.critical',
@@ -11699,8 +11799,7 @@ function PageNotifications({ onNavigate }) {
     'pack.signed',
     'audit.verified',
   ];
-  const filtered =
-    filter === 'all' ? NOTIFICATIONS : NOTIFICATIONS.filter((n) => n.kind === filter);
+  const filtered = filter === 'all' ? items : items.filter((n) => n.kind === filter);
 
   return (
     <div className="page" data-screen-label="20 Notifications">
