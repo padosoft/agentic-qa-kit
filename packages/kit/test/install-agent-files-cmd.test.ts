@@ -64,7 +64,10 @@ describe('aqa install-agent-files — happy path', () => {
   });
 
   it('embeds the slugified project name in the instruction file (default = dir name)', () => {
-    const root = mkdtempSync(join(tmpdir(), 'My Junior Project '));
+    // Prefix has internal spaces but NO trailing space — Windows rejects
+    // path components ending in a space, which would crash mkdtempSync before
+    // the test even reached its assertions.
+    const root = mkdtempSync(join(tmpdir(), 'My Junior Project-'));
     const result = runInstallAgentFiles({ root, targets: 'claude' });
     assert.equal(result.ok, true);
     const claudeMd = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
@@ -126,6 +129,17 @@ describe('aqa install-agent-files — targets validation', () => {
   it('normalizes target casing (CLAUDE → claude)', () => {
     const root = makeTempDir();
     const result = runInstallAgentFiles({ root, targets: 'CLAUDE,Codex' });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.deepEqual(result.targets, ['claude', 'codex']);
+  });
+
+  it('trims whitespace and drops empties in the array form (Copilot iter 1)', () => {
+    // Regression: previously the array form was used as-is, so a token like
+    // 'claude ' would be classified as an unknown target. Both CSV and array
+    // inputs must produce identical normalized results.
+    const root = makeTempDir();
+    const result = runInstallAgentFiles({ root, targets: ['claude ', '', '  codex'] });
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.deepEqual(result.targets, ['claude', 'codex']);

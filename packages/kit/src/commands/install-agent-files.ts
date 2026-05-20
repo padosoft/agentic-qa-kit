@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { type AdapterTarget, renderForTargets } from '@aqa/adapters';
+import { lastPathSegment, slugify } from '../cli-utils.js';
 import { type WriteResult, writeFileSafe } from '../fs-utils.js';
 
 const KNOWN_TARGETS: readonly AdapterTarget[] = ['claude', 'codex', 'gemini', 'copilot'];
@@ -60,17 +61,20 @@ interface ParsedTargetsErr {
   error: string;
 }
 function parseTargets(input: string | readonly string[]): ParsedTargets | ParsedTargetsErr {
-  const raw = Array.isArray(input)
-    ? input
-    : String(input)
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+  // Both code paths normalize the same way: split-if-string, then trim + drop
+  // empties from each token. Without unified normalization, an array form
+  // like `['claude ', '', 'codex']` would surface a confusing
+  // "unknown target ' '" error even though the user clearly meant
+  // `['claude', 'codex']`.
+  const tokens: string[] = Array.isArray(input)
+    ? input.map((s) => String(s))
+    : String(input).split(',');
+  const raw = tokens.map((s) => s.trim()).filter((s) => s.length > 0);
   // Preserve user-given order but de-dupe so the same target isn't written twice.
   const seen = new Set<string>();
   const targets: AdapterTarget[] = [];
   for (const t of raw) {
-    const norm = String(t).toLowerCase();
+    const norm = t.toLowerCase();
     if (seen.has(norm)) continue;
     seen.add(norm);
     if (!isKnownTarget(norm)) {
@@ -86,19 +90,4 @@ function parseTargets(input: string | readonly string[]): ParsedTargets | Parsed
 
 function isKnownTarget(s: string): s is AdapterTarget {
   return (KNOWN_TARGETS as readonly string[]).includes(s);
-}
-
-function lastPathSegment(root: string): string {
-  const parts = root.replace(/[\\/]+$/, '').split(/[\\/]/);
-  return parts[parts.length - 1] ?? 'project';
-}
-
-function slugify(raw: string): string {
-  return (
-    raw
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^-+|-+$/g, '') || 'project'
-  );
 }

@@ -90,8 +90,8 @@ ${bold('Commands')}
   init [name]                       Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
   doctor                            Report kit health (runtime, .aqa, agent docs, validation)
   validate                          Validate .aqa/* against @aqa/schemas
-  install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / copilot-instructions.md
-                                    plus per-agent skills under .claude/.agents/.gemini/.github
+  install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md
+                                    plus per-agent skills under .claude/ .agents/ .gemini/ .github/
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
