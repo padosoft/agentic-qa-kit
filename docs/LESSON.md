@@ -188,6 +188,7 @@
 - The reference repo also reports that `requestReviewsByLogin` can succeed (returning `clientMutationId: null`) while the resulting `reviewRequests` collection stays empty, treated as an API-side regression. Workaround: request Copilot review manually from the PR sidebar Reviewers menu. **Do not silently skip review** — record the blocker in `docs/PROGRESS.md` instead.
 - Bun + TypeScript ESM + strict + `noUncheckedIndexedAccess` is the chosen baseline. Some libraries still ship CJS-only types; pin a `tsconfig.json` per-package when a CJS dep forces module interop relaxation, never relax it globally.
 - For Bun workspaces, the root `package.json` uses `"workspaces": ["packages/*", "packs/*"]`. `bun install` from root installs all workspaces. `bun --filter <name> <script>` runs a script in a single workspace. `bunx -p <pkg> <bin>` runs a binary from a specific package version.
+- **Live admin e2e against local API needs CORS + chain-order normalization.** When the admin Vite dev server (`:5173`) targets a separate local API origin, the test bridge must emit `Access-Control-Allow-*` headers or the UI silently falls back to mock mode. Also, `MemoryStore.listAuditEvents()` returns newest-first; the AuditChainViewer verify flow expects chronological chain order. For live smoke stability, normalize `/api/audit` response to ascending `seq` before feeding the viewer.
 
 ## v1.5 — Admin design integration lessons (2026-05-18)
 
