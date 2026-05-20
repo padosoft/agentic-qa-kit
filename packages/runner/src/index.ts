@@ -8,5 +8,10 @@ export {
   type OracleEvaluator,
   type OracleResult,
 } from './oracles.js';
-export { runScenario, type ScenarioRunResult } from './run.js';
+export {
+  makeHttpProbeRunner,
+  runScenario,
+  type HttpProbeRunnerOptions,
+  type ScenarioRunResult,
+} from './run.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

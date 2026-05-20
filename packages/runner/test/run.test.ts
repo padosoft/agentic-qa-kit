@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
 import { FindingsWriter } from '../dist/findings.js';
-import { runScenario } from '../dist/run.js';
+import { makeHttpProbeRunner, runScenario } from '../dist/run.js';
 
 const SCENARIO = {
   schema_version: '1' as const,
@@ -80,5 +80,42 @@ describe('runScenario', () => {
     });
     // Same run_id + scenario_id + risk_id + severity → second finding dedup'd.
     assert.equal(findings.snapshot().length, 1);
+  });
+
+  it('makeHttpProbeRunner executes relative HTTP probes against baseUrl', async () => {
+    const originalFetch = globalThis.fetch;
+    let seenUrl = '';
+    globalThis.fetch = (async (input) => {
+      seenUrl = String(input);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+    try {
+      const runner = makeHttpProbeRunner({ baseUrl: 'http://localhost:3000' });
+      const result = await runner({
+        id: 'probe-http',
+        kind: 'http',
+        with: { method: 'post', url: '/health', body: { hello: 'world' } },
+        timeout_ms: 1000,
+      });
+      assert.equal(seenUrl, 'http://localhost:3000/health');
+      assert.equal(result.status, 201);
+      assert.deepEqual(result.body, { ok: true });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('makeHttpProbeRunner rejects unsupported probe kinds', async () => {
+    const runner = makeHttpProbeRunner({ baseUrl: 'http://localhost:3000' });
+    const result = await runner({
+      id: 'probe-shell',
+      kind: 'shell',
+      with: {},
+      timeout_ms: 1000,
+    });
+    assert.match(result.error ?? '', /unsupported probe kind/i);
   });
 });
