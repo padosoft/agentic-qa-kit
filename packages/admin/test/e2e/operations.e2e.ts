@@ -25,12 +25,15 @@ async function gotoNav(page: import('@playwright/test').Page, label: string): Pr
 
 test.describe('Operations pages wire-up', () => {
   test('Audit page fetches /api/audit with x-aqa-org and renders live count', async ({ page }) => {
-    let captured: { url: string; org: string | null } | null = null;
-    // PR #39 Copilot iter 2: use **/api/audit** so the matcher stays
-    // resilient to future querystring additions.
+    // Hold the captured request in a stable wrapper object — TS strict
+    // flow-analysis narrows a `let` mutated inside a callback to its
+    // initial value at outer access sites, but object-property writes
+    // are opaque to it.
+    const seen: { url: string | null; org: string | null } = { url: null, org: null };
     await page.route('**/api/audit**', async (route) => {
       const req = route.request();
-      captured = { url: req.url(), org: req.headers()['x-aqa-org'] ?? null };
+      seen.url = req.url();
+      seen.org = req.headers()['x-aqa-org'] ?? null;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -70,8 +73,8 @@ test.describe('Operations pages wire-up', () => {
     await gotoNav(page, 'Audit log');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Audit log/i);
     await expect(page.locator('text=2 events · live from /api/audit')).toBeVisible();
-    expect(captured?.url).toMatch(/\/api\/audit(\?|$)/);
-    expect(captured?.org).toBe('padosoft');
+    expect(seen.url).toMatch(/\/api\/audit(\?|$)/);
+    expect(seen.org).toBe('padosoft');
   });
 
   test('Audit falls back to the fixture when the endpoint fails', async ({ page }) => {
@@ -115,9 +118,9 @@ test.describe('Operations pages wire-up', () => {
   });
 
   test('Notifications page fetches /api/notifications with x-aqa-org', async ({ page }) => {
-    let captured: { org: string | null } | null = null;
+    const seen: { org: string | null } = { org: null };
     await page.route('**/api/notifications**', async (route) => {
-      captured = { org: route.request().headers()['x-aqa-org'] ?? null };
+      seen.org = route.request().headers()['x-aqa-org'] ?? null;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -126,7 +129,7 @@ test.describe('Operations pages wire-up', () => {
     });
     await gotoNav(page, 'Notifications');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Notifications/i);
-    expect(captured?.org).toBe('padosoft');
+    expect(seen.org).toBe('padosoft');
   });
 
   test('Cost page fetches /api/cost/summary with tenant scope + explicit MTD bounds', async ({
@@ -136,20 +139,18 @@ test.describe('Operations pages wire-up', () => {
     // `to` aligned to the current month so the server's total_usd
     // matches the "MTD spend" KPI label (default window is rolling
     // 30 days, which spans month boundaries).
-    let captured: {
+    const seen: {
       org: string | null;
       project: string | null;
       from: string | null;
       to: string | null;
-    } | null = null;
+    } = { org: null, project: null, from: null, to: null };
     await page.route('**/api/cost/summary**', async (route) => {
       const url = new URL(route.request().url());
-      captured = {
-        org: route.request().headers()['x-aqa-org'] ?? null,
-        project: route.request().headers()['x-aqa-project'] ?? null,
-        from: url.searchParams.get('from'),
-        to: url.searchParams.get('to'),
-      };
+      seen.org = route.request().headers()['x-aqa-org'] ?? null;
+      seen.project = route.request().headers()['x-aqa-project'] ?? null;
+      seen.from = url.searchParams.get('from');
+      seen.to = url.searchParams.get('to');
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -175,12 +176,12 @@ test.describe('Operations pages wire-up', () => {
     });
     await gotoNav(page, 'Cost');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Cost/i);
-    expect(captured?.org).toBe('padosoft');
+    expect(seen.org).toBe('padosoft');
     // PR #39 Copilot iter 2: project is now `gescat` (matches the
     // admin's selected project).
-    expect(captured?.project).toBe('gescat');
+    expect(seen.project).toBe('gescat');
     // `from` is the first of the current month at 00:00 UTC.
-    expect(captured?.from).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/);
-    expect(captured?.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(seen.from).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/);
+    expect(seen.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
 });
