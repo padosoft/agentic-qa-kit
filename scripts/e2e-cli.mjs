@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * End-to-end smoke test for the `aqa` CLI against `examples/bun-api`.
+ * End-to-end smoke test for the `aqa` CLI in a self-contained local sandbox.
  *
  * What this exercises:
  *   1. `aqa --version`        — binary is wired
