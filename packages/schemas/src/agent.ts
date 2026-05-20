@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Slug } from './common.js';
+import { IsoDateTime, Slug } from './common.js';
 
 // A repo-relative file path that an Agent install is allowed to
 // materialize. Rejects:
@@ -15,7 +15,11 @@ const SafeRepoPath = z
   .max(255)
   .refine((s) => s === s.trim() && s.length > 0, 'must not have leading/trailing whitespace')
   .refine(
-    (s) => !/^[/\\]/.test(s) && !/^[A-Za-z]:[/\\]/.test(s) && !/^\\\\/.test(s),
+    // Reject leading `/` or `\`, ANY Windows drive-letter prefix
+    // (`C:foo`, `C:/foo`, `C:\foo` — drive-relative is just as
+    // dangerous as absolute on Windows), and UNC roots (`\\srv\…`).
+    // PR #38 Copilot iter 6.
+    (s) => !/^[/\\]/.test(s) && !/^[A-Za-z]:/.test(s) && !/^\\\\/.test(s),
     'must be relative (no leading `/`, `\\`, drive letter, or UNC root)',
   )
   .refine(
@@ -35,8 +39,9 @@ export const Agent = z.object({
   vendor: z.string().min(2).max(120),
   installed: z.boolean().default(false),
   // ISO timestamp of the last install/upgrade — null when the agent
-  // has never been installed.
-  last_updated: z.string().datetime({ offset: true }).nullable().default(null),
+  // has never been installed. Reuses the shared IsoDateTime so all
+  // schemas share the same datetime validation/error messages.
+  last_updated: IsoDateTime.nullable().default(null),
   // Project-root-relative paths the install materializes. Validated
   // as SafeRepoPath so install hooks can't be tricked into writing
   // outside the project root (PR #38 Copilot iter 3). Empty arrays

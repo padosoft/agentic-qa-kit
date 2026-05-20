@@ -825,6 +825,13 @@ probes: []
         api.find((r) => r.method === 'GET' && r.path === '/api/agents')?.requires,
         'agents:read',
       );
+      // PR #38 Copilot iter 6: also assert the detail endpoint, so
+      // an accidental relaxation of the per-id route doesn't slip
+      // through under a permission stricter than the list.
+      assert.equal(
+        api.find((r) => r.method === 'GET' && r.path === '/api/agents/:id')?.requires,
+        'agents:read',
+      );
       assert.equal(
         api.find((r) => r.method === 'POST' && r.path === '/api/agents/:id/install')?.requires,
         'agents:edit',
