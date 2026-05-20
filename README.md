@@ -73,7 +73,7 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 
 ## Quick start (junior-friendly)
 
-> **Status note:** the kit reached **v1.0 GA** (24-task roadmap complete) and is now at **v1.1**. The 18 workspace packages (`@aqa/schemas`, `@aqa/kit`, `@aqa/runner`, `@aqa/reporter`, `@aqa/server`, `@aqa/admin`, `@aqa/compliance`, `@aqa/methodology`, …) ship from this monorepo. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
+> **Status note:** the kit reached **v1.0 GA** (24-task roadmap complete) and is now at **v1.9**. The `@padosoft/agentic-qa-kit` CLI ships as a single bundled tarball from GitHub Packages. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
 
 ### 1. Install Bun
 
@@ -85,65 +85,111 @@ curl -fsSL https://bun.sh/install | bash
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-### 2. Install the kit in your project
+### 2. Tell your project where to find the kit (GitHub Packages auth)
+
+GitHub Packages requires authentication even for public packages. One-time setup per machine — create a PAT with `read:packages` scope at [github.com/settings/tokens](https://github.com/settings/tokens), then add it to a per-project `.npmrc`:
+
+```ini
+# .npmrc — at the root of your project
+@padosoft:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Export the token in your shell (or your CI secrets):
+
+```bash
+export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
+```
+
+### 3. Install the kit in your project
 
 ```bash
 cd /path/to/your/project
-bun add -d agentic-qa-kit
+bun add -d @padosoft/agentic-qa-kit
 ```
 
-> _If you don't have a project yet, clone `examples/bun-api` from this repo (available in v0.1.0)._
+> _If you don't have a project yet, clone `examples/bun-api` from this repo as a starting point._
 
-### 3. Initialize the AQA workspace
+### 4. Initialize the AQA workspace + verify
 
 ```bash
-bunx aqa init
+bunx aqa init       # scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
+bunx aqa doctor     # green/yellow/red checklist of kit health
+bunx aqa validate   # schema-check every .aqa/* file against @aqa/schemas
 ```
 
-Detects your stack and creates `.aqa/` with `testing.md`, `risk-map.yaml`, `profiles.yaml`, and scenarios for the packs your project matches.
+`init` detects your stack (Bun/Node, framework, DB, SUT type) and creates a `.aqa/` directory anchored to the packs your project matches.
 
-### 4. Install agent-specific files (pick one or many)
+### 5. Install agent-specific files (one or many)
 
 ```bash
 bunx aqa install-agent-files --targets claude,codex,gemini,copilot
 ```
 
-This generates `CLAUDE.md` + `.claude/skills/aqa-*`, `AGENTS.md` + `.agents/skills/`, `GEMINI.md` + `.gemini/skills/`, `.github/copilot-instructions.md` + `.github/skills/`.
+Generates `CLAUDE.md` + `.claude/skills/aqa-*`, `AGENTS.md` + `.agents/skills/`, `GEMINI.md` + `.gemini/skills/`, and `.github/copilot-instructions.md` + `.github/skills/`. Existing files are preserved unless you pass `--force`. Add `--dry-run` to see what would change first.
 
-### 5. Run your first agentic QA pass
+### 6. Edit `.aqa/risk-map.yaml` (declare what must never break)
+
+Replace the placeholder risk with the one that actually matters for your project. **The risk map is the heart of the kit — generic risks produce generic findings.**
+
+```yaml
+- id: r-token-replay
+  category: auth
+  title: Tokens remain valid past rotation
+  severity: critical
+  likelihood: possible
+  invariants:
+    - id: inv-token-rotation
+      statement: Old tokens become invalid within 60 seconds of rotation.
+```
+
+### 7. Run your first agentic QA pass
 
 ```bash
 bunx aqa run --profile smoke
 ```
 
-A 10-minute, non-destructive sweep. When it finishes:
+A fast, non-destructive sweep. Each run is written to `.aqa/runs/<run-id>/` with `events.jsonl`, `findings.jsonl`, and 3-level replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`).
+
+### 8. Render the report
 
 ```bash
-bunx aqa report
+bunx aqa report                       # latest run, Markdown + JSON
+bunx aqa report --run-id <id>         # explicit run
+bunx aqa report --format md           # just report.md
 ```
 
-You'll see findings like:
+Writes `report.md` and `report.json` inside the same run directory. You'll see findings like:
 
 ```
 AQA-2026-0001 [P1] Cross-tenant data leak (verified, 3/3 deterministic replay)
 AQA-2026-0002 [P3] Missing rate limit on /api/search
 ```
 
-### 6. Open the admin panel
+### 9. Boot the admin panel (single command)
 
 ```bash
-bun --filter @aqa/admin dev
+bunx aqa admin
 ```
 
-Then open the local URL shown by Vite (normally `http://127.0.0.1:5173`) and inspect runs, findings, replay artifacts, and audit chain state.
+Opens `http://127.0.0.1:5173`. The admin SPA + API server boot in one process, seeded from your local `.aqa/runs/`. Inspect runs, findings, replay artifacts, and verify the hash-chained audit log in-browser. `Ctrl-C` to stop.
 
-### 7. Reproduce from generated artifacts
+| Flag | Effect |
+|---|---|
+| `--port <n>` | listen on a specific port (default 5173) |
+| `--host <h>` | bind host (default `127.0.0.1`; use `0.0.0.0` to expose on LAN) |
+
+### 10. Reproduce from generated artifacts
 
 ```bash
 ls .aqa/runs/<run-id>/
+# events.jsonl  findings.jsonl  report.md  report.json
+# repro.sh      repro.curl       repro.playwright.ts
 ```
 
-Each run stores replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`) so you can reproduce findings deterministically and confirm fixes.
+Each finding ships with a deterministic replay artifact so you can reproduce it, hand it to a teammate, or attach it to a PR.
+
+> **Want the whole ecosystem in one go?** From a clone of `padosoft/agentic-qa-kit`, run `bun run e2e:ecosystem`. It boots `examples/bun-api`, runs a real `aqa run --profile smoke` against it, and opens the admin against the live data. Single command, end-to-end smoke.
 
 ## The mental model in 7 words
 
@@ -156,12 +202,13 @@ Every concept in AQA is one of these seven things or a tool that operates on the
 ## How you use it
 
 1. `aqa init`: detect your repo and scaffold `.aqa/`.
-2. Edit `risk-map.yaml`: declare what must never break.
-3. Install agent files: Claude/Codex/Gemini/Copilot instructions + skills.
+2. `aqa install-agent-files --targets …`: write Claude/Codex/Gemini/Copilot instructions + skills.
+3. Edit `risk-map.yaml`: declare what must never break.
 4. `aqa run --profile smoke`: execute scenarios with probes + oracles.
-5. Open admin: `bun --filter @aqa/admin dev`.
-6. Inspect findings, replay deterministically, verify audit chain.
-7. Iterate risks + scenarios until `release-gate` is green.
+5. `aqa report`: render `report.md` + `report.json` from the latest run.
+6. `aqa admin`: boot the SPA + API on `127.0.0.1:5173`, seeded from local runs.
+7. Inspect findings, replay deterministically, verify audit chain.
+8. Iterate risks + scenarios until `release-gate` is green.
 
 ## Multi-agent
 
@@ -219,10 +266,12 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.5` | **Admin design integration — shipped** | 30-screen hi-fi prototype bundled, Playwright E2E gate, theme + palette + Findings kanban |
 | `v1.6` | **`aqa run` + bundled packs — shipped** | Three-tier pack discovery, atomic run-dir, applies_when filtering, agent-mode rejection until driver lands |
 | `v1.7` | **Pack authoring + admin CRUD — shipped** | `PACK-AUTHORING.md`, `aqa pack new`, admin Create-pack/Import-manifest wizards, full Profile/Risk/Scenario CRUD (Delete/Edit/Clone), Agents wired to `/api/agents`, Operations + Admin pages wired to `/api/audit` / `/api/cost/summary` / `/api/queue` / `/api/notifications` / `/api/tokens` / `/api/orgs`, scenario YAML editor, schema-conforming mock-id migration, `Agent` schema, `agents:read`/`agents:edit` permissions, atomic `Store.createProfile/createScenario` |
+| `v1.8` | **Live ecosystem e2e — shipped** | Real HTTP probe runner, release-gate finding enforcement, single-command ecosystem stack (`bun run e2e:ecosystem`), Playwright admin-against-live-API smoke, audit-chain canonical reconciliation |
+| `v1.9` | **Junior quick-start truthing — shipped** | `aqa install-agent-files` + `aqa report` + `aqa admin` CLI verbs (previously documented but unwired), `@aqa/pack-author` extracted to break kit↔server build cycle, esbuild bundled `dist/cli.cjs`, GitHub Packages publish workflow on `v*` tags, README quick-start rewritten to match the actually-shipped CLI surface |
 
 ## Status
 
-**GA (`v1.0` shipped, `v1.7` current).** The full 24-task roadmap is closed:
+**GA (`v1.0` shipped, `v1.9` current).** The full 24-task roadmap is closed:
 schemas, CLI (`@aqa/kit`), 5 baseline packs, multi-agent adapters
 (Claude/Codex/Gemini/Copilot), runner with hash-chained audit, reporter
 with 3-level replay, admin panel, server + runner fleet, on-prem LLM
