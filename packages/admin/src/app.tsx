@@ -12379,6 +12379,10 @@ function PageTokens({ onNavigate }) {
   // (name/kind/last_used) so we normalize the server payload to the
   // UI shape on load. Falls back to a small fixture so mock-data
   // mode still renders. PR #40 Copilot iter 1.
+  // PR #40 Copilot iter 3: fallback scope values use the actual
+  // ApiTokenScope enum (runs:create / findings:edit /
+  // admin:everything / audit:read), not the pre-schema strings
+  // ("runs:write" / "*") that wouldn't validate against the server.
   const FALLBACK_TOKENS = React.useMemo(
     () => [
       {
@@ -12386,7 +12390,7 @@ function PageTokens({ onNavigate }) {
         name: 'CI · GitHub Actions',
         kind: 'service',
         last_used: '2026-05-18T13:48:00Z',
-        scopes: ['runs:write', 'findings:read'],
+        scopes: ['runs:create', 'findings:read'],
         created_at: '2026-04-12T08:00:00Z',
       },
       {
@@ -12394,7 +12398,7 @@ function PageTokens({ onNavigate }) {
         name: 'Sara · CLI laptop',
         kind: 'user',
         last_used: '2026-05-18T11:14:00Z',
-        scopes: ['*'],
+        scopes: ['admin:everything'],
         created_at: '2026-04-02T09:00:00Z',
       },
       {
