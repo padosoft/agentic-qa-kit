@@ -201,10 +201,14 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.1` | **Polish — shipped** | Banner, full Helm chart (runner StatefulSet, Ingress, NetworkPolicy, Postgres subchart), 3 example targets (Bun, Next.js, Laravel) |
 | `v1.2` | **Admin SPA wired — shipped** | Tailwind 4 + TanStack Router + Query + 12 screens, audit-chain verification in-browser via Web Crypto |
 | `v1.3` | **Quality batch — shipped** | Admin server↔UI mapping, 6 detail routes, 12 new admin tests, CLI E2E smoke gate, threat-model expansion, CHANGELOG backfill |
+| `v1.4` | **API surface — shipped** | 28 admin server routes, `MemoryStore` full coverage, multi-tenant via `x-aqa-org`/`x-aqa-project` headers |
+| `v1.5` | **Admin design integration — shipped** | 30-screen hi-fi prototype bundled, Playwright E2E gate, theme + palette + Findings kanban |
+| `v1.6` | **`aqa run` + bundled packs — shipped** | Three-tier pack discovery, atomic run-dir, applies_when filtering, agent-mode rejection until driver lands |
+| `v1.7` | **Pack authoring + admin CRUD — shipped** | `PACK-AUTHORING.md`, `aqa pack new`, admin Create-pack/Import-manifest wizards, full Profile/Risk/Scenario CRUD (Delete/Edit/Clone), Agents wired to `/api/agents`, Operations + Admin pages wired to `/api/audit` / `/api/cost/summary` / `/api/queue` / `/api/notifications` / `/api/tokens` / `/api/orgs`, scenario YAML editor, schema-conforming mock-id migration, `Agent` schema, `agents:read`/`agents:edit` permissions, atomic `Store.createProfile/createScenario` |
 
 ## Status
 
-**GA (`v1.0` shipped, `v1.3` current).** The full 24-task roadmap is closed:
+**GA (`v1.0` shipped, `v1.7` current).** The full 24-task roadmap is closed:
 schemas, CLI (`@aqa/kit`), 5 baseline packs, multi-agent adapters
 (Claude/Codex/Gemini/Copilot), runner with hash-chained audit, reporter
 with 3-level replay, admin panel, server + runner fleet, on-prem LLM
