@@ -387,6 +387,58 @@ describe('aqa report — error cases', () => {
     if (result.ok) return;
     assert.match(result.error, /expected a JSON object, got array/);
   });
+
+  it('refuses to overwrite a symlinked report.md (Copilot iter 3)', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeEvents(runDir, { runId: RUN_ID, profile: 'smoke', project: 'demo', findingsCount: 0 });
+    writeFindings(runDir, 0);
+    const outside = join(makeTempRoot(), 'evil-report.md');
+    writeFileSync(outside, '# attacker controlled\n', 'utf8');
+    try {
+      symlinkSync(outside, join(runDir, 'report.md'), 'file');
+    } catch {
+      return; // Windows non-admin can't create symlinks; skip.
+    }
+    const result = runReport({ root, runId: RUN_ID, format: 'md' });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /refusing to overwrite symlinked report file/);
+    // Crucial: the attacker-controlled file MUST be untouched.
+    assert.equal(readFileSync(outside, 'utf8'), '# attacker controlled\n');
+  });
+
+  it('latestRunId only considers dirs with events.jsonl (Copilot iter 3)', async () => {
+    const root = makeTempRoot();
+    // Two real run dirs (older + newer) + a non-run subdir that's newer
+    // than both but lacks events.jsonl. The non-run dir must NOT win.
+    const olderDir = makeRunDir(root, 'run-aaaa');
+    writeEvents(olderDir, {
+      runId: 'run-aaaa',
+      profile: 'smoke',
+      project: 'demo',
+      findingsCount: 0,
+    });
+    writeFindings(olderDir, 0, 'run-aaaa');
+    await sleep(20);
+    const newerDir = makeRunDir(root, 'run-bbbb');
+    writeEvents(newerDir, {
+      runId: 'run-bbbb',
+      profile: 'smoke',
+      project: 'demo',
+      findingsCount: 0,
+    });
+    writeFindings(newerDir, 0, 'run-bbbb');
+    await sleep(20);
+    // Pollute .aqa/runs with a NEWER non-run directory.
+    mkdirSync(join(root, '.aqa', 'runs', 'readme-stash'), { recursive: true });
+
+    const result = runReport({ root });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    // Must be the most-recent REAL run, not the polluting subdirectory.
+    assert.equal(result.runId, 'run-bbbb');
+  });
 });
 
 describe('aqa report — state reconstruction (Copilot iter 1 P1)', () => {

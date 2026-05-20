@@ -17,7 +17,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderJson, renderMarkdown } from '@aqa/reporter';
-import { Finding, type Run } from '@aqa/schemas';
+import { Finding, Run } from '@aqa/schemas';
 
 export type ReportFormat = 'md' | 'json' | 'both';
 
@@ -158,26 +158,56 @@ export function runReport(opts: ReportOptions): ReportResult {
     };
   }
 
-  const run = reconstructRun({
+  const runDraft = reconstructRun({
     runId: runIdResolved,
     runDir,
     events,
     findingsCount: findings.length,
   });
+  // Validate the reconstructed Run against the canonical schema before
+  // handing it to the renderers. reconstructRun could in theory produce
+  // a Run.parse-incompatible shape (e.g. terminal state with missing
+  // finished_at if the audit chain itself is malformed) — surfacing that
+  // as a structured error keeps `report.json` consumers safe instead of
+  // shipping a JSON the admin UI silently rejects later.
+  const runParsed = Run.Run.safeParse(runDraft);
+  if (!runParsed.success) {
+    return {
+      ok: false,
+      error: `report: reconstructed run failed schema validation (audit chain is malformed): ${runParsed.error.message.split('\n')[0]}`,
+    };
+  }
+  const run = runParsed.data;
 
   const written: string[] = [];
   // Writes can fail (read-only FS, disk full, permission). Return a
   // structured error rather than letting the exception escape into the
   // CLI's top-level unhandled-error path so callers get a clean message
   // plus an exit code derived from the structured result.
+  // Per-file symlink check: even with a non-symlinked run dir, a
+  // pre-existing `report.md`/`report.json` symlink would be followed
+  // by writeFileSync and let an attacker (or a prior run) redirect the
+  // writes outside the project. lstat each target before writing.
   try {
     if (format === 'md' || format === 'both') {
       const mdPath = join(runDir, 'report.md');
+      if (existsSync(mdPath) && lstatSync(mdPath).isSymbolicLink()) {
+        return {
+          ok: false,
+          error: `report: refusing to overwrite symlinked report file ${mdPath}`,
+        };
+      }
       writeFileSync(mdPath, renderMarkdown({ run, findings }), 'utf8');
       written.push(mdPath);
     }
     if (format === 'json' || format === 'both') {
       const jsonPath = join(runDir, 'report.json');
+      if (existsSync(jsonPath) && lstatSync(jsonPath).isSymbolicLink()) {
+        return {
+          ok: false,
+          error: `report: refusing to overwrite symlinked report file ${jsonPath}`,
+        };
+      }
       writeFileSync(
         jsonPath,
         `${JSON.stringify(renderJson({ run, findings }), null, 2)}\n`,
@@ -212,14 +242,26 @@ function latestRunId(runsRoot: string): string | undefined {
   // hash-based IDs (`run-<sha>`) that don't sort by recency. mtime is
   // monotonic enough for "the most recent run" semantics — lexical name
   // is only used as a deterministic tie-breaker (same-millisecond runs).
+  //
+  // Filter: only consider directories that look like actual runs
+  // (presence of events.jsonl, the canonical run-start marker). Without
+  // this, an unrelated subdirectory under `.aqa/runs/` — or a symlink
+  // whose target's mtime is newer than any real run — would be selected
+  // by mtime and either fail with a confusing error or accidentally
+  // generate a report for the wrong directory. Also reject symlinks at
+  // the dir-entry level for the same reason as the symlink check in
+  // runReport: writes into a symlinked dir leak outside the project.
   const candidates: Array<{ name: string; mtimeMs: number }> = [];
   for (const name of entries) {
+    if (!RUN_ID_RE.test(name) || name.length > RUN_ID_MAX_LEN) continue;
     const dir = join(runsRoot, name);
     try {
+      const lst = lstatSync(dir);
+      if (lst.isSymbolicLink()) continue;
+      if (!lst.isDirectory()) continue;
+      if (!existsSync(join(dir, 'events.jsonl'))) continue;
       const st = statSync(dir);
-      if (st.isDirectory()) {
-        candidates.push({ name, mtimeMs: st.mtimeMs });
-      }
+      candidates.push({ name, mtimeMs: st.mtimeMs });
     } catch {
       // ignore entries we can't stat (broken symlinks, races)
     }
