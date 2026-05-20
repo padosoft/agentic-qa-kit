@@ -13,7 +13,15 @@
  * Wire into CI via `bun run test:e2e-cli` from the root package.json.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -27,7 +35,6 @@ const AQA_BIN = resolve(ROOT, 'packages/kit/dist/cli/aqa.js');
 // `.aqa/` artifacts it expects. Using a tmp dir keeps the smoke test
 // hermetic — no checked-in fixture to drift out of date.
 const SANDBOX = mkdtempSync(`${tmpdir()}/aqa-cli-e2e-`);
-const APP_PORT = 3189;
 
 // Seed a minimal package.json so `aqa doctor`'s runtime check resolves.
 writeFileSync(
@@ -73,7 +80,7 @@ stack:
   package_manager: npm
 sut:
   type: api
-  base_url: http://127.0.0.1:${APP_PORT}
+  base_url: http://127.0.0.1:0
 tags: []
 `,
   'utf8',
@@ -164,60 +171,118 @@ const app = createServer((req, res) => {
   res.writeHead(404, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ ok: false }));
 });
-await new Promise((resolve) => app.listen(APP_PORT, '127.0.0.1', () => resolve(undefined)));
 
 let failed = 0;
-for (const c of cases) {
-  const result = spawnSync(process.execPath, [AQA_BIN, ...c.args], {
-    cwd: c.cwd ?? ROOT,
-    encoding: 'utf8',
-    timeout: c.timeout ?? 20_000,
+try {
+  const boundPort = await new Promise((resolve, reject) => {
+    const onError = (error) => {
+      app.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      app.off('error', onError);
+      const address = app.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Unable to determine local server port for smoke run'));
+        return;
+      }
+      resolve(address.port);
+    };
+    app.once('error', onError);
+    app.once('listening', onListening);
+    app.listen(0, '127.0.0.1');
   });
 
-  const expectedExits = Array.isArray(c.expectExit) ? c.expectExit : [c.expectExit];
-  const exitOk = expectedExits.includes(result.status ?? -1);
-  const stdoutOk = c.expectStdout ? c.expectStdout.test(result.stdout ?? '') : true;
-  const ok = exitOk && stdoutOk;
+  writeFileSync(
+    projectPath,
+    `schema_version: "1"
+name: aqa-cli-e2e-fixture
+stack:
+  runtime: node
+  framework: smoke-fixture
+  db: []
+  package_manager: npm
+sut:
+  type: api
+  base_url: http://127.0.0.1:${boundPort}
+tags: []
+`,
+    'utf8',
+  );
 
-  if (ok) {
-    console.log(`✓ ${c.label} (exit=${result.status})`);
-  } else {
-    failed += 1;
-    console.log(`✗ ${c.label} (exit=${result.status}, expected ${expectedExits.join('|')})`);
-    if (result.signal) console.log(`  signal: ${result.signal} (likely timeout)`);
-    if (result.stdout)
-      console.log('  stdout:', result.stdout.split('\n').slice(0, 5).join('\n         '));
-    if (result.stderr)
-      console.log('  stderr:', result.stderr.split('\n').slice(0, 5).join('\n         '));
-  }
-}
+  for (const c of cases) {
+    const result = spawnSync(process.execPath, [AQA_BIN, ...c.args], {
+      cwd: c.cwd ?? ROOT,
+      encoding: 'utf8',
+      timeout: c.timeout ?? 20_000,
+    });
 
-// Verify `aqa run` produced run artifacts with a non-empty events chain.
-const runsDir = join(SANDBOX, '.aqa', 'runs');
-if (failed === 0) {
-  const runIds = readdirSync(runsDir).sort();
-  if (runIds.length === 0) {
-    failed += 1;
-    console.error('✗ run-smoke did not produce any .aqa/runs/<run-id> directory');
-  } else {
-    const latest = join(runsDir, runIds[runIds.length - 1]);
-    const eventsPath = join(latest, 'events.jsonl');
-    const findingsPath = join(latest, 'findings.jsonl');
-    const eventsText = readFileSync(eventsPath, 'utf8').trim();
-    const findingsText = readFileSync(findingsPath, 'utf8');
-    if (!eventsText) {
+    const expectedExits = Array.isArray(c.expectExit) ? c.expectExit : [c.expectExit];
+    const exitOk = expectedExits.includes(result.status ?? -1);
+    const stdoutOk = c.expectStdout ? c.expectStdout.test(result.stdout ?? '') : true;
+    const ok = exitOk && stdoutOk;
+
+    if (ok) {
+      console.log(`✓ ${c.label} (exit=${result.status})`);
+    } else {
       failed += 1;
-      console.error('✗ run-smoke produced empty events.jsonl');
-    }
-    if (typeof findingsText !== 'string') {
-      failed += 1;
-      console.error('✗ run-smoke did not produce findings.jsonl');
+      console.log(`✗ ${c.label} (exit=${result.status}, expected ${expectedExits.join('|')})`);
+      if (result.signal) console.log(`  signal: ${result.signal} (likely timeout)`);
+      if (result.stdout)
+        console.log('  stdout:', result.stdout.split('\n').slice(0, 5).join('\n         '));
+      if (result.stderr)
+        console.log('  stderr:', result.stderr.split('\n').slice(0, 5).join('\n         '));
     }
   }
-}
 
-app.close();
-rmSync(SANDBOX, { recursive: true, force: true });
+  // Verify `aqa run` produced run artifacts with a non-empty events chain.
+  const runsDir = join(SANDBOX, '.aqa', 'runs');
+  if (failed === 0) {
+    if (!existsSync(runsDir)) {
+      failed += 1;
+      console.error('✗ run-smoke did not produce .aqa/runs');
+    } else {
+      const runIds = readdirSync(runsDir).sort();
+      if (runIds.length === 0) {
+        failed += 1;
+        console.error('✗ run-smoke did not produce any .aqa/runs/<run-id> directory');
+      } else {
+        const latest = join(runsDir, runIds[runIds.length - 1]);
+        const eventsPath = join(latest, 'events.jsonl');
+        const findingsPath = join(latest, 'findings.jsonl');
+        if (!existsSync(eventsPath)) {
+          failed += 1;
+          console.error('✗ run-smoke did not produce events.jsonl');
+        } else {
+          const eventsText = readFileSync(eventsPath, 'utf8').trim();
+          if (!eventsText) {
+            failed += 1;
+            console.error('✗ run-smoke produced empty events.jsonl');
+          }
+        }
+        if (!existsSync(findingsPath)) {
+          failed += 1;
+          console.error('✗ run-smoke did not produce findings.jsonl');
+        }
+      }
+    }
+  }
+} catch (error) {
+  failed += 1;
+  console.error('✗ failed to execute smoke run setup');
+  if (error instanceof Error) {
+    console.error(`  ${error.message}`);
+  } else {
+    console.error(`  ${String(error)}`);
+  }
+} finally {
+  try {
+    app.close();
+  } catch {
+    // ignore close failures during cleanup
+  }
+  rmSync(SANDBOX, { recursive: true, force: true });
+}
 
 if (failed > 0) {
   console.error(`\n${failed} smoke check(s) failed.`);
