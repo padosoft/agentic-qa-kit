@@ -1,4 +1,5 @@
 import type {
+  Agent,
   ApiToken,
   CostSummary,
   Event,
@@ -106,6 +107,20 @@ export interface StoreProvider {
   // loadScenario + saveScenario.
   createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }>;
   deleteScenario(id: string): Promise<void>;
+
+  // ----- Agents (v1.7 slice 4d) -----
+  listAgents(): Promise<Agent.Agent[]>;
+  loadAgent(id: string): Promise<Agent.Agent | null>;
+  // Safe to call repeatedly: marks installed=true and stamps
+  // last_updated with the current time on every call. (Not strictly
+  // idempotent because last_updated changes — but the observable
+  // `installed` state converges.) Returns the resulting Agent so the
+  // admin can correlate the response.
+  installAgent(id: string): Promise<Agent.Agent | null>;
+  // Idempotent uninstall: marks installed=false and leaves
+  // last_updated alone as a record of the last install. Returns the
+  // resulting Agent.
+  uninstallAgent(id: string): Promise<Agent.Agent | null>;
 
   // ----- Notifications -----
   listNotifications(opts: {

@@ -10749,11 +10749,104 @@ function PageProfileDetail({
 // ---------------- Agents ----------------
 function PageAgents({ onNavigate }) {
   const [showInstall, setShowInstall] = React.useState(null);
+  // v1.7 slice 4d — fetch agents from the server. Falls back to the
+  // local AGENTS fixture when the server is unreachable / mock-data
+  // mode is in effect, so the screen still renders something useful.
+  const [agents, setAgents] = React.useState(AGENTS);
+  const [pendingId, setPendingId] = React.useState(null);
+  const toast = useToast();
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/agents'));
+        if (cancelled) return;
+        if (!res.ok) {
+          // PR #38 Copilot iter 2: distinguish "no such route" (older
+          // server) from a real error. 404 → silent fixture fallback
+          // (the route doesn't exist yet). Any other non-2xx → toast
+          // so operators don't see fixture agents masking real auth/
+          // 5xx failures.
+          if (res.status === 404) return;
+          toast.push({
+            kind: 'error',
+            title: 'Could not load agents',
+            body: `HTTP ${res.status} — showing local fixture`,
+          });
+          return;
+        }
+        const body = await res.json();
+        const list = body?.agents;
+        if (!Array.isArray(list) || cancelled) return;
+        // PR #38 Copilot iter 1: an EMPTY agents array is a legitimate
+        // payload (fresh deploy with no adapters discovered yet);
+        // adopt it instead of silently keeping the local fixture,
+        // which would otherwise make the page look like the fixture
+        // agents were installed when they weren't.
+        setAgents(list);
+      } catch {
+        // Mock data mode — leave the fixture in place. The toast bus
+        // is for action errors, not the initial fetch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggleInstall(agent) {
+    if (pendingId) return; // simple in-flight guard
+    setPendingId(agent.id);
+    const action = agent.installed ? 'uninstall' : 'install';
+    try {
+      const res = await fetch(
+        apiUrl(`/api/agents/${encodeURIComponent(agent.id)}/${action}`),
+        { method: 'POST' },
+      );
+      const text = await res.text();
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        toast.push({
+          kind: 'error',
+          title: `${action} ${agent.name} failed`,
+          body: parsed?.error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      const next = parsed?.agent;
+      if (next) {
+        setAgents((prev) => prev.map((a) => (a.id === next.id ? next : a)));
+      } else {
+        // Server didn't echo a body — apply the expected toggle so the
+        // UI doesn't get stuck. Real-mode endpoints always echo; this
+        // path is purely defensive.
+        setAgents((prev) =>
+          prev.map((a) => (a.id === agent.id ? { ...a, installed: !a.installed } : a)),
+        );
+      }
+      toast.push({
+        kind: 'success',
+        title: `${action === 'install' ? 'Installed' : 'Uninstalled'} ${agent.name}`,
+        body: next?.last_updated ?? '',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.push({ kind: 'error', title: `${action} ${agent.name} failed`, body: msg });
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   return (
     <div className="page" data-screen-label="15 Agents">
       <PageHeader
         title="Agents"
-        sub={`${AGENTS.length} adapters · ${AGENTS.filter((a) => a.installed).length} installed`}
+        sub={`${agents.length} adapters · ${agents.filter((a) => a.installed).length} installed`}
         actions={
           <button className="btn sm">
             <I.Github size={12} />
@@ -10763,7 +10856,7 @@ function PageAgents({ onNavigate }) {
       />
 
       <div className="dash-grid">
-        {AGENTS.map((a) => (
+        {agents.map((a) => (
           <div key={a.id} className="card span-6">
             <div className="card-head">
               <h3 className="card-title">
@@ -10826,15 +10919,32 @@ function PageAgents({ onNavigate }) {
                 ))}
               </div>
               <div className="row gap-6">
-                <button className="btn sm" onClick={() => setShowInstall(a)}>
+                <button
+                  className="btn sm"
+                  data-testid={`agent-preview-${a.id}`}
+                  onClick={() => setShowInstall(a)}
+                >
                   <I.Eye size={11} />
                   Preview files
                 </button>
-                <button className={`btn sm ${a.installed ? '' : 'primary'}`}>
-                  {a.installed ? (
+                <button
+                  className={`btn sm ${a.installed ? '' : 'primary'}`}
+                  data-testid={`agent-${a.installed ? 'uninstall' : 'install'}-${a.id}`}
+                  // PR #38 Copilot iter 2: disable ALL install/
+                  // uninstall buttons while ANY agent action is in
+                  // flight (matches the existing global pendingId
+                  // guard inside toggleInstall, which previously left
+                  // unrelated buttons looking clickable but doing
+                  // nothing).
+                  disabled={pendingId !== null}
+                  onClick={() => toggleInstall(a)}
+                >
+                  {pendingId === a.id ? (
+                    'Working…'
+                  ) : a.installed ? (
                     <>
-                      <I.Refresh size={11} />
-                      Update
+                      <I.Trash size={11} />
+                      Uninstall
                     </>
                   ) : (
                     <>

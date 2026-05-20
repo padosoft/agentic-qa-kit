@@ -19,6 +19,7 @@ export const rolePermissions: Record<Role, ReadonlyArray<Permission>> = {
     'risk-map:read',
     'profiles:read',
     'packs:read',
+    'agents:read',
     'audit:read',
     'cost:read',
     'settings:read',
@@ -32,6 +33,7 @@ export const rolePermissions: Record<Role, ReadonlyArray<Permission>> = {
     'risk-map:edit',
     'profiles:read',
     'packs:read',
+    'agents:read',
     'audit:read',
     'cost:read',
     'settings:read',
@@ -48,6 +50,8 @@ export const rolePermissions: Record<Role, ReadonlyArray<Permission>> = {
     'packs:read',
     'packs:install',
     'agents:install',
+    'agents:read',
+    'agents:edit',
     'audit:read',
     'cost:read',
     'settings:read',
@@ -57,10 +61,18 @@ export const rolePermissions: Record<Role, ReadonlyArray<Permission>> = {
 
 /** Does the user hold the given permission via any of their roles? */
 export function allows(user: User, need: Permission): boolean {
+  // Backwards-compat: pre-v1.7 the only agent permission was
+  // 'agents:install'. The v1.7 slice 4d /api/agents* routes guard
+  // with 'agents:read'/'agents:edit' — treat the legacy permission
+  // as satisfying either so existing tokens/custom roles continue
+  // to work.
+  const legacyAgentsAlias =
+    need === 'agents:read' || need === 'agents:edit' ? 'agents:install' : null;
   for (const role of user.roles) {
     const perms = rolePermissions[role];
     if (perms.includes('admin:everything')) return true;
     if (perms.includes(need)) return true;
+    if (legacyAgentsAlias !== null && perms.includes(legacyAgentsAlias)) return true;
   }
   return false;
 }

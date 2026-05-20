@@ -1,4 +1,5 @@
 import type {
+  Agent,
   ApiToken,
   CostSummary,
   Event,
@@ -28,6 +29,7 @@ export class MemoryStore implements StoreProvider {
   private profiles = new Map<string, Profile.Profile>();
   private risks = new Map<string, RiskMap.Risk>();
   private scenarios = new Map<string, Scenario.Scenario>();
+  private agents = new Map<string, Agent.Agent>();
   private notifications: Notification.Notification[] = [];
   private savedViews = new Map<string, SavedView.SavedView>();
   private tokens = new Map<string, ApiToken.ApiToken>();
@@ -220,6 +222,39 @@ export class MemoryStore implements StoreProvider {
     this.scenarios.delete(id);
   }
 
+  // ----- Agents (v1.7 slice 4d) -----
+  async listAgents(): Promise<Agent.Agent[]> {
+    return [...this.agents.values()];
+  }
+  async loadAgent(id: string): Promise<Agent.Agent | null> {
+    return this.agents.get(id) ?? null;
+  }
+  async installAgent(id: string): Promise<Agent.Agent | null> {
+    const a = this.agents.get(id);
+    if (!a) return null;
+    const updated: Agent.Agent = {
+      ...a,
+      installed: true,
+      last_updated: new Date().toISOString(),
+    };
+    this.agents.set(id, updated);
+    return updated;
+  }
+  async uninstallAgent(id: string): Promise<Agent.Agent | null> {
+    const a = this.agents.get(id);
+    if (!a) return null;
+    const updated: Agent.Agent = { ...a, installed: false };
+    this.agents.set(id, updated);
+    return updated;
+  }
+  // __test-namespaced helpers — only for unit/integration tests. They
+  // sit OUTSIDE the StoreProvider contract so production code can't
+  // import them inadvertently (a future TypeScript-strict consumer
+  // would flag the access). PR #38 Copilot iter 2.
+  __test_seedAgent(a: Agent.Agent): void {
+    this.agents.set(a.id, a);
+  }
+
   // ----- Notifications -----
   async listNotifications(opts: {
     org: string;
@@ -346,6 +381,7 @@ export class MemoryStore implements StoreProvider {
     this.profiles.clear();
     this.risks.clear();
     this.scenarios.clear();
+    this.agents.clear();
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();
