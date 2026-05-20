@@ -27,15 +27,21 @@ test.describe('Admin-section wire-up', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
+        // PR #40 Copilot iter 1: schema-conforming @aqa/schemas
+        // ApiToken (display_name, prefix, owner, last_used_at,
+        // ApiTokenScope enum values).
         body: JSON.stringify({
           tokens: [
             {
+              schema_version: '1',
               id: 'tok-live-1',
-              name: 'Live token from server',
-              kind: 'service',
-              last_used: '2026-05-19T12:00:00Z',
-              scopes: ['runs:write'],
+              org: 'padosoft',
+              prefix: 'aqa_pat_abcd1234',
+              owner: 'svc_ci',
+              display_name: 'Live token from server',
+              scopes: ['runs:create', 'findings:read'],
               created_at: '2026-05-01T00:00:00Z',
+              last_used_at: '2026-05-19T12:00:00Z',
             },
           ],
         }),

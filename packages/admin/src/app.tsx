@@ -12262,7 +12262,7 @@ function PageOrg({ onNavigate }) {
     orgs === null
       ? 'padosoft'
       : orgs.length === 0
-        ? 'No orgs configured · using mock org "padosoft"'
+        ? 'No orgs configured'
         : orgs.map((o) => o.slug ?? o.name ?? '?').join(', ');
   return (
     <div className="page" data-screen-label="24 Org & project">
@@ -12373,9 +12373,12 @@ function PageTokens({ onNavigate }) {
   const [showNew, setShowNew] = React.useState(false);
   const [createdToken, setCreatedToken] = React.useState(null);
   // v1.7 slice 4f — wire to GET /api/tokens. The server returns
-  // hashed token records (no raw secret); the create flow (POST
-  // /api/tokens) returns the freshly-issued raw token exactly once.
-  // Falls back to a small fixture so mock-data mode still renders.
+  // @aqa/schemas ApiToken records (id/org/prefix/owner/display_name/
+  // scopes/created_at/last_used_at/…) — only the prefix is exposed,
+  // never the raw secret. The page renders with fixture-style fields
+  // (name/kind/last_used) so we normalize the server payload to the
+  // UI shape on load. Falls back to a small fixture so mock-data
+  // mode still renders. PR #40 Copilot iter 1.
   const FALLBACK_TOKENS = React.useMemo(
     () => [
       {
@@ -12416,7 +12419,24 @@ function PageTokens({ onNavigate }) {
         if (cancelled || !res.ok) return;
         const body = await res.json();
         if (cancelled) return;
-        if (Array.isArray(body?.tokens)) setTokens(body.tokens);
+        if (!Array.isArray(body?.tokens)) return;
+        // PR #40 Copilot iter 1: adapt @aqa/schemas ApiToken to the
+        // page's fixture shape. `kind` is derived heuristically from
+        // owner (svc_/bot_ prefix → service, otherwise user); a real
+        // adapter would inspect a server-side `kind` field once that
+        // lands on ApiToken.
+        const adapted = body.tokens.map((t) => ({
+          id: t.id,
+          name: t.display_name ?? t.name ?? t.id,
+          kind:
+            typeof t.owner === 'string' && /^(svc|bot|ci|service)[_-]/i.test(t.owner)
+              ? 'service'
+              : 'user',
+          last_used: t.last_used_at ?? t.last_used ?? null,
+          scopes: Array.isArray(t.scopes) ? t.scopes : [],
+          created_at: t.created_at ?? new Date().toISOString(),
+        }));
+        setTokens(adapted);
       } catch {
         /* mock mode */
       }
