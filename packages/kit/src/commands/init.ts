@@ -51,7 +51,7 @@ must hold under that risk. See \`docs/methodology/agentic-qa.md\` in the kit rep
 
 - Add new risks to \`risk-map.yaml\`.
 - Probes/oracles can be inlined in scenarios or referenced from packs.
-- Findings land under \`.aqa/runs/<id>/findings.jsonl\`. Use \`aqa replay <finding-id>\` to reproduce.
+- Findings land under \`.aqa/runs/<id>/findings.jsonl\`; replay artifacts are written in the same run directory (\`repro.sh\`, \`repro.curl\`, \`repro.playwright.ts\`).
 `;
 
 function riskMapYaml(name: string): string {

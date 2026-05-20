@@ -34,6 +34,7 @@
 - [What makes it different](#what-makes-it-different)
 - [Quick start (junior-friendly)](#quick-start-junior-friendly)
 - [The mental model in 7 words](#the-mental-model-in-7-words)
+- [How you use it](#how-you-use-it)
 - [Multi-agent](#multi-agent)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Roadmap](#roadmap)
@@ -66,16 +67,13 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 - 🔒 **Sandbox by design** — container-per-scenario isolation default for security and release-gate profiles. Egress allowlists. Tool-call budgets. Resource limits. Cost kill-switches.
 - 💰 **Cost governance built-in** — per-org / project / profile / scenario budgets in USD and tokens, hard kill-switches, attribution to risk areas. No more "an agent loop burned $400 overnight".
 - 🏠 **BYOK + on-prem LLM** — bring your own Anthropic/OpenAI keys, or use vLLM / Bedrock private / Azure OpenAI VNet / llama.cpp. Air-gap deploy supported.
-- 📋 **OWASP Top 10 Agentic (2026)** built-in security pack. Plus STRIDE / FMEA risk discovery (v0.6).
-- 🧾 **Hash-chained audit log** + WORM export. SOC2 / ISO 27001 / GDPR / HIPAA alignment on the roadmap (v0.3 self-hosted, v1.0 GA).
+- 📋 **OWASP Top 10 Agentic (2026)** built-in security pack. Plus STRIDE / FMEA risk discovery.
+- 🧾 **Hash-chained audit log** + WORM export. SOC2 / ISO 27001 controls shipped, with private-deploy governance.
 - 🔁 **Process-first governance** — every PR follows a documented loop with Copilot Code Review. Lessons captured in `docs/LESSON.md` for permanent improvement.
 
 ## Quick start (junior-friendly)
 
 > **Status note:** the kit reached **v1.0 GA** (24-task roadmap complete) and is now at **v1.1**. The 18 workspace packages (`@aqa/schemas`, `@aqa/kit`, `@aqa/runner`, `@aqa/reporter`, `@aqa/server`, `@aqa/admin`, `@aqa/compliance`, `@aqa/methodology`, …) ship from this monorepo. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
-
-<details>
-<summary><strong>Preview the v0.1.0 quick start</strong> (click to expand)</summary>
 
 ### 1. Install Bun
 
@@ -131,15 +129,21 @@ AQA-2026-0001 [P1] Cross-tenant data leak (verified, 3/3 deterministic replay)
 AQA-2026-0002 [P3] Missing rate limit on /api/search
 ```
 
-### 6. Replay a finding to confirm
+### 6. Open the admin panel
 
 ```bash
-bunx aqa replay AQA-2026-0001
+bun --filter @aqa/admin dev
 ```
 
-Re-runs the deterministic bug reproduction (curl / Playwright / SQL) and tells you if it still reproduces. If it doesn't, the bug is fixed — closes the loop.
+Then open the local URL shown by Vite (normally `http://127.0.0.1:5173`) and inspect runs, findings, replay artifacts, and audit chain state.
 
-</details>
+### 7. Reproduce from generated artifacts
+
+```bash
+ls .aqa/runs/<run-id>/
+```
+
+Each run stores replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`) so you can reproduce findings deterministically and confirm fixes.
 
 ## The mental model in 7 words
 
@@ -148,6 +152,16 @@ Risk → Invariant → Scenario → Probe → Oracle → Finding → Replay
 ```
 
 Every concept in AQA is one of these seven things or a tool that operates on them. See [`docs/ecosystem-explained.md`](docs/ecosystem-explained.md) for the deep introduction.
+
+## How you use it
+
+1. `aqa init`: detect your repo and scaffold `.aqa/`.
+2. Edit `risk-map.yaml`: declare what must never break.
+3. Install agent files: Claude/Codex/Gemini/Copilot instructions + skills.
+4. `aqa run --profile smoke`: execute scenarios with probes + oracles.
+5. Open admin: `bun --filter @aqa/admin dev`.
+6. Inspect findings, replay deterministically, verify audit chain.
+7. Iterate risks + scenarios until `release-gate` is green.
 
 ## Multi-agent
 
@@ -184,7 +198,7 @@ Capability negotiation is runtime: the kit asks the agent target what it support
 +------------------------------------------------------------+
 ```
 
-Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md) _(stub; expanded in v0.1.0)_.
+Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md).
 
 ## Roadmap
 
@@ -230,9 +244,9 @@ decisions: [`docs/adr/`](docs/adr/).
 - [`docs/adr/`](docs/adr/) — architecture decisions
 - [`docs/design/admin-panel-template.md`](docs/design/admin-panel-template.md) — admin UI spec (for parallel template work)
 - [`AGENTS.md`](AGENTS.md) — single source of truth for AI contributors
-- [`docs/architecture/reference.md`](docs/architecture/reference.md) — full architecture _(stub; expanded in v0.1.0)_
-- [`docs/security/threat-model.md`](docs/security/threat-model.md) — STRIDE applied to AQA _(stub; expanded in v0.1.0)_
-- [`docs/methodology/agentic-qa.md`](docs/methodology/agentic-qa.md) — methodology paper _(stub; expanded in v0.1.0)_
+- [`docs/architecture/reference.md`](docs/architecture/reference.md) — full architecture
+- [`docs/security/threat-model.md`](docs/security/threat-model.md) — STRIDE applied to AQA
+- [`docs/methodology/agentic-qa.md`](docs/methodology/agentic-qa.md) — methodology paper
 
 ## Contributing
 
