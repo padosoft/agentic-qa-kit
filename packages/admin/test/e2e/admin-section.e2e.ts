@@ -63,10 +63,21 @@ test.describe('Admin-section wire-up', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
+        // PR #40 Copilot iter 2: schema-conforming Tenancy.Org.
         body: JSON.stringify({
           orgs: [
-            { slug: 'padosoft', name: 'Padosoft' },
-            { slug: 'acme', name: 'Acme Corp' },
+            {
+              schema_version: '1',
+              slug: 'padosoft',
+              display_name: 'Padosoft',
+              created_at: '2026-01-01T00:00:00Z',
+            },
+            {
+              schema_version: '1',
+              slug: 'acme',
+              display_name: 'Acme Corp',
+              created_at: '2026-02-01T00:00:00Z',
+            },
           ],
         }),
       });
@@ -86,7 +97,11 @@ test.describe('Admin-section wire-up', () => {
   });
 
   test('Audit (admin) page fetches /api/audit and renders the live count', async ({ page }) => {
+    // PR #40 Copilot iter 2: gate on GET so a future POST/DELETE
+    // on /api/audit (e.g. an admin clear-events flow) isn't
+    // silently hijacked by this stub.
     await page.route('**/api/audit**', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
