@@ -11845,7 +11845,10 @@ function PageNotifications({ onNavigate }) {
         if (!Array.isArray(body?.notifications)) return;
         const adapted = body.notifications.map((n) => ({
           id: n.id,
-          kind: n.kind ?? 'audit.verified',
+          // Fallback to a schema-valid NotificationKind (the server
+          // always returns a valid kind, but stay defensive against
+          // malformed payloads). PR #39 Copilot iter 5.
+          kind: n.kind ?? 'run.failed',
           // Title falls back to a humanized kind so we always render
           // something even when the server omits `summary`.
           title: n.summary ?? n.title ?? (n.kind ?? 'event').replace(/\./g, ' ').toUpperCase(),
@@ -11892,7 +11895,7 @@ function PageNotifications({ onNavigate }) {
     <div className="page" data-screen-label="20 Notifications">
       <PageHeader
         title="Notifications"
-        sub={`${NOTIFICATIONS.filter((n) => n.unread).length} unread of ${NOTIFICATIONS.length}`}
+        sub={`${items.filter((n) => n.unread).length} unread of ${items.length}`}
         actions={
           <>
             <button className="btn sm">
@@ -11916,9 +11919,7 @@ function PageNotifications({ onNavigate }) {
           >
             {k === 'all' ? 'All' : k}
             <span className="count">
-              {k === 'all'
-                ? NOTIFICATIONS.length
-                : NOTIFICATIONS.filter((n) => n.kind === k).length}
+              {k === 'all' ? items.length : items.filter((n) => n.kind === k).length}
             </span>
           </button>
         ))}
