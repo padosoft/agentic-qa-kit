@@ -11223,8 +11223,29 @@ function PageAudit({ onNavigate }) {
         }
       />
       <AuditChainViewer
-        demoGood={liveEvents && liveEvents.length > 0 ? liveEvents : AUDIT_EVENTS_GOOD}
-        demoBad={liveEvents ? [] : AUDIT_EVENTS_BAD}
+        // PR #39 Copilot iter 1: server Event has {ts, actor:{type,id},
+        // prev_hash} but AuditChainViewer's demo shape is {at, actor:
+        // string, prev_hash}. Normalize the server response before
+        // handing it to the viewer; otherwise the viewer breaks on
+        // actor.toLowerCase() / reads ev.at. An empty live array is
+        // ALSO a valid loaded state (no fixture fallback) — use
+        // liveEvents !== null as the "loaded" signal.
+        demoGood={
+          liveEvents !== null
+            ? liveEvents.map((ev) => ({
+                at: ev.ts ?? ev.at ?? '',
+                actor:
+                  typeof ev.actor === 'string'
+                    ? ev.actor
+                    : ev.actor?.id || ev.actor?.type || 'system',
+                kind: ev.kind ?? 'event',
+                payload: ev.payload ?? {},
+                prev_hash: ev.prev_hash ?? '0'.repeat(64),
+                hash: ev.hash ?? '0'.repeat(64),
+              }))
+            : AUDIT_EVENTS_GOOD
+        }
+        demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
       />
     </div>
   );
@@ -11232,17 +11253,21 @@ function PageAudit({ onNavigate }) {
 
 // ---------------- Cost ----------------
 function PageCost({ onNavigate }) {
-  // v1.7 slice 4e — wire to /api/cost/summary. The endpoint returns
-  // an aggregated summary (totals, breakdown by profile/model); the
-  // page's MTD curve and projection still draw from the local
-  // COST_DAYS fixture for now (no per-day endpoint yet). Pulling the
-  // summary lets the header KPIs reflect live state when available.
+  // v1.7 slice 4e — wire to /api/cost/summary. The server default is
+  // a rolling 30-day window; the page's KPI labels say "MTD spend",
+  // so pass explicit `from`/`to` aligned to the current calendar
+  // month. PR #39 Copilot iter 1.
   const [summary, setSummary] = React.useState(null);
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(apiUrl('/api/cost/summary'), {
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const from = monthStart.toISOString();
+        const to = now.toISOString();
+        const url = `${apiUrl('/api/cost/summary')}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        const res = await fetch(url, {
           headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' },
         });
         if (cancelled || !res.ok) return;
@@ -11486,10 +11511,12 @@ function PageCost({ onNavigate }) {
 
 // ---------------- Queue ----------------
 function PageQueue({ onNavigate }) {
-  // v1.7 slice 4e — wire to /api/queue. Server returns the live jobs;
-  // the runners panel stays on the local RUNNERS fixture for v1.7
-  // (no /api/runners endpoint yet). Falls back to QUEUE_JOBS on
-  // error so mock-data mode still renders the page.
+  // v1.7 slice 4e — wire to /api/queue. Server returns EnqueuedJob
+  // ({id, enqueued_at, payload, status, leased_until}) but the page
+  // renders fixture fields (kind, leased_by, attempts, stuck,
+  // payload_summary). Normalize the server payload to the UI shape
+  // so KPIs and the table render correctly when live. PR #39 Copilot
+  // iter 1.
   const [jobs, setJobs] = React.useState(QUEUE_JOBS);
   React.useEffect(() => {
     let cancelled = false;
@@ -11498,7 +11525,23 @@ function PageQueue({ onNavigate }) {
         const res = await fetch(apiUrl('/api/queue'));
         if (cancelled || !res.ok) return;
         const body = await res.json();
-        if (Array.isArray(body?.jobs)) setJobs(body.jobs);
+        if (!Array.isArray(body?.jobs)) return;
+        const adapted = body.jobs.map((j) => ({
+          id: j.id,
+          kind: (j.payload && typeof j.payload === 'object' ? j.payload.kind : null) ?? 'aqa.run',
+          enqueued_at: j.enqueued_at ?? new Date().toISOString(),
+          leased_by: j.status === 'in_flight' ? (j.leased_by ?? 'runner') : null,
+          attempts: j.attempts ?? 0,
+          stuck:
+            typeof j.leased_until === 'string'
+              ? new Date(j.leased_until).getTime() < Date.now()
+              : false,
+          payload_summary:
+            j.payload && typeof j.payload === 'object'
+              ? JSON.stringify(j.payload).slice(0, 80)
+              : '',
+        }));
+        setJobs(adapted);
       } catch {
         /* mock mode — keep the fixture */
       }
@@ -11768,9 +11811,12 @@ function PageQueue({ onNavigate }) {
 // ---------------- Notifications ----------------
 function PageNotifications({ onNavigate }) {
   const [filter, setFilter] = React.useState('all');
-  // v1.7 slice 4e — wire to /api/notifications (with x-aqa-org).
-  // Fall back to the NOTIFICATIONS fixture if the server is
-  // unreachable so mock-data mode still renders.
+  // v1.7 slice 4e — wire to /api/notifications. Server returns
+  // @aqa/schemas Notification ({id, kind, summary, actor, read_by,
+  // at, …}); UI expects fixture shape ({id, kind, title, body,
+  // unread, link, at}). Normalize so unread counts + rendering work
+  // against the live payload. PR #39 Copilot iter 1.
+  const SELF = 'usr_self';
   const [items, setItems] = React.useState(NOTIFICATIONS);
   React.useEffect(() => {
     let cancelled = false;
@@ -11781,7 +11827,19 @@ function PageNotifications({ onNavigate }) {
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
-        if (Array.isArray(body?.notifications)) setItems(body.notifications);
+        if (!Array.isArray(body?.notifications)) return;
+        const adapted = body.notifications.map((n) => ({
+          id: n.id,
+          kind: n.kind ?? 'audit.verified',
+          // Title falls back to a humanized kind so we always render
+          // something even when the server omits `summary`.
+          title: n.summary ?? n.title ?? (n.kind ?? 'event').replace(/\./g, ' ').toUpperCase(),
+          body: n.body ?? '',
+          unread: Array.isArray(n.read_by) ? !n.read_by.includes(SELF) : (n.unread ?? false),
+          link: n.link ?? null,
+          at: n.at ?? n.ts ?? new Date().toISOString(),
+        }));
+        setItems(adapted);
       } catch {
         /* mock mode */
       }

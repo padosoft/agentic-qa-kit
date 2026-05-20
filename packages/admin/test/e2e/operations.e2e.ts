@@ -14,8 +14,11 @@ import { expect, test } from '@playwright/test';
 async function gotoNav(page: import('@playwright/test').Page, label: string): Promise<void> {
   await page.goto('/');
   await expect(page.locator('.sidebar')).toBeVisible();
+  // Escape regex metacharacters in `label` so a nav item like
+  // "Audit (admin)" doesn't trip the parens. Mirrors smoke.e2e.ts.
+  const safe = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await page
-    .locator('.nav-item', { hasText: new RegExp(`^${label}`, 'i') })
+    .locator('.nav-item', { hasText: new RegExp(`^${safe}`, 'i') })
     .first()
     .click();
 }
@@ -93,12 +96,26 @@ test.describe('Operations pages wire-up', () => {
     expect(captured?.org).toBe('padosoft');
   });
 
-  test('Cost page fetches /api/cost/summary with tenant scope', async ({ page }) => {
-    let captured: { org: string | null; project: string | null } | null = null;
+  test('Cost page fetches /api/cost/summary with tenant scope + explicit MTD bounds', async ({
+    page,
+  }) => {
+    // PR #39 Copilot iter 1: the request must carry explicit `from`/
+    // `to` aligned to the current month so the server's total_usd
+    // matches the "MTD spend" KPI label (default window is rolling
+    // 30 days, which spans month boundaries).
+    let captured: {
+      org: string | null;
+      project: string | null;
+      from: string | null;
+      to: string | null;
+    } | null = null;
     await page.route('**/api/cost/summary**', async (route) => {
+      const url = new URL(route.request().url());
       captured = {
         org: route.request().headers()['x-aqa-org'] ?? null,
         project: route.request().headers()['x-aqa-project'] ?? null,
+        from: url.searchParams.get('from'),
+        to: url.searchParams.get('to'),
       };
       await route.fulfill({
         status: 200,
@@ -110,5 +127,8 @@ test.describe('Operations pages wire-up', () => {
     await expect(page.locator('h1, .page-title').first()).toContainText(/Cost/i);
     expect(captured?.org).toBe('padosoft');
     expect(captured?.project).toBe('demo');
+    // `from` is the first of the current month at 00:00 UTC.
+    expect(captured?.from).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/);
+    expect(captured?.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
 });
