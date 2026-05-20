@@ -2,6 +2,7 @@
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
+import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
@@ -22,7 +23,16 @@ interface ParsedArgs {
   values: Map<string, string>;
 }
 
-const VALUE_FLAGS = new Set(['profile', 'seed', 'sut-type', 'description', 'author', 'license']);
+const VALUE_FLAGS = new Set([
+  'profile',
+  'seed',
+  'sut-type',
+  'description',
+  'author',
+  'license',
+  'targets',
+  'project-name',
+]);
 
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { command: null, positionals: [], flags: new Set(), values: new Map() };
@@ -77,19 +87,23 @@ ${bold('Usage')}
   aqa <command> [options]
 
 ${bold('Commands')}
-  init [name]            Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
-  doctor                 Report kit health (runtime, .aqa, agent docs, validation)
-  validate               Validate .aqa/* against @aqa/schemas
-  run [--profile <p>]    Execute scenarios for the given profile; write events + findings
-  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring guide:
-                         https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
-                         — this path is only present in the source repo, not in the npm tarball)
+  init [name]                       Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
+  doctor                            Report kit health (runtime, .aqa, agent docs, validation)
+  validate                          Validate .aqa/* against @aqa/schemas
+  install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / copilot-instructions.md
+                                    plus per-agent skills under .claude/.agents/.gemini/.github
+  run [--profile <p>]               Execute scenarios for the given profile; write events + findings
+  pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
+                                    guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
+                                    — this path is only present in the source repo, not in the npm tarball)
 
 ${bold('Common options')}
-  --force                (init / pack new) overwrite existing files/directory
-  --dry-run              (init) don't write to disk; print what would happen
+  --force                (init / install-agent-files / pack new) overwrite existing files/directory
+  --dry-run              (init / install-agent-files) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
+  --targets <list>       (install-agent-files) comma-separated targets: claude,codex,gemini,copilot
+  --project-name <name>  (install-agent-files) override the slug embedded in instruction files
   --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
   --description <text>   (pack new) one-line summary written into the manifest
   --author <name>        (pack new) manifest author field
@@ -157,6 +171,49 @@ async function main(): Promise<number> {
         }
       }
       return result.ok ? 0 : 1;
+    }
+    case 'install-agent-files': {
+      printHeader('install-agent-files');
+      if (args.flags.has('targets') && !args.values.has('targets')) {
+        console.error(red('aqa install-agent-files: --targets requires a value'));
+        return 1;
+      }
+      if (args.flags.has('project-name') && !args.values.has('project-name')) {
+        console.error(red('aqa install-agent-files: --project-name requires a value'));
+        return 1;
+      }
+      const targetsRaw = args.values.get('targets');
+      if (targetsRaw === undefined) {
+        console.error(
+          red('aqa install-agent-files: --targets is required (e.g. --targets claude,codex)'),
+        );
+        return 1;
+      }
+      const installOpts: Parameters<typeof runInstallAgentFiles>[0] = {
+        root: cwd,
+        targets: targetsRaw,
+      };
+      if (args.values.has('project-name')) {
+        installOpts.projectName = args.values.get('project-name') ?? '';
+      }
+      if (args.flags.has('force')) installOpts.overwrite = true;
+      if (args.flags.has('dry-run')) installOpts.dryRun = true;
+      const result = runInstallAgentFiles(installOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(dim(`targets: ${result.targets.join(', ')}`));
+      for (const f of result.files) {
+        const marker = {
+          created: green('+'),
+          overwritten: yellow('~'),
+          'skipped-exists': dim('·'),
+          'dry-run': cyan('?'),
+        }[f.result];
+        console.info(`  ${marker} ${f.path} ${dim(`[${f.target}/${f.result}]`)}`);
+      }
+      return 0;
     }
     case 'run': {
       printHeader('run');
