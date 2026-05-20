@@ -733,10 +733,19 @@ function fmtTime(ts) {
   return d.toISOString().slice(11, 19) + 'Z';
 }
 function fmtDate(ts) {
-  return new Date(ts).toISOString().slice(0, 10);
+  // PR #40 Copilot iter 5: null/undefined → em dash, matches the
+  // fmtRelative guard. Previously this rendered "1970-01-01" for
+  // tokens whose created_at was missing.
+  if (ts == null) return '—';
+  const t = new Date(ts);
+  if (Number.isNaN(t.getTime())) return '—';
+  return t.toISOString().slice(0, 10);
 }
 function fmtDateTime(ts) {
-  return new Date(ts).toISOString().slice(0, 19).replace('T', ' ') + 'Z';
+  if (ts == null) return '—';
+  const t = new Date(ts);
+  if (Number.isNaN(t.getTime())) return '—';
+  return t.toISOString().slice(0, 19).replace('T', ' ') + 'Z';
 }
 function fmtDateTimeLocal(ts) {
   const d = new Date(ts);
