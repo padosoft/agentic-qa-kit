@@ -1,0 +1,443 @@
+/**
+ * `aqa report` — renders the on-disk run artifacts (`events.jsonl` +
+ * `findings.jsonl`) into a Markdown summary and a stable JSON view for
+ * downstream dashboards.
+ *
+ * Loose contract (intentional, see also `runRun`):
+ *  - `aqa run` writes events + findings, NOT a `run.json` (the canonical
+ *    Run shape is reconstructed from the audit chain). `aqa report` does
+ *    that reconstruction here from the first `run_started` and last
+ *    `run_finished` events so reports remain replayable from the audit
+ *    trail alone, without coupling reporter output to a new sidecar file.
+ *  - Reports are written into the same run directory so a junior can hand
+ *    a single `runDir` to a teammate and get the whole story (events,
+ *    findings, replay artifacts, plus the rendered report).
+ */
+
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { renderJson, renderMarkdown } from '@aqa/reporter';
+import { Finding, Run } from '@aqa/schemas';
+
+export type ReportFormat = 'md' | 'json' | 'both';
+
+// Mirrors @aqa/schemas LongSlug exactly: SlugPattern + max length 256.
+// Previous v1.9 iteration used a looser /^[a-z0-9-]{1,80}$/ that both
+// capped at 80 instead of 256 AND allowed leading/trailing dashes plus
+// `--` runs — so a malformed --run-id could pass this guard yet later
+// fail at a Finding.parse() site. Pattern + length checked separately
+// so the error message can distinguish "bad characters" from "too long"
+// (helpful for hash-suffixed run ids on the edge of the cap).
+const RUN_ID_RE = /^[a-z0-9](?:-?[a-z0-9])*$/;
+const RUN_ID_MAX_LEN = 256;
+
+export interface ReportOptions {
+  root: string;
+  /** Run id (== directory name under `.aqa/runs/`). Omit to use the latest run. */
+  runId?: string;
+  /** Default 'both'. Controls which artifacts are written. */
+  format?: ReportFormat;
+}
+
+export interface ReportOk {
+  ok: true;
+  runId: string;
+  runDir: string;
+  files: string[];
+  findingsCount: number;
+}
+
+export interface ReportErr {
+  ok: false;
+  error: string;
+}
+
+export type ReportResult = ReportOk | ReportErr;
+
+export function runReport(opts: ReportOptions): ReportResult {
+  const format: ReportFormat = opts.format ?? 'both';
+  if (format !== 'md' && format !== 'json' && format !== 'both') {
+    return {
+      ok: false,
+      error: `report: --format must be md | json | both, got "${String(format)}"`,
+    };
+  }
+  const runsRoot = join(opts.root, '.aqa', 'runs');
+  if (!existsSync(runsRoot)) {
+    return {
+      ok: false,
+      error: `report: no runs directory at ${runsRoot} — run \`aqa run --profile smoke\` first`,
+    };
+  }
+  const runIdResolved = opts.runId ?? latestRunId(runsRoot);
+  if (!runIdResolved) {
+    return {
+      ok: false,
+      error: `report: no runs found under ${runsRoot} — run \`aqa run --profile smoke\` first`,
+    };
+  }
+  // Defense-in-depth: a `--run-id` of `../../../etc/passwd` (or similar)
+  // would otherwise resolve outside `.aqa/runs/`. The schema treats run
+  // IDs as LongSlug; mirror that constraint at the CLI boundary so a
+  // typo or malicious input can't drive writes anywhere outside the
+  // intended directory.
+  if (runIdResolved.length > RUN_ID_MAX_LEN) {
+    return {
+      ok: false,
+      error: `report: invalid run id — exceeds ${RUN_ID_MAX_LEN}-char LongSlug cap (got ${runIdResolved.length})`,
+    };
+  }
+  if (!RUN_ID_RE.test(runIdResolved)) {
+    return {
+      ok: false,
+      error: `report: invalid run id "${runIdResolved}" — must match ${RUN_ID_RE.source}`,
+    };
+  }
+  const runDir = join(runsRoot, runIdResolved);
+  if (!safeIsDir(runDir)) {
+    return { ok: false, error: `report: run directory not found: ${runDir}` };
+  }
+  // Refuse symlinked run dirs. A previous run (or an attacker with FS
+  // write under .aqa/runs/) could leave a symlink pointing outside the
+  // project; `report.md` / `report.json` writes would then land
+  // wherever the link points. lstatSync (not statSync) so the test
+  // doesn't transparently follow the link.
+  try {
+    if (lstatSync(runDir).isSymbolicLink()) {
+      return {
+        ok: false,
+        error: `report: refusing to write into symlinked run directory ${runDir}`,
+      };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: cannot stat run directory ${runDir}: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const eventsPath = join(runDir, 'events.jsonl');
+  // Missing artifacts → fail-fast. A silent empty report on a corrupted
+  // run dir hides the real problem (the run never wrote its audit trail).
+  if (!existsSync(eventsPath)) {
+    return {
+      ok: false,
+      error: `report: events.jsonl is missing at ${eventsPath} — run is incomplete or corrupted`,
+    };
+  }
+  let events: ReadonlyArray<Record<string, unknown>>;
+  try {
+    events = readJsonl(eventsPath);
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: cannot read events.jsonl: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const findingsPath = join(runDir, 'findings.jsonl');
+  if (!existsSync(findingsPath)) {
+    return {
+      ok: false,
+      error: `report: findings.jsonl is missing at ${findingsPath} — run is incomplete or corrupted`,
+    };
+  }
+  let findings: readonly Finding.Finding[];
+  try {
+    findings = readJsonl(findingsPath).map((raw, idx) => {
+      const parsed = Finding.Finding.safeParse(raw);
+      if (!parsed.success) {
+        throw new Error(`findings.jsonl line ${idx + 1}: ${parsed.error.message}`);
+      }
+      return parsed.data;
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: cannot read findings.jsonl: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const runDraft = reconstructRun({
+    runId: runIdResolved,
+    runDir,
+    events,
+    findingsCount: findings.length,
+  });
+  // Validate the reconstructed Run against the canonical schema before
+  // handing it to the renderers. reconstructRun could in theory produce
+  // a Run.parse-incompatible shape (e.g. terminal state with missing
+  // finished_at if the audit chain itself is malformed) — surfacing that
+  // as a structured error keeps `report.json` consumers safe instead of
+  // shipping a JSON the admin UI silently rejects later.
+  const runParsed = Run.Run.safeParse(runDraft);
+  if (!runParsed.success) {
+    return {
+      ok: false,
+      error: `report: reconstructed run failed schema validation (audit chain is malformed): ${runParsed.error.message.split('\n')[0]}`,
+    };
+  }
+  const run = runParsed.data;
+
+  const written: string[] = [];
+  // Writes can fail (read-only FS, disk full, permission). Return a
+  // structured error rather than letting the exception escape into the
+  // CLI's top-level unhandled-error path so callers get a clean message
+  // plus an exit code derived from the structured result.
+  // Per-file symlink check: even with a non-symlinked run dir, a
+  // pre-existing `report.md`/`report.json` symlink would be followed
+  // by writeFileSync and let an attacker (or a prior run) redirect the
+  // writes outside the project. lstat each target before writing.
+  try {
+    if (format === 'md' || format === 'both') {
+      const mdPath = join(runDir, 'report.md');
+      if (existsSync(mdPath) && lstatSync(mdPath).isSymbolicLink()) {
+        return {
+          ok: false,
+          error: `report: refusing to overwrite symlinked report file ${mdPath}`,
+        };
+      }
+      writeFileSync(mdPath, renderMarkdown({ run, findings }), 'utf8');
+      written.push(mdPath);
+    }
+    if (format === 'json' || format === 'both') {
+      const jsonPath = join(runDir, 'report.json');
+      if (existsSync(jsonPath) && lstatSync(jsonPath).isSymbolicLink()) {
+        return {
+          ok: false,
+          error: `report: refusing to overwrite symlinked report file ${jsonPath}`,
+        };
+      }
+      writeFileSync(
+        jsonPath,
+        `${JSON.stringify(renderJson({ run, findings }), null, 2)}\n`,
+        'utf8',
+      );
+      written.push(jsonPath);
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: cannot write report file: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  return {
+    ok: true,
+    runId: runIdResolved,
+    runDir,
+    files: written,
+    findingsCount: findings.length,
+  };
+}
+
+function latestRunId(runsRoot: string): string | undefined {
+  let entries: string[];
+  try {
+    entries = readdirSync(runsRoot);
+  } catch {
+    return undefined;
+  }
+  // Pick by file mtime, not lexical name. `aqa run --seed` produces
+  // hash-based IDs (`run-<sha>`) that don't sort by recency. mtime is
+  // monotonic enough for "the most recent run" semantics — lexical name
+  // is only used as a deterministic tie-breaker (same-millisecond runs).
+  //
+  // Filter: only consider directories that look like actual runs
+  // (presence of events.jsonl, the canonical run-start marker). Without
+  // this, an unrelated subdirectory under `.aqa/runs/` — or a symlink
+  // whose target's mtime is newer than any real run — would be selected
+  // by mtime and either fail with a confusing error or accidentally
+  // generate a report for the wrong directory. Also reject symlinks at
+  // the dir-entry level for the same reason as the symlink check in
+  // runReport: writes into a symlinked dir leak outside the project.
+  const candidates: Array<{ name: string; mtimeMs: number }> = [];
+  for (const name of entries) {
+    if (!RUN_ID_RE.test(name) || name.length > RUN_ID_MAX_LEN) continue;
+    const dir = join(runsRoot, name);
+    try {
+      const lst = lstatSync(dir);
+      if (lst.isSymbolicLink()) continue;
+      if (!lst.isDirectory()) continue;
+      if (!existsSync(join(dir, 'events.jsonl'))) continue;
+      const st = statSync(dir);
+      candidates.push({ name, mtimeMs: st.mtimeMs });
+    } catch {
+      // ignore entries we can't stat (broken symlinks, races)
+    }
+  }
+  candidates.sort((a, b) => {
+    if (b.mtimeMs !== a.mtimeMs) return b.mtimeMs - a.mtimeMs;
+    return b.name.localeCompare(a.name);
+  });
+  return candidates[0]?.name;
+}
+
+function safeIsDir(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function readJsonl(path: string): Array<Record<string, unknown>> {
+  // Caller has already confirmed the file exists — this helper only
+  // returns [] for an empty file (legitimate "zero events" case),
+  // never for a missing one.
+  // Strict: a non-empty line that parses as valid JSON but isn't a
+  // plain object (e.g. `null`, `[]`, `"x"`, `42`) is rejected. Silently
+  // dropping such lines would turn a corrupted file into a seemingly
+  // successful report.
+  const text = readFileSync(path, 'utf8');
+  const out: Array<Record<string, unknown>> = [];
+  let lineNo = 0;
+  for (const raw of text.split('\n')) {
+    lineNo += 1;
+    const line = raw.trim();
+    if (!line) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch (e) {
+      throw new Error(`${path} line ${lineNo}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      // typeof null === 'object', so explicit null branch.
+      const got = parsed === null ? 'null' : Array.isArray(parsed) ? 'array' : typeof parsed;
+      throw new Error(`${path} line ${lineNo}: expected a JSON object, got ${got}`);
+    }
+    out.push(parsed as Record<string, unknown>);
+  }
+  return out;
+}
+
+interface ReconstructInput {
+  runId: string;
+  runDir: string;
+  events: ReadonlyArray<Record<string, unknown>>;
+  findingsCount: number;
+}
+
+function reconstructRun(input: ReconstructInput): Run.Run {
+  // Best-effort reconstruction from the audit chain — see file header. The
+  // reporter only reads a small subset of Run fields, but we still build the
+  // full schema-conformant object so the JSON report stays valid for the
+  // admin UI and any external dashboard.
+  const { runId, runDir, events, findingsCount } = input;
+  const started = pickEvent(events, 'run_started');
+  const finished = pickEvent(events, 'run_finished');
+
+  const startedAt = readString(started, 'ts') ?? new Date(0).toISOString();
+  const finishedAt = readString(finished, 'ts');
+  const profile = readPayloadString(started, 'profile') ?? 'unknown';
+  const project = readPayloadString(started, 'project') ?? 'unknown';
+  const scenariosRun = readPayloadNumber(finished, 'scenarios_run') ?? 0;
+  const totalsFindings = readPayloadNumber(finished, 'findings') ?? findingsCount;
+
+  const state: Run.Run['state'] = deriveState(finished, scenariosRun);
+
+  const run: Run.Run = {
+    schema_version: '1',
+    id: runId,
+    started_at: startedAt,
+    ...(finishedAt ? { finished_at: finishedAt } : {}),
+    state,
+    project,
+    profile,
+    execution_mode: 'orchestrator',
+    config_snapshot: {
+      profile,
+      execution_mode: 'orchestrator',
+      packs: [],
+      // Synthetic placeholder: this report path doesn't recompute the
+      // config hash from disk (the canonical hash is computed by the
+      // runner at run-time). The admin UI displays config_hash in
+      // replay copy, so an all-zeros value will be visible — users
+      // viewing a CLI-rendered report.json should treat this hash as
+      // a "not computed" sentinel, not a real digest. Encoded as 64
+      // zeros (a valid Sha256 by shape) so the JSON still passes
+      // Run.parse().
+      config_hash: '0'.repeat(64),
+    },
+    totals: {
+      scenarios: scenariosRun,
+      findings: totalsFindings,
+      probes: 0,
+      llm_tokens_in: 0,
+      llm_tokens_out: 0,
+      llm_cost_usd: 0,
+    },
+    artifact_dir: runDir,
+  };
+  return run;
+}
+
+function deriveState(
+  finished: Record<string, unknown> | undefined,
+  scenariosRun: number,
+): Run.Run['state'] {
+  // `runRun` writes `run_finished` on success AND on most failure paths
+  // (pack errors, scenario errors, missing scenarios, unsafe paths, runtime
+  // errors, zero scenarios). Treat any non-zero error counter — or a run
+  // that completed zero scenarios — as `failed` so the report doesn't
+  // mislabel broken runs as successes.
+  if (!finished) return 'running';
+  const errorKeys = [
+    'pack_errors',
+    'scenario_errors',
+    'missing_scenarios',
+    'unsafe_paths',
+    'runtime_errors',
+  ] as const;
+  for (const k of errorKeys) {
+    const v = readPayloadNumber(finished, k);
+    if (typeof v === 'number' && v > 0) return 'failed';
+  }
+  if (scenariosRun === 0) return 'failed';
+  return 'succeeded';
+}
+
+function pickEvent(
+  events: ReadonlyArray<Record<string, unknown>>,
+  kind: string,
+): Record<string, unknown> | undefined {
+  // run_started: first match; run_finished: last (a re-run within the same
+  // dir would have appended a new finalization line). Both kinds appear at
+  // most once today, but the lookup stays defensive.
+  if (kind === 'run_finished') {
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i]?.kind === kind) return events[i];
+    }
+    return undefined;
+  }
+  for (const e of events) {
+    if (e.kind === kind) return e;
+  }
+  return undefined;
+}
+
+function readString(obj: Record<string, unknown> | undefined, key: string): string | undefined {
+  const v = obj?.[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+function readPayloadString(
+  obj: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const payload = obj?.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  const v = (payload as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+function readPayloadNumber(
+  obj: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const payload = obj?.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  const v = (payload as Record<string, unknown>)[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}

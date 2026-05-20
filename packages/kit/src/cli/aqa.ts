@@ -4,6 +4,7 @@ import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
+import { runReport } from '../commands/report.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 
@@ -32,6 +33,8 @@ const VALUE_FLAGS = new Set([
   'license',
   'targets',
   'project-name',
+  'run-id',
+  'format',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -93,6 +96,7 @@ ${bold('Commands')}
   install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md
                                     plus per-agent skills under .claude/ .agents/ .gemini/ .github/
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
+  report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
                                     — this path is only present in the source repo, not in the npm tarball)
@@ -104,6 +108,8 @@ ${bold('Common options')}
   --seed <string>        (run) deterministic run_id seed — useful for replay
   --targets <list>       (install-agent-files) comma-separated targets: claude,codex,gemini,copilot
   --project-name <name>  (install-agent-files) override the slug embedded in instruction files
+  --run-id <id>          (report) target a specific run; default = latest
+  --format <fmt>         (report) md | json | both (default: both)
   --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
   --description <text>   (pack new) one-line summary written into the manifest
   --author <name>        (pack new) manifest author field
@@ -254,6 +260,37 @@ async function main(): Promise<number> {
         console.info(`    ${yellow('⚠ warnings:')}`);
         for (const w of result.warnings) console.info(`      ${yellow('·')} ${w}`);
       }
+      return 0;
+    }
+    case 'report': {
+      printHeader('report');
+      if (args.flags.has('run-id') && !args.values.has('run-id')) {
+        console.error(red('aqa report: --run-id requires a value'));
+        return 1;
+      }
+      if (args.flags.has('format') && !args.values.has('format')) {
+        console.error(red('aqa report: --format requires a value'));
+        return 1;
+      }
+      const reportOpts: Parameters<typeof runReport>[0] = { root: cwd };
+      if (args.values.has('run-id')) reportOpts.runId = args.values.get('run-id') ?? '';
+      if (args.values.has('format')) {
+        const fmt = args.values.get('format') ?? '';
+        if (fmt !== 'md' && fmt !== 'json' && fmt !== 'both') {
+          console.error(red(`aqa report: --format must be md | json | both, got "${fmt}"`));
+          return 1;
+        }
+        reportOpts.format = fmt;
+      }
+      const result = runReport(reportOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} ${bold(result.runId)}`);
+      console.info(`    ${dim('runDir:    ')}${result.runDir}`);
+      console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
+      for (const f of result.files) console.info(`    ${green('+')} ${f}`);
       return 0;
     }
     case 'pack': {
