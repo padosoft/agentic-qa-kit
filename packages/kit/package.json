@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@aqa/auth": "workspace:*",
+    "@aqa/pack-author": "workspace:*",
     "@aqa/pack-loader": "workspace:*",
     "@aqa/runner": "workspace:*",
     "@aqa/schemas": "workspace:*",
