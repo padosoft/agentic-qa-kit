@@ -96,7 +96,7 @@ export function runDoctor(opts: DoctorOptions): DoctorResult {
       : 'no agent instruction files',
     suggestion: docsPresent
       ? undefined
-      : 'Run `aqa install-agent-files` (Task 4) to scaffold agent-specific instructions.',
+      : 'Run `aqa install-agent-files --targets claude,codex,gemini,copilot` to scaffold agent-specific instructions.',
   });
 
   return { profile, checks, worst: worstOf(checks) };
