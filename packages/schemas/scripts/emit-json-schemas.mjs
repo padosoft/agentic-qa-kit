@@ -66,6 +66,7 @@ const modules = [
   { file: 'cost-summary.js', exportName: 'CostSummary', schemaName: 'cost-summary' },
   { file: 'tenancy.js', exportName: 'Org', schemaName: 'org' },
   { file: 'tenancy.js', exportName: 'ProjectRef', schemaName: 'project-ref' },
+  { file: 'sso-config.js', exportName: 'SsoConfig', schemaName: 'sso-config' },
 ];
 
 /**

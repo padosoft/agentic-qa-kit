@@ -11,6 +11,7 @@ import type {
   Run,
   SavedView,
   Scenario,
+  SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
 import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
@@ -141,6 +142,10 @@ export class PostgresStore implements StoreProvider {
 
   async listUsers(): Promise<StoreUserDirectoryEntry[]> {
     this.notImpl('listUsers');
+  }
+
+  async loadSsoConfig(): Promise<SsoConfig.SsoConfig | null> {
+    this.notImpl('loadSsoConfig');
   }
 
   async listNotifications(): Promise<Notification.Notification[]> {

@@ -78,6 +78,29 @@ describe('MemoryStore', () => {
     await s.close();
     assert.equal((await s.listRuns()).length, 0);
   });
+
+  it('stores and loads SSO config snapshot', async () => {
+    const s = new MemoryStore();
+    const sampleConfig = {
+      schema_version: '1' as const,
+      provider: 'oidc',
+      enabled: true,
+      issuer_url: 'https://id.example.com/realms/main',
+      client_id: 'aqa-admin',
+      client_secret_set: true,
+      allowed_email_domains: ['example.com'],
+      claim_mappings: {
+        'user.id': 'sub',
+        'user.email': 'email',
+        'user.role': 'groups[0]',
+      },
+    };
+    s.__test_seedSsoConfig(sampleConfig);
+    const loaded = await s.loadSsoConfig();
+    assert.deepEqual(loaded, sampleConfig);
+    await s.close();
+    assert.equal(await s.loadSsoConfig(), null);
+  });
 });
 
 describe('PostgresStore (v0.3 scaffold)', () => {
@@ -162,5 +185,6 @@ describe('PostgresStore (v0.3 scaffold)', () => {
       /not implemented/,
     );
     await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
+    await assert.rejects(() => s.loadSsoConfig(), /not implemented/);
   });
 });

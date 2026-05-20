@@ -788,6 +788,73 @@ probes: []
     });
   });
 
+  describe('SSO config (slice 4h)', () => {
+    const sampleConfig = {
+      schema_version: '1' as const,
+      provider: 'oidc',
+      enabled: true,
+      issuer_url: 'https://id.example.com/realms/main',
+      client_id: 'aqa-admin',
+      client_secret_set: true,
+      allowed_email_domains: ['example.com'],
+      claim_mappings: {
+        'user.id': 'sub',
+        'user.email': 'email',
+        'user.role': 'roles[0]',
+      },
+    };
+
+    it('GET /api/sso/config returns null when unset', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/sso/config');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { config: unknown };
+      assert.equal(body.config, null);
+    });
+
+    it('GET /api/sso/config returns schema-validated config', async () => {
+      const c = ctx();
+      (
+        c.store as unknown as { __test_seedSsoConfig: (cfg: typeof sampleConfig) => void }
+      ).__test_seedSsoConfig(sampleConfig);
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/sso/config');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 200);
+      const body = res?.body as { config: typeof sampleConfig | null };
+      assert.deepEqual(body.config, sampleConfig);
+    });
+
+    it('GET /api/sso/config returns 500 on schema-invalid cached config', async () => {
+      const c = ctx();
+      (c.store as unknown as { __test_seedSsoConfig: (cfg: unknown) => void }).__test_seedSsoConfig(
+        {
+          schema_version: '1',
+          provider: 'oidc',
+          enabled: true,
+          issuer_url: 'not-a-url',
+          client_id: 'aqa-admin',
+          client_secret_set: true,
+          allowed_email_domains: ['example.com'],
+          claim_mappings: { user: 'sub' },
+        },
+      );
+      const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/sso/config');
+      const res = await route?.handle({ headers: {}, params: {} }, c);
+      assert.equal(res?.status, 500);
+      const body = res?.body as { error: string };
+      assert.match(body.error, /sso config failed schema validation/i);
+    });
+
+    it('requires settings:read', () => {
+      const api = makeApi();
+      assert.equal(
+        api.find((r) => r.method === 'GET' && r.path === '/api/sso/config')?.requires,
+        'settings:read',
+      );
+    });
+  });
+
   // ============ v1.7 slice 4d — Agents ============
 
   describe('Agents (slice 4d)', () => {

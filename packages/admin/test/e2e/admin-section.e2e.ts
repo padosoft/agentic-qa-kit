@@ -3,9 +3,7 @@ import { expect, test } from '@playwright/test';
 /**
  * v1.7 slice 4f — Admin section pages (API tokens, Org & project,
  * Audit-admin) now read from the existing server endpoints with
- * graceful fixture fallback. Users/Roles/SSO are intentionally
- * deferred — no server scaffolding exists for them yet (would
- * require new schemas + routes), so the slice ships what's wirable.
+ * graceful fixture fallback.
  */
 
 async function gotoNav(page: import('@playwright/test').Page, label: string): Promise<void> {
@@ -125,5 +123,73 @@ test.describe('Admin-section wire-up', () => {
     await gotoNav(page, 'Audit (admin)');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Audit/i);
     await expect(page.locator('text=1 events · live from /api/audit (admin)')).toBeVisible();
+  });
+
+  test('SSO page fetches /api/sso/config and renders live config fields', async ({ page }) => {
+    await page.route('**/api/sso/config**', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          config: {
+            schema_version: '1',
+            provider: 'oidc',
+            enabled: true,
+            issuer_url: 'https://id.example.com/realms/main',
+            client_id: 'aqa-admin-live',
+            client_secret_set: true,
+            allowed_email_domains: ['example.com', 'internal.internal'],
+            claim_mappings: {
+              'user.id': 'sub',
+              'user.email': 'email',
+              'user.role': 'roles[0]',
+            },
+          },
+        }),
+      });
+    });
+    await gotoNav(page, 'SSO');
+    await expect(page.locator('h1, .page-title').first()).toContainText(/Single Sign-On/i);
+    await expect(page.locator('input[value*="https://id.example.com/realms/main"]')).toBeVisible();
+    await expect(page.locator('input[value="aqa-admin-live"]')).toBeVisible();
+    await expect(page.locator('text="example.com"')).toBeVisible();
+    await expect(page.locator('text="internal.internal"')).toBeVisible();
+    await expect(page.locator('text=user.id')).toBeVisible();
+    await expect(page.locator('text=roles[0]')).toBeVisible();
+  });
+
+  test('SSO page falls back to fixture config when /api/sso/config is unreachable', async ({
+    page,
+  }) => {
+    await page.route('**/api/sso/config**', (route) => route.abort('failed'));
+    await gotoNav(page, 'SSO');
+    await expect(page.locator('h1, .page-title').first()).toContainText(/Single Sign-On/i);
+    // Fallback config is still rendered from fixture fixtures.
+    await expect(page.locator('text="padosoft.com"')).toBeVisible();
+    await expect(
+      page.locator('input[value*="https://auth.padosoft.com/realms/padosoft"]'),
+    ).toBeVisible();
+  });
+
+  test('SSO page renders explicit not-configured state when /api/sso/config returns null', async ({
+    page,
+  }) => {
+    await page.route('**/api/sso/config**', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: null }),
+      });
+    });
+    await gotoNav(page, 'SSO');
+    await expect(page.locator('h1, .page-title').first()).toContainText(/Single Sign-On/i);
+    await expect(page.locator('text=SSO is not configured')).toBeVisible();
+    await expect(
+      page.locator('text=Enable SSO in your identity provider settings before saving.'),
+    ).toBeVisible();
+    await expect(page.locator('input[value=""]')).toHaveCount(2);
+    await expect(page.locator('input[value="not configured"]')).toBeVisible();
   });
 });

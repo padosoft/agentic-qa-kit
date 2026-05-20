@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "provider": "oidc",
+  "enabled": true,
+  "issuer_url": "https://auth.example.com/realms/aqa",
+  "client_id": "aqa-admin",
+  "client_secret_set": true,
+  "allowed_email_domains": ["example.com", "acme.org"],
+  "claim_mappings": {
+    "user.id": "sub",
+    "user.email": "email",
+    "user.name": "name",
+    "user.role": "groups[0]"
+  }
+}

@@ -11,6 +11,7 @@ import type {
   Run,
   SavedView,
   Scenario,
+  SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
 
@@ -166,6 +167,11 @@ export interface StoreProvider {
   // invite/role-change flows; for now `listUsers` is all the page
   // needs.
   listUsers(): Promise<StoreUserDirectoryEntry[]>;
+
+  // ----- SSO config (slice 4h) -----
+  // Backing config for the Admin SSO page. The secret is intentionally
+  // not modeled as writable output from this method.
+  loadSsoConfig(): Promise<SsoConfig.SsoConfig | null>;
 
   // ----- Tenancy -----
   listOrgs(): Promise<Tenancy.Org[]>;

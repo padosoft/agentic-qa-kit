@@ -25,7 +25,6 @@ describe('allows', () => {
 
 describe('OidcAdapter (scaffold)', () => {
   it('refuses empty issuer / client_id at construction', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: testing runtime guard
     assert.throws(
       () =>
         new OidcAdapter({
@@ -33,7 +32,7 @@ describe('OidcAdapter (scaffold)', () => {
           client_id: '',
           client_secret_env: '',
           redirect_uri: '',
-        } as any),
+        }),
     );
   });
   it('authorizeUrl throws "not implemented" until Task 19', () => {

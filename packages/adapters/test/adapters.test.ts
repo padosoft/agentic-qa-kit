@@ -26,9 +26,11 @@ describe('adapter registry', () => {
     assert.equal(adapterByTarget('copilot'), copilotAdapter);
   });
 
-  // biome-ignore lint/suspicious/noExplicitAny: testing runtime guard for invalid input
   it('adapterByTarget throws for unknown', () => {
-    assert.throws(() => adapterByTarget('mistral' as any), /unknown target/);
+    assert.throws(
+      () => adapterByTarget('mistral' as unknown as Parameters<typeof adapterByTarget>[0]),
+      /unknown target/,
+    );
   });
 });
 
