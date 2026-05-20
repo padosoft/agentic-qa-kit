@@ -12043,13 +12043,22 @@ function PageUsers({ onNavigate }) {
                   .map((part) => part[0]?.toUpperCase() ?? '')
                   .join('') || '?'
               : '?';
+          // PR #42 Copilot iter 2: map server's `suspended` to the
+          // UI's `disabled` (StatusBadge has explicit styling for
+          // disabled, not suspended).
+          const status =
+            u.status === 'suspended'
+              ? 'disabled'
+              : typeof u.status === 'string'
+                ? u.status
+                : 'active';
           return {
             id: u.id,
             name,
             initials,
             email: u.email ?? '',
             role: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles[0] : 'viewer',
-            status: u.status ?? 'active',
+            status,
             last_active_at: u.last_active_at ?? null,
           };
         });

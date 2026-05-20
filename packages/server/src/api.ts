@@ -1,5 +1,5 @@
-import { rolePermissions } from '@aqa/auth';
-import type { Permission, Role, User, allows } from '@aqa/auth';
+import { Permission, rolePermissions } from '@aqa/auth';
+import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
 import type { PackNewErrorCode } from '@aqa/kit';
 import {
@@ -874,32 +874,13 @@ export function makeApi(): ApiHandler[] {
       async handle(_req, _ctx) {
         const roles = Object.entries(rolePermissions).map(([role, perms]) => ({
           role: role as Role,
-          permissions: perms as ReadonlyArray<Permission>,
+          permissions: perms as ReadonlyArray<PermissionType>,
         }));
-        // Surface the full Permission enum separately so the admin
-        // grid can render rows for every permission, including ones
-        // only reachable through the `admin:everything` wildcard
-        // (e.g. `settings:edit`). PR #42 Copilot iter 1.
-        const all_permissions = [
-          'runs:read',
-          'runs:create',
-          'findings:read',
-          'findings:edit',
-          'risk-map:read',
-          'risk-map:edit',
-          'profiles:read',
-          'profiles:edit',
-          'packs:read',
-          'packs:install',
-          'agents:install',
-          'agents:read',
-          'agents:edit',
-          'audit:read',
-          'cost:read',
-          'settings:read',
-          'settings:edit',
-          'admin:everything',
-        ] as const satisfies ReadonlyArray<Permission>;
+        // Derive the full enum from @aqa/auth at runtime (PR #42
+        // Copilot iter 2) — `Permission.options` is the canonical
+        // string[] from the Zod enum. Hardcoded copies drifted
+        // every time the enum gained an entry.
+        const all_permissions = Permission.options as ReadonlyArray<PermissionType>;
         return asResponse({ roles, all_permissions });
       },
     },

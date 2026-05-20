@@ -14,6 +14,19 @@ import type {
   Tenancy,
 } from '@aqa/schemas';
 
+// Directory entry for the admin's Users page — shared by every
+// StoreProvider adapter so the store and admin agree on field names
+// (`display_name`, `last_active_at`, etc.). PR #42 Copilot iter 2:
+// extracted from inline-anon types in `listUsers` and `MemoryStore`.
+export interface StoreUserDirectoryEntry {
+  id: string;
+  email: string;
+  display_name: string;
+  roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+  status?: 'active' | 'invited' | 'suspended';
+  last_active_at?: string;
+}
+
 /**
  * Persistence boundary for the AQA stack. The runner persists runs +
  * events + findings (write side); the server uses the read methods to
@@ -152,16 +165,7 @@ export interface StoreProvider {
   // (SSO/OIDC) — read-only from the store. A future slice can add
   // invite/role-change flows; for now `listUsers` is all the page
   // needs.
-  listUsers(): Promise<
-    Array<{
-      id: string;
-      email: string;
-      display_name: string;
-      roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
-      status?: 'active' | 'invited' | 'suspended';
-      last_active_at?: string;
-    }>
-  >;
+  listUsers(): Promise<StoreUserDirectoryEntry[]>;
 
   // ----- Tenancy -----
   listOrgs(): Promise<Tenancy.Org[]>;
