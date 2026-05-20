@@ -11168,6 +11168,24 @@ function PageReplay({ onNavigate }) {
 }
 
 // ---------------- Audit log ----------------
+// Shared normalizer: maps @aqa/schemas Event records onto the
+// AuditChainViewer's demo-chain shape. Used by both PageAudit and
+// PageAdminAudit. PR #40 Copilot iter 4 (de-duplication).
+function normalizeAuditEventsForViewer(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map((ev) => ({
+    at: ev.ts ?? ev.at ?? '',
+    actor:
+      typeof ev.actor === 'string'
+        ? ev.actor
+        : ev.actor?.id || ev.actor?.type || 'system',
+    kind: ev.kind ?? 'event',
+    payload: ev.payload ?? {},
+    prev_hash: ev.prev_hash ?? '0'.repeat(64),
+    hash: ev.hash ?? '0'.repeat(64),
+  }));
+}
+
 function PageAudit({ onNavigate }) {
   // v1.7 slice 4e — wire to /api/audit (audit:read). The server
   // route returns Event records as-stored — hash verification is the
@@ -11227,27 +11245,8 @@ function PageAudit({ onNavigate }) {
         }
       />
       <AuditChainViewer
-        // PR #39 Copilot iter 1: server Event has {ts, actor:{type,id},
-        // prev_hash} but AuditChainViewer's demo shape is {at, actor:
-        // string, prev_hash}. Normalize the server response before
-        // handing it to the viewer; otherwise the viewer breaks on
-        // actor.toLowerCase() / reads ev.at. An empty live array is
-        // ALSO a valid loaded state (no fixture fallback) — use
-        // liveEvents !== null as the "loaded" signal.
         demoGood={
-          liveEvents !== null
-            ? liveEvents.map((ev) => ({
-                at: ev.ts ?? ev.at ?? '',
-                actor:
-                  typeof ev.actor === 'string'
-                    ? ev.actor
-                    : ev.actor?.id || ev.actor?.type || 'system',
-                kind: ev.kind ?? 'event',
-                payload: ev.payload ?? {},
-                prev_hash: ev.prev_hash ?? '0'.repeat(64),
-                hash: ev.hash ?? '0'.repeat(64),
-              }))
-            : AUDIT_EVENTS_GOOD
+          liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
         }
         demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
       />
@@ -12438,7 +12437,11 @@ function PageTokens({ onNavigate }) {
               : 'user',
           last_used: t.last_used_at ?? t.last_used ?? null,
           scopes: Array.isArray(t.scopes) ? t.scopes : [],
-          created_at: t.created_at ?? new Date().toISOString(),
+          // PR #40 Copilot iter 4: leave created_at null when the
+          // server omits it — defaulting to "now" was misleading
+          // (showed a fake "just created" date for any record where
+          // the timestamp was lost in transit).
+          created_at: t.created_at ?? null,
         }));
         setTokens(adapted);
       } catch {
@@ -12578,14 +12581,16 @@ function PageTokens({ onNavigate }) {
             <div className="field-row">
               <label className="field-label">Scopes</label>
               <div className="row gap-4" style={{ flexWrap: 'wrap' }}>
+                {/* PR #40 Copilot iter 4: chips mirror the @aqa/schemas
+                    ApiTokenScope enum so a future create-token POST
+                    can pass these straight through. */}
                 {[
                   'runs:read',
-                  'runs:write',
+                  'runs:create',
                   'findings:read',
-                  'findings:write',
+                  'findings:edit',
                   'audit:read',
-                  'packs:install',
-                  'admin',
+                  'admin:everything',
                 ].map((s) => (
                   <span key={s} className="chip">
                     {s}
@@ -12651,19 +12656,7 @@ function PageAdminAudit({ onNavigate }) {
       />
       <AuditChainViewer
         demoGood={
-          liveEvents !== null
-            ? liveEvents.map((ev) => ({
-                at: ev.ts ?? ev.at ?? '',
-                actor:
-                  typeof ev.actor === 'string'
-                    ? ev.actor
-                    : ev.actor?.id || ev.actor?.type || 'system',
-                kind: ev.kind ?? 'event',
-                payload: ev.payload ?? {},
-                prev_hash: ev.prev_hash ?? '0'.repeat(64),
-                hash: ev.hash ?? '0'.repeat(64),
-              }))
-            : AUDIT_EVENTS_GOOD
+          liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
         }
         demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
       />
