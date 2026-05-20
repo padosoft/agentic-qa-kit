@@ -20,10 +20,10 @@ function canon(value: unknown): string {
     .join(',')}}`;
 }
 
-function makeEvent(prev: string, body: Record<string, unknown>) {
-  const rest = { prev_hash: prev, ...body };
+function makeEvent(prev: string, body: Record<string, unknown>, index: number) {
+  const rest = { ...body };
   const hash = createHash('sha256').update(prev).update(canon(rest)).digest('hex');
-  return { ...rest, hash };
+  return { prev_hash: index === 0 ? null : prev, ...rest, hash };
 }
 
 describe('controls catalog', () => {
@@ -49,17 +49,17 @@ describe('controls catalog', () => {
 
 describe('verifyEventChain', () => {
   it('accepts a well-formed 3-event chain', () => {
-    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 });
-    const e2 = makeEvent(e1.hash, { kind: 'scenario', t: 2 });
-    const e3 = makeEvent(e2.hash, { kind: 'run.end', t: 3 });
+    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 }, 0);
+    const e2 = makeEvent(e1.hash, { kind: 'scenario', t: 2 }, 1);
+    const e3 = makeEvent(e2.hash, { kind: 'run.end', t: 3 }, 2);
     const result = verifyEventChain([e1, e2, e3]);
     assert.equal(result.ok, true);
     assert.equal(result.count, 3);
   });
 
   it('rejects a tampered body', () => {
-    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 });
-    const e2 = makeEvent(e1.hash, { kind: 'scenario', t: 2 });
+    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 }, 0);
+    const e2 = makeEvent(e1.hash, { kind: 'scenario', t: 2 }, 1);
     // mutate body without recomputing hash
     const tampered = { ...e2, kind: 'scenario-evil' };
     const result = verifyEventChain([e1, tampered]);
@@ -68,8 +68,8 @@ describe('verifyEventChain', () => {
   });
 
   it('rejects a broken prev_hash link', () => {
-    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 });
-    const e2 = makeEvent('a'.repeat(64), { kind: 'scenario', t: 2 });
+    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 }, 0);
+    const e2 = makeEvent('a'.repeat(64), { kind: 'scenario', t: 2 }, 1);
     const result = verifyEventChain([e1, e2]);
     assert.equal(result.ok, false);
     assert.equal(result.bad_index, 1);
@@ -78,7 +78,7 @@ describe('verifyEventChain', () => {
 
 describe('parseEventLines', () => {
   it('parses one event per non-empty line', () => {
-    const lines = `${JSON.stringify({ prev_hash: ZERO, hash: 'x', a: 1 })}\n\n${JSON.stringify({ prev_hash: 'x', hash: 'y', a: 2 })}\n`;
+    const lines = `${JSON.stringify({ prev_hash: null, hash: 'x', a: 1 })}\n\n${JSON.stringify({ prev_hash: 'x', hash: 'y', a: 2 })}\n`;
     const events = parseEventLines(lines);
     assert.equal(events.length, 2);
   });

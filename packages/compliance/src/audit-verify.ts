@@ -4,12 +4,14 @@ import { createHash } from 'node:crypto';
  * Hash-chain verification for `events.jsonl` audit logs.
  *
  * Each event line is a JSON object containing at minimum:
- *   - `prev_hash`: sha256 of the previous canonical record (or all-zeros
- *     for the first record)
- *   - `hash`: sha256(prev_hash || canonical(rest)) of the current record
+ *   - `prev_hash`: sha256 of the previous record (or `null` on the
+ *     first record)
+ *   - `hash`: sha256(seed_prev_hash || canonical(rest_without_prev_hash_and_hash))
+ *     of the current record. The first event uses an internal all-zero
+ *     seed as `seed_prev_hash`.
  *
- * `verifyEventChain(lines)` re-walks the chain and returns the index of
- * the first mismatch, or -1 if the chain is intact.
+ * `verifyEventChain(events)` re-walks the chain and returns a structured
+ * result (`ok`, `bad_index`, `reason`, `count`).
  *
  * Why this exists: SOC2 CC7.1/CC7.2 and ISO A.8.15 ask for tamper-evident
  * logging. A hash chain is mechanically verifiable — auditors do not need
@@ -19,7 +21,7 @@ import { createHash } from 'node:crypto';
 const ZERO_HASH = '0'.repeat(64);
 
 export interface AuditEvent {
-  prev_hash: string;
+  prev_hash: string | null;
   hash: string;
   [k: string]: unknown;
 }
@@ -53,15 +55,16 @@ export function verifyEventChain(events: AuditEvent[]): ChainVerifyResult {
     if (!ev) {
       return { ok: false, bad_index: i, reason: 'empty record', count: events.length };
     }
-    if (ev.prev_hash !== expectedPrev) {
+    const expectedField = i === 0 ? null : expectedPrev;
+    if (ev.prev_hash !== expectedField) {
       return {
         ok: false,
         bad_index: i,
-        reason: `prev_hash mismatch (expected ${expectedPrev.slice(0, 12)}…, got ${String(ev.prev_hash).slice(0, 12)}…)`,
+        reason: `prev_hash mismatch (expected ${String(expectedField).slice(0, 12)}…, got ${String(ev.prev_hash).slice(0, 12)}…)`,
         count: events.length,
       };
     }
-    const { hash, ...rest } = ev;
+    const { hash, prev_hash: _prevHash, ...rest } = ev;
     const recomputed = computeHash(expectedPrev, rest);
     if (recomputed !== hash) {
       return {
