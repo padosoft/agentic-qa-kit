@@ -88,6 +88,26 @@ describe('aqa install-agent-files — happy path', () => {
     const claudeMd = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
     assert.match(claudeMd, /my-override/, 'project-name override must be slugified into CLAUDE.md');
   });
+
+  it('caps the slugified project name at 64 chars (Slug.max) — Copilot iter 2', () => {
+    // @aqa/schemas Slug enforces .max(64). A 70-char project name fed into
+    // init/install-agent-files would otherwise produce a name that
+    // `aqa validate` rejects. Cap-then-trim-trailing-dashes keeps the slug
+    // schema-conformant in the worst case.
+    const root = makeTempDir();
+    const result = runInstallAgentFiles({
+      root,
+      targets: 'claude',
+      projectName: 'a'.repeat(70),
+    });
+    assert.equal(result.ok, true);
+    const claudeMd = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
+    // The slugified name appears in CLAUDE.md's header. It must be exactly
+    // 64 'a's, never longer.
+    const match = claudeMd.match(/`(a+)`/);
+    assert.ok(match, 'expected the slugified project name in a backticked token');
+    assert.ok((match?.[1]?.length ?? 0) <= 64, `slug exceeded 64 chars: ${match?.[1]?.length}`);
+  });
 });
 
 describe('aqa install-agent-files — targets validation', () => {

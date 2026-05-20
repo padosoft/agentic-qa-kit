@@ -1,9 +1,15 @@
 import { join } from 'node:path';
-import { type AdapterTarget, renderForTargets } from '@aqa/adapters';
+import { type AdapterTarget, adapters, renderForTargets } from '@aqa/adapters';
 import { lastPathSegment, slugify } from '../cli-utils.js';
 import { type WriteResult, writeFileSafe } from '../fs-utils.js';
 
-const KNOWN_TARGETS: readonly AdapterTarget[] = ['claude', 'codex', 'gemini', 'copilot'];
+// Derive the canonical target list from the adapter registry so adding a
+// new adapter (e.g. opencode) automatically extends `--targets` without
+// requiring a synced edit here. Sorted alphabetically for stable error
+// message ordering.
+const KNOWN_TARGETS: readonly AdapterTarget[] = Object.freeze(
+  [...adapters.map((a) => a.target)].sort(),
+);
 
 export interface InstallAgentFilesOptions {
   root: string;
