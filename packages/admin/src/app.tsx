@@ -11169,13 +11169,13 @@ function PageReplay({ onNavigate }) {
 
 // ---------------- Audit log ----------------
 function PageAudit({ onNavigate }) {
-  // v1.7 slice 4e — wire to /api/audit (audit:read). The server route
-  // returns chain-verified events; in mock mode we fall back to the
-  // hardcoded fixtures (AUDIT_EVENTS_GOOD / _BAD) so the demo stays
-  // usable when no server is reachable. The AuditChainViewer's
-  // schema is whatever the server returns plus its existing demo
-  // demoGood/demoBad shape — we pass the live events as `demoGood`
-  // and clear the bad demo to avoid mixing concerns.
+  // v1.7 slice 4e — wire to /api/audit (audit:read). The server
+  // route returns Event records as-stored — hash verification is the
+  // CLIENT'S job (AuditChainViewer recomputes hashes in the browser
+  // via Web Crypto). In mock mode the fixture fallback keeps the
+  // page usable when no server is reachable.
+  // PR #39 Copilot iter 6: re-check the cancellation guard AFTER
+  // await res.json() so an unmount mid-parse can't setState.
   const [liveEvents, setLiveEvents] = React.useState(null);
   React.useEffect(() => {
     let cancelled = false;
@@ -11186,6 +11186,7 @@ function PageAudit({ onNavigate }) {
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
+        if (cancelled) return;
         if (Array.isArray(body?.events)) setLiveEvents(body.events);
       } catch {
         /* mock mode — leave the fixtures */
@@ -11289,7 +11290,21 @@ function PageCost({ onNavigate }) {
     };
   }, []);
   const mtd = summary?.total_usd ?? COST_DAYS.reduce((a, d) => a + d.usd, 0);
-  const dayCount = COST_DAYS.length;
+  // PR #39 Copilot iter 6: when a live summary is loaded, derive
+  // dayCount from its [from,to] window so avgDay/projected/cum
+  // curves stay consistent with the server's requested range.
+  // Falls back to COST_DAYS.length in mock mode.
+  const dayCount = (() => {
+    if (summary?.from && summary?.to) {
+      const fromMs = new Date(summary.from).getTime();
+      const toMs = new Date(summary.to).getTime();
+      if (Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs >= fromMs) {
+        const days = Math.max(1, Math.ceil((toMs - fromMs) / 86_400_000));
+        return days;
+      }
+    }
+    return COST_DAYS.length;
+  })();
   const avgDay = mtd / dayCount;
   const budget = 250;
   const projection = budget * 1.18; // 18% over by month-end
