@@ -12236,9 +12236,37 @@ function PageSSO({ onNavigate }) {
 
 // ---------------- Org & project ----------------
 function PageOrg({ onNavigate }) {
+  // v1.7 slice 4f — fetch /api/orgs to surface the live org list.
+  // The page's existing UI is still mostly fixture-driven (project
+  // list, branding); the live read lets us update the subtitle so
+  // the page reflects what's actually configured server-side.
+  const [orgs, setOrgs] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/orgs'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.orgs)) setOrgs(body.orgs);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const sub =
+    orgs === null
+      ? 'padosoft'
+      : orgs.length === 0
+        ? 'No orgs configured · using mock org "padosoft"'
+        : orgs.map((o) => o.slug ?? o.name ?? '?').join(', ');
   return (
     <div className="page" data-screen-label="24 Org & project">
-      <PageHeader title="Organization & projects" sub="padosoft" />
+      <PageHeader title="Organization & projects" sub={sub} />
       <div className="split-2">
         <div className="card">
           <div className="card-head">
@@ -12344,32 +12372,59 @@ function PageOrg({ onNavigate }) {
 function PageTokens({ onNavigate }) {
   const [showNew, setShowNew] = React.useState(false);
   const [createdToken, setCreatedToken] = React.useState(null);
-  const tokens = [
-    {
-      id: 'tok_ci',
-      name: 'CI · GitHub Actions',
-      kind: 'service',
-      last_used: '2026-05-18T13:48:00Z',
-      scopes: ['runs:write', 'findings:read'],
-      created_at: '2026-04-12T08:00:00Z',
-    },
-    {
-      id: 'tok_sara',
-      name: 'Sara · CLI laptop',
-      kind: 'user',
-      last_used: '2026-05-18T11:14:00Z',
-      scopes: ['*'],
-      created_at: '2026-04-02T09:00:00Z',
-    },
-    {
-      id: 'tok_audit',
-      name: 'Audit · download bot',
-      kind: 'service',
-      last_used: '2026-05-15T16:04:00Z',
-      scopes: ['audit:read'],
-      created_at: '2026-05-01T00:00:00Z',
-    },
-  ];
+  // v1.7 slice 4f — wire to GET /api/tokens. The server returns
+  // hashed token records (no raw secret); the create flow (POST
+  // /api/tokens) returns the freshly-issued raw token exactly once.
+  // Falls back to a small fixture so mock-data mode still renders.
+  const FALLBACK_TOKENS = React.useMemo(
+    () => [
+      {
+        id: 'tok_ci',
+        name: 'CI · GitHub Actions',
+        kind: 'service',
+        last_used: '2026-05-18T13:48:00Z',
+        scopes: ['runs:write', 'findings:read'],
+        created_at: '2026-04-12T08:00:00Z',
+      },
+      {
+        id: 'tok_sara',
+        name: 'Sara · CLI laptop',
+        kind: 'user',
+        last_used: '2026-05-18T11:14:00Z',
+        scopes: ['*'],
+        created_at: '2026-04-02T09:00:00Z',
+      },
+      {
+        id: 'tok_audit',
+        name: 'Audit · download bot',
+        kind: 'service',
+        last_used: '2026-05-15T16:04:00Z',
+        scopes: ['audit:read'],
+        created_at: '2026-05-01T00:00:00Z',
+      },
+    ],
+    [],
+  );
+  const [tokens, setTokens] = React.useState(FALLBACK_TOKENS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/tokens'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.tokens)) setTokens(body.tokens);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="25 API tokens">
       <PageHeader
@@ -12531,11 +12586,38 @@ function PageTokens({ onNavigate }) {
 
 // ---------------- Admin audit ----------------
 function PageAdminAudit({ onNavigate }) {
+  // v1.7 slice 4f — same /api/audit wire as PageAudit (slice 4e),
+  // just with admin-view copy. Re-checks `cancelled` after the
+  // await res.json() like the other live-fetch pages.
+  const [liveEvents, setLiveEvents] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/audit'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.events)) setLiveEvents(body.events);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="26 Admin audit">
       <PageHeader
         title="Audit log (admin view)"
-        sub="Broader filters · bulk evidence bundle download"
+        sub={
+          liveEvents !== null
+            ? `${liveEvents.length} events · live from /api/audit (admin)`
+            : 'Broader filters · bulk evidence bundle download'
+        }
         actions={
           <button className="btn sm">
             <I.Download size={12} />
@@ -12543,7 +12625,24 @@ function PageAdminAudit({ onNavigate }) {
           </button>
         }
       />
-      <AuditChainViewer demoGood={AUDIT_EVENTS_GOOD} demoBad={AUDIT_EVENTS_BAD} />
+      <AuditChainViewer
+        demoGood={
+          liveEvents !== null
+            ? liveEvents.map((ev) => ({
+                at: ev.ts ?? ev.at ?? '',
+                actor:
+                  typeof ev.actor === 'string'
+                    ? ev.actor
+                    : ev.actor?.id || ev.actor?.type || 'system',
+                kind: ev.kind ?? 'event',
+                payload: ev.payload ?? {},
+                prev_hash: ev.prev_hash ?? '0'.repeat(64),
+                hash: ev.hash ?? '0'.repeat(64),
+              }))
+            : AUDIT_EVENTS_GOOD
+        }
+        demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
+      />
     </div>
   );
 }
