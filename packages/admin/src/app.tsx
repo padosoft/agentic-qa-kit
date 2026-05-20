@@ -11863,24 +11863,24 @@ function PageNotifications({ onNavigate }) {
       cancelled = true;
     };
   }, []);
-  // PR #39 Copilot iter 2: derive kinds dynamically (fixture +
-  // server kinds + whatever's actually in items[]) so a live
-  // notifications payload doesn't hide rows for kinds the static
-  // list didn't anticipate (audit.chain_broken, pack.install_failed,
-  // queue.stuck, user.invited, …).
+  // PR #39 Copilot iter 4: filter base is the @aqa/schemas
+  // NotificationKind enum (the contract the server commits to).
+  // Then union with whatever's actually in items[] so any extras
+  // (legacy fixture rows, future enum additions) still show up.
+  // Previously this mixed fixture-only kinds with server kinds and
+  // presented filters that the server would never produce.
+  const SERVER_NOTIFICATION_KINDS = [
+    'run.failed',
+    'finding.critical',
+    'finding.verified',
+    'budget.threshold',
+    'audit.chain_broken',
+    'pack.install_failed',
+    'queue.stuck',
+    'user.invited',
+  ];
   const kinds = React.useMemo(() => {
-    const set = new Set([
-      'finding.critical',
-      'run.failed',
-      'run.completed',
-      'budget.threshold',
-      'pack.signed',
-      'audit.verified',
-      'audit.chain_broken',
-      'pack.install_failed',
-      'queue.stuck',
-      'user.invited',
-    ]);
+    const set = new Set(SERVER_NOTIFICATION_KINDS);
     for (const n of items) {
       if (typeof n.kind === 'string') set.add(n.kind);
     }

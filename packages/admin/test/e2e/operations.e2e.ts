@@ -36,25 +36,30 @@ test.describe('Operations pages wire-up', () => {
         contentType: 'application/json',
         // Schema-conforming Event payload: seq, ts, actor:{type,id},
         // prev_hash, hash, run_id.
+        // PR #39 Copilot iter 4: schema-conforming Event — run_id at
+        // the top level, EventKind enum values (underscored, not
+        // dotted), prev_hash null on the chain head.
         body: JSON.stringify({
           events: [
             {
               schema_version: '1',
               seq: 1,
               ts: '2026-05-19T10:00:00Z',
+              run_id: 'run-1',
               actor: { type: 'system', id: 'runner' },
-              kind: 'run.started',
-              payload: { run_id: 'r-1' },
-              prev_hash: '0'.repeat(64),
+              kind: 'run_started',
+              payload: {},
+              prev_hash: null,
               hash: 'a'.repeat(64),
             },
             {
               schema_version: '1',
               seq: 2,
               ts: '2026-05-19T10:05:00Z',
+              run_id: 'run-1',
               actor: { type: 'system', id: 'runner' },
-              kind: 'run.finished',
-              payload: { run_id: 'r-1' },
+              kind: 'run_finished',
+              payload: {},
               prev_hash: 'a'.repeat(64),
               hash: 'b'.repeat(64),
             },
@@ -86,6 +91,8 @@ test.describe('Operations pages wire-up', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
+        // PR #39 Copilot iter 4: queued jobs omit `leased_until`
+        // (it's only set when the job is leased to a runner).
         body: JSON.stringify({
           jobs: [
             {
@@ -93,7 +100,6 @@ test.describe('Operations pages wire-up', () => {
               enqueued_at: '2026-05-19T11:00:00Z',
               payload: { kind: 'aqa.run', profile: 'smoke' },
               status: 'queued',
-              leased_until: null,
             },
           ],
         }),
@@ -149,6 +155,10 @@ test.describe('Operations pages wire-up', () => {
         contentType: 'application/json',
         // PR #39 Copilot iter 2: schema-conforming CostSummary
         // (schema_version + tenant scope echoed back).
+        // PR #39 Copilot iter 4: aligned to @aqa/schemas CostSummary
+        // exactly — no extra `currency` field (the schema doesn't
+        // define it). `daily` is the date→usd record used by the
+        // chart.
         body: JSON.stringify({
           summary: {
             schema_version: '1',
@@ -158,7 +168,7 @@ test.describe('Operations pages wire-up', () => {
             to: '2026-05-19T23:00:00.000Z',
             total_usd: 123.45,
             by_profile: [],
-            currency: 'USD',
+            daily: {},
           },
         }),
       });
