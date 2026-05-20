@@ -876,7 +876,31 @@ export function makeApi(): ApiHandler[] {
           role: role as Role,
           permissions: perms as ReadonlyArray<Permission>,
         }));
-        return asResponse({ roles });
+        // Surface the full Permission enum separately so the admin
+        // grid can render rows for every permission, including ones
+        // only reachable through the `admin:everything` wildcard
+        // (e.g. `settings:edit`). PR #42 Copilot iter 1.
+        const all_permissions = [
+          'runs:read',
+          'runs:create',
+          'findings:read',
+          'findings:edit',
+          'risk-map:read',
+          'risk-map:edit',
+          'profiles:read',
+          'profiles:edit',
+          'packs:read',
+          'packs:install',
+          'agents:install',
+          'agents:read',
+          'agents:edit',
+          'audit:read',
+          'cost:read',
+          'settings:read',
+          'settings:edit',
+          'admin:everything',
+        ] as const satisfies ReadonlyArray<Permission>;
+        return asResponse({ roles, all_permissions });
       },
     },
 

@@ -12131,6 +12131,7 @@ function PageRoles({ onNavigate }) {
   // derived from the response. Mock-data mode keeps the legacy
   // {role: capabilities-bitmap} fixture.
   const [liveRoles, setLiveRoles] = React.useState(null);
+  const [allPermissions, setAllPermissions] = React.useState(null);
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -12139,7 +12140,21 @@ function PageRoles({ onNavigate }) {
         if (cancelled || !res.ok) return;
         const body = await res.json();
         if (cancelled) return;
-        if (Array.isArray(body?.roles)) setLiveRoles(body.roles);
+        if (Array.isArray(body?.roles)) {
+          // PR #42 Copilot iter 1: normalize each role entry — the
+          // server is the trust boundary, but untyped JSON could
+          // still arrive with a missing/null `permissions`.
+          const normalized = body.roles
+            .filter((r) => r && typeof r.role === 'string')
+            .map((r) => ({
+              role: r.role,
+              permissions: Array.isArray(r.permissions) ? r.permissions : [],
+            }));
+          setLiveRoles(normalized);
+          if (Array.isArray(body.all_permissions)) {
+            setAllPermissions(body.all_permissions.filter((p) => typeof p === 'string'));
+          }
+        }
       } catch {
         /* mock mode */
       }
@@ -12151,13 +12166,19 @@ function PageRoles({ onNavigate }) {
   if (liveRoles !== null) {
     // Live mode: render the actual permissions matrix from @aqa/auth.
     const roleNames = liveRoles.map((r) => r.role);
-    // Union of all permissions across all roles, then alphabetize so
-    // the rows are stable.
-    const permSet = new Set();
-    for (const r of liveRoles) {
-      for (const p of r.permissions ?? []) permSet.add(p);
+    // Prefer the server's `all_permissions` (full Permission enum, so
+    // wildcard-only perms like settings:edit appear as rows); fall
+    // back to the union of explicit grants. PR #42 Copilot iter 1.
+    let allPerms;
+    if (Array.isArray(allPermissions) && allPermissions.length > 0) {
+      allPerms = [...allPermissions].sort();
+    } else {
+      const permSet = new Set();
+      for (const r of liveRoles) {
+        for (const p of r.permissions) permSet.add(p);
+      }
+      allPerms = [...permSet].sort();
     }
-    const allPerms = [...permSet].sort();
     return (
       <div className="page" data-screen-label="22 Roles">
         <PageHeader
