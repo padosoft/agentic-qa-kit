@@ -733,10 +733,19 @@ function fmtTime(ts) {
   return d.toISOString().slice(11, 19) + 'Z';
 }
 function fmtDate(ts) {
-  return new Date(ts).toISOString().slice(0, 10);
+  // PR #40 Copilot iter 5: null/undefined → em dash, matches the
+  // fmtRelative guard. Previously this rendered "1970-01-01" for
+  // tokens whose created_at was missing.
+  if (ts == null) return '—';
+  const t = new Date(ts);
+  if (Number.isNaN(t.getTime())) return '—';
+  return t.toISOString().slice(0, 10);
 }
 function fmtDateTime(ts) {
-  return new Date(ts).toISOString().slice(0, 19).replace('T', ' ') + 'Z';
+  if (ts == null) return '—';
+  const t = new Date(ts);
+  if (Number.isNaN(t.getTime())) return '—';
+  return t.toISOString().slice(0, 19).replace('T', ' ') + 'Z';
 }
 function fmtDateTimeLocal(ts) {
   const d = new Date(ts);
@@ -11168,6 +11177,24 @@ function PageReplay({ onNavigate }) {
 }
 
 // ---------------- Audit log ----------------
+// Shared normalizer: maps @aqa/schemas Event records onto the
+// AuditChainViewer's demo-chain shape. Used by both PageAudit and
+// PageAdminAudit. PR #40 Copilot iter 4 (de-duplication).
+function normalizeAuditEventsForViewer(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map((ev) => ({
+    at: ev.ts ?? ev.at ?? '',
+    actor:
+      typeof ev.actor === 'string'
+        ? ev.actor
+        : ev.actor?.id || ev.actor?.type || 'system',
+    kind: ev.kind ?? 'event',
+    payload: ev.payload ?? {},
+    prev_hash: ev.prev_hash ?? '0'.repeat(64),
+    hash: ev.hash ?? '0'.repeat(64),
+  }));
+}
+
 function PageAudit({ onNavigate }) {
   // v1.7 slice 4e — wire to /api/audit (audit:read). The server
   // route returns Event records as-stored — hash verification is the
@@ -11227,27 +11254,8 @@ function PageAudit({ onNavigate }) {
         }
       />
       <AuditChainViewer
-        // PR #39 Copilot iter 1: server Event has {ts, actor:{type,id},
-        // prev_hash} but AuditChainViewer's demo shape is {at, actor:
-        // string, prev_hash}. Normalize the server response before
-        // handing it to the viewer; otherwise the viewer breaks on
-        // actor.toLowerCase() / reads ev.at. An empty live array is
-        // ALSO a valid loaded state (no fixture fallback) — use
-        // liveEvents !== null as the "loaded" signal.
         demoGood={
-          liveEvents !== null
-            ? liveEvents.map((ev) => ({
-                at: ev.ts ?? ev.at ?? '',
-                actor:
-                  typeof ev.actor === 'string'
-                    ? ev.actor
-                    : ev.actor?.id || ev.actor?.type || 'system',
-                kind: ev.kind ?? 'event',
-                payload: ev.payload ?? {},
-                prev_hash: ev.prev_hash ?? '0'.repeat(64),
-                hash: ev.hash ?? '0'.repeat(64),
-              }))
-            : AUDIT_EVENTS_GOOD
+          liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
         }
         demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
       />
@@ -12236,9 +12244,37 @@ function PageSSO({ onNavigate }) {
 
 // ---------------- Org & project ----------------
 function PageOrg({ onNavigate }) {
+  // v1.7 slice 4f — fetch /api/orgs to surface the live org list.
+  // The page's existing UI is still mostly fixture-driven (project
+  // list, branding); the live read lets us update the subtitle so
+  // the page reflects what's actually configured server-side.
+  const [orgs, setOrgs] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/orgs'));
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.orgs)) setOrgs(body.orgs);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const sub =
+    orgs === null
+      ? 'padosoft'
+      : orgs.length === 0
+        ? 'No orgs configured'
+        : orgs.map((o) => o.slug ?? o.name ?? '?').join(', ');
   return (
     <div className="page" data-screen-label="24 Org & project">
-      <PageHeader title="Organization & projects" sub="padosoft" />
+      <PageHeader title="Organization & projects" sub={sub} />
       <div className="split-2">
         <div className="card">
           <div className="card-head">
@@ -12344,32 +12380,87 @@ function PageOrg({ onNavigate }) {
 function PageTokens({ onNavigate }) {
   const [showNew, setShowNew] = React.useState(false);
   const [createdToken, setCreatedToken] = React.useState(null);
-  const tokens = [
-    {
-      id: 'tok_ci',
-      name: 'CI · GitHub Actions',
-      kind: 'service',
-      last_used: '2026-05-18T13:48:00Z',
-      scopes: ['runs:write', 'findings:read'],
-      created_at: '2026-04-12T08:00:00Z',
-    },
-    {
-      id: 'tok_sara',
-      name: 'Sara · CLI laptop',
-      kind: 'user',
-      last_used: '2026-05-18T11:14:00Z',
-      scopes: ['*'],
-      created_at: '2026-04-02T09:00:00Z',
-    },
-    {
-      id: 'tok_audit',
-      name: 'Audit · download bot',
-      kind: 'service',
-      last_used: '2026-05-15T16:04:00Z',
-      scopes: ['audit:read'],
-      created_at: '2026-05-01T00:00:00Z',
-    },
-  ];
+  // v1.7 slice 4f — wire to GET /api/tokens. The server returns
+  // @aqa/schemas ApiToken records (id/org/prefix/owner/display_name/
+  // scopes/created_at/last_used_at/…) — only the prefix is exposed,
+  // never the raw secret. The page renders with fixture-style fields
+  // (name/kind/last_used) so we normalize the server payload to the
+  // UI shape on load. Falls back to a small fixture so mock-data
+  // mode still renders. PR #40 Copilot iter 1.
+  // PR #40 Copilot iter 3: fallback scope values use the actual
+  // ApiTokenScope enum (runs:create / findings:edit /
+  // admin:everything / audit:read), not the pre-schema strings
+  // ("runs:write" / "*") that wouldn't validate against the server.
+  const FALLBACK_TOKENS = React.useMemo(
+    () => [
+      {
+        id: 'tok_ci',
+        name: 'CI · GitHub Actions',
+        kind: 'service',
+        last_used: '2026-05-18T13:48:00Z',
+        scopes: ['runs:create', 'findings:read'],
+        created_at: '2026-04-12T08:00:00Z',
+      },
+      {
+        id: 'tok_sara',
+        name: 'Sara · CLI laptop',
+        kind: 'user',
+        last_used: '2026-05-18T11:14:00Z',
+        scopes: ['admin:everything'],
+        created_at: '2026-04-02T09:00:00Z',
+      },
+      {
+        id: 'tok_audit',
+        name: 'Audit · download bot',
+        kind: 'service',
+        last_used: '2026-05-15T16:04:00Z',
+        scopes: ['audit:read'],
+        created_at: '2026-05-01T00:00:00Z',
+      },
+    ],
+    [],
+  );
+  const [tokens, setTokens] = React.useState(FALLBACK_TOKENS);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/tokens'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (!Array.isArray(body?.tokens)) return;
+        // PR #40 Copilot iter 1: adapt @aqa/schemas ApiToken to the
+        // page's fixture shape. `kind` is derived heuristically from
+        // owner (svc_/bot_ prefix → service, otherwise user); a real
+        // adapter would inspect a server-side `kind` field once that
+        // lands on ApiToken.
+        const adapted = body.tokens.map((t) => ({
+          id: t.id,
+          name: t.display_name ?? t.name ?? t.id,
+          kind:
+            typeof t.owner === 'string' && /^(svc|bot|ci|service)[_-]/i.test(t.owner)
+              ? 'service'
+              : 'user',
+          last_used: t.last_used_at ?? t.last_used ?? null,
+          scopes: Array.isArray(t.scopes) ? t.scopes : [],
+          // PR #40 Copilot iter 4: leave created_at null when the
+          // server omits it — defaulting to "now" was misleading
+          // (showed a fake "just created" date for any record where
+          // the timestamp was lost in transit).
+          created_at: t.created_at ?? null,
+        }));
+        setTokens(adapted);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="25 API tokens">
       <PageHeader
@@ -12499,14 +12590,16 @@ function PageTokens({ onNavigate }) {
             <div className="field-row">
               <label className="field-label">Scopes</label>
               <div className="row gap-4" style={{ flexWrap: 'wrap' }}>
+                {/* PR #40 Copilot iter 4: chips mirror the @aqa/schemas
+                    ApiTokenScope enum so a future create-token POST
+                    can pass these straight through. */}
                 {[
                   'runs:read',
-                  'runs:write',
+                  'runs:create',
                   'findings:read',
-                  'findings:write',
+                  'findings:edit',
                   'audit:read',
-                  'packs:install',
-                  'admin',
+                  'admin:everything',
                 ].map((s) => (
                   <span key={s} className="chip">
                     {s}
@@ -12531,11 +12624,38 @@ function PageTokens({ onNavigate }) {
 
 // ---------------- Admin audit ----------------
 function PageAdminAudit({ onNavigate }) {
+  // v1.7 slice 4f — same /api/audit wire as PageAudit (slice 4e),
+  // just with admin-view copy. Re-checks `cancelled` after the
+  // await res.json() like the other live-fetch pages.
+  const [liveEvents, setLiveEvents] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/audit'), {
+          headers: { 'x-aqa-org': 'padosoft' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(body?.events)) setLiveEvents(body.events);
+      } catch {
+        /* mock mode */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="page" data-screen-label="26 Admin audit">
       <PageHeader
         title="Audit log (admin view)"
-        sub="Broader filters · bulk evidence bundle download"
+        sub={
+          liveEvents !== null
+            ? `${liveEvents.length} events · live from /api/audit (admin)`
+            : 'Broader filters · bulk evidence bundle download'
+        }
         actions={
           <button className="btn sm">
             <I.Download size={12} />
@@ -12543,7 +12663,12 @@ function PageAdminAudit({ onNavigate }) {
           </button>
         }
       />
-      <AuditChainViewer demoGood={AUDIT_EVENTS_GOOD} demoBad={AUDIT_EVENTS_BAD} />
+      <AuditChainViewer
+        demoGood={
+          liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : AUDIT_EVENTS_GOOD
+        }
+        demoBad={liveEvents !== null ? [] : AUDIT_EVENTS_BAD}
+      />
     </div>
   );
 }
