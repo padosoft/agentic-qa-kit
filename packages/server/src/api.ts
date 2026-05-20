@@ -1,4 +1,5 @@
-import type { User, allows } from '@aqa/auth';
+import { rolePermissions } from '@aqa/auth';
+import type { Permission, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/kit';
 import type { PackNewErrorCode } from '@aqa/kit';
 import {
@@ -849,6 +850,33 @@ export function makeApi(): ApiHandler[] {
         const agent = await ctx.store.uninstallAgent(id);
         if (!agent) return notFound('agent');
         return asResponse({ agent });
+      },
+    },
+
+    // ============ v1.7 slice 4g — Users & Roles ============
+    {
+      method: 'GET',
+      path: '/api/users',
+      requires: 'settings:read',
+      async handle(_req, ctx) {
+        const users = await ctx.store.listUsers();
+        return asResponse({ users });
+      },
+    },
+    {
+      // Returns the rolePermissions matrix from @aqa/auth — the admin
+      // Roles page renders it as the "Action × Role" grid. Static
+      // (compiled-in) so no store call needed; the route exists so
+      // the admin doesn't need a build-time dep on @aqa/auth.
+      method: 'GET',
+      path: '/api/roles',
+      requires: 'settings:read',
+      async handle(_req, _ctx) {
+        const roles = Object.entries(rolePermissions).map(([role, perms]) => ({
+          role: role as Role,
+          permissions: perms as ReadonlyArray<Permission>,
+        }));
+        return asResponse({ roles });
       },
     },
 

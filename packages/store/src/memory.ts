@@ -35,6 +35,16 @@ export class MemoryStore implements StoreProvider {
   private tokens = new Map<string, ApiToken.ApiToken>();
   private orgs = new Map<string, Tenancy.Org>();
   private projects = new Map<string, Tenancy.ProjectRef>();
+  // v1.7 slice 4g — directory snapshot of users known to the admin.
+  // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
+  private users: Array<{
+    id: string;
+    email: string;
+    display_name: string;
+    roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+    status?: 'active' | 'invited' | 'suspended';
+    last_active_at?: string;
+  }> = [];
 
   // ----- Runs -----
   async saveRun(run: Run.Run): Promise<void> {
@@ -254,6 +264,30 @@ export class MemoryStore implements StoreProvider {
   __test_seedAgent(a: Agent.Agent): void {
     this.agents.set(a.id, a);
   }
+  __test_seedUser(u: {
+    id: string;
+    email: string;
+    display_name: string;
+    roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+    status?: 'active' | 'invited' | 'suspended';
+    last_active_at?: string;
+  }): void {
+    this.users.push(u);
+  }
+
+  // ----- Users (v1.7 slice 4g) -----
+  async listUsers(): Promise<
+    Array<{
+      id: string;
+      email: string;
+      display_name: string;
+      roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+      status?: 'active' | 'invited' | 'suspended';
+      last_active_at?: string;
+    }>
+  > {
+    return [...this.users];
+  }
 
   // ----- Notifications -----
   async listNotifications(opts: {
@@ -382,6 +416,7 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.agents.clear();
+    this.users = [];
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();

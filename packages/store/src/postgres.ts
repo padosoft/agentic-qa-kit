@@ -139,6 +139,19 @@ export class PostgresStore implements StoreProvider {
     this.notImpl('uninstallAgent');
   }
 
+  async listUsers(): Promise<
+    Array<{
+      id: string;
+      email: string;
+      display_name: string;
+      roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+      status?: 'active' | 'invited' | 'suspended';
+      last_active_at?: string;
+    }>
+  > {
+    this.notImpl('listUsers');
+  }
+
   async listNotifications(): Promise<Notification.Notification[]> {
     this.notImpl('listNotifications');
   }

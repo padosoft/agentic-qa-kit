@@ -147,6 +147,22 @@ export interface StoreProvider {
   createToken(token: ApiToken.ApiToken): Promise<void>;
   revokeToken(id: string, at: string): Promise<void>;
 
+  // ----- Users (v1.7 slice 4g) -----
+  // The admin's Users page reflects the identity provider's directory
+  // (SSO/OIDC) — read-only from the store. A future slice can add
+  // invite/role-change flows; for now `listUsers` is all the page
+  // needs.
+  listUsers(): Promise<
+    Array<{
+      id: string;
+      email: string;
+      display_name: string;
+      roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;
+      status?: 'active' | 'invited' | 'suspended';
+      last_active_at?: string;
+    }>
+  >;
+
   // ----- Tenancy -----
   listOrgs(): Promise<Tenancy.Org[]>;
   loadOrg(slug: string): Promise<Tenancy.Org | null>;
