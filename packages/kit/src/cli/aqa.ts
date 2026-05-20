@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
+import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
 import { runPackNew } from '../commands/pack-new.js';
@@ -22,7 +23,16 @@ interface ParsedArgs {
   values: Map<string, string>;
 }
 
-const VALUE_FLAGS = new Set(['profile', 'seed', 'sut-type', 'description', 'author', 'license']);
+const VALUE_FLAGS = new Set([
+  'profile',
+  'seed',
+  'sut-type',
+  'description',
+  'author',
+  'license',
+  'port',
+  'host',
+]);
 
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { command: null, positionals: [], flags: new Set(), values: new Map() };
@@ -81,6 +91,7 @@ ${bold('Commands')}
   doctor                 Report kit health (runtime, .aqa, agent docs, validation)
   validate               Validate .aqa/* against @aqa/schemas
   run [--profile <p>]    Execute scenarios for the given profile; write events + findings
+  admin [--port N]       Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring guide:
                          https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
                          — this path is only present in the source repo, not in the npm tarball)
@@ -90,6 +101,8 @@ ${bold('Common options')}
   --dry-run              (init) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
+  --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
+  --host <h>             (admin) bind host (default 127.0.0.1; use 0.0.0.0 to expose on LAN)
   --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
   --description <text>   (pack new) one-line summary written into the manifest
   --author <name>        (pack new) manifest author field
@@ -197,6 +210,53 @@ async function main(): Promise<number> {
         console.info(`    ${yellow('⚠ warnings:')}`);
         for (const w of result.warnings) console.info(`      ${yellow('·')} ${w}`);
       }
+      return 0;
+    }
+    case 'admin': {
+      printHeader('admin');
+      if (args.flags.has('port') && !args.values.has('port')) {
+        console.error(red('aqa admin: --port requires a value'));
+        return 1;
+      }
+      if (args.flags.has('host') && !args.values.has('host')) {
+        console.error(red('aqa admin: --host requires a value'));
+        return 1;
+      }
+      const adminOpts: Parameters<typeof runAdmin>[0] = { root: cwd };
+      if (args.values.has('port')) {
+        const raw = args.values.get('port') ?? '';
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 0 || n > 65535) {
+          console.error(red(`aqa admin: --port must be an integer 0..65535, got "${raw}"`));
+          return 1;
+        }
+        adminOpts.port = n;
+      }
+      if (args.values.has('host')) adminOpts.host = args.values.get('host') ?? '';
+      const result = await runAdmin(adminOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} admin listening at ${bold(result.url)}`);
+      console.info(`    ${dim('healthz:   ')}${result.url}/api/healthz`);
+      console.info(`    ${dim('Stop:      ')}Ctrl-C`);
+      // Keep the process alive until interrupted. The server holds an open
+      // socket but that alone isn't enough to keep node from exiting once
+      // there's no other pending work — register a SIGINT/SIGTERM listener
+      // that closes cleanly before exiting.
+      const stop = async (): Promise<void> => {
+        await result.close();
+        process.exit(0);
+      };
+      process.on('SIGINT', () => {
+        void stop();
+      });
+      process.on('SIGTERM', () => {
+        void stop();
+      });
+      // Block forever — until a signal triggers stop().
+      await new Promise<void>(() => {});
       return 0;
     }
     case 'pack': {
