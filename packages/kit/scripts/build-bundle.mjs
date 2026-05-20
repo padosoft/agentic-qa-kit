@@ -13,9 +13,11 @@
  * npm dep (yaml, kleur, zod, …) into one file, and externalises only
  * Node built-ins (`node:fs`, `node:http`, …). The resulting `dist/cli.cjs`
  * is the only JS artifact shipped in the npm tarball — alongside the
- * static `dist/packs/` (bundled by bundle-packs.mjs) and `dist/admin/`
- * (bundled by bundle-admin.mjs) data directories that the CLI loads at
- * runtime via fs paths.
+ * static `dist/packs/` directory (bundled by bundle-packs.mjs) that the
+ * CLI loads at runtime via fs paths. The admin SPA static directory
+ * (`dist/admin/`) is bundled by a sibling `bundle-admin.mjs` added in
+ * the macro-task v1.9 `aqa admin` sub-task; this PR alone ships only
+ * the CLI bundler.
  *
  * Why CJS-in-.cjs instead of ESM-in-.js: some bundled CJS deps (yaml,
  * ajv) call `require('process')` etc. inside their compiled output.
@@ -61,7 +63,7 @@ await build({
   // bundling rewrites those to a `__require` helper that throws
   // ("Dynamic require of X is not supported"). CJS output preserves
   // Node's native `require` so the wrappers resolve cleanly. The
-  // tarball's `bin: dist/cli.js` runs identically as CJS — bin
+  // tarball's `bin: dist/cli.cjs` runs identically as CJS — bin
   // scripts don't care about ESM vs CJS as long as the shebang is
   // intact.
   format: 'cjs',
@@ -141,11 +143,14 @@ await build({
   logLevel: 'info',
 });
 
-// Post-process: dedupe shebangs. esbuild's banner adds one and the entry
-// file already contains its own (tsc preserved it from the source), so
-// the file lands with two `#!/usr/bin/env node` lines and Node rejects
-// the second as a syntax error. Strip any extra shebang lines after the
-// first.
+// Defensive shebang dedup. Today this script does NOT set an esbuild
+// banner (the entry file's own `#!/usr/bin/env node`, preserved by
+// tsc, is enough). If a future iteration re-introduces a banner with
+// a shebang — or if esbuild ever decides to add one itself — the
+// output would land with two shebang lines and Node would reject the
+// second as a SyntaxError. Keeping this idempotent post-process means
+// the bundle stays runnable through that kind of edit without anyone
+// noticing in CI.
 {
   const text = readFileSync(outFile, 'utf8');
   const lines = text.split('\n');

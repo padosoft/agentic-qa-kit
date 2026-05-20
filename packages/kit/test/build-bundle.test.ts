@@ -45,6 +45,17 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
       head.startsWith('#!/usr/bin/env node'),
       `bundle must start with shebang, got: ${head.slice(0, 40)}`,
     );
+
+    // POSIX: build-bundle.mjs chmod's the output 0o755 so consumers
+    // can spawn the bin script without an extra chmod step. Windows
+    // file modes don't carry POSIX execute bits the same way, so this
+    // assertion is POSIX-only.
+    if (process.platform !== 'win32') {
+      assert.ok(
+        (st.mode & 0o111) !== 0,
+        `bundle must be executable (mode 755+); got mode ${(st.mode & 0o777).toString(8)}`,
+      );
+    }
   });
 
   it('emits a sidecar meta JSON (cli.bundle.meta.json)', () => {
