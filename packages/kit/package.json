@@ -1,36 +1,58 @@
 {
   "name": "@aqa/kit",
-  "version": "0.0.1",
-  "description": "agentic-qa-kit — `aqa` CLI for the multi-agent QA operating system.",
+  "version": "1.9.0",
+  "description": "agentic-qa-kit — `aqa` CLI for the multi-agent QA operating system. Multi-agent (Claude/Codex/Gemini/Copilot), Bun-first, enterprise-ready.",
   "type": "module",
   "license": "Apache-2.0",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "homepage": "https://github.com/padosoft/agentic-qa-kit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/padosoft/agentic-qa-kit.git",
+    "directory": "packages/kit"
+  },
+  "bugs": {
+    "url": "https://github.com/padosoft/agentic-qa-kit/issues"
+  },
+  "author": "Padosoft <info@padosoft.com>",
+  "keywords": ["qa", "testing", "agent", "claude", "codex", "gemini", "copilot", "bun"],
+  "main": "./dist/cli.cjs",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/cli.cjs"
     }
   },
   "bin": {
-    "aqa": "./dist/cli/aqa.js"
+    "aqa": "./dist/cli.cjs"
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist/cli.cjs", "dist/cli.cjs.map", "dist/packs", "dist/admin", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs && node scripts/bundle-admin.mjs && node scripts/build-bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/pack-new.test.ts",
+    "pretest": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs && node scripts/bundle-admin.mjs",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/pack-new.test.ts test/install-agent-files-cmd.test.ts test/report-cmd.test.ts test/admin-cmd.test.ts test/build-bundle.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
+    "@aqa/adapters": "workspace:*",
+    "@aqa/auth": "workspace:*",
+    "@aqa/pack-author": "workspace:*",
     "@aqa/pack-loader": "workspace:*",
+    "@aqa/reporter": "workspace:*",
     "@aqa/runner": "workspace:*",
     "@aqa/schemas": "workspace:*",
+    "@aqa/server": "workspace:*",
+    "@aqa/store": "workspace:*",
     "kleur": "^4.1.5",
     "yaml": "^2.6.0"
   },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "aqa": {
+    "publishName": "@padosoft/agentic-qa-kit"
   }
 }

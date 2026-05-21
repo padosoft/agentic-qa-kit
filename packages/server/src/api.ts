@@ -1,7 +1,7 @@
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
-import { runPackNew } from '@aqa/kit';
-import type { PackNewErrorCode } from '@aqa/kit';
+import { runPackNew } from '@aqa/pack-author';
+import type { PackNewErrorCode } from '@aqa/pack-author';
 import {
   PackManifest as PackManifestSchema,
   Profile as ProfileSchema,
@@ -330,9 +330,10 @@ export function makeApi(): ApiHandler[] {
     },
     {
       // v1.7 slice 3 — scaffold a new pack on disk for the Admin
-      // "Create pack" wizard. Delegates to `runPackNew` from `@aqa/kit`
-      // (the same code path as `aqa pack new` on the CLI) so the two
-      // UIs stay in lockstep on validation, atomic --force, etc.
+      // "Create pack" wizard. Delegates to `runPackNew` from
+      // `@aqa/pack-author` (the same code path the kit's `aqa pack new`
+      // CLI calls through its re-export shim) so the two UIs stay in
+      // lockstep on validation, atomic --force, etc.
       //
       // Synchronous FS work in an async handler: `runPackNew` is sync
       // (mkdir / writeFile / rename of ~5 small files plus a few schema

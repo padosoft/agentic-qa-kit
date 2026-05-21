@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
+import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runInit } from '../commands/init.js';
+import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
+import { runReport } from '../commands/report.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 
@@ -22,7 +25,20 @@ interface ParsedArgs {
   values: Map<string, string>;
 }
 
-const VALUE_FLAGS = new Set(['profile', 'seed', 'sut-type', 'description', 'author', 'license']);
+const VALUE_FLAGS = new Set([
+  'profile',
+  'seed',
+  'sut-type',
+  'description',
+  'author',
+  'license',
+  'targets',
+  'project-name',
+  'run-id',
+  'format',
+  'port',
+  'host',
+]);
 
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { command: null, positionals: [], flags: new Set(), values: new Map() };
@@ -77,19 +93,33 @@ ${bold('Usage')}
   aqa <command> [options]
 
 ${bold('Commands')}
-  init [name]            Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
-  doctor                 Report kit health (runtime, .aqa, agent docs, validation)
-  validate               Validate .aqa/* against @aqa/schemas
-  run [--profile <p>]    Execute scenarios for the given profile; write events + findings
-  pack new <slug>        Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring guide:
-                         https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
-                         — this path is only present in the source repo, not in the npm tarball)
+  init [name]                       Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
+  doctor                            Report kit health (runtime, .aqa, agent docs, validation)
+  validate                          Validate .aqa/* against @aqa/schemas
+  install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md
+                                    plus per-agent skills under .claude/ .agents/ .gemini/ .github/
+  run [--profile <p>]               Execute scenarios for the given profile; write events + findings
+  report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
+  admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
+  pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
+                                    guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
+                                    — this path is only present in the source repo, not in the npm tarball)
 
 ${bold('Common options')}
-  --force                (init / pack new) overwrite existing files/directory
-  --dry-run              (init) don't write to disk; print what would happen
+  --force                (init / install-agent-files / pack new) overwrite existing files/directory
+  --dry-run              (init / install-agent-files) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
+  --targets <list>       (install-agent-files) comma-separated targets: claude,codex,gemini,copilot
+  --project-name <name>  (install-agent-files) override the slug embedded in instruction files
+  --run-id <id>          (report) target a specific run; default = latest
+  --format <fmt>         (report) md | json | both (default: both)
+  --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
+  --host <h>             (admin) bind host (default 127.0.0.1 — recommended)
+                         WARNING: \`aqa admin\` runs WITHOUT real authentication.
+                         Binding to 0.0.0.0 exposes the in-memory store and
+                         makeApi() to any host on the same network — only do
+                         this on a trusted dev VM or isolated CI runner.
   --sut-type <type>      (pack new) api | web | cli | lib | agent | pipeline
   --description <text>   (pack new) one-line summary written into the manifest
   --author <name>        (pack new) manifest author field
@@ -158,6 +188,49 @@ async function main(): Promise<number> {
       }
       return result.ok ? 0 : 1;
     }
+    case 'install-agent-files': {
+      printHeader('install-agent-files');
+      if (args.flags.has('targets') && !args.values.has('targets')) {
+        console.error(red('aqa install-agent-files: --targets requires a value'));
+        return 1;
+      }
+      if (args.flags.has('project-name') && !args.values.has('project-name')) {
+        console.error(red('aqa install-agent-files: --project-name requires a value'));
+        return 1;
+      }
+      const targetsRaw = args.values.get('targets');
+      if (targetsRaw === undefined) {
+        console.error(
+          red('aqa install-agent-files: --targets is required (e.g. --targets claude,codex)'),
+        );
+        return 1;
+      }
+      const installOpts: Parameters<typeof runInstallAgentFiles>[0] = {
+        root: cwd,
+        targets: targetsRaw,
+      };
+      if (args.values.has('project-name')) {
+        installOpts.projectName = args.values.get('project-name') ?? '';
+      }
+      if (args.flags.has('force')) installOpts.overwrite = true;
+      if (args.flags.has('dry-run')) installOpts.dryRun = true;
+      const result = runInstallAgentFiles(installOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(dim(`targets: ${result.targets.join(', ')}`));
+      for (const f of result.files) {
+        const marker = {
+          created: green('+'),
+          overwritten: yellow('~'),
+          'skipped-exists': dim('·'),
+          'dry-run': cyan('?'),
+        }[f.result];
+        console.info(`  ${marker} ${f.path} ${dim(`[${f.target}/${f.result}]`)}`);
+      }
+      return 0;
+    }
     case 'run': {
       printHeader('run');
       // A flag passed without a value (e.g. `aqa run --profile`) is treated as
@@ -197,6 +270,84 @@ async function main(): Promise<number> {
         console.info(`    ${yellow('⚠ warnings:')}`);
         for (const w of result.warnings) console.info(`      ${yellow('·')} ${w}`);
       }
+      return 0;
+    }
+    case 'report': {
+      printHeader('report');
+      if (args.flags.has('run-id') && !args.values.has('run-id')) {
+        console.error(red('aqa report: --run-id requires a value'));
+        return 1;
+      }
+      if (args.flags.has('format') && !args.values.has('format')) {
+        console.error(red('aqa report: --format requires a value'));
+        return 1;
+      }
+      const reportOpts: Parameters<typeof runReport>[0] = { root: cwd };
+      if (args.values.has('run-id')) reportOpts.runId = args.values.get('run-id') ?? '';
+      if (args.values.has('format')) {
+        const fmt = args.values.get('format') ?? '';
+        if (fmt !== 'md' && fmt !== 'json' && fmt !== 'both') {
+          console.error(red(`aqa report: --format must be md | json | both, got "${fmt}"`));
+          return 1;
+        }
+        reportOpts.format = fmt;
+      }
+      const result = runReport(reportOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} ${bold(result.runId)}`);
+      console.info(`    ${dim('runDir:    ')}${result.runDir}`);
+      console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
+      for (const f of result.files) console.info(`    ${green('+')} ${f}`);
+      return 0;
+    }
+    case 'admin': {
+      printHeader('admin');
+      if (args.flags.has('port') && !args.values.has('port')) {
+        console.error(red('aqa admin: --port requires a value'));
+        return 1;
+      }
+      if (args.flags.has('host') && !args.values.has('host')) {
+        console.error(red('aqa admin: --host requires a value'));
+        return 1;
+      }
+      const adminOpts: Parameters<typeof runAdmin>[0] = { root: cwd };
+      if (args.values.has('port')) {
+        const raw = args.values.get('port') ?? '';
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 0 || n > 65535) {
+          console.error(red(`aqa admin: --port must be an integer 0..65535, got "${raw}"`));
+          return 1;
+        }
+        adminOpts.port = n;
+      }
+      if (args.values.has('host')) adminOpts.host = args.values.get('host') ?? '';
+      const result = await runAdmin(adminOpts);
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} admin listening at ${bold(result.url)}`);
+      console.info(`    ${dim('healthz:   ')}${result.url}/api/healthz`);
+      console.info(`    ${dim('Stop:      ')}Ctrl-C`);
+      // Keep the process alive until interrupted. The server holds an open
+      // socket but that alone isn't enough to keep node from exiting once
+      // there's no other pending work — register a SIGINT/SIGTERM listener
+      // that closes cleanly before exiting.
+      const stop = async (): Promise<void> => {
+        await result.close();
+        process.exit(0);
+      };
+      process.on('SIGINT', () => {
+        void stop();
+      });
+      process.on('SIGTERM', () => {
+        void stop();
+      });
+      // Block forever — until a signal triggers stop().
+      await new Promise<void>(() => {});
       return 0;
     }
     case 'pack': {
