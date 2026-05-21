@@ -89,9 +89,11 @@
         "aqa": "./dist/cli/aqa.js",
       },
       "dependencies": {
+        "@aqa/adapters": "workspace:*",
         "@aqa/auth": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
+        "@aqa/reporter": "workspace:*",
         "@aqa/runner": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "@aqa/server": "workspace:*",
