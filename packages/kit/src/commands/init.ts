@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { stringify as yamlStringify } from 'yaml';
+import { lastPathSegment, slugify } from '../cli-utils.js';
 import { type WriteResult, writeFileSafe } from '../fs-utils.js';
 import { type ProjectProfile, profileRepo } from '../profiler.js';
 
@@ -160,19 +161,4 @@ export function runInit(opts: InitOptions): InitResult {
     result: writeFileSafe(path, content, writeOpts),
   }));
   return { profile, files };
-}
-
-function lastPathSegment(root: string): string {
-  const parts = root.replace(/[\\/]+$/, '').split(/[\\/]/);
-  return parts[parts.length - 1] ?? 'project';
-}
-
-function slugify(raw: string): string {
-  return (
-    raw
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^-+|-+$/g, '') || 'project'
-  );
 }
