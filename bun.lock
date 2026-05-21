@@ -90,10 +90,14 @@
       },
       "dependencies": {
         "@aqa/adapters": "workspace:*",
+        "@aqa/auth": "workspace:*",
+        "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
         "@aqa/reporter": "workspace:*",
         "@aqa/runner": "workspace:*",
         "@aqa/schemas": "workspace:*",
+        "@aqa/server": "workspace:*",
+        "@aqa/store": "workspace:*",
         "kleur": "^4.1.5",
         "yaml": "^2.6.0",
       },
@@ -107,6 +111,14 @@
       "version": "0.0.1",
       "dependencies": {
         "@aqa/schemas": "workspace:*",
+      },
+    },
+    "packages/pack-author": {
+      "name": "@aqa/pack-author",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aqa/schemas": "workspace:*",
+        "yaml": "^2.6.0",
       },
     },
     "packages/pack-loader": {
@@ -159,7 +171,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@aqa/auth": "workspace:*",
-        "@aqa/kit": "workspace:*",
+        "@aqa/pack-author": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "@aqa/store": "workspace:*",
         "yaml": "^2.9.0",
@@ -217,6 +229,8 @@
     "@aqa/methodology": ["@aqa/methodology@workspace:packages/methodology"],
 
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
+
+    "@aqa/pack-author": ["@aqa/pack-author@workspace:packages/pack-author"],
 
     "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
 
