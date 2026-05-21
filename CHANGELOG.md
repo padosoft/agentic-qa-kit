@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-05-21 — Junior quick-start truthing
+
+The v1.x roadmap is fully closed and the kit ships to GitHub Packages as `@padosoft/agentic-qa-kit`. This release closes the four gaps an external junior would have hit if they tried to follow the README quick-start in v1.8:
+
+### Added
+
+- **`aqa install-agent-files --targets …`** CLI verb (PR #52). Cables the existing `renderForTargets()` from `@aqa/adapters` into a real command. Generates `CLAUDE.md` + `AGENTS.md` + `GEMINI.md` + `.github/copilot-instructions.md` plus per-agent skills under `.claude/`, `.agents/`, `.gemini/`, `.github/`. Flags: `--targets <csv|repeat>`, `--project-name <slug>`, `--force`, `--dry-run`. Unknown target fails fast without writing anything. Existing files preserved unless `--force`.
+- **`aqa report [--run-id <id>] [--format md|json|both]`** CLI verb (PR #53). Renders `events.jsonl` + `findings.jsonl` from a run into `report.md` (auditor-friendly) and `report.json` (stable shape consumed by the admin UI). Defaults to the latest run by file mtime so hash-suffixed `--seed` ids work alongside ISO-prefixed ones. Strict on bad inputs: missing artifacts, malformed JSONL, traversal in `--run-id`, symlinked run dirs all error fast.
+- **`aqa admin [--port <n>] [--host <h>]`** CLI verb (PR #54). Boots the admin SPA + `makeApi()` in a single Node process on `http://127.0.0.1:5173`. The bundled SPA ships inside the kit tarball; the in-memory store is seeded from `.aqa/runs/<id>/{events,findings}.jsonl` so the admin shows real local data out of the box. Path-traversal-safe static serving with SPA fallback for client-side routes.
+- **`@aqa/pack-author`** new workspace package (PR #54). Extracted `runPackNew` from `@aqa/kit` to break the kit↔server build cycle that emerged when kit started depending on server (via the new `aqa admin` command). `@aqa/server`'s `POST /api/packs/scaffold` and `@aqa/kit`'s `aqa pack new` both consume it. Kit keeps a 5-line re-export shim so existing in-kit imports work unchanged.
+- **GitHub Packages publish pipeline** (PR #55). New `.github/workflows/publish.yml` runs on every `v*` tag and publishes `@padosoft/agentic-qa-kit` to `https://npm.pkg.github.com` with `--provenance`. The kit publishes as a single bundled `dist/cli.cjs` (~460 KB) via esbuild — every `@aqa/*` workspace dep + every npm dep is inlined; only Node built-ins stay external. `packages/kit/scripts/publish-prep.mjs` swaps `@aqa/kit` → `@padosoft/agentic-qa-kit` and pins `workspace:*` deps to the kit's version at publish time only (the workspace keeps its internal name so other packages can keep referencing it).
+- **README + `docs/getting-started.md` rewritten** to match the actually-shipped CLI surface. Adds the `.npmrc` snippet for GH Packages auth, the 10-step quick-start, the `aqa admin` boot path, and a single-command `bun run e2e:ecosystem` pointer for monorepo contributors.
+
+### Changed
+
+- **kit `package.json` `name` field policy.** The workspace name stays `@aqa/kit` so other monorepo packages can reference it. The published artifact's `name` is set at publish time from the new `aqa.publishName` declaration (`@padosoft/agentic-qa-kit`). This dual-naming keeps internal imports stable while satisfying GH Packages' `<scope> === <repo-owner>` requirement.
+- **Bundle format.** Kit now ships as `dist/cli.cjs` (CJS-in-.cjs) instead of separate per-file ESM modules. The `.cjs` extension overrides the package-level `"type": "module"` so Node loads it as CJS and bundled deps that internally `require('process')` resolve cleanly.
+- **`packages/server/src/api.ts`** imports `runPackNew` from `@aqa/pack-author` (was `@aqa/kit`).
+- **`packages/server/src/index.ts`** re-exports `ApiHandler`, `ApiMethod`, `ApiRequest`, `ApiResponse` so kit can consume them type-only.
+
+### Fixed
+
+- **`doctor.ts` hint no longer says `(Task 4)`** — the verb exists now, so the suggestion is the full command a junior can paste.
+- **Slugifier caps at 64 chars** (Slug schema max). Previously a long project directory name would slip through `aqa init` / `aqa install-agent-files` and trip `aqa validate` later. Caps then re-strips trailing dashes so the truncated slug stays schema-conformant.
+- **`KNOWN_TARGETS` derived from `@aqa/adapters.adapters`** instead of being a hardcoded duplicate — adding a new adapter (e.g. `opencode`) auto-extends `--targets`.
+
+## [1.8.3] — 2026-05-20 — Live ecosystem e2e + roadmap closure sync
+
+PR #51 — dedicated ecosystem Playwright smoke (`packages/admin/test/e2e/ecosystem-live.e2e.ts`) with a single-command stack bootstrap (`scripts/ecosystem-stack.mjs`). Boots `examples/bun-api`, runs a real `aqa run --profile smoke`, serves live `/api/*` from `@aqa/server.makeApi` + `MemoryStore`, drives the admin against the live backend, asserts `finding_emitted` is visible from `/api/audit` and chain verification returns `CHAIN OK`. Command: `bun run e2e:ecosystem`.
+
+## [1.8.2] — 2026-05-20 — Ecosystem smoke e2e hardening
+
+PR #50 — `scripts/e2e-cli.mjs` no longer stops at version/help/doctor/validate only: boots a local HTTP `/healthz` target, seeds a schema-valid local smoke pack/profile, executes `aqa run --profile smoke` with the real HTTP probe runner, and asserts run artifacts are emitted under `.aqa/runs/<run-id>/`.
+
+## [1.8.1] — 2026-05-20 — Audit chain canonical reconciliation
+
+PR #49 — aligned `@aqa/compliance.verifyEventChain` with `@aqa/runner.EventChainWriter`: hash recomputation excludes `prev_hash` from canonical body, and first-record `prev_hash: null` is canonical instead of expecting all-zero literal.
+
 ## [1.3.0] — 2026-05-18
 
 ### Added — quality polish (no new packages)
