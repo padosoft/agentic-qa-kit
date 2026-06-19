@@ -1,0 +1,226 @@
+{
+  "title": "agentic-qa-kit",
+  "description": "The agentic QA operating system for software projects.",
+  "url": "https://doc.agentic-qa-kit.padosoft.com",
+  "src": "docs",
+  "out": "../_site",
+  "base": "/",
+  "favicon": "assets/favicon.svg",
+  "copyCode": true,
+  "pageNavigation": true,
+  "minify": true,
+  "layout": {
+    "spa": true,
+    "header": {
+      "enabled": true
+    },
+    "sidebar": {
+      "enabled": true,
+      "collapsible": true,
+      "defaultCollapsed": false
+    },
+    "footer": {
+      "style": "minimal",
+      "content": "Apache-2.0. Maintained by Padosoft."
+    },
+    "menubar": {
+      "enabled": true,
+      "position": "top",
+      "left": [
+        {
+          "text": "Docs",
+          "url": "/"
+        },
+        {
+          "text": "GitHub",
+          "url": "https://github.com/padosoft/agentic-qa-kit"
+        }
+      ],
+      "right": [
+        {
+          "text": "Padosoft",
+          "url": "https://www.padosoft.com"
+        }
+      ]
+    }
+  },
+  "theme": {
+    "name": "default",
+    "appearance": "system",
+    "primaryColor": "#0d9488",
+    "customCss": [
+      "assets/custom.css"
+    ]
+  },
+  "navigation": [
+    {
+      "text": "Get Started",
+      "items": [
+        {
+          "text": "Overview",
+          "url": "/"
+        },
+        {
+          "text": "Quickstart",
+          "url": "/get-started/quickstart"
+        },
+        {
+          "text": "Installation",
+          "url": "/get-started/installation"
+        }
+      ]
+    },
+    {
+      "text": "Guides",
+      "items": [
+        {
+          "text": "Run Agentic QA",
+          "url": "/guides/run-agentic-qa"
+        },
+        {
+          "text": "Packs and Agents",
+          "url": "/guides/packs-and-agents"
+        },
+        {
+          "text": "Reports and Replay",
+          "url": "/guides/reports-and-replay"
+        }
+      ]
+    },
+    {
+      "text": "Concetti & Teoria",
+      "items": [
+        {
+          "text": "Motivazione",
+          "url": "/concetti-teoria/motivazione"
+        },
+        {
+          "text": "Teoria",
+          "url": "/concetti-teoria/teoria"
+        },
+        {
+          "text": "Risk Model",
+          "url": "/concetti-teoria/risk-model"
+        }
+      ]
+    },
+    {
+      "text": "Architettura",
+      "items": [
+        {
+          "text": "Overview",
+          "url": "/architettura/overview"
+        },
+        {
+          "text": "Design",
+          "url": "/architettura/design"
+        },
+        {
+          "text": "Pipeline Workflow",
+          "url": "/architettura/pipeline-workflow"
+        },
+        {
+          "text": "Modello dati/contratto",
+          "url": "/architettura/modello-dati-contratto"
+        },
+        {
+          "text": "ADR",
+          "url": "/architettura/adr"
+        },
+        {
+          "text": "Worked Example",
+          "url": "/architettura/worked-example"
+        },
+        {
+          "text": "Gotchas and Limits",
+          "url": "/architettura/gotchas-limits"
+        }
+      ]
+    },
+    {
+      "text": "Best Practices",
+      "items": [
+        {
+          "text": "Risk Maps",
+          "url": "/best-practices/risk-maps"
+        },
+        {
+          "text": "Release Gates",
+          "url": "/best-practices/release-gates"
+        }
+      ]
+    },
+    {
+      "text": "Operations",
+      "items": [
+        {
+          "text": "CI and Governance",
+          "url": "/operations/ci-governance"
+        },
+        {
+          "text": "Admin and Self-hosting",
+          "url": "/operations/admin-self-hosting"
+        }
+      ]
+    },
+    {
+      "text": "Reference",
+      "items": [
+        {
+          "text": "CLI",
+          "url": "/reference/cli"
+        },
+        {
+          "text": "API",
+          "url": "/reference/api"
+        },
+        {
+          "text": "Schema API",
+          "url": "/reference/schema-api"
+        }
+      ]
+    }
+  ],
+  "plugins": {
+    "search": {
+      "semantic": true,
+      "model": "Xenova/all-MiniLM-L6-v2",
+      "include": [
+        "**/*.md"
+      ],
+      "exclude": [
+        "**/.git/**",
+        "**/node_modules/**"
+      ],
+      "showFilters": true,
+      "showConfidence": false
+    },
+    "git": {
+      "repo": "https://github.com/padosoft/agentic-qa-kit",
+      "branch": "main",
+      "editLink": true,
+      "lastUpdated": true,
+      "commitHistory": true,
+      "maxCommits": 5,
+      "dateFormat": "relative"
+    },
+    "seo": {
+      "titleTemplate": "%s | agentic-qa-kit",
+      "defaultDescription": "The agentic QA operating system for software projects.",
+      "description": "The agentic QA operating system for software projects."
+    },
+    "sitemap": {
+      "url": "https://doc.agentic-qa-kit.padosoft.com",
+      "defaultChangefreq": "weekly",
+      "defaultPriority": 0.8
+    },
+    "mermaid": {
+      "theme": "default"
+    },
+    "math": {
+      "katex": {}
+    },
+    "llms": {},
+    "analytics": false
+  }
+}

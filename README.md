@@ -15,6 +15,8 @@
 [![Status: GA](https://img.shields.io/badge/status-GA%20%E2%80%A2%20v1.0-2ea44f)](#status)
 [![Works with Claude · Codex · Gemini · Copilot](https://img.shields.io/badge/works%20with-Claude%20%E2%80%A2%20Codex%20%E2%80%A2%20Gemini%20%E2%80%A2%20Copilot-blueviolet)](#multi-agent)
 
+**Official docs:** [https://doc.agentic-qa-kit.padosoft.com](https://doc.agentic-qa-kit.padosoft.com)
+
 > _Not a test runner. An **operating system** for agentic QA._
 >
 > A standardized framework that turns coding agents into QA engineers guided by **risk maps, invariants, scenarios, probes, oracles, and replay**.

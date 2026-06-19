@@ -1,0 +1,28 @@
+:root {
+  --docmd-accent: #0d9488;
+}
+
+a,
+.docmd-heading .heading-anchor {
+  color: var(--docmd-accent);
+}
+
+.main-content {
+  line-height: 1.68;
+}
+
+.main-content h1,
+.main-content h2,
+.main-content h3 {
+  letter-spacing: 0;
+}
+
+.docmd-card,
+.callout,
+.collapsible {
+  border-radius: 8px;
+}
+
+.mermaid-wrapper {
+  border-radius: 8px;
+}
