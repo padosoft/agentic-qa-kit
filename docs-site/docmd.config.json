@@ -1,11 +1,4 @@
 {
-  "title": "agentic-qa-kit",
-  "description": "The agentic QA operating system for software projects.",
-  "url": "https://doc.agentic-qa-kit.padosoft.com",
-  "src": "docs",
-  "out": "../_site",
-  "base": "/",
-  "favicon": "assets/favicon.svg",
   "copyCode": true,
   "pageNavigation": true,
   "minify": true,
@@ -45,9 +38,10 @@
     }
   },
   "theme": {
-    "name": "default",
     "appearance": "system",
     "primaryColor": "#0d9488",
+    "name": "default",
+    "defaultMode": "dark",
     "customCss": [
       "assets/custom.css"
     ]
@@ -182,28 +176,6 @@
     }
   ],
   "plugins": {
-    "search": {
-      "semantic": true,
-      "model": "Xenova/all-MiniLM-L6-v2",
-      "include": [
-        "**/*.md"
-      ],
-      "exclude": [
-        "**/.git/**",
-        "**/node_modules/**"
-      ],
-      "showFilters": true,
-      "showConfidence": false
-    },
-    "git": {
-      "repo": "https://github.com/padosoft/agentic-qa-kit",
-      "branch": "main",
-      "editLink": true,
-      "lastUpdated": true,
-      "commitHistory": true,
-      "maxCommits": 5,
-      "dateFormat": "relative"
-    },
     "seo": {
       "titleTemplate": "%s | agentic-qa-kit",
       "defaultDescription": "The agentic QA operating system for software projects.",
@@ -221,6 +193,28 @@
       "katex": {}
     },
     "llms": {},
-    "analytics": false
-  }
+    "search": {
+      "enabled": true,
+      "semantic": true,
+      "placeholder": "Search the docs…"
+    },
+    "git": {
+      "repo": "https://github.com/padosoft/agentic-qa-kit",
+      "branch": "main",
+      "editLink": true,
+      "lastUpdated": true,
+      "commitHistory": true,
+      "dateFormat": "relative"
+    },
+    "analytics": {
+      "enabled": false
+    }
+  },
+  "title": "agentic-qa-kit",
+  "description": "The agentic QA operating system for software projects.",
+  "url": "https://doc.agentic-qa-kit.padosoft.com",
+  "src": "docs",
+  "out": "_site",
+  "base": "/",
+  "favicon": "assets/favicon.svg"
 }
