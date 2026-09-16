@@ -24,6 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -32,6 +33,8 @@ export interface AdminOptions {
   root: string;
   port?: number;
   host?: string;
+  /** Override the local development identity with a real verifier in production. */
+  authenticate?: ApiContext['authenticate'];
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -123,13 +126,15 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const ctx = {
     store,
     queue: new RunnerQueue(),
-    authenticate: async () => ({
-      id: 'usr-local',
-      email: 'local@aqa.test',
-      display_name: 'Local',
-      // 'admin' role short-circuits permission checks in @aqa/auth.
-      roles: ['admin' as const],
-    }),
+    authenticate:
+      opts.authenticate ??
+      (async () => ({
+        id: 'usr-local',
+        email: 'local@aqa.test',
+        display_name: 'Local',
+        // 'admin' role short-circuits permission checks in @aqa/auth.
+        roles: ['admin' as const],
+      })),
     projectRoot: opts.root,
   };
 
@@ -445,6 +450,21 @@ async function delegateToApi(args: {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(req.headers)) {
     headers[k] = Array.isArray(v) ? v.join(',') : String(v ?? '');
+  }
+  if (matched.route.requires !== null) {
+    const user = await hctx.ctx.authenticate(headers);
+    if (!user) {
+      res.statusCode = 401;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    if (!allows(user, matched.route.requires)) {
+      res.statusCode = 403;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: `forbidden: requires ${matched.route.requires}` }));
+      return;
+    }
   }
   const params: Record<string, string> = {
     ...Object.fromEntries(url.searchParams.entries()),

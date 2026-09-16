@@ -125,6 +125,27 @@ describe('aqa admin — boot + smoke', () => {
     }
   });
 
+  it('enforces the route permission at the HTTP boundary', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      authenticate: async () => null,
+    });
+    assert.equal(boot.ok, true);
+    if (boot.ok) {
+      try {
+        const res = await fetchText(`${boot.url}/api/orgs`);
+        assert.equal(res.status, 401);
+      } finally {
+        await boot.close();
+      }
+    }
+  });
+
   it('rejects --port outside 0..65535', async () => {
     const root = makeTempRoot();
     const adminDistDir = makeFakeAdminDist();
