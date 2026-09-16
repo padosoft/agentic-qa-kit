@@ -154,6 +154,133 @@ describe('makeApi', () => {
     assert.equal(bad?.status, 400);
   });
 
+  it('POST /api/findings/:id/status rejects unproven verified state', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-status',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'a'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-status',
+    });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9001',
+      run_id: 'run-status',
+      scenario_id: 'scenario-status',
+      risk_id: 'risk-status',
+      title: 'A finding that needs proof',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/findings/:id/status',
+    );
+    const res = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9001' },
+        body: { status: 'verified', reason: 'Review without a deterministic replay' },
+      },
+      c,
+    );
+    assert.equal(res?.status, 400);
+    assert.equal((await c.store.loadFinding('AQA-2026-9001'))?.status, 'draft');
+    assert.equal((await c.store.listAuditEvents({})).length, 0);
+  });
+
+  it('POST /api/findings/:id/status persists a valid transition and audit event', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-status-ok',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'b'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-status-ok',
+    });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9002',
+      run_id: 'run-status-ok',
+      scenario_id: 'scenario-status',
+      risk_id: 'risk-status',
+      title: 'A finding that can be rejected',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/findings/:id/status',
+    );
+    const res = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9002' },
+        body: { status: 'rejected', reason: 'Reproduced as a false positive in staging' },
+      },
+      c,
+    );
+    assert.equal(res?.status, 200);
+    assert.equal((await c.store.loadFinding('AQA-2026-9002'))?.status, 'rejected');
+    const audit = await c.store.listAuditEvents({});
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.payload.action, 'finding_status_changed');
+    assert.equal(audit[0]?.prev_hash, null);
+  });
+
   it('GET /api/orgs returns empty list initially', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/orgs');
