@@ -37,6 +37,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
+import { buildReplayArtifacts } from '@aqa/reporter';
 import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
@@ -477,6 +478,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const missingScenarios: string[] = [];
   const unsafeScenarioPaths: string[] = [];
   const runtimeErrors: string[] = [];
+  const executedScenarios: Scenario.Scenario[] = [];
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
@@ -511,6 +513,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       }
       if (!tagsMatch(scenario.tags ?? [], profile.tags)) continue;
       scenariosRun += 1;
+      executedScenarios.push(scenario);
       // runScenario itself appends `finding_emitted` to events and pushes the
       // finding through findings.append when both writers are provided — do
       // NOT re-emit here. Wrap in try/catch so a future probe-runner
@@ -528,6 +531,30 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       } catch (e) {
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
+    }
+  }
+
+  const replayArtifacts: string[] = [];
+  const replayErrors: string[] = [];
+  for (const finding of findings.snapshot()) {
+    const scenario = executedScenarios.find((candidate) => candidate.id === finding.scenario_id);
+    if (!scenario) {
+      replayErrors.push(`${finding.id}: scenario ${finding.scenario_id} is unavailable`);
+      continue;
+    }
+    try {
+      for (const artifact of buildReplayArtifacts({
+        finding,
+        scenario,
+        ...(project.sut.base_url ? { base_url: project.sut.base_url } : {}),
+      })) {
+        const artifactPath = join(runDir, artifact.path);
+        mkdirSync(dirname(artifactPath), { recursive: true });
+        writeFileSync(artifactPath, artifact.contents, { encoding: 'utf8', mode: 0o755 });
+        replayArtifacts.push(artifact.path);
+      }
+    } catch (e) {
+      replayErrors.push(`${finding.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -550,6 +577,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenarios: missingScenarios.length,
         unsafe_paths: unsafeScenarioPaths.length,
         runtime_errors: runtimeErrors.length,
+        replay_artifacts: replayArtifacts.length,
+        replay_errors: replayErrors.length,
         release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
         // Capped detail samples — let auditors diagnose the run from the
         // audit trail alone, without having to re-execute it. Bounded so
@@ -559,6 +588,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenario_samples: cap(missingScenarios),
         unsafe_path_samples: cap(unsafeScenarioPaths),
         runtime_error_samples: cap(runtimeErrors),
+        replay_artifact_samples: cap(replayArtifacts),
+        replay_error_samples: cap(replayErrors),
       },
     });
   } catch (e) {
@@ -633,6 +664,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     );
   if (runtimeErrors.length > 0)
     reasons.push(`${runtimeErrors.length} scenario(s) threw at runtime: ${fmtList(runtimeErrors)}`);
+  if (replayErrors.length > 0)
+    reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
   if (scenariosRun === 0) {
     reasons.push(
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,

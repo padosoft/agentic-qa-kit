@@ -3,6 +3,7 @@ import type { Finding, Scenario } from '@aqa/schemas';
 export interface ReplayInput {
   finding: Finding.Finding;
   scenario: Scenario.Scenario;
+  base_url?: string;
 }
 
 export interface ReplayArtifact {
@@ -23,12 +24,21 @@ function httpProbes(scenario: Scenario.Scenario): Scenario.Probe[] {
   return scenario.steps.filter((s) => s.kind === 'http');
 }
 
-function curlFor(probe: Scenario.Probe): string {
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function curlFor(probe: Scenario.Probe, baseUrl?: string): string {
   const w = probe.with as HttpProbeWith;
   const method = (w.method ?? 'GET').toUpperCase();
-  const url = w.url ?? '/';
+  const rawUrl = w.url ?? '/';
+  const url = /^https?:\/\//i.test(rawUrl)
+    ? rawUrl
+    : baseUrl
+      ? new URL(rawUrl, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString()
+      : rawUrl;
   const headers = Object.entries(w.headers ?? {})
-    .map(([k, v]) => `  -H '${k}: ${v}'`)
+    .map(([k, v]) => `  -H ${shellQuote(`${k}: ${v}`)}`)
     .join(' \\\n');
   const body = w.body !== undefined ? ` \\\n  --data '${JSON.stringify(w.body)}'` : '';
   return `curl -fsS -X ${method} '${url}' \\\n${headers || '  # (no headers)'}${body}`;
@@ -41,7 +51,7 @@ function curlFor(probe: Scenario.Probe): string {
  * lands when the runner gets LLM-driven discovery.
  */
 export function buildReplayArtifacts(input: ReplayInput): ReplayArtifact[] {
-  const { scenario, finding } = input;
+  const { scenario, finding, base_url: baseUrl } = input;
   const out: ReplayArtifact[] = [];
 
   const http = httpProbes(scenario);
@@ -52,13 +62,13 @@ export function buildReplayArtifacts(input: ReplayInput): ReplayArtifact[] {
       `# Replay for ${finding.id}`,
       `# Scenario: ${scenario.id} — ${scenario.title}`,
       '',
-      ...http.map((p) => `${curlFor(p)}\n`),
+      ...http.map((p) => `${curlFor(p, baseUrl)}\n`),
     ];
     out.push({ path: 'replay/repro.sh', contents: `${lines.join('\n')}\n`, kind: 'sh' });
 
     out.push({
       path: 'replay/repro.curl',
-      contents: `${http.map((p) => curlFor(p)).join('\n\n')}\n`,
+      contents: `${http.map((p) => curlFor(p, baseUrl)).join('\n\n')}\n`,
       kind: 'curl',
     });
   }

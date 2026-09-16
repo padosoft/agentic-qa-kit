@@ -213,6 +213,12 @@ describe('aqa run', () => {
       1,
       `expected exactly 1 finding line, got ${findingsLines.length}`,
     );
+    assert.ok(existsSync(join(result.runDir, 'replay', 'repro.sh')));
+    assert.ok(existsSync(join(result.runDir, 'replay', 'repro.curl')));
+    const finished = events.find((e) => e.kind === 'run_finished') as {
+      payload?: { replay_artifacts?: number };
+    };
+    assert.equal(finished.payload?.replay_artifacts, 2);
   });
 
   it('rejects an unknown profile rather than silently running all scenarios', async () => {
