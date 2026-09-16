@@ -9,6 +9,14 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-17
+
+- **Deep technical review completed; product fixes NOT implemented.** Local `main` synchronized/verified against `origin/main` at `044135cdee0aaaf2e865ca10381ef5e4052ed22e`. Preserved pre-existing `.claude/scheduled_tasks.lock`. Review-only work: no push, PR, publish or changes to product source.
+- **Readiness correction:** historical roadmap closure below is not evidence of enterprise readiness. [Detailed review](internal/enterprise-review-2026-09-17.md) records 24 prioritized findings, including reproduced false-green gates/oracles, browser audit accepting tampered events, finding ID collisions, invalid verified status, failed runs reported successful, anonymous admin writes, volatile mutations and failing CJS run/admin commands. Real compiled UI + real loopback API used for the audit negative; no intercepted requests.
+- **Evidence:** Windows/Bun 1.3.14/Node 25.2.1; workspace build and typecheck pass; root build only builds documentation; lint fails; unit suite 366 pass / 2 fail (Windows symlink setup and unsupported test skip); CLI E2E 5 pass but does not exercise published CJS entrypoint. GitHub CI run 27881325266 on reviewed main fails lint with downstream jobs skipped. Full Playwright, Node 22/Linux, deployed enterprise journeys and installed registry tarball remain unverified. [Diagnostic reproducer](internal/reviews/2026-09-17-reproduce.mjs) prints observations, not a passing regression suite.
+- **Strategy and ecommerce design delivered:** current AI/QA comparison with primary sources in review; [Commerce Assurance proposal](internal/ecommerce-qa-design-2026-09-17.md) covers missing commerce packs, money/order/inventory invariants, ten complete journeys, provider/merchant adapter contracts and safe testing boundaries. Proposal only; implementation requires confirmed pilot constraints and approval.
+- **Next:** agree remediation scope, then fail-closed execution/oracles, truthful outcome/audit, bundle/build gates, durable state and authorization/tenant boundaries before enterprise expansion. No production readiness or ecommerce coverage claimed. Existing AGENTS/rules/ADRs were not silently rewritten to adopt proposed architecture.
+
 ## 2026-05-21
 
 - **v1.9 macro closed — junior quick-start truthing.** Five sub-task PRs merged into `task/v1.9-junior-quickstart-truthing`:

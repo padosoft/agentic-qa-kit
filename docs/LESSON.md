@@ -1,5 +1,14 @@
 # Lessons
 
+## 2026-09-17 — evidence-based enterprise review
+
+- **A successful gate must prove execution, not merely absence of findings.** The default no-network probe returns 200; negative-content oracles can accept transport failure, and the shipped idempotency config is ignored by its oracle. Missing drivers and invalid oracle contracts must fail closed. See [review and reproducer](internal/enterprise-review-2026-09-17.md).
+- **A live API does not make the browser verifier genuine.** Compiled admin with a real HTTP backend reported CHAIN OK for a modified event rejected by the backend SHA verifier. Test a tampered payload and compare complete canonical records, not just link continuity or fixture flags.
+- **Version/help and ESM CLI smoke do not validate the published entrypoint.** CJS bundle run/admin fail on import.meta.url even though help works; root build was changed to docs-only while delivery still relies on it. Test the installed artifact's real journey from outside the workspace.
+- **Durability, outcome and identity cross boundaries.** Per-scenario finding counters collide across runs; failed release gates become successful reports/admin runs; MemoryStore mutations vanish at restart. Tests need multiple runs, negative outcomes and fresh-process rereads.
+- **Commerce needs stateful, independent oracles.** A 200 or confirmation page does not prove one charge, one order, inventory integrity or refund reconciliation. Model duplicated/out-of-order events, ambiguous timeout, concurrency and cleanup; never exercise real financial side effects without specific authorization.
+- **Separate environment failures from security claims.** Two Windows unit failures arise from symlink privileges followed by unsupported Bun test skip; they do not demonstrate a path-escape vulnerability. Node 25 diagnostics do not certify Node 22 support. Observational repro output is not a green regression suite.
+
 > Persistent journal of non-obvious things learned while building `agentic-qa-kit`. Read this before starting any sub-task; update it after every Copilot review iteration that surfaces something worth remembering. Entries dated `YYYY-MM-DD`. Newest first.
 
 ## How to use this file

@@ -4,7 +4,7 @@
 
 ### The agentic QA operating system for software projects
 
-**Turn any repository into an agentic QA lab. Works with Claude · Codex · Gemini · Copilot. Bun-first. Enterprise-ready.**
+**Turn any repository into an agentic QA lab. Works with Claude · Codex · Gemini · Copilot. Bun-first. Enterprise path in progress.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-bun%20%E2%89%A5%201.3-black)](https://bun.sh)
@@ -12,7 +12,7 @@
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)](https://www.typescriptlang.org/)
 [![CI](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/padosoft/agentic-qa-kit/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/padosoft/agentic-qa-kit?display_name=tag&sort=semver)](https://github.com/padosoft/agentic-qa-kit/releases)
-[![Status: GA](https://img.shields.io/badge/status-GA%20%E2%80%A2%20v1.0-2ea44f)](#status)
+[![Status: review](https://img.shields.io/badge/status-pre--production%20review-f59e0b)](#status)
 [![Works with Claude · Codex · Gemini · Copilot](https://img.shields.io/badge/works%20with-Claude%20%E2%80%A2%20Codex%20%E2%80%A2%20Gemini%20%E2%80%A2%20Copilot-blueviolet)](#multi-agent)
 
 **Official docs:** [https://doc.agentic-qa-kit.padosoft.com](https://doc.agentic-qa-kit.padosoft.com)
@@ -37,6 +37,7 @@
 - [Quick start (junior-friendly)](#quick-start-junior-friendly)
 - [The mental model in 7 words](#the-mental-model-in-7-words)
 - [How you use it](#how-you-use-it)
+- [Screenshots](#screenshots)
 - [Multi-agent](#multi-agent)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Roadmap](#roadmap)
@@ -75,7 +76,7 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 
 ## Quick start (junior-friendly)
 
-> **Status note:** the kit reached **v1.0 GA** (24-task roadmap complete) and is now at **v1.9**. The `@padosoft/agentic-qa-kit` CLI ships as a single bundled tarball from GitHub Packages. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
+> **Status note:** the repository is at **v1.9**, with an enterprise hardening review in progress. The local workspace CLI and ecosystem smoke are available, but the published bundle, shared multi-tenant service and several enterprise controls still require remediation and independent verification. See [`docs/internal/enterprise-review-2026-09-17.md`](docs/internal/enterprise-review-2026-09-17.md) before using it as a release gate. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
 
 ### 1. Install Bun
 
@@ -212,6 +213,58 @@ Every concept in AQA is one of these seven things or a tool that operates on the
 7. Inspect findings, replay deterministically, verify audit chain.
 8. Iterate risks + scenarios until `release-gate` is green.
 
+## Screenshots
+
+The following screens show the current admin-panel direction. They are product snapshots, not proof that every screen is backed by durable storage or that every enterprise control is operational. The review documents distinguish the live API paths from demonstration or incomplete paths.
+
+### Dashboard and operations
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-Dashboard.png" alt="AQA admin dashboard" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-Dashboard-dark.png" alt="AQA admin dashboard in dark mode" width="49%" />
+</p>
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-runs.png" alt="AQA runs" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-findings.png" alt="AQA findings" width="49%" />
+</p>
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-run.png" alt="AQA run detail" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-audit-log.png" alt="AQA audit log" width="49%" />
+</p>
+
+### Risk, scenarios and replay
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-risk-map.png" alt="AQA risk map" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-scenarios.png" alt="AQA scenarios" width="49%" />
+</p>
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-scenario.png" alt="AQA scenario detail" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-replay.png" alt="AQA replay" width="49%" />
+</p>
+
+### Agents, access and governance
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-agents.png" alt="AQA agents" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-roles.png" alt="AQA roles" width="49%" />
+</p>
+
+<p align="center">
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-organization.png" alt="AQA organization" width="49%" />
+  <img src="resources/screenshotts/agentic-qa-kit-Web-Panel-SSo.png" alt="AQA SSO" width="49%" />
+</p>
+
+<details>
+<summary>Show the complete screenshot inventory</summary>
+
+Dashboard, runs, run events, logs, cost, run cost, run replay, findings, audit log, risk map, scenarios, scenario detail, packs, profiles, agents, queue runners, notifications, API tokens, organization, roles, user, profile and SSO snapshots are stored in [`resources/screenshotts/`](resources/screenshotts/).
+
+</details>
+
 ## Multi-agent
 
 | Target | Files generated | Capability highlights |
@@ -260,7 +313,7 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v0.4.x` | Admin editing | Scenario Studio, AI-generation with review workflow |
 | `v0.5.x` | Multi-team | Server + runner fleet, findings dedup, bug→fix→verify-fix loop |
 | `v0.6.x` | Methodology rigor | STRIDE/FMEA/OWASP integration, oracle ensemble, judge calibration |
-| `v1.0` | **GA enterprise — shipped** | SOC2/ISO controls catalog, `aqa-audit-verify` CLI, pen-test scope doc |
+| `v1.0` | **Historical roadmap milestone** | SOC2/ISO controls catalog, `aqa-audit-verify` CLI, pen-test scope doc; operational readiness is being revalidated |
 | `v1.1` | **Polish — shipped** | Banner, full Helm chart (runner StatefulSet, Ingress, NetworkPolicy, Postgres subchart), 3 example targets (Bun, Next.js, Laravel) |
 | `v1.2` | **Admin SPA wired — shipped** | Tailwind 4 + TanStack Router + Query + 12 screens, audit-chain verification in-browser via Web Crypto |
 | `v1.3` | **Quality batch — shipped** | Admin server↔UI mapping, 6 detail routes, 12 new admin tests, CLI E2E smoke gate, threat-model expansion, CHANGELOG backfill |
@@ -270,17 +323,23 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.7` | **Pack authoring + admin CRUD — shipped** | `PACK-AUTHORING.md`, `aqa pack new`, admin Create-pack/Import-manifest wizards, full Profile/Risk/Scenario CRUD (Delete/Edit/Clone), Agents wired to `/api/agents`, Operations + Admin pages wired to `/api/audit` / `/api/cost/summary` / `/api/queue` / `/api/notifications` / `/api/tokens` / `/api/orgs`, scenario YAML editor, schema-conforming mock-id migration, `Agent` schema, `agents:read`/`agents:edit` permissions, atomic `Store.createProfile/createScenario` |
 | `v1.8` | **Live ecosystem e2e — shipped** | Real HTTP probe runner, release-gate finding enforcement, single-command ecosystem stack (`bun run e2e:ecosystem`), Playwright admin-against-live-API smoke, audit-chain canonical reconciliation |
 | `v1.9` | **Junior quick-start truthing — shipped** | `aqa install-agent-files` + `aqa report` + `aqa admin` CLI verbs (previously documented but unwired), `@aqa/pack-author` extracted to break kit↔server build cycle, esbuild bundled `dist/cli.cjs`, GitHub Packages publish workflow on `v*` tags, README quick-start rewritten to match the actually-shipped CLI surface |
+| `v2.0` | **Enterprise truth and safety — next** | Fail-closed runner/oracles, canonical outcomes, real audit verification, durable persistence, authentication/tenant authorization, working published bundle, CI/build recovery, sandbox and secret-redaction enforcement |
+| `v2.1` | **Commerce Assurance pilot — planned** | Commerce pack, money/order/payment/inventory contracts, provider and merchant adapters, webhook/retry/race journeys, refund reconciliation and safe synthetic fixtures |
+| `v2.2` | **Stateful agentic QA — planned** | Evidence graph, stateful journey engine, capability preflight, temporal assertions, multi-actor sessions, mutation testing and trace-to-regression workflows |
 
 ## Status
 
-**GA (`v1.0` shipped, `v1.9` current).** The full 24-task roadmap is closed:
-schemas, CLI (`@aqa/kit`), 5 baseline packs, multi-agent adapters
-(Claude/Codex/Gemini/Copilot), runner with hash-chained audit, reporter
-with 3-level replay, admin panel, server + runner fleet, on-prem LLM
-adapters, SSO/RBAC, Postgres backend, pack signing + scanning,
-container sandbox, cost governance, findings dedup + clustering,
-STRIDE/FMEA/OWASP methodology layer, Helm chart + Terraform + air-gap
-installer, SOC2/ISO controls catalog + `aqa-audit-verify` CLI.
+**Pre-production review (`v1.9` current).** The repository contains schemas, CLI,
+baseline packs, multi-agent adapters, runner/reporter, admin UI and deployment
+artifacts. Several enterprise capabilities are currently partial, declarative or
+not wired through the complete journey. The review reproduced false-green
+outcomes, audit-verification gaps, volatile admin state, authorization gaps and
+published-bundle failures; these are release blockers until fixed and re-tested.
+
+The intended enterprise target remains: durable multi-tenant storage, SSO/RBAC,
+signed packs, sandboxed execution, cost governance, evidence-grade audit,
+replay, and safe agent integrations. “Implemented in the roadmap” is not treated
+as evidence that the capability is production-operational.
 
 Release notes per tag: [Releases page](https://github.com/padosoft/agentic-qa-kit/releases).
 Live state: [`docs/PROGRESS.md`](docs/PROGRESS.md). Architectural
@@ -298,6 +357,8 @@ decisions: [`docs/adr/`](docs/adr/).
 - [`docs/architecture/reference.md`](docs/architecture/reference.md) — full architecture
 - [`docs/security/threat-model.md`](docs/security/threat-model.md) — STRIDE applied to AQA
 - [`docs/methodology/agentic-qa.md`](docs/methodology/agentic-qa.md) — methodology paper
+- [`docs/internal/enterprise-review-2026-09-17.md`](docs/internal/enterprise-review-2026-09-17.md) — current technical and strategic review
+- [`docs/internal/ecommerce-qa-design-2026-09-17.md`](docs/internal/ecommerce-qa-design-2026-09-17.md) — Commerce Assurance proposal and priority journeys
 
 ## Contributing
 
