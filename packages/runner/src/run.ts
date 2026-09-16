@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Finding, type Scenario } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 import type { FindingsWriter } from './findings.js';
@@ -140,10 +141,12 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   let finding: Finding.Finding | null = null;
   if (failed.length > 0) {
     const year = new Date().getUTCFullYear();
-    const seed = String(opts.findingIdSeed ?? Math.floor(Math.random() * 9000) + 1000).padStart(
-      4,
-      '0',
-    );
+    // The human-readable code must remain schema-compatible, but it cannot
+    // be based on the scenario position: that value repeats on every run and
+    // causes a durable store keyed by finding.id to overwrite findings.
+    // UUID entropy gives each occurrence a globally unique code while the
+    // legacy four-digit prefix remains accepted for imported fixtures.
+    const seed = randomUUID().replace(/\D/g, '').slice(0, 20).padEnd(20, '0');
     const agreement = oracleResults.length
       ? oracleResults.reduce((s, o) => s + o.agreement, 0) / oracleResults.length
       : 0;

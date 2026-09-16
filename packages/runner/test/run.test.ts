@@ -129,6 +129,28 @@ describe('runScenario', () => {
     assert.equal(findings.snapshot().length, 1);
   });
 
+  it('generates distinct finding IDs across runs even with the same scenario seed', async () => {
+    const findings = new FindingsWriter('/tmp/_ignore', { persist: false });
+    const first = await runScenario({
+      scenario: SCENARIO,
+      run_id: 'run-id-first',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+      findings,
+      findingIdSeed: 1,
+    });
+    const second = await runScenario({
+      scenario: SCENARIO,
+      run_id: 'run-id-second',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+      findings,
+      findingIdSeed: 1,
+    });
+    assert.ok(first.finding);
+    assert.ok(second.finding);
+    assert.notEqual(first.finding?.id, second.finding?.id);
+    assert.equal(findings.snapshot().length, 2);
+  });
+
   it('makeHttpProbeRunner executes relative HTTP probes against baseUrl', async () => {
     const originalFetch = globalThis.fetch;
     let seenUrl = '';

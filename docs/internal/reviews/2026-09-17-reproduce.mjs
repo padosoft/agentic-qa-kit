@@ -148,10 +148,11 @@ for (const run_id of ['run-first', 'run-second'])
   );
 const store = new MemoryStore();
 for (const f of findings) await store.appendFinding(f);
-show('finding-id-collision', {
+show('finding-id-uniqueness', {
   input: findings.length,
   ids: findings.map((f) => f.id),
   stored: (await store.listFindings({})).length,
+  preserved: new Set(findings.map((f) => f.id)).size === findings.length,
 });
 const ctx = {
   store,
@@ -179,8 +180,11 @@ const changed = await api
   );
 show('verified-invariant-bypass', {
   status: changed.status,
-  acceptedState: changed.body.finding.status,
-  schemaValid: Finding.Finding.safeParse(changed.body.finding).success,
+  accepted: changed.status === 200,
+  acceptedState: changed.body?.finding?.status ?? null,
+  schemaValid: changed.body?.finding
+    ? Finding.Finding.safeParse(changed.body.finding).success
+    : false,
   auditEvents: (await store.listAuditEvents({})).length,
 });
 const writer = new EventChainWriter('unused', { persist: false });

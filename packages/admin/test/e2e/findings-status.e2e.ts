@@ -80,7 +80,7 @@ test.describe('Findings kanban status change', () => {
     // layout shifts, but the test still proves the endpoint contract
     // (URL pattern + request body). Just assert the URL named *a*
     // finding ID (AQA-2026-XXXX).
-    expect(findingId).toMatch(/^AQA-2026-\d{4}$/);
+    expect(findingId).toMatch(/^AQA-2026-\d{4,}$/);
     // Core UI outcome: the dropped card must actually appear in the
     // verified column after 200. The kanban re-renders byCol() so
     // the card with the matching finding id ends up under the target.
@@ -210,7 +210,7 @@ test.describe('Findings kanban status change', () => {
     const pendingCard = page.locator('[data-finding-pending="true"]');
     await expect(pendingCard).toBeVisible();
     const pendingId = await pendingCard.getAttribute('data-finding-id');
-    expect(pendingId).toMatch(/^AQA-2026-\d{4}$/);
+    expect(pendingId).toMatch(/^AQA-2026-\d{4,}$/);
     // Release the hold so the test cleans up. The card flips back to
     // pending="false" once the response resolves.
     resolveFirst();

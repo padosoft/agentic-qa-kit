@@ -146,6 +146,17 @@ describe('aqa admin — boot + smoke', () => {
     }
   });
 
+  it('refuses a non-loopback bind without explicit authentication', async () => {
+    const result = await runAdmin({
+      root: makeTempRoot(),
+      port: 0,
+      host: '0.0.0.0',
+      adminDistDir: makeFakeAdminDist(),
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /non-loopback.*authenticate/i);
+  });
+
   it('rejects --port outside 0..65535', async () => {
     const root = makeTempRoot();
     const adminDistDir = makeFakeAdminDist();

@@ -91,6 +91,13 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     return { ok: false, error: `admin: --port must be an integer 0..65535, got ${port}` };
   }
+  const loopbackHosts = new Set(['127.0.0.1', '::1', 'localhost']);
+  if (!loopbackHosts.has(host) && !opts.authenticate) {
+    return {
+      ok: false,
+      error: 'admin: non-loopback bind requires an explicit authenticate callback (OIDC/JWT)',
+    };
+  }
 
   const adminDistDir = opts.adminDistDir ?? defaultAdminDistDir();
   if (!existsSync(adminDistDir) || !statSync(adminDistDir).isDirectory()) {
