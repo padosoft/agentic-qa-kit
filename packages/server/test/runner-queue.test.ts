@@ -25,7 +25,7 @@ describe('RunnerQueue', () => {
     const q = new RunnerQueue();
     q.enqueue(JOB);
     const j = q.dequeue();
-    assert.equal(q.ack(j?.id ?? ''), true);
+    assert.equal(q.ack(j?.id ?? '', j?.lease_token), true);
     assert.equal(q.size(), 0);
   });
 
@@ -44,5 +44,17 @@ describe('RunnerQueue', () => {
     assert.equal(q.ack('missing'), false);
     q.enqueue(JOB);
     assert.equal(q.ack(JOB.id), false); // not in_flight yet
+  });
+
+  it('rejects a stale worker ACK after the lease is fenced and reassigned', () => {
+    const q = new RunnerQueue({ lease_ms: 100 });
+    q.enqueue(JOB);
+    const first = q.dequeue(new Date('2026-05-17T10:00:00Z'));
+    const second = q.dequeue(new Date('2026-05-17T10:00:00.200Z'));
+    assert.ok(first?.lease_token);
+    assert.ok(second?.lease_token);
+    assert.notEqual(first?.lease_token, second?.lease_token);
+    assert.equal(q.ack(JOB.id, first?.lease_token), false);
+    assert.equal(q.ack(JOB.id, second?.lease_token), true);
   });
 });

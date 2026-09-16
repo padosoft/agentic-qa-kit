@@ -263,9 +263,13 @@ if (admin.ok) {
 }
 const queue = new RunnerQueue({ lease_ms: 10 });
 queue.enqueue({ id: 'review-job', payload: {}, enqueued_at: new Date(0).toISOString() });
-queue.dequeue(new Date(0));
-queue.dequeue(new Date(20));
-show('stale-worker-ack', { accepted: queue.ack('review-job'), state: queue.snapshot()[0].status });
+const firstLease = queue.dequeue(new Date(0));
+const secondLease = queue.dequeue(new Date(20));
+show('stale-worker-ack', {
+  staleAccepted: queue.ack('review-job', firstLease?.lease_token),
+  currentAccepted: queue.ack('review-job', secondLease?.lease_token),
+  state: queue.snapshot()[0].status,
+});
 const restart = await runAdmin({ root, port: 0, adminDistDir: resolve('packages/admin/dist') });
 if (restart.ok) {
   try {

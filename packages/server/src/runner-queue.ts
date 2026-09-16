@@ -7,6 +7,7 @@ export interface RunnerJob {
 export interface EnqueuedJob extends RunnerJob {
   status: 'queued' | 'in_flight' | 'done';
   leased_until?: string | undefined;
+  lease_token?: string | undefined;
 }
 
 /**
@@ -38,19 +39,25 @@ export class RunnerQueue {
       if (j.status === 'in_flight' && j.leased_until && new Date(j.leased_until) < now) {
         j.status = 'queued';
         j.leased_until = undefined;
+        j.lease_token = undefined;
       }
     }
     const job = this.jobs.find((j) => j.status === 'queued');
     if (!job) return null;
     job.status = 'in_flight';
     job.leased_until = new Date(now.getTime() + this.leaseMs).toISOString();
-    return job;
+    job.lease_token = randomUUID();
+    // Never leak the mutable queue record: a later lease/requeue must not
+    // rewrite the token held by an earlier worker.
+    return { ...job };
   }
 
-  ack(id: string): boolean {
+  ack(id: string, leaseToken?: string): boolean {
     const job = this.jobs.find((j) => j.id === id);
-    if (!job || job.status !== 'in_flight') return false;
+    if (!job || job.status !== 'in_flight' || !leaseToken || job.lease_token !== leaseToken)
+      return false;
     job.status = 'done';
+    job.lease_token = undefined;
     return true;
   }
 
@@ -73,6 +80,7 @@ export class RunnerQueue {
     if (!job) return false;
     job.status = 'queued';
     job.leased_until = undefined;
+    job.lease_token = undefined;
     return true;
   }
 
@@ -82,6 +90,8 @@ export class RunnerQueue {
     const job = this.jobs.find((j) => j.id === id);
     if (!job) return false;
     job.status = 'done';
+    job.lease_token = undefined;
     return true;
   }
 }
+import { randomUUID } from 'node:crypto';
