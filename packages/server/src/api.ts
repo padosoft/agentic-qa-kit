@@ -272,9 +272,16 @@ export function makeApi(): ApiHandler[] {
       path: '/api/findings',
       requires: 'findings:read',
       async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
         const filter: { run_id?: string } = {};
         if (req.params.run_id) filter.run_id = req.params.run_id;
-        const findings = await ctx.store.listFindings(filter);
+        const candidates = await ctx.store.listFindings(filter);
+        const findings = [];
+        for (const finding of candidates) {
+          const run = await ctx.store.loadRun(finding.run_id);
+          if (run?.project === s.project) findings.push(finding);
+        }
         return asResponse({ findings } satisfies { findings: Finding.Finding[] });
       },
     },

@@ -281,6 +281,63 @@ describe('makeApi', () => {
     assert.equal(audit[0]?.prev_hash, null);
   });
 
+  it('GET /api/findings only returns findings whose run belongs to the requested project', async () => {
+    const c = ctx();
+    const run = {
+      schema_version: '1' as const,
+      id: 'run-tenant-findings',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded' as const,
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator' as const,
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator' as const,
+        packs: [],
+        config_hash: 'c'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-tenant-findings',
+    };
+    await c.store.saveRun(run);
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9010',
+      run_id: run.id,
+      scenario_id: 'scenario-tenant',
+      risk_id: 'risk-tenant',
+      title: 'Tenant-scoped finding',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/findings');
+    const visible = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    const foreign = await route?.handle(
+      { headers: { ...TENANT_HEADERS, 'x-aqa-project': 'other' }, params: {} },
+      c,
+    );
+    assert.equal((visible?.body as { findings: unknown[] }).findings.length, 1);
+    assert.equal((foreign?.body as { findings: unknown[] }).findings.length, 0);
+  });
+
   it('GET /api/orgs returns empty list initially', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/orgs');
