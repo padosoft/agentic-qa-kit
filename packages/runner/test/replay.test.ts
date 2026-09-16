@@ -40,6 +40,22 @@ describe('verifyScenario', () => {
     assert.equal(r.successes, 2);
   });
 
+  it('deterministic=false when every attempt fails differently', async () => {
+    let status = 500;
+    const r = await verifyScenario({
+      scenario: SCENARIO,
+      run_id: 'run-different-failures',
+      attempts: 2,
+      probeRunner: async (p) => ({ probe_id: p.id, status: status++ }),
+    });
+    assert.equal(r.successes, 1);
+    assert.equal(r.deterministic, false);
+    assert.notEqual(
+      r.attempts_detail[0]?.failure_fingerprint,
+      r.attempts_detail[1]?.failure_fingerprint,
+    );
+  });
+
   it('throws on attempts < 1', async () => {
     await assert.rejects(
       () =>
