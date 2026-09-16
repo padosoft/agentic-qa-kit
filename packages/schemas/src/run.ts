@@ -87,7 +87,11 @@ export type Run = z.infer<typeof Run>;
  */
 export function deriveStateFromCompletion(completion: unknown, scenariosRun: number): RunState {
   if (!completion || typeof completion !== 'object') return 'running';
-  const payload = completion as Record<string, unknown>;
+  const candidate = completion as Record<string, unknown>;
+  const payload =
+    candidate.payload && typeof candidate.payload === 'object'
+      ? (candidate.payload as Record<string, unknown>)
+      : candidate;
   const errorKeys = [
     'pack_errors',
     'scenario_errors',
@@ -95,7 +99,10 @@ export function deriveStateFromCompletion(completion: unknown, scenariosRun: num
     'unsafe_paths',
     'runtime_errors',
   ] as const;
-  if (errorKeys.some((key) => typeof payload[key] === 'number' && payload[key] > 0)) {
+  if (
+    payload.release_gate_failed === true ||
+    errorKeys.some((key) => typeof payload[key] === 'number' && payload[key] > 0)
+  ) {
     return 'failed';
   }
   return scenariosRun === 0 ? 'failed' : 'succeeded';

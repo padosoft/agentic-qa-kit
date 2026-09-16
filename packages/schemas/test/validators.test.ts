@@ -67,13 +67,23 @@ describe('schema version', () => {
 describe('Run completion state derivation', () => {
   it('does not treat a completed event with errors as success', () => {
     assert.equal(
-      Run.deriveStateFromCompletion({ runtime_errors: 1, scenarios_run: 1 }, 1),
+      Run.deriveStateFromCompletion(
+        { kind: 'run_finished', payload: { runtime_errors: 1, scenarios_run: 1 } },
+        1,
+      ),
       'failed',
     );
   });
 
   it('treats zero executed scenarios as failed', () => {
     assert.equal(Run.deriveStateFromCompletion({}, 0), 'failed');
+  });
+
+  it('treats a failed release gate as failed even without runtime errors', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { release_gate_failed: true } }, 1),
+      'failed',
+    );
   });
 
   it('treats a clean non-empty completion as succeeded', () => {

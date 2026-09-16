@@ -22,7 +22,8 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
-import { extname, join, normalize, sep } from 'node:path';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -199,6 +200,13 @@ function defaultAdminDistDir(): string {
   // both in the source tree and inside an npm-installed tarball.
   // Using import.meta.url keeps this self-contained — no env var, no
   // build-time string substitution.
+  const moduleDir =
+    typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+  const bundledPath = resolve(moduleDir, 'admin');
+  const sourcePath = resolve(moduleDir, '..', 'admin');
+  if (existsSync(bundledPath)) return bundledPath;
+  if (existsSync(sourcePath)) return sourcePath;
+
   const url = new URL('../admin/', import.meta.url);
   // pathname is URL-encoded; on Windows it begins with `/C:/...` which
   // node treats as a valid path when normalized.
@@ -256,7 +264,7 @@ async function seedStoreFromRuns(store: StoreProvider, runsRoot: string): Promis
       started_at: startedAt,
       ...(finishedAt ? { finished_at: finishedAt } : {}),
       state: Run.deriveStateFromCompletion(
-        runFinished?.payload,
+        runFinished,
         readPayloadNumber(runFinished, 'scenarios_run') ?? 0,
       ),
       project,

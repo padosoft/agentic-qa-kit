@@ -335,7 +335,7 @@ function reconstructRun(input: ReconstructInput): Run.Run {
   const scenariosRun = readPayloadNumber(finished, 'scenarios_run') ?? 0;
   const totalsFindings = readPayloadNumber(finished, 'findings') ?? findingsCount;
 
-  const state = Run.deriveStateFromCompletion(finished?.payload, scenariosRun);
+  const state = Run.deriveStateFromCompletion(finished, scenariosRun);
 
   const run: Run.Run = {
     schema_version: '1',

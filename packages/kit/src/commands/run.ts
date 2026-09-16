@@ -11,11 +11,9 @@
  * writers we hand it; we never re-emit `finding_emitted` ourselves.
  *
  * Profiles with `require_deterministic_replay: true` (the canonical
- * "release-gate" signal from the schema) are *intended* to treat any
- * emitted finding as a run-level failure, but that strict semantic is
- * **deferred** until a real probe runner ships. Today's runs use the
- * no-network probe stub, so every finding is synthetic and not a real
- * regression — surfacing findings via `findingsCount` + `findings.jsonl`
+ * "release-gate" signal from the schema) treat any emitted finding as a
+ * run-level failure. Missing probe drivers and transport errors are recorded
+ * as failed evidence; they are never represented by a synthetic success.
  * is the honest signal for now. Both smoke and release-gate currently
  * report `ok: true` when scenarios completed without infrastructure
  * errors. The check re-engages automatically once findings reflect
@@ -169,8 +167,10 @@ function discoverInDir(parentDir: string, candidates: string[]): void {
  */
 function bundledKitPacksDir(): string {
   // dist/commands/run.js → dist/packs
-  const here = dirname(fileURLToPath(import.meta.url));
-  return resolve(here, '..', 'packs');
+  const here =
+    typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+  const bundledPath = resolve(here, 'packs');
+  return existsSync(bundledPath) ? bundledPath : resolve(here, '..', 'packs');
 }
 
 function defaultPacksRoot(projectRoot: string): string[] {
@@ -550,6 +550,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenarios: missingScenarios.length,
         unsafe_paths: unsafeScenarioPaths.length,
         runtime_errors: runtimeErrors.length,
+        release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
         // Capped detail samples — let auditors diagnose the run from the
         // audit trail alone, without having to re-execute it. Bounded so
         // a runaway pack tree can't blow up the JSONL line size.

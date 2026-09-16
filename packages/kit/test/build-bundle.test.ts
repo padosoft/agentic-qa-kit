@@ -13,6 +13,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -70,6 +71,20 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
     assert.equal(typeof meta.bytes, 'number');
     assert.ok(meta.bytes > 0);
     assert.match(meta.generated_at, /^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('executes run and admin help from the bundled entrypoint', () => {
+    if (!existsSync(bundlePath)) return;
+    const run = spawnSync(process.execPath, [bundlePath, 'run', '--help'], {
+      cwd: kitRoot,
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, `bundled run failed: ${run.stderr}`);
+    const admin = spawnSync(process.execPath, [bundlePath, 'admin', '--help'], {
+      cwd: kitRoot,
+      encoding: 'utf8',
+    });
+    assert.equal(admin.status, 0, `bundled admin failed: ${admin.stderr}`);
   });
 });
 
