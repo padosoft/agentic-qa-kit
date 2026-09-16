@@ -335,7 +335,7 @@ function reconstructRun(input: ReconstructInput): Run.Run {
   const scenariosRun = readPayloadNumber(finished, 'scenarios_run') ?? 0;
   const totalsFindings = readPayloadNumber(finished, 'findings') ?? findingsCount;
 
-  const state: Run.Run['state'] = deriveState(finished, scenariosRun);
+  const state = Run.deriveStateFromCompletion(finished?.payload, scenariosRun);
 
   const run: Run.Run = {
     schema_version: '1',
@@ -371,31 +371,6 @@ function reconstructRun(input: ReconstructInput): Run.Run {
     artifact_dir: runDir,
   };
   return run;
-}
-
-function deriveState(
-  finished: Record<string, unknown> | undefined,
-  scenariosRun: number,
-): Run.Run['state'] {
-  // `runRun` writes `run_finished` on success AND on most failure paths
-  // (pack errors, scenario errors, missing scenarios, unsafe paths, runtime
-  // errors, zero scenarios). Treat any non-zero error counter — or a run
-  // that completed zero scenarios — as `failed` so the report doesn't
-  // mislabel broken runs as successes.
-  if (!finished) return 'running';
-  const errorKeys = [
-    'pack_errors',
-    'scenario_errors',
-    'missing_scenarios',
-    'unsafe_paths',
-    'runtime_errors',
-  ] as const;
-  for (const k of errorKeys) {
-    const v = readPayloadNumber(finished, k);
-    if (typeof v === 'number' && v > 0) return 'failed';
-  }
-  if (scenariosRun === 0) return 'failed';
-  return 'succeeded';
 }
 
 function pickEvent(

@@ -4,6 +4,7 @@
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.
 - **Cleanup is part of the evidence contract.** Running cleanup only on the happy path leaves commerce reservations and fixtures behind exactly when failures matter most. Execute every declared cleanup probe, catch its exception, and persist its result as cleanup evidence.
+- **Run state must have one owner.** Report and admin independently inferring “a `run_finished` event exists = success” drifted from CLI counters. Put the derivation beside the schema and make every consumer use it; test errors, zero scenarios and missing completion separately.
 
 - **A successful gate must prove execution, not merely absence of findings.** The default no-network probe returns 200; negative-content oracles can accept transport failure, and the shipped idempotency config is ignored by its oracle. Missing drivers and invalid oracle contracts must fail closed. See [review and reproducer](internal/enterprise-review-2026-09-17.md).
 - **A live API does not make the browser verifier genuine.** Compiled admin with a real HTTP backend reported CHAIN OK for a modified event rejected by the backend SHA verifier. Test a tampered payload and compare complete canonical records, not just link continuity or fixture flags.

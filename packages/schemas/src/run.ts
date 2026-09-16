@@ -79,3 +79,24 @@ export const Run = z
     }
   });
 export type Run = z.infer<typeof Run>;
+
+/**
+ * Derive the persisted run state from the completion event counters.
+ * Consumers must use the same fail-closed rule: a completion event alone is
+ * not proof of success when it reports errors or zero executed scenarios.
+ */
+export function deriveStateFromCompletion(completion: unknown, scenariosRun: number): RunState {
+  if (!completion || typeof completion !== 'object') return 'running';
+  const payload = completion as Record<string, unknown>;
+  const errorKeys = [
+    'pack_errors',
+    'scenario_errors',
+    'missing_scenarios',
+    'unsafe_paths',
+    'runtime_errors',
+  ] as const;
+  if (errorKeys.some((key) => typeof payload[key] === 'number' && payload[key] > 0)) {
+    return 'failed';
+  }
+  return scenariosRun === 0 ? 'failed' : 'succeeded';
+}

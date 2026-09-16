@@ -255,7 +255,10 @@ async function seedStoreFromRuns(store: StoreProvider, runsRoot: string): Promis
       id: name,
       started_at: startedAt,
       ...(finishedAt ? { finished_at: finishedAt } : {}),
-      state: (runFinished ? 'succeeded' : 'running') as Run.RunState,
+      state: Run.deriveStateFromCompletion(
+        runFinished?.payload,
+        readPayloadNumber(runFinished, 'scenarios_run') ?? 0,
+      ),
       project,
       profile,
       execution_mode: 'orchestrator' as const,

@@ -64,6 +64,23 @@ describe('schema version', () => {
   });
 });
 
+describe('Run completion state derivation', () => {
+  it('does not treat a completed event with errors as success', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ runtime_errors: 1, scenarios_run: 1 }, 1),
+      'failed',
+    );
+  });
+
+  it('treats zero executed scenarios as failed', () => {
+    assert.equal(Run.deriveStateFromCompletion({}, 0), 'failed');
+  });
+
+  it('treats a clean non-empty completion as succeeded', () => {
+    assert.equal(Run.deriveStateFromCompletion({}, 2), 'succeeded');
+  });
+});
+
 describe('valid fixtures', () => {
   const validDir = join(fixturesDir, 'valid');
   const files = readdirSync(validDir).filter((f) => f.endsWith('.json'));
