@@ -5,15 +5,7 @@
   "overlap": 64,
   "incremental": true,
   "topK": 10,
-  "include": [
-    "docs-site/docs/**/*.md",
-    "_site/**/*.html",
-    "_site/llms.txt"
-  ],
-  "exclude": [
-    "**/node_modules/**",
-    "**/.git/**",
-    "**/.docmd-search/**"
-  ],
+  "include": ["docs-site/docs/**/*.md", "_site/**/*.html", "_site/llms.txt"],
+  "exclude": ["**/node_modules/**", "**/.git/**", "**/.docmd-search/**"],
   "outDir": "_site/.docmd-search"
 }

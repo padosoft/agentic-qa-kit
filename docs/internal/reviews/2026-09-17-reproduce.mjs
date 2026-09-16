@@ -1,31 +1,31 @@
+import { spawnSync } from 'node:child_process';
 // Diagnostic reproductions for the review, not a passing regression suite.
 // From repository root: bun run build:workspace; node docs/internal/reviews/2026-09-17-reproduce.mjs
 // Uses synthetic data, loopback HTTP and temporary directories. No external SUT or LLM calls.
 // Temporary fixture directories are retained for inspection. No production files are edited.
-import { readFileSync, readdirSync, mkdtempSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 const require = createRequire(new URL('../../../packages/kit/package.json', import.meta.url));
 const yaml = require('yaml');
 const { parse } = yaml;
-import { Scenario, Finding } from '../../../packages/schemas/dist/index.js';
-import {
-  runScenario,
-  verifyScenario,
-  EventChainWriter,
-  makeHttpProbeRunner,
-} from '../../../packages/runner/dist/index.js';
 import { createServer } from 'node:http';
 import { verifyEventChain } from '../../../packages/compliance/dist/index.js';
-import { MemoryStore } from '../../../packages/store/dist/index.js';
-import { makeApi, RunnerQueue } from '../../../packages/server/dist/index.js';
-import { runInit } from '../../../packages/kit/dist/commands/init.js';
-import { runPackNew } from '../../../packages/pack-author/dist/index.js';
-import { runRun } from '../../../packages/kit/dist/commands/run.js';
-import { runReport } from '../../../packages/kit/dist/commands/report.js';
 import { runAdmin } from '../../../packages/kit/dist/commands/admin.js';
+import { runInit } from '../../../packages/kit/dist/commands/init.js';
+import { runReport } from '../../../packages/kit/dist/commands/report.js';
+import { runRun } from '../../../packages/kit/dist/commands/run.js';
+import { runPackNew } from '../../../packages/pack-author/dist/index.js';
+import {
+  EventChainWriter,
+  makeHttpProbeRunner,
+  runScenario,
+  verifyScenario,
+} from '../../../packages/runner/dist/index.js';
+import { Finding, Scenario } from '../../../packages/schemas/dist/index.js';
+import { RunnerQueue, makeApi } from '../../../packages/server/dist/index.js';
+import { MemoryStore } from '../../../packages/store/dist/index.js';
 
 const show = (id, evidence) => console.log(JSON.stringify({ id, ...evidence }));
 const root = mkdtempSync(join(tmpdir(), 'aqa-review-'));
@@ -196,7 +196,7 @@ chain[0].payload.project = 'changed-without-rehash';
 const app = readFileSync('packages/admin/src/app.tsx', 'utf8');
 const start = app.indexOf('function validateChainStep(');
 const end = app.indexOf('\n}\n', start) + 2;
-const validate = new Function(app.slice(start, end) + '; return validateChainStep;')();
+const validate = new Function(`${app.slice(start, end)}; return validateChainStep;`)();
 show('audit-false-pass', {
   backendAcceptsTamper: verifyEventChain(chain).ok,
   uiIssue: validate(chain, chain.length),
@@ -238,13 +238,13 @@ for (const verb of ['run', 'admin']) {
     [resolve('packages/kit/dist/cli.cjs'), verb, ...(verb === 'run' ? ['--profile', 'smoke'] : [])],
     { cwd: root, encoding: 'utf8', timeout: 10000 },
   );
-  show('bundle-' + verb, { exit: result.status, stderr: result.stderr.trim().slice(0, 550) });
+  show(`bundle-${verb}`, { exit: result.status, stderr: result.stderr.trim().slice(0, 550) });
 }
 const admin = await runAdmin({ root, port: 0, adminDistDir: resolve('packages/admin/dist') });
 if (admin.ok) {
   try {
     const hdr = { 'content-type': 'application/json', origin: 'https://untrusted.example.invalid' };
-    const response = await fetch(admin.url + '/api/orgs', {
+    const response = await fetch(`${admin.url}/api/orgs`, {
       method: 'POST',
       headers: hdr,
       body: JSON.stringify({ schema_version: '1', slug: 'review-org', name: 'Synthetic review' }),
@@ -253,7 +253,7 @@ if (admin.ok) {
       status: response.status,
       cors: response.headers.get('access-control-allow-origin'),
     });
-    const runs = await fetch(admin.url + '/api/runs', {
+    const runs = await fetch(`${admin.url}/api/runs`, {
       headers: { 'x-aqa-org': 'review-org', 'x-aqa-project': 'review-app' },
     }).then((r) => r.json());
     show('failed-run-success-admin', { states: runs.runs.map((r) => r.state) });
@@ -269,7 +269,7 @@ show('stale-worker-ack', { accepted: queue.ack('review-job'), state: queue.snaps
 const restart = await runAdmin({ root, port: 0, adminDistDir: resolve('packages/admin/dist') });
 if (restart.ok) {
   try {
-    const orgs = await fetch(restart.url + '/api/orgs').then((r) => r.json());
+    const orgs = await fetch(`${restart.url}/api/orgs`).then((r) => r.json());
     show('restart-loses-mutation', { orgs: orgs.orgs.length });
   } finally {
     await restart.close();
@@ -280,7 +280,7 @@ const browserRuns = join(browserRoot, '.aqa', 'runs', 'run-audit');
 fs.mkdirSync(browserRuns, { recursive: true });
 fs.writeFileSync(
   join(browserRuns, 'events.jsonl'),
-  chain.map((e) => JSON.stringify(e)).join('\n') + '\n',
+  `${chain.map((e) => JSON.stringify(e)).join('\n')}\n`,
 );
 fs.writeFileSync(join(browserRuns, 'findings.jsonl'), '');
 const browserAdmin = await runAdmin({
