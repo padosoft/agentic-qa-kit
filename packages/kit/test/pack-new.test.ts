@@ -235,13 +235,11 @@ describe('aqa pack new', () => {
 
 describe('aqa pack new — integration with aqa run', () => {
   /**
-   * The strongest sanity check: a freshly-scaffolded pack must actually run
-   * end-to-end against the no-network probe stub. If the starter scenario's
-   * oracle doesn't pass against the stub, every new pack would emit
-   * synthetic findings out of the box, exactly the failure mode iter-17
-   * surfaced for the bundled packs.
+   * A freshly-scaffolded pack must not claim a clean run when no SUT/driver is
+   * configured. The old test relied on the removed no-network 200 stub and
+   * therefore encoded a false green.
    */
-  it('produces a pack whose starter scenario runs cleanly under aqa run', async () => {
+  it('does not claim a clean run without a configured SUT driver', async () => {
     // Build a fixture project that aqa init would produce.
     const root = makeTempDir();
     writeFileSync(
@@ -284,14 +282,16 @@ describe('aqa pack new — integration with aqa run', () => {
     // a freshly-scaffolded pack must be discoverable by `runRun`'s default
     // discovery (which scans `<root>/packs/*`) without any caller hint.
     const result = await runRun({ root, profile: 'smoke' });
-    assert.equal(result.ok, true, `new pack must run cleanly, got: ${JSON.stringify(result)}`);
+    // Smoke remains informational by contract, but the finding makes the
+    // missing driver visible; only a release-gate profile may be green.
+    assert.equal(result.ok, true, `smoke should remain informational: ${JSON.stringify(result)}`);
     assert.ok(result.scenariosRun >= 1, 'starter scenario must execute');
-    assert.equal(result.findingsCount, 0, 'starter scenario must pass against the stub probe');
+    assert.ok(result.findingsCount >= 1, 'missing driver must be observable as a finding');
 
     // Prove the scaffolded scenario actually ran (not some bundled pack
     // sneaking in). `scn-pack-demo-starter` is the derived id from the
     // scaffold template; it can't appear in any other pack's events.
-    if (!result.runDir) throw new Error('result.runDir must be set on success');
+    if (!result.runDir) throw new Error('result.runDir must be set on failure too');
     const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8');
     assert.match(
       events,

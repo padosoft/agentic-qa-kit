@@ -21,6 +21,11 @@ export type OracleEvaluator = (
   ctx: { probes: readonly ProbeRunResult[] },
 ) => OracleResult;
 
+function transportError(ctx: { probes: readonly ProbeRunResult[] }): string | null {
+  const failed = ctx.probes.find((probe) => probe.error);
+  return failed?.error ? `transport error on probe "${failed.probe_id}": ${failed.error}` : null;
+}
+
 const httpStatus: OracleEvaluator = (oracle, ctx) => {
   const expected = Number(oracle.with.expected);
   const last = ctx.probes[ctx.probes.length - 1];
@@ -36,6 +41,10 @@ const httpStatus: OracleEvaluator = (oracle, ctx) => {
 };
 
 const responseContains: OracleEvaluator = (oracle, ctx) => {
+  const error = transportError(ctx);
+  if (error) {
+    return { oracle_id: oracle.id, passed: false, reason: error, agreement: 0 };
+  }
   const needle = String(oracle.with.value ?? '');
   const haystack = ctx.probes.map((p) => JSON.stringify(p.body ?? '')).join(' ');
   const passed = haystack.includes(needle);
@@ -48,6 +57,10 @@ const responseContains: OracleEvaluator = (oracle, ctx) => {
 };
 
 const responseNotContains: OracleEvaluator = (oracle, ctx) => {
+  const error = transportError(ctx);
+  if (error) {
+    return { oracle_id: oracle.id, passed: false, reason: error, agreement: 0 };
+  }
   const needle = String(oracle.with.value ?? '');
   const haystack = ctx.probes.map((p) => JSON.stringify(p.body ?? '')).join(' ');
   const passed = !haystack.includes(needle);

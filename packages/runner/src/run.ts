@@ -7,6 +7,7 @@ import { type OracleResult, type ProbeRunResult, evaluateOracle } from './oracle
 export interface ScenarioRunResult {
   scenario_id: string;
   probes: readonly ProbeRunResult[];
+  cleanup: readonly ProbeRunResult[];
   oracles: readonly OracleResult[];
   finding: Finding.Finding | null;
 }
@@ -16,7 +17,7 @@ export type ProbeRunner = (probe: Scenario.Probe) => Promise<ProbeRunResult>;
 export interface RunScenarioOptions {
   scenario: Scenario.Scenario;
   run_id: string;
-  /** Inject a probe runner — defaults to a "no-network" stub that records nothing. */
+  /** Inject the probe runner. Omitting it is an explicit failed execution. */
   probeRunner?: ProbeRunner;
   events?: EventChainWriter;
   findings?: FindingsWriter;
@@ -24,10 +25,9 @@ export interface RunScenarioOptions {
   findingIdSeed?: number;
 }
 
-const NO_NETWORK_PROBE: ProbeRunner = async (p) => ({
+const MISSING_PROBE_RUNNER: ProbeRunner = async (p) => ({
   probe_id: p.id,
-  status: 200,
-  body: null,
+  error: 'no probe runner configured',
 });
 
 export interface HttpProbeRunnerOptions {
@@ -90,19 +90,38 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
 }
 
 export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRunResult> {
-  const runner = opts.probeRunner ?? NO_NETWORK_PROBE;
+  const runner = opts.probeRunner ?? MISSING_PROBE_RUNNER;
   const probeResults: ProbeRunResult[] = [];
-  for (const probe of opts.scenario.steps) {
-    const r = await runner(probe);
-    probeResults.push(r);
+  const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
+    try {
+      return await runner(probe);
+    } catch (error) {
+      return {
+        probe_id: probe.id,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+  const recordProbe = (probe: Scenario.Probe, r: ProbeRunResult, cleanup: boolean) => {
     opts.events?.append({
       ts: new Date().toISOString(),
       run_id: opts.run_id,
       kind: 'probe_executed',
       actor: { type: 'orchestrator', id: 'runner' },
       scenario_id: opts.scenario.id,
-      payload: { probe_id: probe.id, status: r.status, error: r.error },
+      payload: { probe_id: probe.id, status: r.status, error: r.error, cleanup },
     });
+  };
+  for (const probe of opts.scenario.steps) {
+    const r = await execute(probe);
+    probeResults.push(r);
+    recordProbe(probe, r, false);
+  }
+  const cleanupResults: ProbeRunResult[] = [];
+  for (const probe of opts.scenario.cleanup) {
+    const r = await execute(probe);
+    cleanupResults.push(r);
+    recordProbe(probe, r, true);
   }
   const oracleResults: OracleResult[] = [];
   for (const oracle of opts.scenario.oracles) {
@@ -157,7 +176,13 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       payload: { severity: finding.severity },
     });
   }
-  return { scenario_id: opts.scenario.id, probes: probeResults, oracles: oracleResults, finding };
+  return {
+    scenario_id: opts.scenario.id,
+    probes: probeResults,
+    cleanup: cleanupResults,
+    oracles: oracleResults,
+    finding,
+  };
 }
 
 export { RunLifecycle };

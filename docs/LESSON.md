@@ -2,6 +2,9 @@
 
 ## 2026-09-17 — evidence-based enterprise review
 
+- **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.
+- **Cleanup is part of the evidence contract.** Running cleanup only on the happy path leaves commerce reservations and fixtures behind exactly when failures matter most. Execute every declared cleanup probe, catch its exception, and persist its result as cleanup evidence.
+
 - **A successful gate must prove execution, not merely absence of findings.** The default no-network probe returns 200; negative-content oracles can accept transport failure, and the shipped idempotency config is ignored by its oracle. Missing drivers and invalid oracle contracts must fail closed. See [review and reproducer](internal/enterprise-review-2026-09-17.md).
 - **A live API does not make the browser verifier genuine.** Compiled admin with a real HTTP backend reported CHAIN OK for a modified event rejected by the backend SHA verifier. Test a tampered payload and compare complete canonical records, not just link continuity or fixture flags.
 - **Version/help and ESM CLI smoke do not validate the published entrypoint.** CJS bundle run/admin fail on import.meta.url even though help works; root build was changed to docs-only while delivery still relies on it. Test the installed artifact's real journey from outside the workspace.

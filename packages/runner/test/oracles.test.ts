@@ -26,6 +26,15 @@ describe('builtInOracles', () => {
     );
     assert.equal(r.passed, false);
   });
+
+  it('response_not_contains fails closed when the probe has a transport error', () => {
+    const r = evaluateOracle(
+      { id: 'o-no-error', kind: 'response_not_contains', with: { value: 'PWNED' }, weight: 1 },
+      { probes: [{ probe_id: 'p1', error: 'synthetic transport unavailable' }] },
+    );
+    assert.equal(r.passed, false);
+    assert.match(r.reason, /transport error/i);
+  });
   it('unknown oracle kind returns passed=false with a clear reason', () => {
     const r = evaluateOracle(
       // biome-ignore lint/suspicious/noExplicitAny: testing runtime guard

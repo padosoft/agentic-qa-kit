@@ -62,6 +62,53 @@ describe('runScenario', () => {
     assert.equal(result.finding, null);
   });
 
+  it('fails closed when no probe runner is configured', async () => {
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        oracles: [
+          { id: 'o-no-error', kind: 'response_not_contains', with: { value: 'PWNED' }, weight: 1 },
+        ],
+      },
+      run_id: 'run-no-driver',
+    });
+    assert.equal(result.probes[0]?.error, 'no probe runner configured');
+    assert.equal(result.oracles[0]?.passed, false);
+    assert.ok(result.finding);
+  });
+
+  it('runs every cleanup probe after a failed step and records cleanup failures', async () => {
+    const calls: string[] = [];
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        cleanup: [
+          {
+            id: 'cleanup-one',
+            kind: 'http',
+            with: { method: 'DELETE', url: '/fixture/one' },
+            timeout_ms: 1000,
+          },
+          {
+            id: 'cleanup-two',
+            kind: 'http',
+            with: { method: 'DELETE', url: '/fixture/two' },
+            timeout_ms: 1000,
+          },
+        ],
+      },
+      run_id: 'run-cleanup',
+      probeRunner: async (probe) => {
+        calls.push(probe.id);
+        if (probe.id === 'cleanup-two') throw new Error('cleanup service unavailable');
+        return { probe_id: probe.id, status: 200 };
+      },
+    });
+    assert.deepEqual(calls, ['probe-rotate', 'probe-use-old', 'cleanup-one', 'cleanup-two']);
+    assert.equal(result.cleanup.length, 2);
+    assert.match(result.cleanup[1]?.error ?? '', /cleanup service unavailable/);
+  });
+
   it('dedups identical findings within the same run', async () => {
     const findings = new FindingsWriter('/tmp/_ignore', { persist: false });
     await runScenario({
