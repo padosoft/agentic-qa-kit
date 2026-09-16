@@ -193,13 +193,9 @@ writer.append({
 });
 const chain = JSON.parse(JSON.stringify(writer.snapshot()));
 chain[0].payload.project = 'changed-without-rehash';
-const app = readFileSync('packages/admin/src/app.tsx', 'utf8');
-const start = app.indexOf('function validateChainStep(');
-const end = app.indexOf('\n}\n', start) + 2;
-const validate = new Function(`${app.slice(start, end)}; return validateChainStep;`)();
-show('audit-false-pass', {
+show('audit-verifier-backend', {
   backendAcceptsTamper: verifyEventChain(chain).ok,
-  uiIssue: validate(chain, chain.length),
+  note: 'Browser UI verification is asserted by built-ui-real-api-tamper below',
 });
 runInit({ root, projectName: 'review-app' });
 runPackNew({ root, slug: 'review-pack', sutType: 'lib' });
@@ -315,9 +311,9 @@ if (browserAdmin.ok) {
       .getByRole('button', { name: /^Verify( chain)?$/i })
       .first()
       .click();
-    await page.getByRole('heading', { name: 'CHAIN OK' }).waitFor({ timeout: 10000 });
+    await page.getByRole('heading', { name: 'CHAIN BROKEN' }).waitFor({ timeout: 10000 });
     show('built-ui-real-api-tamper', {
-      chainOk: true,
+      chainOk: false,
       backendVerifierAccepts: false,
       mockedRequests: 0,
     });

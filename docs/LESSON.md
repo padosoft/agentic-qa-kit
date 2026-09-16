@@ -224,6 +224,11 @@
 
 ## v1.5 — Admin design integration lessons (2026-05-18)
 
+## v2.0 — Truthful browser audit verification (2026-09-17)
+
+- **Never verify a live audit chain from display-normalized fields.** The admin previously converted `null` to a zero hash and retained only display values, making a continuity check insufficient to prove record integrity. Keep the original API object alongside presentation data and hash the canonical raw record in the browser.
+- **Async crypto invalidates synchronous source diagnostics.** Once Web Crypto is used, a static extractor that calls the verifier without `await` can report a false result (a Promise is truthy). The authoritative regression must drive the compiled browser UI and assert the visible `CHAIN BROKEN` state.
+
 - **Porting a hi-fi design-tool prototype to a real Vite + TS strict bundle.** The deliverable from Claude Design (or any similar tool) is shipped as a single big React tree authored with Babel-in-the-browser conventions. To make it run as a normal Vite SPA with TS strict + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`, the lowest-friction path is to: (a) concatenate all `.jsx` files into one `app.tsx` with `// @ts-nocheck` at the top, (b) `import * as React from 'react'` once and destructure hooks (`const { useState, useEffect } = React;`), (c) inline the prototype's CSS as raw `.css` files imported from `global.css`, (d) add Biome ignore rules for the bundled file + the CSS files so the rest of the repo keeps its strict lint posture. Anything else (re-modularizing into proper modules, removing `@ts-nocheck`) is multi-week work that the design refresh will invalidate on the next handoff.
 - **Design-tool-only hooks need production fallbacks.** The Claude Design prototype calls `window.useTweaks(defaults)` and `window.parent.postMessage(...)` for editor integration. Both crash in production. Pattern: at the bottom of the bundled file, *before* `ReactDOM.render`, inject fallbacks that match the design-tool signature exactly:
   ```ts

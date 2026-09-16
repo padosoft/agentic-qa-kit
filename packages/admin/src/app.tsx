@@ -3520,11 +3520,10 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
     setFirstMismatch(null);
     setExpanded(null);
     let i = 0;
-    const tick = () => {
+    const tick = async () => {
       i = Math.min(i + 1, chain.length);
       setProgress(i / chain.length);
-      // detect mismatch — for demo, the tampered chain has a "broken" flag injected by `validateChain`
-      const issue = validateChainStep(chain, i);
+      const issue = await validateChainStep(chain, i);
       if (issue) {
         setFirstMismatch(issue);
         setVerifiedCount(issue.index);
@@ -3537,9 +3536,9 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
         return;
       }
       setVerifiedCount(i);
-      timerRef.current = setTimeout(tick, 25);
+      timerRef.current = setTimeout(() => void tick(), 25);
     };
-    tick();
+    void tick();
   };
 
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -3842,9 +3841,13 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
   );
 }
 
-// Simulated "chain verification" — for the demo, we detect a tampered event by recomputing
-// based on the prev_hash continuity logic (any modified event will surface a mismatch on the next event).
-function validateChainStep(chain, upto) {
+async function validateChainStep(chain, upto) {
+  const rawChain = chain.map((event) => event.raw).filter(Boolean);
+  if (rawChain.length === chain.length) return validateCanonicalChain(rawChain, upto);
+
+  // Legacy visual fixtures do not contain canonical Event records. Keep their
+  // continuity-only check for the demo, but live API records always use the
+  // cryptographic path above.
   for (let i = 1; i < upto; i++) {
     const prev = chain[i - 1];
     const cur = chain[i];
@@ -3861,6 +3864,40 @@ function validateChainStep(chain, upto) {
     }
   }
   return null;
+}
+
+async function validateCanonicalChain(chain, upto) {
+  const zeroHash = '0'.repeat(64);
+  let expectedPrev = zeroHash;
+  for (let i = 0; i < upto; i++) {
+    const event = chain[i];
+    if (!event) return { index: i, expected: 'record', got: 'missing' };
+    const expectedField = i === 0 ? null : expectedPrev;
+    if (event.prev_hash !== expectedField) {
+      return { index: i, expected: String(expectedField), got: String(event.prev_hash) };
+    }
+    const { hash: recordedHash, prev_hash: _prevHash, ...rest } = event;
+    const recomputed = await sha256Hex(expectedPrev + canonicalStringify(rest));
+    if (recomputed !== recordedHash) {
+      return { index: i, expected: recomputed, got: String(recordedHash) };
+    }
+    expectedPrev = recordedHash;
+  }
+  return null;
+}
+
+function canonicalStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
+  const object = value;
+  const keys = Object.keys(object).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalStringify(object[key])}`).join(',')}}`;
+}
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // -------------------------------------------------------------
@@ -11219,8 +11256,9 @@ function normalizeAuditEventsForViewer(events) {
         : ev.actor?.id || ev.actor?.type || 'system',
     kind: ev.kind ?? 'event',
     payload: ev.payload ?? {},
-    prev_hash: ev.prev_hash ?? '0'.repeat(64),
+    prev_hash: ev.prev_hash === null ? null : (ev.prev_hash ?? '0'.repeat(64)),
     hash: ev.hash ?? '0'.repeat(64),
+    raw: ev,
   }));
 }
 
