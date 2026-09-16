@@ -323,6 +323,12 @@ describe('aqa run', () => {
     try {
       symlinkSync(outsideTarget, link, 'file');
     } catch {
+      if (process.versions.bun) {
+        console.warn(
+          '[run-cmd.test] symlink case not executable: Bun node:test skip is unsupported',
+        );
+        return;
+      }
       t.skip('symlink creation not supported on this platform/permission level');
       return;
     }

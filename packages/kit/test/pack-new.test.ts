@@ -97,6 +97,12 @@ describe('aqa pack new', () => {
     try {
       symlinkSync(externalDir, link, 'dir');
     } catch {
+      if (process.versions.bun) {
+        console.warn(
+          '[pack-new.test] symlink case not executable: Bun node:test skip is unsupported',
+        );
+        return;
+      }
       t.skip('symlink creation not supported on this platform/permission level');
       return;
     }
