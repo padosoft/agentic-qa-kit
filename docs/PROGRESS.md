@@ -21,6 +21,12 @@
   contracts passed. The corrected branch still needs a fresh CI run to prove
   the fix in PostgreSQL 16.
 
+- **Closed an HTTP dispatcher regression.** The bundled admin server now parses
+  `PATCH` request bodies and advertises `PATCH`, `Idempotency-Key` and `If-Match`
+  in CORS preflight responses. This restores the real HTTP path for SCIM patch
+  and conditional/idempotent browser mutations; the route handlers alone had
+  not exposed the adapter bug.
+
 - **Commerce assurance pack.** Added the opt-in `pack-commerce-core`, selected
   only for ecommerce/commerce/shop/storefront project tags. It defines five
   release-gate journeys (checkout idempotency, inventory oversell, tax/shipping

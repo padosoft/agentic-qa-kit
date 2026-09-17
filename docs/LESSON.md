@@ -6,6 +6,12 @@
   transaction-scoped advisory lock when multiple replicas may initialize the
   same schema.
 
+- **Route-handler tests do not prove HTTP adapter behavior.** A framework-
+  agnostic handler can accept a PATCH body while the Node dispatcher silently
+  drops it, and a browser can be blocked by a preflight method/header omission.
+  Complete-journey evidence must exercise parsing, CORS and dispatch at the
+  network boundary as well as the handler.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

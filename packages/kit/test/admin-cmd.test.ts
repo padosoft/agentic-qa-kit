@@ -538,6 +538,9 @@ describe('aqa admin — boot + smoke', () => {
         'https://console.example.test',
       );
       assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+      assert.match(preflight.headers.get('access-control-allow-methods') ?? '', /PATCH/);
+      assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /idempotency-key/i);
+      assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /if-match/i);
     } finally {
       await boot.close();
     }

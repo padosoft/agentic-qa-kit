@@ -575,10 +575,10 @@ async function handleRequest(
   if (allowedOrigin) {
     res.setHeader('access-control-allow-origin', allowedOrigin);
     res.setHeader('access-control-allow-credentials', 'true');
-    res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     res.setHeader(
       'access-control-allow-headers',
-      'authorization,content-type,cookie,x-aqa-org,x-aqa-project',
+      'authorization,content-type,cookie,idempotency-key,if-match,x-aqa-org,x-aqa-project',
     );
     res.setHeader('vary', 'Origin');
   }
@@ -817,7 +817,7 @@ async function delegateToApi(args: {
   }
 
   let body: unknown;
-  if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString('utf8').trim();
