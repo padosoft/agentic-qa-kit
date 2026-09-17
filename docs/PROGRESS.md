@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added authenticated MCP HTTP transport.** `McpHttpTransport` now mounts
+  the bounded JSON request/response MCP surface through the Fetch API: every
+  request is authenticated, sessions are principal-bound and capped, bodies
+  are byte-limited, protocol versions are checked, idle sessions expire and
+  `DELETE` terminates a session. Evidence: server MCP suite **143 tests pass /
+  0 fail** including auth binding, body limits, expiry and termination. SSE
+  push, sticky/shared sessions and deployed TLS/IdP evidence remain open.
+  ADR-195 records the transport boundary.
+
 - **Added durable immutable trajectory artifacts.** `AgentTrajectoryStore`
   validates before write, bounds UTF-8 size, writes through a temporary file
   and rename, refuses replacement under the same run/scenario identity, and

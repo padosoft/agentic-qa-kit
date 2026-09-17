@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-17 — bind MCP sessions to identity at the transport edge
+
+An authenticated JSON-RPC method is not enough for a deployed MCP endpoint.
+Authenticate every HTTP request, bind the session to the principal that
+created it, cap body/session resources, and provide explicit expiry and
+termination. Process-local sessions are useful evidence but must be called
+out separately from sticky routing or a shared registry in production.
+
 # 2026-09-17 — durable evidence needs read-time verification
 
 Writing a digest at artifact creation does not protect a later replay unless
