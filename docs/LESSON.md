@@ -12,6 +12,11 @@
   Complete-journey evidence must exercise parsing, CORS and dispatch at the
   network boundary as well as the handler.
 
+- **Nullable SQL parameters need an explicit type at the query boundary.** A
+  PostgreSQL expression such as `$n IS NULL` has no type context when the
+  value is `null`; cast optional interpolated values (`::text`, etc.) rather
+  than relying on the column on the other side of an `OR` to infer them.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

@@ -214,7 +214,7 @@ export class PostgresEventBus implements EventBus {
       SELECT event_id, org, project, type, occurred_at, data
       FROM aqa_live_events
       WHERE org = ${options.org}
-        AND (${options.project ?? null} IS NULL OR project = ${options.project ?? null})
+        AND (${options.project ?? null}::text IS NULL OR project = ${options.project ?? null})
         AND sequence > ${afterSequence.toString()}
       ORDER BY sequence ASC
       LIMIT ${limit}

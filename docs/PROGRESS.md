@@ -27,6 +27,12 @@
   and conditional/idempotent browser mutations; the route handlers alone had
   not exposed the adapter bug.
 
+- **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
+  fix, the live replay query failed on PostgreSQL 16 when an optional project
+  scope was absent because an untyped `NULL` parameter could not be inferred.
+  The nullable parameter now has an explicit `text` cast. A fresh CI run is
+  required for final PostgreSQL evidence.
+
 - **Commerce assurance pack.** Added the opt-in `pack-commerce-core`, selected
   only for ecommerce/commerce/shop/storefront project tags. It defines five
   release-gate journeys (checkout idempotency, inventory oversell, tax/shipping
