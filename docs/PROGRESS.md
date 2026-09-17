@@ -888,3 +888,7 @@
 
 - Added `WebAuthnLifecycle` with HTTPS-origin validation, bounded random one-time challenges, user/origin/RP/credential binding, injected signature verification, monotonic-counter clone detection and explicit counterless-authenticator support. Exported the boundary from `@aqa/auth` and documented the production integration limits in ADR-117.
 - Evidence: auth build/typecheck and **30 tests passed**, including replay, wrong-user/origin/credential, expiry, signature failure, counter rollback and counterless credentials. Durable challenge/credential stores, a maintained cryptographic verifier and a real browser/provider passkey journey remain open.
+
+# 2026-09-17 — enterprise regression after WebAuthn increment
+
+- Evidence: repository `typecheck`, **591 tests passed / 0 failed**, workspace build and Biome lint all passed locally. The local run has no `AQA_TEST_POSTGRES_DSN`, so PostgreSQL-dependent tests remain explicit non-evidence skips; GitHub CI run `35205836642` has PostgreSQL integration and Bun tests passed, while Node 22 and Build were still running at ledger update time. No Copilot review was requested or awaited per user instruction.
