@@ -1227,3 +1227,10 @@ tokens and payment identifiers, normalize control characters and enforce a
 hard bound; detailed diagnostics belong only in redacted, access-controlled
 logs. Sanitizing only the logger still leaves an independent API disclosure
 path.
+
+# 2026-09-17 — redaction must distinguish PANs from identifiers
+
+A generic 13–19 digit regex, especially when it accepts separators, can
+rewrite timestamps and run IDs in otherwise safe artifacts. Use Luhn-backed
+PAN detection and regression cases for both a real test card and production-
+shaped identifiers; redaction must never mutate audit identity fields.

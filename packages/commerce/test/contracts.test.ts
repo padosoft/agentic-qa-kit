@@ -104,6 +104,7 @@ describe('@aqa/commerce contracts', () => {
     const policy = new CommerceToolPolicy({
       read_tools: ['catalog.search'],
       approval_ledger: ledger,
+      now: () => new Date('2026-09-17T10:00:00Z'),
     });
     const call = {
       schema_version: '1' as const,

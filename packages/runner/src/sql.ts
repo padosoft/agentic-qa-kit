@@ -1,3 +1,4 @@
+import { redactJson } from '@aqa/observability';
 import type { ProbeRunner } from './run.js';
 
 export type SqlRow = Readonly<Record<string, unknown>>;
@@ -10,32 +11,6 @@ export interface SqlProbeRunnerOptions {
     signal?: AbortSignal,
   ) => Promise<readonly SqlRow[]>;
   maxRows?: number;
-}
-
-function redact(value: unknown, key = ''): unknown {
-  if (
-    /(authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key|pan|cvv|iban)/i.test(
-      key,
-    )
-  ) {
-    return '[REDACTED]';
-  }
-  if (typeof value === 'string') {
-    return value
-      .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-      .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]')
-      .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
-  }
-  if (Array.isArray(value)) return value.map((item) => redact(item));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
-        childKey,
-        redact(child, childKey),
-      ]),
-    );
-  }
-  return value;
 }
 
 function isReadOnly(sql: string): boolean {
@@ -79,11 +54,11 @@ export function makeSqlProbeRunner(opts: SqlProbeRunnerOptions): ProbeRunner {
       if (rows.length > maxRows) {
         return { probe_id: probe.id, error: `sql result exceeds ${maxRows} rows` };
       }
-      return { probe_id: probe.id, body: rows.map((row) => redact(row)) };
+      return { probe_id: probe.id, body: rows.map((row) => redactJson(row)) };
     } catch (error) {
       return {
         probe_id: probe.id,
-        error: redact(error instanceof Error ? error.message : String(error)) as string,
+        error: redactJson(error instanceof Error ? error.message : String(error)) as string,
       };
     }
   };

@@ -1,12 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { redactText } from '@aqa/observability';
 import { Finding } from '@aqa/schemas';
-
-function redactText(value: string): string {
-  return value
-    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]');
-}
 
 export class FindingsWriter {
   private readonly path: string;

@@ -446,17 +446,43 @@ function formatLabels(key: string, le?: number | string): string {
 
 const SENSITIVE =
   /(authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key|pan|cvv|iban)/i;
-function redact(value: unknown, key = ''): unknown {
+
+function isLikelyPan(value: string): boolean {
+  const digits = value.replace(/[^0-9]/g, '');
+  if (digits.length < 13 || digits.length > 19) return false;
+  let sum = 0;
+  let doubleDigit = false;
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    const digit = Number(digits[index]);
+    const adjusted = doubleDigit && digit * 2 > 9 ? digit * 2 - 9 : digit * (doubleDigit ? 2 : 1);
+    sum += adjusted;
+    doubleDigit = !doubleDigit;
+  }
+  return sum % 10 === 0;
+}
+
+export function redactText(value: string): string {
+  return value
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, (candidate) =>
+      isLikelyPan(candidate) ? '[REDACTED-PAN]' : candidate,
+    )
+    .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, '[REDACTED-IBAN]')
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
+}
+
+export function redactJson(value: unknown, key = ''): unknown {
   if (SENSITIVE.test(key)) return '[REDACTED]';
-  if (typeof value === 'string')
-    return value
-      .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
-      .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]');
-  if (Array.isArray(value)) return value.map((item) => redact(item));
+  if (typeof value === 'string') return redactText(value);
+  if (Array.isArray(value)) return value.map((item) => redactJson(item));
   if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redact(v, k)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactJson(v, k)]));
   return value;
 }
+
+const redact = redactJson;
 
 /** Return a bounded error string safe to expose at an HTTP boundary. */
 export function safeErrorMessage(error: unknown, fallback = 'internal error'): string {
@@ -473,7 +499,9 @@ export function safeErrorMessage(error: unknown, fallback = 'internal error'): s
     )
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
-    .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[REDACTED-PAN]')
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, (candidate) =>
+      isLikelyPan(candidate) ? '[REDACTED-PAN]' : candidate,
+    )
     .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, '[REDACTED-IBAN]')
     .replace(/[\r\n\t]+/g, ' ')
     .trim()

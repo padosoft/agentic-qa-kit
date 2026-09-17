@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { basename } from 'node:path';
+import { redactText } from '@aqa/observability';
 import type { ProbeRunner } from './run.js';
 
 export interface ShellProbeRunnerOptions {
@@ -11,15 +12,6 @@ export interface ShellProbeRunnerOptions {
   /** Explicit non-secret environment; PATH is copied only for resolution. */
   env?: Readonly<Record<string, string>>;
   maxOutputBytes?: number;
-}
-
-function redact(value: string): string {
-  return value
-    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
-    .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]')
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
 }
 
 function commandAllowed(command: string, allowed: readonly string[]): boolean {
@@ -108,7 +100,7 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
       child.once('error', (error) => {
         clearTimeout(timeout);
         externalSignal?.removeEventListener('abort', abort);
-        resolve({ probe_id: probe.id, error: redact(error.message) });
+        resolve({ probe_id: probe.id, error: redactText(error.message) });
       });
       child.once('close', (code, signal) => {
         clearTimeout(timeout);
@@ -128,7 +120,7 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
         resolve({
           probe_id: probe.id,
           ...(code === null ? {} : { status: code }),
-          body: { stdout: redact(stdout), stderr: redact(stderr), exit_code: code },
+          body: { stdout: redactText(stdout), stderr: redactText(stderr), exit_code: code },
         });
       });
     });

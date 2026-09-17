@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { redactJson, redactText } from '@aqa/observability';
 
 export interface ArtifactRef {
   id: string;
@@ -24,32 +25,7 @@ export interface ArtifactStore {
 export { S3ArtifactStore } from './s3.js';
 export type { S3ArtifactClient, S3ArtifactStoreOptions } from './s3.js';
 
-const SENSITIVE_KEY =
-  /(authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key|pan|cvv|iban)/i;
-
-export function redactText(value: string): string {
-  return value
-    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
-    .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]')
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
-}
-
-export function redactJson(value: unknown, key = ''): unknown {
-  if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
-  if (typeof value === 'string') return redactText(value);
-  if (Array.isArray(value)) return value.map((item) => redactJson(item));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
-        childKey,
-        redactJson(child, childKey),
-      ]),
-    );
-  }
-  return value;
-}
+export { redactJson, redactText } from '@aqa/observability';
 
 function safeKey(key: string): string {
   if (

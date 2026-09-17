@@ -21,6 +21,15 @@
   after this increment; PostgreSQL/browser/provider live journeys remain
   explicit deployment evidence gaps.
 
+- **Centralized evidence DLP and PAN false-positive fix.** Moved text/JSON
+  redaction into `@aqa/observability` and wired artifacts, findings, audit
+  events, SQL, shell and browser evidence to the same policy. PAN masking now
+  requires a valid Luhn checksum, preventing dates and run IDs from being
+  rewritten; ADR-124 records the binary/provider-specific residual gap.
+- Evidence: targeted observability **13/13**, artifacts **6/6**, commerce
+  **23/23**, and kit **137 passed / 2 platform skips**. A full workspace test,
+  typecheck and build gate is the next verification step.
+
 - **Runner capability preflight added.** `runScenario()` can now receive the
   configured driver's supported probe kinds and fails before executing steps or
   cleanup when a browser/SQL/shell/LLM/custom capability is absent. The gap is

@@ -48,6 +48,7 @@
       "name": "@aqa/artifacts",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/observability": "workspace:*",
         "@aws-sdk/client-s3": "^3.862.0",
       },
     },
@@ -187,6 +188,7 @@
       "name": "@aqa/runner",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/observability": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "playwright": "^1.60.0",
         "postgres": "^3.4.9",

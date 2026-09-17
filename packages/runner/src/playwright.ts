@@ -1,3 +1,4 @@
+import { redactText } from '@aqa/observability';
 import type { Scenario } from '@aqa/schemas';
 import type { ProbeRunner } from './run.js';
 
@@ -50,13 +51,6 @@ export interface PlaywrightProbeRunner extends ProbeRunner {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function redact(value: string): string {
-  return value
-    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
 }
 
 function resolveAllowedUrl(
@@ -205,14 +199,14 @@ export function makePlaywrightProbeRunner(
         return { probe_id: probe.id, error: `page text exceeds ${maxTextBytes} bytes` };
       return {
         probe_id: probe.id,
-        body: { url: page.url(), title: await page.title(), text: redact(text) },
+        body: { url: page.url(), title: await page.title(), text: redactText(text) },
       };
     } catch (error) {
       if (externalSignal?.aborted)
         return { probe_id: probe.id, error: 'playwright probe cancelled' };
       return {
         probe_id: probe.id,
-        error: redact(error instanceof Error ? error.message : String(error)),
+        error: redactText(error instanceof Error ? error.message : String(error)),
       };
     } finally {
       externalSignal?.removeEventListener('abort', abort);

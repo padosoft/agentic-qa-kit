@@ -1,27 +1,10 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { redactJson } from '@aqa/observability';
 import { Event } from '@aqa/schemas';
 
 const ZERO_HASH = '0'.repeat(64);
-const SENSITIVE_KEY = /(authorization|token|secret|password|cookie|api[_-]?key|pan|cvv|iban)/i;
-
-function redact(value: unknown, key = ''): unknown {
-  if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
-  if (typeof value === 'string') {
-    return value
-      .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-      .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]');
-  }
-  if (Array.isArray(value)) return value.map((item) => redact(item));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, redact(v, k)]),
-    );
-  }
-  return value;
-}
-
 function canonicalise(value: unknown): string {
   return JSON.stringify(value, (_k, v) => {
     if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -85,7 +68,7 @@ export class EventChainWriter {
       actor: draft.actor,
       scenario_id: draft.scenario_id,
       finding_id: draft.finding_id,
-      payload: redact(draft.payload ?? {}) as Record<string, unknown>,
+      payload: redactJson(draft.payload ?? {}) as Record<string, unknown>,
     };
     const hashInput = this.prevHash + canonicalise(rest);
     const hash = createHash('sha256').update(hashInput).digest('hex');
