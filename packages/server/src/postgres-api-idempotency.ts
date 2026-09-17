@@ -142,10 +142,13 @@ export class PostgresApiIdempotencyStore implements ApiIdempotencyStore {
   }
 
   private async migrate(): Promise<void> {
-    const lockKey = "hashtext('aqa_api_idempotency_migration')";
-    await this.q(`SELECT pg_advisory_lock(${lockKey})`);
-    try {
-      await this.q(
+    await this.sql.begin(async (tx) => {
+      await this.qWith(
+        tx,
+        "SELECT pg_advisory_xact_lock(hashtext('aqa_api_idempotency_migration'))",
+      );
+      await this.qWith(
+        tx,
         `CREATE TABLE IF NOT EXISTS aqa_api_idempotency (
           scope text NOT NULL,
           idempotency_key text NOT NULL,
@@ -160,12 +163,11 @@ export class PostgresApiIdempotencyStore implements ApiIdempotencyStore {
           PRIMARY KEY (scope, idempotency_key)
         )`,
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'CREATE INDEX IF NOT EXISTS aqa_api_idempotency_expiry_idx ON aqa_api_idempotency (expires_at)',
       );
-    } finally {
-      await this.q(`SELECT pg_advisory_unlock(${lockKey})`);
-    }
+    });
   }
 
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {

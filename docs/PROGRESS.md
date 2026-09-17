@@ -1370,3 +1370,15 @@
 - Evidence: failure reproduced from CI logs; local typecheck/tests remain green.
   The next hosted PostgreSQL run is required before marking the regression
   closed.
+
+# 2026-09-17 — transaction-scoped migration locks
+
+- Extended the race fix to the PostgreSQL runner queue and LLM budget ledger.
+  All three adapters now run the complete DDL bootstrap and
+  `pg_advisory_xact_lock` on the same transaction client. This closes the
+  pooled-session hazard where a session lock could be acquired, DDL routed to
+  another connection, or unlock issued against the wrong session.
+- Evidence: code-level lock audit has no remaining session-scoped migration
+  locks in the durable adapters. Local typecheck, Biome and package tests are
+  still required; hosted PostgreSQL CI remains the authoritative concurrency
+  proof.

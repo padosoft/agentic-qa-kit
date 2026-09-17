@@ -94,31 +94,23 @@ export class PostgresBudgetLedger implements BudgetLedger {
     this.ready = this.migrate();
   }
 
-  private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
-    return (await (this.sql.unsafe as unknown as (q: string, v: unknown[]) => Promise<unknown>)(
-      text,
-      values,
-    )) as T[];
-  }
-
   private async migrate(): Promise<void> {
-    await this.q("SELECT pg_advisory_lock(hashtext('aqa_llm_budget_ledger_migration'))");
-    try {
-      await this.q(
+    await this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (q: string, v?: unknown[]) => Promise<unknown>;
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_llm_budget_ledger_migration'))");
+      await query(
         'CREATE TABLE IF NOT EXISTS aqa_llm_budgets (key text PRIMARY KEY, budget_usd numeric NULL, reserved_usd numeric NOT NULL DEFAULT 0, spent_usd numeric NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())',
       );
-      await this.q(
+      await query(
         'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, actual_usd numeric NULL, model text NULL, tokens_in bigint NULL, tokens_out bigint NULL, pricing_version text NULL, pricing_sha256 text NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
       );
-      await this.q(
+      await query(
         'ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS actual_usd numeric NULL, ADD COLUMN IF NOT EXISTS model text NULL, ADD COLUMN IF NOT EXISTS tokens_in bigint NULL, ADD COLUMN IF NOT EXISTS tokens_out bigint NULL, ADD COLUMN IF NOT EXISTS pricing_version text NULL, ADD COLUMN IF NOT EXISTS pricing_sha256 text NULL',
       );
-      await this.q(
+      await query(
         "ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS expires_at timestamptz NOT NULL DEFAULT (now() + interval '5 minutes')",
       );
-    } finally {
-      await this.q("SELECT pg_advisory_unlock(hashtext('aqa_llm_budget_ledger_migration'))");
-    }
+    });
   }
 
   async reserve(

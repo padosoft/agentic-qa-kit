@@ -1532,5 +1532,8 @@ that a sort order is a scheduler.
 
 Concurrent PostgreSQL boots can still race inside relation/type creation even
 when DDL says `IF NOT EXISTS`. Shared adapters need a database advisory lock
-around the complete bootstrap sequence, released in `finally`; a local serial
-test cannot prove this cross-replica property.
+around the complete bootstrap sequence. With pooled clients, use
+`pg_advisory_xact_lock` inside `sql.begin` and issue every DDL statement on the
+transaction client: a session lock plus separate pooled calls can acquire and
+release on different sessions and therefore is not a valid cross-replica
+boundary. A local serial test cannot prove this property.

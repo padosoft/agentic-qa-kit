@@ -62,38 +62,49 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   }
 
   private async migrate(): Promise<void> {
-    const lockKey = "hashtext('aqa_runner_jobs_migration')";
-    await this.q(`SELECT pg_advisory_lock(${lockKey})`);
-    try {
-      await this.q(
+    await this.sql.begin(async (tx) => {
+      await this.qWith(tx, "SELECT pg_advisory_xact_lock(hashtext('aqa_runner_jobs_migration'))");
+      await this.qWith(
+        tx,
         "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 5, failure_reason text, updated_at timestamptz NOT NULL DEFAULT now())",
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'ALTER TABLE aqa_runner_jobs DROP CONSTRAINT IF EXISTS aqa_runner_jobs_status_check',
       );
-      await this.q(
+      await this.qWith(
+        tx,
         "ALTER TABLE aqa_runner_jobs ADD CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled'))",
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS max_attempts integer NOT NULL DEFAULT 5',
       );
-      await this.q('ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS failure_reason text');
-      await this.q('ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS idempotency_key text');
-      await this.q(
+      await this.qWith(
+        tx,
+        'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS failure_reason text',
+      );
+      await this.qWith(
+        tx,
+        'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS idempotency_key text',
+      );
+      await this.qWith(
+        tx,
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS idempotency_fingerprint text',
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 0',
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'CREATE UNIQUE INDEX IF NOT EXISTS aqa_runner_jobs_idempotency_idx ON aqa_runner_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL',
       );
-      await this.q(
+      await this.qWith(
+        tx,
         'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_ready_idx ON aqa_runner_jobs (status, enqueued_at, leased_until)',
       );
-    } finally {
-      await this.q(`SELECT pg_advisory_unlock(${lockKey})`);
-    }
+    });
   }
 
   private async wait(): Promise<void> {
