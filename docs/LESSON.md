@@ -1197,3 +1197,10 @@ After a payment or order request times out, the side effect may already exist.
 Never map every exception to “not committed” and blindly retry. Keep the
 approval claim, classify the result as unknown, and reconcile against the
 authoritative merchant/provider state before another mutation.
+
+# 2026-09-17 — a pricing digest is not operator authenticity
+
+A catalog can be modified and rehashed locally while remaining internally
+consistent. Carrying a SHA-256 digest proves reproducibility, not approval;
+sign the canonical catalog with an operator key and verify against an
+out-of-band trust map before using it for budget admission.

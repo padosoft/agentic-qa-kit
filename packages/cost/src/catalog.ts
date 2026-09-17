@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import type { ModelPricing } from './pricing.js';
 
 export interface PricingCatalog {
@@ -8,6 +8,14 @@ export interface PricingCatalog {
   models: Readonly<Record<string, ModelPricing>>;
   sha256: string;
 }
+
+export type SignedPricingCatalog = PricingCatalog & {
+  signing: {
+    algorithm: 'Ed25519';
+    key_id: string;
+    signature: string;
+  };
+};
 
 /** Parse and hash a deterministic pricing catalog before it reaches a tracker. */
 export function parsePricingCatalog(input: unknown): PricingCatalog {
@@ -63,6 +71,76 @@ export function parsePricingCatalog(input: unknown): PricingCatalog {
     models: sortModels(models),
     sha256,
   };
+}
+
+/** Sign the canonical catalog bytes with an operator-held Ed25519 private key. */
+export function signPricingCatalog(
+  catalog: PricingCatalog,
+  privateKeyPem: string,
+  keyId: string,
+): SignedPricingCatalog {
+  if (!privateKeyPem.trim() || !keyId.trim())
+    throw new Error('[cost] pricing catalog signing key and key_id are required');
+  const parsed = parsePricingCatalog(catalog);
+  const key = createPrivateKey(privateKeyPem);
+  if (key.asymmetricKeyType !== 'ed25519')
+    throw new Error('[cost] pricing catalog signing key must be Ed25519');
+  const signature = sign(null, Buffer.from(canonicalBytes(parsed)), key).toString('base64url');
+  return {
+    ...parsed,
+    signing: { algorithm: 'Ed25519', key_id: keyId, signature },
+  };
+}
+
+/** Verify an operator-signed catalog before it is accepted by budget control. */
+export function verifySignedPricingCatalog(
+  input: unknown,
+  trustedPublicKeys: Readonly<Record<string, string>>,
+): SignedPricingCatalog {
+  const parsed = parsePricingCatalog(input);
+  if (!input || typeof input !== 'object')
+    throw new Error('[cost] pricing catalog signing is required');
+  const signing = (input as Record<string, unknown>).signing;
+  if (!signing || typeof signing !== 'object' || Array.isArray(signing))
+    throw new Error('[cost] pricing catalog signing is required');
+  const metadata = signing as Record<string, unknown>;
+  if (
+    metadata.algorithm !== 'Ed25519' ||
+    typeof metadata.key_id !== 'string' ||
+    !metadata.key_id.trim() ||
+    typeof metadata.signature !== 'string' ||
+    !/^[A-Za-z0-9_-]+$/.test(metadata.signature)
+  )
+    throw new Error('[cost] invalid pricing catalog signature metadata');
+  const publicKeyPem = trustedPublicKeys[metadata.key_id];
+  if (!publicKeyPem?.trim()) throw new Error('[cost] pricing catalog signer is not trusted');
+  const key = createPublicKey(publicKeyPem);
+  if (key.asymmetricKeyType !== 'ed25519')
+    throw new Error('[cost] pricing catalog trust key must be Ed25519');
+  const valid = verify(
+    null,
+    Buffer.from(canonicalBytes(parsed)),
+    key,
+    Buffer.from(metadata.signature, 'base64url'),
+  );
+  if (!valid) throw new Error('[cost] pricing catalog signature mismatch');
+  return {
+    ...parsed,
+    signing: {
+      algorithm: 'Ed25519',
+      key_id: metadata.key_id,
+      signature: metadata.signature,
+    },
+  };
+}
+
+function canonicalBytes(catalog: PricingCatalog): string {
+  return JSON.stringify({
+    schema_version: catalog.schema_version,
+    version: catalog.version,
+    effective_at: catalog.effective_at,
+    models: sortModels({ ...catalog.models }),
+  });
 }
 
 function sortModels(models: Record<string, ModelPricing>): Record<string, ModelPricing> {

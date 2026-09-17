@@ -5,7 +5,13 @@ export {
   type LlmCall,
 } from './budget.js';
 export { defaultPricing, type ModelPricing } from './pricing.js';
-export { parsePricingCatalog, type PricingCatalog } from './catalog.js';
+export {
+  parsePricingCatalog,
+  signPricingCatalog,
+  verifySignedPricingCatalog,
+  type PricingCatalog,
+  type SignedPricingCatalog,
+} from './catalog.js';
 export {
   MemoryBudgetLedger,
   PostgresBudgetLedger,

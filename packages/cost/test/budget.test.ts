@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { BudgetDispatchBlockedError, BudgetTracker } from '../dist/budget.js';
-import { parsePricingCatalog } from '../dist/catalog.js';
+import {
+  parsePricingCatalog,
+  signPricingCatalog,
+  verifySignedPricingCatalog,
+} from '../dist/catalog.js';
 import { MemoryBudgetLedger } from '../dist/ledger.js';
 import { BudgetReaper } from '../dist/reaper.js';
 
@@ -95,6 +100,32 @@ describe('BudgetTracker', () => {
       () => parsePricingCatalog({ ...catalog, effective_at: '2026-07-01' }),
       /ISO UTC timestamp/,
     );
+  });
+
+  it('requires a trusted Ed25519 signature for operator pricing provenance', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const privatePem = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+    const publicPem = publicKey.export({ format: 'pem', type: 'spki' }).toString();
+    const catalog = parsePricingCatalog({
+      schema_version: '1',
+      version: '2026-q4',
+      effective_at: '2026-10-01T00:00:00Z',
+      models: { 'test-model': { input_per_mtok: 1, output_per_mtok: 2 } },
+    });
+    const signed = signPricingCatalog(catalog, privatePem, 'pricing-key-1');
+    assert.equal(
+      verifySignedPricingCatalog(signed, { 'pricing-key-1': publicPem }).signing.key_id,
+      'pricing-key-1',
+    );
+    assert.throws(
+      () =>
+        verifySignedPricingCatalog(
+          { ...signed, version: 'tampered' },
+          { 'pricing-key-1': publicPem },
+        ),
+      /signature mismatch|sha256 mismatch/,
+    );
+    assert.throws(() => verifySignedPricingCatalog(signed, {}), /not trusted/);
   });
 });
 

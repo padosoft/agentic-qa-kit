@@ -902,3 +902,8 @@
 
 - Added `CommerceMutationGate` for agentic commerce writes. It composes durable approval authorization with a provider executor and preserves the distinction between `committed`, `not_committed` and `unknown`; thrown/ambiguous provider outcomes never become a successful mutation or a safe retry. The executor contract requires merchant-side atomic revision/total/idempotency checks and reconciliation.
 - Evidence: commerce build/typecheck and **23 tests passed**, including the ambiguous timeout path and approval replay denial. Real payment/merchant transaction atomicity, provider idempotency retention and fault-injected sandbox journeys remain deployment evidence.
+
+# 2026-09-17 — signed LLM pricing catalog provenance
+
+- Added Ed25519 signing and trust-map verification for canonical versioned pricing catalogs. Budget configuration can now reject unknown operator keys, algorithm changes and catalog tampering before admission; the catalog digest/version remain the reproducibility identity.
+- Evidence: cost build/typecheck and **13 tests passed**, including trusted-key verification, tampering and unknown-signer rejection. KMS/Vault key lifecycle, admin distribution/rotation and provider invoice reconciliation remain deployment evidence.
