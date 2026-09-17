@@ -29,8 +29,8 @@ export class FindingsWriter {
       ...finding,
       title: redactText(finding.title),
       summary: redactText(finding.summary),
-      evidence: finding.evidence.map(redactText),
-      tags: finding.tags.map(redactText),
+      evidence: finding.evidence.map((value) => redactText(value)),
+      tags: finding.tags.map((value) => redactText(value)),
     });
     this.findings.push(safeFinding);
     if (this.persist) appendFileSync(this.path, `${JSON.stringify(safeFinding)}\n`, 'utf8');

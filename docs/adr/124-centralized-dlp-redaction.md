@@ -18,8 +18,10 @@ miss a secret in another evidence path.
 Runner, artifact and telemetry paths use that implementation; the artifacts
 package re-exports the functions for compatibility. PAN detection accepts
 13–19 digit values with common separators only when the Luhn checksum passes,
-avoiding accidental redaction of dates and identifiers. JSON keys containing
-credential/PII names are still redacted regardless of value format.
+avoiding accidental redaction of dates and identifiers. IPv4 addresses,
+contextual high-entropy secret assignments and operator-supplied custom
+patterns are supported. JSON keys containing credential/PII names are still
+redacted regardless of value format.
 
 ## Consequences
 

@@ -30,6 +30,14 @@
   **23/23**, and kit **137 passed / 2 platform skips**. A full workspace test,
   typecheck and build gate is the next verification step.
 
+- **Configurable DLP coverage expanded.** The shared policy now redacts IPv4,
+  contextual high-entropy secret assignments and operator-supplied regex
+  patterns in addition to AWS/JWT/email/Luhn-PAN/IBAN values. Regression
+  coverage explicitly proves timestamps and run IDs remain unchanged.
+- Evidence: observability **14/14** and repository lint passed. Binary
+  screenshots/PDFs, IPv6/provider-specific formats and enterprise secret
+  classifiers remain deployment/provider-specific gaps.
+
 - **Runner capability preflight added.** `runScenario()` can now receive the
   configured driver's supported probe kinds and fails before executing steps or
   cleanup when a browser/SQL/shell/LLM/custom capability is absent. The gap is

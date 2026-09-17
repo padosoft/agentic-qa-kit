@@ -461,9 +461,46 @@ function isLikelyPan(value: string): boolean {
   return sum % 10 === 0;
 }
 
-export function redactText(value: string): string {
-  return value
+export interface RedactionPolicy {
+  /** Additional organization-specific PII/secret expressions. */
+  customPatterns?: readonly RegExp[];
+  /** Redact IPv4 addresses in persisted evidence; enabled by default. */
+  redactIpAddresses?: boolean;
+}
+
+const DEFAULT_REDACTION_POLICY: Required<Pick<RedactionPolicy, 'redactIpAddresses'>> = {
+  redactIpAddresses: true,
+};
+
+function hasHighEntropySecret(value: string): boolean {
+  if (value.length < 16 || value.length > 256) return false;
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((pattern) =>
+    pattern.test(value),
+  ).length;
+  if (classes < 3) return false;
+  const frequencies = new Map<string, number>();
+  for (const character of value) frequencies.set(character, (frequencies.get(character) ?? 0) + 1);
+  const entropy = [...frequencies.values()].reduce(
+    (total, count) => total - (count / value.length) * Math.log2(count / value.length),
+    0,
+  );
+  return entropy >= 3.2;
+}
+
+export function redactText(value: string, policy: RedactionPolicy = {}): string {
+  const effective = { ...DEFAULT_REDACTION_POLICY, ...policy };
+  let redacted = value
     .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+    .replace(
+      /\b(?:authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key)\b\s*[:=]\s*(['"]?)([^\s,'";]+)\1/gi,
+      (full, _quote: string, secret: string) =>
+        /^Bearer$/i.test(secret)
+          ? full
+          : full.replace(
+              secret,
+              hasHighEntropySecret(secret) ? '[REDACTED-HIGH-ENTROPY]' : '[REDACTED]',
+            ),
+    )
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
     .replace(/\b(?:\d[ -]*?){13,19}\b/g, (candidate) =>
@@ -471,6 +508,17 @@ export function redactText(value: string): string {
     )
     .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, '[REDACTED-IBAN]')
     .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED-EMAIL]');
+  if (effective.redactIpAddresses) {
+    redacted = redacted.replace(
+      /\b(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\b/g,
+      '[REDACTED-IP]',
+    );
+  }
+  for (const pattern of policy.customPatterns ?? []) {
+    pattern.lastIndex = 0;
+    redacted = redacted.replace(pattern, '[REDACTED-CUSTOM]');
+  }
+  return redacted;
 }
 
 export function redactJson(value: unknown, key = ''): unknown {

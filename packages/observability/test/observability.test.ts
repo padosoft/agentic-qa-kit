@@ -9,6 +9,7 @@ import {
   formatTraceParent,
   makeEventSpanObserver,
   parseTraceParent,
+  redactText,
   safeErrorMessage,
 } from '../dist/index.js';
 
@@ -105,6 +106,21 @@ describe('@aqa/observability', () => {
     assert.match(message, /REDACTED/);
     assert.ok(message.length <= 500);
     assert.equal(safeErrorMessage(new Error('')), 'internal error');
+  });
+
+  it('redacts contextual secrets and PII without mutating timestamps or custom IDs', () => {
+    const text = redactText(
+      'run 2026-09-17-10-06-25-858-2db758 token=Abcdefghijklmnop1234+/ 192.168.1.42 user@example.test',
+      { customPatterns: [/tenant-[a-z0-9-]+/gi] },
+    );
+    assert.match(text, /2026-09-17-10-06-25-858-2db758/);
+    assert.match(text, /REDACTED-HIGH-ENTROPY/);
+    assert.match(text, /REDACTED-IP|REDACTED-EMAIL/);
+    assert.doesNotMatch(text, /user@example\.test|192\.168\.1\.42/);
+    assert.equal(
+      redactText('tenant-shop-42', { customPatterns: [/tenant-[a-z0-9-]+/gi] }),
+      '[REDACTED-CUSTOM]',
+    );
   });
 
   it('computes a bounded error budget with explicit reason codes', () => {

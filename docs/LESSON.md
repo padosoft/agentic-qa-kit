@@ -1234,3 +1234,10 @@ A generic 13–19 digit regex, especially when it accepts separators, can
 rewrite timestamps and run IDs in otherwise safe artifacts. Use Luhn-backed
 PAN detection and regression cases for both a real test card and production-
 shaped identifiers; redaction must never mutate audit identity fields.
+
+# 2026-09-17 — contextual entropy beats global token heuristics
+
+High-entropy detection is safest when attached to a secret-like assignment
+(`token=...`, `api_key: ...`) rather than scanning every opaque identifier.
+Organizations still need custom patterns, while binary screenshots/PDFs need a
+separate classifier instead of pretending text redaction protects them.

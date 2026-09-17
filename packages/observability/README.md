@@ -11,6 +11,9 @@ Provider-neutral observability primitives for production AQA deployments.
 - Cardinality limits to prevent untrusted scenario/project labels exhausting
   the process.
 - Structured JSON logs with pre-write secret redaction.
+- Shared DLP redaction for text/JSON evidence: bearer/JWT/AWS keys, email,
+  Luhn-validated PANs, IBANs, IPv4 addresses, contextual high-entropy secret
+  assignments and operator-supplied patterns.
 - `evaluateSlo()` for pure SLO/error-budget decisions with explicit
   `healthy`/`warning`/`breached` status and no-data handling.
 
@@ -27,3 +30,8 @@ const parent = parseTraceParent(request.headers.traceparent);
 const span = new Tracer(console.log).startSpan('aqa.run', { run_id: runId }, parent);
 span.end();
 ```
+
+Evidence writers should use `redactText()` / `redactJson()` before persistence.
+Custom organization-specific patterns can be passed through `customPatterns`;
+binary evidence is not transformed and requires an explicit classification
+policy at the artifact boundary.
