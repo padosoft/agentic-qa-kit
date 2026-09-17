@@ -646,6 +646,31 @@ describe('runScenario', () => {
     }
   });
 
+  it('propagates the configured W3C traceparent and overrides scenario headers', async () => {
+    const originalFetch = globalThis.fetch;
+    let received: Headers | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      received = new Headers(init?.headers);
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    try {
+      const runner = makeHttpProbeRunner({
+        baseUrl: 'https://shop.example',
+        trace_context: { trace_id: 'a'.repeat(32), span_id: 'b'.repeat(16) },
+      });
+      const result = await runner({
+        id: 'trace-probe',
+        kind: 'http',
+        with: { url: '/', headers: { traceparent: '00-invalid' } },
+        timeout_ms: 1000,
+      });
+      assert.equal(result.status, 200);
+      assert.equal(received?.get('traceparent'), `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('makeHttpProbeRunner propagates cooperative cancellation to fetch', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (_input, init) =>
