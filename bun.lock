@@ -185,6 +185,7 @@
       "dependencies": {
         "@aqa/schemas": "workspace:*",
         "playwright": "^1.60.0",
+        "postgres": "^3.4.9",
       },
     },
     "packages/sandbox": {

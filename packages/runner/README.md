@@ -29,6 +29,10 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   persistent browser context with origin allowlisting, structured actions,
   bounded/redacted text evidence and explicit `close()`. It does not permit
   arbitrary JavaScript or unrestricted navigation.
+- **Postgres adapter** — `makePostgresSqlProbeRunner()` executes the generic
+  read-only SQL contract in a `READ ONLY` transaction with statement timeout,
+  bounded rows and explicit shutdown. Use a least-privilege role and secret
+  manager in production; the DSN never belongs in a pack.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

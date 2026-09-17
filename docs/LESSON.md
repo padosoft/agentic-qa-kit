@@ -46,6 +46,11 @@
   close hook is never called. Invoke and audit shutdown before publication;
   cooperative close is still complemented by worker-level kill/cancellation.
 
+- **A generic SQL adapter becomes production evidence only with a live DB gate.**
+  Keep the query policy provider-neutral, then run a real Postgres contract in
+  the hosted service job. A local unit fixture cannot prove transaction mode,
+  timeout or connection lifecycle against the actual client.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

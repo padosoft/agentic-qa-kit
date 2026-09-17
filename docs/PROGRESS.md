@@ -65,6 +65,12 @@
   turns shutdown failures into run errors. The Playwright journey has a real
   close assertion; hard process cancellation remains worker/sandbox work.
 
+- **Real Postgres SQL adapter added.** The runner now provides a concrete
+  Postgres implementation with read-only transactions, local statement timeout,
+  bounded rows and lifecycle close. CI PostgreSQL now runs its contract test;
+  local no-DSN runs are explicitly skipped. Merchant schema/RLS/provider
+  reconciliation remains open.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

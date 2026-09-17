@@ -22,4 +22,9 @@ export {
   type PlaywrightProbeRunner,
   type PlaywrightProbeRunnerOptions,
 } from './playwright.js';
+export {
+  makePostgresSqlProbeRunner,
+  type PostgresSqlProbeRunner,
+  type PostgresSqlProbeRunnerOptions,
+} from './postgres.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
 import { FindingsWriter } from '../dist/findings.js';
 import { makePlaywrightProbeRunner } from '../dist/playwright.js';
+import { makePostgresSqlProbeRunner } from '../dist/postgres.js';
 import { makeHttpProbeRunner, runScenario } from '../dist/run.js';
 import { makeShellProbeRunner } from '../dist/shell.js';
 import { makeSqlProbeRunner } from '../dist/sql.js';
@@ -360,6 +361,23 @@ describe('runScenario', () => {
     ]);
     await runner.close();
     assert.equal(calls.at(-1), 'context-close');
+  });
+
+  it('makePostgresSqlProbeRunner requires an explicit DSN and bounds timeout policy', async () => {
+    assert.throws(
+      () => makePostgresSqlProbeRunner({ connectionString: '' }),
+      /connectionString is required/,
+    );
+    assert.throws(
+      () =>
+        makePostgresSqlProbeRunner({
+          connectionString: 'postgres://localhost/aqa',
+          statementTimeoutMs: 0,
+        }),
+      /statementTimeoutMs/,
+    );
+    const runner = makePostgresSqlProbeRunner({ connectionString: 'postgres://localhost/aqa' });
+    await runner.close();
   });
 
   it('makeHttpProbeRunner rejects unsupported probe kinds', async () => {
