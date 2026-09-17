@@ -1094,6 +1094,13 @@ concurrency, and make settlement/reaping idempotent. The deployment must run the
 reaper on a schedule and alert on expired reservations; a library method alone
 is not operational evidence.
 
+# 2026-09-17 — make cleanup schedulable and testable
+
+Keep the ledger's reaper logic independent from its deployment trigger. Expose a
+deterministic single tick for CronJob/systemd adapters and a guarded interval for
+embedded processes; prevent overlapping ticks and surface errors through an
+injected callback so operators can add metrics/alerts without leaking payloads.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the

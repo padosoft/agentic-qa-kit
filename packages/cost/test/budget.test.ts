@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { BudgetDispatchBlockedError, BudgetTracker } from '../dist/budget.js';
 import { MemoryBudgetLedger } from '../dist/ledger.js';
+import { BudgetReaper } from '../dist/reaper.js';
 
 describe('BudgetTracker', () => {
   it('charges per-call cost based on input + output tokens', () => {
@@ -99,5 +100,17 @@ describe('MemoryBudgetLedger', () => {
     assert.equal(await ledger.reapExpired(new Date(Date.now() + 11)), 1);
     const next = await ledger.reserve('org/reaper', 1, 0.8, 10);
     assert.ok(next);
+  });
+
+  it('runs a bounded reaper tick and tolerates repeated start/stop', async () => {
+    const ledger = new MemoryBudgetLedger();
+    await ledger.reserve('org/scheduled', 1, 0.8, 10);
+    const reaper = new BudgetReaper(ledger, { interval_ms: 100 });
+    assert.equal(await reaper.runOnce(new Date(Date.now() + 11)), 1);
+    reaper.start();
+    reaper.start();
+    reaper.stop();
+    reaper.stop();
+    assert.equal(await ledger.reapExpired(new Date(Date.now() + 12)), 0);
   });
 });

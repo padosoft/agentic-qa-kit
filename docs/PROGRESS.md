@@ -828,3 +828,8 @@
 
 - Added TTLs to budget reservations and `reapExpired()` to Memory/PostgreSQL ledgers. PostgreSQL reclaims expired rows with `FOR UPDATE SKIP LOCKED`, releases the reserved estimate and marks the reservation settled; repeated cleanup is safe.
 - Evidence: cost build/typecheck and **10 tests passed**, including simulated worker crash recovery. Production still needs a scheduled reaper/metric/alert and a live PostgreSQL multi-client recovery journey.
+
+# 2026-09-17 — reusable budget reaper scheduler
+
+- Added `BudgetReaper`, a validated long-lived scheduler around `reapExpired()`. It prevents overlapping ticks, exposes a deterministic `runOnce()` for job schedulers/tests, supports idempotent start/stop and routes failures through an injected callback.
+- Evidence: cost build/typecheck and **11 tests passed**, including scheduled lifecycle behavior. Kubernetes CronJob/systemd wiring, metrics and alerts remain deployment work.
