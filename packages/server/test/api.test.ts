@@ -730,6 +730,30 @@ probes: []
       assert.deepEqual(statuses, [201, 409]);
     });
 
+    it('allows the same profile name in separate tenant projects without leakage', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const alpha = { ...TENANT_HEADERS, 'x-aqa-project': 'alpha' };
+      const beta = { ...TENANT_HEADERS, 'x-aqa-project': 'beta' };
+      const a = await route?.handle({ headers: alpha, params: {}, body: validProfile }, c);
+      const b = await route?.handle(
+        { headers: beta, params: {}, body: { ...validProfile, tags: ['beta'] } },
+        c,
+      );
+      assert.equal(a?.status, 201);
+      assert.equal(b?.status, 201);
+      assert.deepEqual(
+        (await c.store.loadProfile(validProfile.name, { org: 'padosoft', project: 'beta' }))?.tags,
+        ['beta'],
+      );
+      const list = makeApi().find((r) => r.method === 'GET' && r.path === '/api/profiles');
+      const alphaList = await list?.handle({ headers: alpha, params: {} }, c);
+      assert.deepEqual(
+        (alphaList?.body as { profiles: Array<{ tags: string[] }> }).profiles[0]?.tags,
+        [],
+      );
+    });
+
     it('requires the profiles:edit permission', () => {
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
       assert.equal(route?.requires, 'profiles:edit');
