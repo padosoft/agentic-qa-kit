@@ -1,5 +1,12 @@
 # Lessons
 
+- **Test the artifact customers install.** An in-repository CJS bundle can
+  work while the publish manifest still points at private workspace
+  dependencies or omits runtime assets. The release gate must prepare the
+  publish manifest, pack it, extract it into an isolated directory, and
+  execute the extracted binary; registry publication and fresh network
+  installation remain separate evidence.
+
 - **PostgreSQL `IF NOT EXISTS` does not serialize identity DDL.** Concurrent
   first boots can race on the implicit sequence and fail with a duplicate
   relation error. PostgreSQL adapter bootstrap migrations must use a stable,

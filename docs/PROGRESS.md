@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Closed the local installable-artifact evidence gap.** Added a complete
+  `npm pack` journey that prepares the publish manifest, rejects leaked
+  `@aqa/*` dependencies, extracts the tarball in isolation, and runs the
+  installed CLI through `--version`, `--help`, `init` and `validate`. CI now
+  runs it after the production build. Evidence: local journey passed on
+  Windows; hosted registry publication, fresh-machine network installation
+  and real provider journeys remain separate gates.
+
 - **Connected risk coverage to the operator CLI.** Added `aqa risk coverage`
   to load RiskMap/pack scenarios and schema-validated `scenario_finished` run
   events, then report covered/partial/gap/stale status. Invalid evidence fails

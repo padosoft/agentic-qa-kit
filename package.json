@@ -24,6 +24,7 @@
     "test": "node scripts/run-workspace-script.mjs test",
     "test:watch": "node scripts/run-workspace-script.mjs test:watch",
     "test:e2e-cli": "node scripts/e2e-cli.mjs",
+    "test:e2e-installed-artifact": "node scripts/e2e-installed-artifact.mjs",
     "dev": "npm --prefix docs-site run dev",
     "build": "npm --prefix docs-site run build && bun run build:workspace",
     "check": "npm --prefix docs-site run check",
