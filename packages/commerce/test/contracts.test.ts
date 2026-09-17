@@ -24,6 +24,7 @@ import {
   assertPromotionRedeemable,
   assertReturnRequestIntegrity,
   assertSameCurrency,
+  assertSettlementIntegrity,
   assertSubscriptionIntegrity,
   assertTenderAllocation,
   verifyCheckoutJourney,
@@ -831,6 +832,65 @@ describe('@aqa/commerce contracts', () => {
           opened_at: '2026-09-17T10:00:00Z',
         }),
       /exact order payment/,
+    );
+  });
+
+  it('reconciles settlement totals across captures, refunds and lost chargebacks', () => {
+    const payment = {
+      schema_version: '1' as const,
+      order_id: 'order-settlement',
+      provider: 'reference',
+      payment_id: 'payment-settlement',
+      amount: { currency: 'EUR', amount_minor: '1000' },
+      refunded_amount: { currency: 'EUR', amount_minor: '200' },
+      status: 'partially_refunded' as const,
+      observed_at: '2026-09-17T10:00:00Z',
+    };
+    const refund = {
+      schema_version: '1' as const,
+      id: 'refund-settlement',
+      order_id: payment.order_id,
+      amount: { currency: 'EUR', amount_minor: '200' },
+      status: 'succeeded' as const,
+      observed_at: '2026-09-17T10:01:00Z',
+    };
+    const chargeback = {
+      schema_version: '1' as const,
+      id: 'chargeback-settlement',
+      order_id: payment.order_id,
+      payment_id: payment.payment_id,
+      amount: { currency: 'EUR', amount_minor: '100' },
+      status: 'lost' as const,
+      reason: 'fraud',
+      opened_at: '2026-09-17T10:02:00Z',
+    };
+    assert.doesNotThrow(() =>
+      assertSettlementIntegrity(payment, [refund], [chargeback], {
+        schema_version: '1',
+        provider: 'reference',
+        order_id: payment.order_id,
+        payment_id: payment.payment_id,
+        captured: { currency: 'EUR', amount_minor: '1000' },
+        refunded: { currency: 'EUR', amount_minor: '200' },
+        chargeback: { currency: 'EUR', amount_minor: '100' },
+        net: { currency: 'EUR', amount_minor: '700' },
+        observed_at: '2026-09-17T10:03:00Z',
+      }),
+    );
+    assert.throws(
+      () =>
+        assertSettlementIntegrity(payment, [refund], [chargeback], {
+          schema_version: '1',
+          provider: 'reference',
+          order_id: payment.order_id,
+          payment_id: payment.payment_id,
+          captured: { currency: 'EUR', amount_minor: '1000' },
+          refunded: { currency: 'EUR', amount_minor: '100' },
+          chargeback: { currency: 'EUR', amount_minor: '100' },
+          net: { currency: 'EUR', amount_minor: '800' },
+          observed_at: '2026-09-17T10:03:00Z',
+        }),
+      /settlement totals do not reconcile/,
     );
   });
 

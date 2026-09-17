@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added provider-neutral commerce settlement reconciliation.** The commerce
+  contract now validates that captured payment, successful refunds and lost
+  chargebacks are linked to the same payment and exactly reconstruct the
+  provider-reported net settlement. Unresolved chargebacks and non-successful
+  refunds fail closed. Evidence: commerce contracts **29 passed / 0 failed**,
+  build/typecheck/Biome/diff-check pass. Live PSP settlement remains external
+  deployment evidence.
+
 - **Commerce refund integrity hardened.** Payment validation now parses the
   runtime snapshot, requires `partially_refunded` to carry a strictly positive
   partial amount, requires all refund states to reconcile with the captured
