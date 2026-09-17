@@ -14,6 +14,7 @@
 - [Junior-friendly quick start](#junior-friendly-quick-start)
 - [Project profiler](#project-profiler)
 - [Programmatic API](#programmatic-api)
+- [Durable artifact backend](#durable-artifact-backend)
 - [Development](#development)
 
 ## What's inside
@@ -66,6 +67,24 @@ bunx aqa validate             # schema-validate .aqa/* (CI-safe)
 
 `aqa init` is **non-destructive**: existing files are left alone unless you pass `--force`. Pair it
 with `--dry-run` to preview the writes.
+
+## Durable artifact backend
+
+Runs use the local filesystem by default. For AWS S3, MinIO or another
+S3-compatible endpoint, configure the deployment environment before `aqa run`:
+
+```text
+AQA_ARTIFACT_S3_BUCKET=aqa-artifacts
+AQA_ARTIFACT_S3_PREFIX=tenant/acme
+AQA_ARTIFACT_S3_ENDPOINT=https://minio.example.internal   # optional
+AQA_ARTIFACT_S3_FORCE_PATH_STYLE=true                    # MinIO commonly needs this
+```
+
+The AWS SDK uses its normal credential chain; credentials must never be passed
+as CLI arguments or committed. Optional Object Lock requests use
+`AQA_ARTIFACT_S3_RETAIN_UNTIL` (ISO timestamp) together with
+`AQA_ARTIFACT_S3_RETENTION_MODE=GOVERNANCE|COMPLIANCE`. Bucket versioning,
+Object Lock enablement, KMS and tenant authorization remain operator controls.
 
 ## Project profiler
 

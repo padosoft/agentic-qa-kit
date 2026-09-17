@@ -36,12 +36,12 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FileArtifactStore } from '@aqa/artifacts';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
 import { Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
+import { createRunArtifactStore } from '../artifacts.js';
 
 export interface RunOptions {
   root: string;
@@ -537,7 +537,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   const replayArtifacts: string[] = [];
   const replayErrors: string[] = [];
-  const artifactStore = new FileArtifactStore(runDir);
+  const artifactStore = createRunArtifactStore(runDir, runId);
   for (const finding of findings.snapshot()) {
     const scenario = executedScenarios.find((candidate) => candidate.id === finding.scenario_id);
     if (!scenario) {
