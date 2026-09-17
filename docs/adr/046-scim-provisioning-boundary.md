@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — tenant-aware persistence and HTTP boundary shipped; advanced protocol operations remain open.
+Accepted — tenant-aware persistence, HTTP boundary and basic filter/pagination shipped; advanced protocol operations remain open.
 
 ## Decision
 
@@ -19,6 +19,7 @@ migration/admin data.
 ## Consequences
 
 SCIM semantics can be tested and reused without coupling protocol code to a
-storage implementation. The current boundary proves auth, scope and lifecycle
-semantics, while token rotation, audit emission, RFC filter/pagination semantics
-and live PostgreSQL journey evidence remain required for full production signoff.
+storage implementation. The current boundary proves auth, scope, lifecycle and
+basic list semantics, while token rotation, audit emission, full RFC filter
+grammar and live PostgreSQL journey evidence remain required for full production
+signoff.

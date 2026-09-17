@@ -600,6 +600,12 @@ as an idempotent deactivation until a reviewed retention/deletion contract exist
 preserve the resource ID and auditability, and require a dedicated bearer verifier
 separate from interactive user authentication.
 
+# 2026-09-17 — SCIM pagination must happen after tenant filtering
+
+Compute `totalResults` from the already tenant-scoped and filter-matched set,
+then slice the page. Never paginate a global result before applying tenant
+authorization, or page boundaries can leak both counts and identities.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with

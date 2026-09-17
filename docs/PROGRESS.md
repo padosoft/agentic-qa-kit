@@ -402,3 +402,8 @@
 
 - Added provider-neutral commerce contracts for exact split-tender reconciliation across card, gift-card and store-credit instruments, including currency and duplicate-tender guards. Added commit-time promotion validation for currency, expiry and redemption limits.
 - Evidence: `@aqa/commerce` typecheck and 15/15 tests; repository lint and `git diff --check` pass. Durable atomic redemption, provider settlement, gift-card locking, tax treatment and financial reconciliation remain open.
+
+# 2026-09-17 — SCIM query and pagination boundary
+
+- Added optional query parameters to the API request contract and wired SCIM `filter`, `startIndex` and `count` to a tenant-bound ListResponse. The endpoint now reports total results before pagination and preserves the existing dedicated bearer authorization.
+- Evidence: server typecheck, 111 tests (110 passed, one PostgreSQL EventBus skip), repository Biome check and `git diff --check` pass. Complex SCIM filter grammar, token rotation/audit events and live PostgreSQL provisioning remain open.

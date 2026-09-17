@@ -69,6 +69,7 @@ export interface ApiRequest {
   headers: Record<string, string>;
   body?: unknown;
   params: Record<string, string>;
+  query?: Record<string, string | undefined>;
 }
 
 export interface ApiResponse {
@@ -1482,13 +1483,17 @@ export function makeApi(): ApiHandler[] {
         if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
           return asResponse({ error: 'SCIM authorization required' }, 401);
         const directory = scimDirectory(ctx);
-        const users = await new ScimProvisioner(directory, org).list(
-          typeof req.params.filter === 'string' ? req.params.filter : undefined,
-        );
+        const query = req.query ?? {};
+        const startIndex = Math.max(1, Number.parseInt(query.startIndex ?? '1', 10) || 1);
+        const count = Math.max(0, Number.parseInt(query.count ?? '0', 10) || 0);
+        const allUsers = await new ScimProvisioner(directory, org).list(query.filter);
+        const pageStart = startIndex - 1;
+        const users =
+          count > 0 ? allUsers.slice(pageStart, pageStart + count) : allUsers.slice(pageStart);
         return asResponse({
           schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'],
-          totalResults: users.length,
-          startIndex: 1,
+          totalResults: allUsers.length,
+          startIndex,
           itemsPerPage: users.length,
           Resources: users.map(scimUserResource),
         });

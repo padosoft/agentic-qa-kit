@@ -642,6 +642,21 @@ describe('makeApi', () => {
     assert.equal((afterPatch?.body as { userName: string }).userName, 'scim-user');
     const listed = await list?.handle({ headers, params: {} }, c);
     assert.equal((listed?.body as { totalResults: number }).totalResults, 1);
+    const filtered = await list?.handle(
+      {
+        headers,
+        params: {},
+        query: { filter: 'userName eq "scim-user"', startIndex: '1', count: '1' },
+      },
+      c,
+    );
+    assert.deepEqual(
+      (filtered?.body as { Resources: Array<{ userName: string }> }).Resources.map(
+        (u) => u.userName,
+      ),
+      ['scim-user'],
+    );
+    assert.equal((filtered?.body as { totalResults: number }).totalResults, 1);
     assert.equal(
       (
         await detail?.handle(
