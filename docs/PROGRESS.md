@@ -858,3 +858,8 @@
 
 - Tightened pricing catalog validation to require bounded catalog versions, non-empty model names and canonical ISO UTC timestamps (`Z`), preventing timezone/date-only ambiguity in cost evidence.
 - Evidence: cost build/typecheck and **12 tests passed**, including rejection of a date-only effective timestamp.
+
+# 2026-09-17 — tenant-scoped runner authorization
+
+- Runner authentication can now return explicit `org`/`project` scopes. Memory and PostgreSQL dequeue apply those scopes before leasing; ACK/fail re-read the job and hide cross-tenant attempts as not-found. Boolean authorizers remain compatible as an intentionally unscoped bootstrap path.
+- Evidence: server build/typecheck and **125 tests passed**, including scoped dequeue and cross-tenant ACK denial. Live PostgreSQL scoped dequeue and production mTLS/OIDC claim issuance remain deployment evidence.

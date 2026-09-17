@@ -23,6 +23,11 @@ function ctx(
     scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
     packTrustedKeys?: Readonly<Record<string, string>>;
     packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
+    runnerAuthorize?: (
+      headers: Record<string, string>,
+    ) => Promise<
+      boolean | { runner_id: string; scopes: readonly { org: string; project?: string }[] }
+    >;
   } = {},
 ) {
   return {
@@ -33,6 +38,7 @@ function ctx(
     ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
+    ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -380,6 +386,39 @@ describe('makeApi', () => {
         .status,
       204,
     );
+  });
+
+  it('runner authorization scopes dequeue and ACK to the declared tenant project', async () => {
+    const c = ctx({
+      runnerAuthorize: async () => ({
+        runner_id: 'runner-shop',
+        scopes: [{ org: 'padosoft', project: 'shop' }],
+      }),
+    });
+    c.queue.enqueue({
+      id: 'shop-job',
+      payload: { org: 'padosoft', project: 'shop' },
+      enqueued_at: '2026-05-17T10:00:00Z',
+    });
+    c.queue.enqueue({
+      id: 'other-job',
+      payload: { org: 'other', project: 'shop' },
+      enqueued_at: '2026-05-17T10:01:00Z',
+    });
+    const nextRoute = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/runner/jobs/next',
+    );
+    const ackRoute = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/ack',
+    );
+    assert.ok(nextRoute && ackRoute);
+    const next = await nextRoute.handle({ headers: {}, params: {} }, c);
+    assert.equal((next.body as { job: { id: string } }).job.id, 'shop-job');
+    const crossTenant = await ackRoute.handle(
+      { headers: {}, params: { id: 'other-job' }, body: { lease_token: 'unknown' } },
+      c,
+    );
+    assert.equal(crossTenant.status, 404);
   });
 
   it('GET /api/queue snapshots the queue', async () => {

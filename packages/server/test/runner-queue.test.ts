@@ -18,6 +18,23 @@ describe('RunnerQueue', () => {
     assert.equal(q.dequeue()?.id, 'job-2');
   });
 
+  it('dequeues only jobs inside the runner scopes', () => {
+    const q = new RunnerQueue();
+    q.enqueue({
+      id: 'org-a-job',
+      payload: { org: 'org-a', project: 'shop' },
+      enqueued_at: '2026-05-17T10:00:00Z',
+    });
+    q.enqueue({
+      id: 'org-b-job',
+      payload: { org: 'org-b', project: 'shop' },
+      enqueued_at: '2026-05-17T10:01:00Z',
+    });
+    assert.equal(q.dequeue(undefined, [{ org: 'org-a', project: 'shop' }])?.id, 'org-a-job');
+    assert.equal(q.dequeue(undefined, [{ org: 'org-a', project: 'shop' }]), null);
+    assert.equal(q.dequeue(undefined, [{ org: 'org-b' }])?.id, 'org-b-job');
+  });
+
   it('dequeue flips status to in_flight and stamps lease', () => {
     const q = new RunnerQueue();
     q.enqueue(JOB);

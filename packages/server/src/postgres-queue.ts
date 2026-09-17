@@ -7,6 +7,7 @@ import {
   type QueueQuota,
   type RunnerJob,
   type RunnerQueueLike,
+  type RunnerScope,
   assertQueueQuota,
   queueScope,
   validateQueueQuota,
@@ -227,10 +228,24 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     });
   }
 
-  async dequeue(now = new Date()): Promise<EnqueuedJob | null> {
+  async dequeue(now = new Date(), scopes?: readonly RunnerScope[]): Promise<EnqueuedJob | null> {
     await this.wait();
     const token = randomUUID();
     const until = new Date(now.getTime() + this.leaseMs).toISOString();
+    const scopeValues: unknown[] = [];
+    const scopeSql =
+      scopes === undefined
+        ? ''
+        : scopes.length === 0
+          ? ' AND false'
+          : ` AND (${scopes
+              .map((scope, index) => {
+                const orgIndex = 4 + index * 2;
+                const projectIndex = orgIndex + 1;
+                scopeValues.push(scope.org, scope.project ?? null);
+                return `(payload->>'org' = $${orgIndex} AND ($${projectIndex}::text IS NULL OR payload->>'project' = $${projectIndex}))`;
+              })
+              .join(' OR ')})`;
     const rows = await this.q<StoredJob>(
       `WITH expired AS (
          UPDATE aqa_runner_jobs
@@ -240,7 +255,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
          RETURNING id
        ), candidate AS (
          SELECT id FROM aqa_runner_jobs
-         WHERE status = 'queued' OR (status = 'in_flight' AND leased_until < $1 AND attempts < max_attempts)
+         WHERE (status = 'queued' OR (status = 'in_flight' AND leased_until < $1 AND attempts < max_attempts))${scopeSql}
          ORDER BY enqueued_at, id
          FOR UPDATE SKIP LOCKED LIMIT 1
        )
@@ -249,7 +264,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
            attempts = j.attempts + 1, updated_at = now()
        FROM candidate WHERE j.id = candidate.id
        RETURNING j.id, j.payload, j.enqueued_at, j.status, j.leased_until, j.lease_token, j.attempts, j.max_attempts, j.failure_reason, j.idempotency_key, j.idempotency_fingerprint`,
-      [now.toISOString(), until, token],
+      [now.toISOString(), until, token, ...scopeValues],
     );
     return rows[0] ? this.map(rows[0]) : null;
   }

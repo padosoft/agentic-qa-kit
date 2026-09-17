@@ -1142,3 +1142,10 @@ or runtime control.
 A pricing effective date without an explicit UTC instant is not reproducible
 across deployments. Validate and hash one canonical timestamp form; otherwise
 two operators can attach different temporal meanings to the same catalog.
+
+# 2026-09-17 — authenticate runners before assigning tenant work
+
+Runner credentials are not enough: a valid runner must also be constrained to
+the tenant projects it may process. Enforce the scope inside dequeue and repeat
+the check on ACK/fail, because route-level authentication alone cannot prevent
+cross-tenant work consumption or completion.

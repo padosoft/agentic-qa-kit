@@ -8,6 +8,19 @@ export interface RunnerJob {
   idempotency_fingerprint?: string;
 }
 
+export interface RunnerScope {
+  org: string;
+  project?: string;
+}
+
+/** Result of runner authentication; scopes are enforced by the queue routes. */
+export interface RunnerAuthorization {
+  runner_id: string;
+  scopes: readonly RunnerScope[];
+}
+
+export type RunnerAuthorizationResult = boolean | RunnerAuthorization;
+
 export interface QueueQuota {
   concurrent_runs_max?: number;
   concurrent_scenarios_max?: number;
@@ -24,7 +37,10 @@ export interface EnqueuedJob extends RunnerJob {
 
 export interface RunnerQueueLike {
   enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
-  dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
+  dequeue(
+    now?: Date,
+    scopes?: readonly RunnerScope[],
+  ): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   get(id: string): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   renew(id: string, leaseToken: string | undefined, now?: Date): boolean | Promise<boolean>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
@@ -154,7 +170,7 @@ export class RunnerQueue {
     return enq;
   }
 
-  dequeue(now: Date = new Date()): EnqueuedJob | null {
+  dequeue(now: Date = new Date(), scopes?: readonly RunnerScope[]): EnqueuedJob | null {
     // Promote stale leases back to queued before picking the next.
     for (const j of this.jobs) {
       if (j.status === 'in_flight' && j.leased_until && new Date(j.leased_until) < now) {
@@ -168,7 +184,9 @@ export class RunnerQueue {
         j.lease_token = undefined;
       }
     }
-    const job = this.jobs.find((j) => j.status === 'queued');
+    const job = this.jobs.find(
+      (j) => j.status === 'queued' && matchesRunnerScopes(j.payload, scopes),
+    );
     if (!job) return null;
     job.status = 'in_flight';
     job.attempts += 1;
@@ -261,6 +279,18 @@ export function queueScope(payload: Record<string, unknown>): string | undefined
   return typeof payload.org === 'string' && typeof payload.project === 'string'
     ? `${payload.org}/${payload.project}`
     : undefined;
+}
+
+export function matchesRunnerScopes(
+  payload: Record<string, unknown>,
+  scopes?: readonly RunnerScope[],
+): boolean {
+  if (!scopes) return true;
+  const org = typeof payload.org === 'string' ? payload.org : undefined;
+  const project = typeof payload.project === 'string' ? payload.project : undefined;
+  return scopes.some(
+    (scope) => scope.org === org && (scope.project === undefined || scope.project === project),
+  );
 }
 
 function scenarioCount(payload: Record<string, unknown>): number {
