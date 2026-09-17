@@ -17,6 +17,12 @@
   provider-silent-ignore false-green path; independent checkpoint publication,
   bucket/versioning/KMS and restore drills remain deployment evidence.
 
+- **Independent checkpoint publication added.** `runRun()` now supports a
+  separately injected audit checkpoint store, publishes the final checkpoint
+  under `checkpoints/<run_id>.json`, and records its digest in the canonical
+  manifest. The journey test uses two distinct file stores; production still
+  needs a separately administered WORM/KMS/backup domain and restore drill.
+
 - **CI SBOM provenance gate added.** The Build job now runs a pinned Anchore
   Syft action after the workspace build, emits and retains a CycloneDX JSON
   inventory, and validates that it is non-empty and structurally valid. The

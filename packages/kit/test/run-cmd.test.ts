@@ -29,6 +29,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { FileArtifactStore } from '@aqa/artifacts';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
@@ -210,6 +211,27 @@ describe('aqa run', () => {
     );
     assert.ok(existsSync(join(result.runDir, 'canonical', 'manifest.json.meta.json')));
     assert.ok(existsSync(join(result.runDir, 'canonical', 'checkpoint.json.meta.json')));
+  });
+
+  it('publishes the signed completeness checkpoint to an independent store', async () => {
+    const { root, packDir } = fixtureProject();
+    const externalRoot = mkdtempSync(join(tmpdir(), 'aqa-checkpoint-'));
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      auditCheckpointStore: new FileArtifactStore(externalRoot),
+    });
+    assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
+    assert.ok(result.runId);
+    assert.ok(result.runDir);
+    const externalPath = join(externalRoot, 'checkpoints', `${result.runId}.json`);
+    assert.ok(existsSync(externalPath), 'external checkpoint must be independently published');
+    const manifest = JSON.parse(
+      readFileSync(join(result.runDir, 'canonical', 'manifest.json'), 'utf8'),
+    ) as { external_checkpoint?: { key: string; sha256: string } };
+    assert.equal(manifest.external_checkpoint?.key, `checkpoints/${result.runId}.json`);
+    assert.equal(manifest.external_checkpoint?.sha256.length, 64);
   });
 
   it('does not emit a finding when a scenario has no executable driver', async () => {

@@ -35,6 +35,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import type { ArtifactStore } from '@aqa/artifacts';
 import {
   type AuditCheckpointSigner,
   createAuditCheckpoint,
@@ -86,6 +87,8 @@ export interface RunOptions {
   probeRunner?: ProbeRunner;
   /** Optional operator key used to sign the final audit completeness checkpoint. */
   auditCheckpointSigner?: AuditCheckpointSigner;
+  /** Independent store for the final checkpoint; failure blocks the run. */
+  auditCheckpointStore?: ArtifactStore;
 }
 
 export interface RunResult {
@@ -660,6 +663,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const canonicalArtifacts: string[] = [];
   const canonicalArtifactErrors: string[] = [];
   const canonicalRefs: Record<string, { id: string; sha256: string; bytes: number }> = {};
+  let externalCheckpointRef: { id: string; sha256: string; bytes: number; key: string } | undefined;
   for (const [key, path] of [
     ['canonical/events.jsonl', eventsPath],
     ['canonical/findings.jsonl', findingsPath],
@@ -685,6 +689,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         sha256: checkpointRef.sha256,
         bytes: checkpointRef.bytes,
       };
+      if (opts.auditCheckpointStore) {
+        const externalRef = await opts.auditCheckpointStore.putJson(
+          `checkpoints/${runId}.json`,
+          checkpoint,
+        );
+        externalCheckpointRef = {
+          key: externalRef.key,
+          id: externalRef.id,
+          sha256: externalRef.sha256,
+          bytes: externalRef.bytes,
+        };
+      }
     } catch (e) {
       canonicalArtifactErrors.push(
         `canonical/checkpoint.json: ${e instanceof Error ? e.message : String(e)}`,
@@ -699,6 +715,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         events_key: 'canonical/events.jsonl',
         findings_key: 'canonical/findings.jsonl',
         artifacts: canonicalRefs,
+        ...(externalCheckpointRef ? { external_checkpoint: externalCheckpointRef } : {}),
         published_at: new Date().toISOString(),
       });
       canonicalArtifacts.push(manifest.key);

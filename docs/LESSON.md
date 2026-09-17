@@ -7,6 +7,12 @@
   truncation. This still does not replace independent checkpoint publication
   or bucket-level versioning/KMS/restore evidence.
 
+- **A local checkpoint is not an independent attestation.** The run API must
+  accept a separately owned publication store and fail closed if that publish
+  fails. The production adapter still has to prove WORM, IAM separation, KMS,
+  backup and restore behavior; a second directory in the same authority domain
+  is only a contract fixture.
+
 - **Bun monorepos need a non-npm SBOM path.** `npm sbom` can return
   `ESBOMPROBLEMS` and an empty stream when a root package-lock is absent and
   workspace/link dependencies are resolved by Bun. Treating that output as a

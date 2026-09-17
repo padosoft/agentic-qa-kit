@@ -99,6 +99,12 @@ After `run_finished`, the selected store also receives byte-preserved
 publication fails the run result; publication is not a distributed transaction
 and partial uploads require operational retry or cleanup.
 
+For an independently administered audit domain, callers embedding `runRun()`
+can pass a separate `auditCheckpointStore`. The final checkpoint is then
+published as `checkpoints/<run_id>.json` and its digest is recorded in the local
+manifest. Configure that store with its own tenant boundary, Object Lock/KMS,
+backup and restore evidence; the runner does not infer those controls.
+
 ## Durable admin state
 
 `aqa admin` uses `MemoryStore` for local development. Set `AQA_STORE_DSN` to a
