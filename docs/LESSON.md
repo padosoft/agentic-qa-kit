@@ -1636,3 +1636,11 @@ description and evidence paths. Keep scanning bounded, avoid reading ignored
 directories, emit stable source-relative tags and carry source metadata into
 the persisted risk object. This remains a reviewable heuristic, never proof
 that all project-specific risks were found.
+# 2026-09-17 — AI risk hypotheses need a separate approval boundary
+
+Schema-valid model output is still only a hypothesis. Keep it outside the
+active RiskMap in a queue with provider/model and prompt/response hashes,
+redact generated fields before queueing, require a named reviewer for terminal
+transitions, and do not persist raw model text because it can contain secrets
+or customer data. Local tests prove the boundary; reviewer identity, LLM
+quality and durable production storage need separate evidence.

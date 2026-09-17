@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { ReviewQueue, proposeScenarios } from '../dist/index.js';
+import { ReviewQueue, RiskReviewQueue, proposeRisks, proposeScenarios } from '../dist/index.js';
 
 const SCN = {
   schema_version: '1' as const,
@@ -93,5 +93,75 @@ describe('ReviewQueue', () => {
     );
     assert.doesNotMatch(JSON.stringify(item), /oversell inventory/);
     assert.equal(JSON.stringify(item).includes(response), false);
+  });
+});
+
+const RISK = {
+  id: 'checkout-total',
+  category: 'business_logic' as const,
+  title: 'Checkout total can drift',
+  severity: 'high' as const,
+  likelihood: 'possible' as const,
+  invariants: [],
+  owners: [],
+  tags: [],
+};
+
+describe('RiskReviewQueue and proposeRisks', () => {
+  it('keeps AI hypotheses pending until a named reviewer approves them', async () => {
+    const queue = new RiskReviewQueue();
+    const response = JSON.stringify([
+      { ...RISK, description: 'Authorization: Bearer model-secret' },
+    ]);
+    const result = await proposeRisks({
+      scope: 'checkout',
+      llm: {
+        provider: 'fixture',
+        call: async () => ({
+          text: response,
+          tokens_in: 1,
+          tokens_out: 2,
+          model_version_hash: 'model-sha',
+          finish_reason: 'stop' as const,
+        }),
+      },
+      queue,
+      model: 'fixture-model',
+      id_seed: 'checkout',
+    });
+    assert.deepEqual(result.enqueued_ids, ['checkout-hypothesis-1']);
+    assert.equal(queue.list('pending').length, 1);
+    assert.equal(queue.approvedRisks().length, 0);
+    assert.equal(queue.list('pending')[0]?.provenance.model_version_hash, 'model-sha');
+    assert.equal(queue.list('pending')[0]?.risk.description, 'Authorization: Bearer [REDACTED]');
+    assert.doesNotMatch(JSON.stringify(queue.list('pending')[0]), /model-secret/);
+    assert.equal(queue.approve('checkout-hypothesis-1', 'security-reviewer')?.state, 'approved');
+    assert.equal(queue.approvedRisks().length, 1);
+  });
+
+  it('rejects invalid model output and refuses anonymous approval', async () => {
+    const queue = new RiskReviewQueue();
+    const invalid = await proposeRisks({
+      scope: 'checkout',
+      llm: {
+        provider: 'fixture',
+        call: async () => ({
+          text: '{not-json}',
+          tokens_in: 1,
+          tokens_out: 1,
+          finish_reason: 'stop' as const,
+        }),
+      },
+      queue,
+      model: 'fixture-model',
+    });
+    assert.equal(invalid.count, 0);
+    queue.enqueue(RISK, 'risk-1', {
+      provider: 'fixture',
+      model: 'fixture-model',
+      prompt_sha256: 'a'.repeat(64),
+      response_sha256: 'b'.repeat(64),
+    });
+    assert.throws(() => queue.approve('risk-1', '   '), /reviewer is required/);
   });
 });
