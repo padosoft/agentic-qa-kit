@@ -23,7 +23,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { OidcSessionManager, allows, type ScimTokenManager } from '@aqa/auth';
+import { OidcSessionManager, type ScimTokenManager, allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
