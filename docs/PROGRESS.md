@@ -19,6 +19,12 @@
   compliance tests **12 passed / 0 failed**, build/typecheck/Biome/diff-check
   pass. This does not claim a live backup or restore drill.
 
+- **DR inventory contract merged to `main`.** PR #65 was squash-merged as
+  `0c42570` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The manifest format is now part
+  of the released code; WAL/KMS/Object Lock/restore execution remains
+  infrastructure evidence.
+
 - **Added provider-neutral commerce settlement reconciliation.** The commerce
   contract now validates that captured payment, successful refunds and lost
   chargebacks are linked to the same payment and exactly reconstruct the
