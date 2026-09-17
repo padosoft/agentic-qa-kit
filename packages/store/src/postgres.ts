@@ -427,16 +427,25 @@ export class PostgresStore implements StoreProvider {
       daily: {},
     };
     for (const run of runs) {
+      const cost = run.totals.llm_cost_usd;
+      const day = run.started_at.slice(0, 10);
+      result.total_usd += cost;
+      result.daily[day] = (result.daily[day] ?? 0) + cost;
       const current = result.by_profile.find((entry) => entry.profile === run.profile);
-      if (current) current.runs += 1;
-      else
+      if (current) {
+        current.llm_tokens_in += run.totals.llm_tokens_in;
+        current.llm_tokens_out += run.totals.llm_tokens_out;
+        current.llm_cost_usd += cost;
+        current.runs += 1;
+      } else {
         result.by_profile.push({
           profile: run.profile,
-          llm_tokens_in: 0,
-          llm_tokens_out: 0,
-          llm_cost_usd: 0,
+          llm_tokens_in: run.totals.llm_tokens_in,
+          llm_tokens_out: run.totals.llm_tokens_out,
+          llm_cost_usd: cost,
           runs: 1,
         });
+      }
     }
     return result;
   }

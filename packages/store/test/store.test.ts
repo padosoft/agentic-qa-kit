@@ -152,6 +152,32 @@ describe('PostgresStore', () => {
         RUN,
         'a fresh store instance must read state written by the previous process',
       );
+      await reopened.saveRun({
+        ...RUN,
+        id: 'cost-run',
+        totals: {
+          ...RUN.totals,
+          llm_tokens_in: 11,
+          llm_tokens_out: 7,
+          llm_cost_usd: 1.25,
+        },
+      });
+      const costs = await reopened.costSummary({
+        org: 'demo-org',
+        project: RUN.project,
+        from: '2026-05-17T00:00:00Z',
+        to: '2026-05-17T23:59:59Z',
+      });
+      assert.equal(costs.total_usd, 1.25);
+      assert.deepEqual(costs.by_profile, [
+        {
+          profile: RUN.profile,
+          llm_tokens_in: 11,
+          llm_tokens_out: 7,
+          llm_cost_usd: 1.25,
+          runs: 2,
+        },
+      ]);
 
       const profile = {
         schema_version: '1' as const,
