@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **PostgreSQL event bus shipped.** `@aqa/server` now exposes `EventBus`,
+  `MemoryEventBus` and `PostgresEventBus` with bounded envelopes, validated
+  channels, cross-replica `LISTEN/NOTIFY`, idempotent unsubscribe and isolated
+  subscriber errors. The live cross-client contract is wired into the
+  PostgreSQL CI job; durability remains intentionally owned by the store and
+  runner queue. ADR-029 records the transport boundary and reconnect gap.
 - **OIDC store retention hardening.** The PostgreSQL session backend now indexes
   pending-state expiry and opportunistically removes expired PKCE/session rows
   on writes, preventing abandoned login attempts from producing unbounded

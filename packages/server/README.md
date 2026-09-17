@@ -17,6 +17,13 @@ production. `aqa admin` selects `PostgresRunnerQueue` when `AQA_QUEUE_DSN` is
 configured and `PostgresStore` when `AQA_STORE_DSN` is configured; otherwise it
 intentionally uses local in-memory components for development.
 
+`MemoryEventBus` is the deterministic local transport. `PostgresEventBus`
+provides cross-replica `LISTEN/NOTIFY` fan-out for self-hosted deployments.
+It is intentionally not a durable queue: publishers persist authoritative
+state first, and consumers reconcile after reconnects. Payloads are bounded to
+7,500 UTF-8 bytes to stay below PostgreSQL notification limits; subscriber
+failures are isolated from publishers.
+
 The protected `POST /api/admin/migrate-legacy-configuration` endpoint performs
 the explicit legacy configuration migration using `x-aqa-org` and/or
 `x-aqa-project` scope headers. It requires `admin:everything` and never

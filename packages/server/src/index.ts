@@ -13,3 +13,10 @@ export {
   type RunnerQueueLike,
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
+export {
+  MemoryEventBus,
+  PostgresEventBus,
+  type BusEvent,
+  type EventBus,
+  type EventHandler,
+} from './event-bus.js';
