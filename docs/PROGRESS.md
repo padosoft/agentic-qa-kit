@@ -910,7 +910,7 @@
 
 # 2026-09-17 — full workspace regression after enterprise slices
 
-- Evidence: repository typecheck, **597 tests passed / 0 failed**, and Biome lint passed locally after JWT runner, commerce mutation and signed pricing catalog changes. PostgreSQL-dependent branches remain explicit skips without `AQA_TEST_POSTGRES_DSN`; hosted CI remains authoritative for those live contracts and for Node 22/OCI/browser execution.
+- Evidence: repository typecheck, **599 tests passed / 0 failed**, and Biome lint passed locally after JWT runner, commerce mutation, signed pricing catalog, durable WebAuthn and CORS changes. PostgreSQL-dependent branches remain explicit skips without `AQA_TEST_POSTGRES_DSN`; hosted CI remains authoritative for those live contracts and for Node 22/OCI/browser execution.
 
 # 2026-09-17 — durable WebAuthn PostgreSQL stores
 
