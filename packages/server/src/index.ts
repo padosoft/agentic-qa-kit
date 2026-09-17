@@ -11,6 +11,7 @@ export {
   assertQueueQuota,
   IdempotencyConflictError,
   ResourceQuotaExceededError,
+  queueScope,
   validateQueueQuota,
   type QueueQuota,
   type EnqueuedJob,

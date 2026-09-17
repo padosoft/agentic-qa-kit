@@ -8,6 +8,7 @@ import {
   type RunnerJob,
   type RunnerQueueLike,
   assertQueueQuota,
+  queueScope,
   validateQueueQuota,
 } from './runner-queue.js';
 
@@ -46,10 +47,13 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   }
 
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
-    const unsafe = this.sql.unsafe as unknown as (
-      query: string,
-      params: unknown[],
-    ) => Promise<unknown>;
+    return this.qWith(this.sql, text, values);
+  }
+
+  private async qWith<T>(client: unknown, text: string, values: unknown[] = []): Promise<T[]> {
+    const unsafe = (
+      client as { unsafe: (query: string, params?: unknown[]) => unknown }
+    ).unsafe.bind(client) as (query: string, params?: unknown[]) => Promise<unknown>;
     return (await unsafe(text, values)) as T[];
   }
 
@@ -113,6 +117,11 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
 
   async enqueue(job: RunnerJob): Promise<EnqueuedJob> {
     await this.wait();
+    if (
+      this.quota.concurrent_runs_max !== undefined ||
+      this.quota.concurrent_scenarios_max !== undefined
+    )
+      return this.enqueueWithQuota(job);
     if (job.idempotency_key) {
       const existing = await this.q<StoredJob>(
         'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE idempotency_key = $1',
@@ -153,6 +162,69 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     }
     if (!row) throw new Error('[server/queue] enqueue returned no row');
     return this.map(row);
+  }
+
+  private async enqueueWithQuota(job: RunnerJob): Promise<EnqueuedJob> {
+    return this.sql.begin(async (tx) => {
+      const scope = queueScope(job.payload);
+      if (scope)
+        await this.qWith(tx, 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [scope]);
+
+      if (job.idempotency_key) {
+        const existing = await this.qWith<StoredJob>(
+          tx,
+          'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE idempotency_key = $1',
+          [job.idempotency_key],
+        );
+        const prior = existing[0];
+        if (prior) {
+          if (prior.idempotency_fingerprint !== job.idempotency_fingerprint)
+            throw new IdempotencyConflictError();
+          return this.map(prior);
+        }
+      }
+
+      if (scope) {
+        const active = await this.qWith<Pick<StoredJob, 'status' | 'payload'>>(
+          tx,
+          "SELECT status, payload FROM aqa_runner_jobs WHERE status IN ('queued', 'in_flight')",
+        );
+        assertQueueQuota(
+          active.map((row) => ({
+            status: row.status,
+            payload: this.decode<Record<string, unknown>>(row.payload),
+          })),
+          job,
+          this.quota,
+        );
+      }
+
+      const rows = await this.qWith<StoredJob>(
+        tx,
+        "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint) VALUES ($1, $2::jsonb, $3, 'queued', $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint",
+        [
+          job.id,
+          JSON.stringify(job.payload),
+          job.enqueued_at,
+          this.maxAttempts,
+          job.idempotency_key ?? null,
+          job.idempotency_fingerprint ?? null,
+        ],
+      );
+      let row = rows[0];
+      if (!row && job.idempotency_key) {
+        const existing = await this.qWith<StoredJob>(
+          tx,
+          'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE idempotency_key = $1',
+          [job.idempotency_key],
+        );
+        row = existing[0];
+        if (row?.idempotency_fingerprint !== job.idempotency_fingerprint)
+          throw new IdempotencyConflictError();
+      }
+      if (!row) throw new Error('[server/queue] enqueue returned no row');
+      return this.map(row);
+    });
   }
 
   async dequeue(now = new Date()): Promise<EnqueuedJob | null> {

@@ -527,9 +527,9 @@ fail closed until explicitly migrated.
 
 Per-tenant queue quotas are useful as an immediate backpressure contract, but a
 PostgreSQL snapshot followed by an insert can oversubscribe under concurrent
-replicas. Keep the `429` behavior and bounded error shape, but do not call the
-distributed guarantee complete until admission is serialized with a transaction
-and durable counters (or an equivalent advisory-lock protocol).
+replicas. Keep the `429` behavior and bounded error shape, and serialize the
+snapshot plus insert with a transaction-scoped advisory lock (or durable
+counters) before calling the distributed guarantee complete.
 
 # 2026-09-17 — cost calculation is not a kill switch
 

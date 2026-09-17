@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — first enforcement slice; distributed atomicity remains planned.
+Accepted — distributed admission serialization shipped; configuration/metrics remain planned.
 
 ## Decision
 
@@ -13,14 +13,14 @@ and declared scenario units. Limits are scoped by the authenticated `org` and
 before quota evaluation.
 
 The in-memory queue enforces the rule synchronously. The PostgreSQL adapter
-uses the same rule and a durable snapshot, but its snapshot-plus-insert window
-is explicitly advisory under concurrent replicas. Production-grade distributed
-admission requires a transaction with serialized counters or an equivalent
-PostgreSQL advisory-lock protocol and must emit quota utilization metrics.
+uses the same rule inside a transaction-scoped advisory lock keyed by the
+tenant/project scope, so the snapshot and insert are serialized across queue
+clients. It must still emit quota utilization metrics and receive durable
+configuration rather than only constructor options.
 
 ## Consequences
 
 Queue overload is bounded and tenant isolation is preserved at the API error
-boundary. Operators can configure safe local limits today, while CI and the
-next implementation slice must prove atomic contention behavior, kill-switch
-propagation, and recovery after lease expiry.
+boundary. CI proves concurrent PostgreSQL clients cannot both pass the same
+scoped limit. Kill-switch propagation, configuration persistence, utilization
+metrics and recovery after lease expiry remain separate operational work.

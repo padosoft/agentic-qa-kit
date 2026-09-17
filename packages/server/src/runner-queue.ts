@@ -62,12 +62,12 @@ export function assertQueueQuota(
   job: RunnerJob,
   quota: QueueQuota,
 ): void {
-  const scope = scopeOf(job.payload);
+  const scope = queueScope(job.payload);
   if (!scope) return;
   const scoped = active.filter(
     (candidate) =>
       (candidate.status === 'queued' || candidate.status === 'in_flight') &&
-      scopeOf(candidate.payload) === scope,
+      queueScope(candidate.payload) === scope,
   );
   if (quota.concurrent_runs_max !== undefined && scoped.length >= quota.concurrent_runs_max)
     throw new ResourceQuotaExceededError(
@@ -226,7 +226,7 @@ export class RunnerQueue {
   }
 }
 
-function scopeOf(payload: Record<string, unknown>): string | undefined {
+export function queueScope(payload: Record<string, unknown>): string | undefined {
   return typeof payload.org === 'string' && typeof payload.project === 'string'
     ? `${payload.org}/${payload.project}`
     : undefined;

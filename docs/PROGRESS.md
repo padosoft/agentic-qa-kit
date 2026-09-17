@@ -345,8 +345,8 @@
 # 2026-09-17 — tenant quota admission slice
 
 - Added validated per-organization/project admission limits for concurrent runs and declared scenario units to both the memory queue and the PostgreSQL queue. Idempotent retries return the existing job before quota evaluation; API callers receive a bounded `429 RESOURCE_QUOTA_EXCEEDED` response with no secret or payload echo.
-- PostgreSQL currently evaluates the shared snapshot before insert, so it is safe as a local guard but is not yet a distributed atomic quota guarantee across simultaneous replicas. The remaining production step is a transaction/advisory-lock counter table plus kill-switch/config propagation and operational metrics.
-- Evidence: server typecheck, server suite (108 passed plus one PostgreSQL EventBus platform skip before this adapter-only change), repository lint. Live PostgreSQL quota contention remains CI evidence, not locally verified.
+- PostgreSQL quota admission now serializes each scoped decision with a transaction-scoped advisory lock before reading active jobs and inserting. The queue still needs durable quota configuration/metrics and runtime kill-switch propagation, but the previous snapshot-plus-insert race is closed.
+- Evidence: server typecheck, server suite (109 passed plus one PostgreSQL EventBus platform skip), repository lint. A live two-client contention test is included in `postgres-queue.test.ts` and runs in CI with PostgreSQL 16; this Windows workspace has no local PostgreSQL DSN.
 
 # 2026-09-17 — cost dispatch safety slice
 

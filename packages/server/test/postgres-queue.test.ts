@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { IdempotencyConflictError, PostgresRunnerQueue } from '../dist/index.js';
+import {
+  IdempotencyConflictError,
+  PostgresRunnerQueue,
+  ResourceQuotaExceededError,
+} from '../dist/index.js';
 
 describe('PostgresRunnerQueue', () => {
   it('survives reconnect and fences stale acknowledgements', async () => {
@@ -76,6 +80,30 @@ describe('PostgresRunnerQueue', () => {
           }),
         IdempotencyConflictError,
       );
+    } finally {
+      await first.close();
+      await second.close();
+    }
+  });
+
+  it('serializes scoped quota admission across concurrent PostgreSQL clients', async (t) => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      t.skip('AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const first = new PostgresRunnerQueue(dsn, { quota: { concurrent_runs_max: 1 } });
+    const second = new PostgresRunnerQueue(dsn, { quota: { concurrent_runs_max: 1 } });
+    const scope = `quota-org-${randomUUID()}`;
+    const payload = { org: scope, project: 'quota-project', scenario_count: 1 };
+    try {
+      const results = await Promise.allSettled([
+        first.enqueue({ id: randomUUID(), payload, enqueued_at: new Date().toISOString() }),
+        second.enqueue({ id: randomUUID(), payload, enqueued_at: new Date().toISOString() }),
+      ]);
+      assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+      const rejected = results.find((result) => result.status === 'rejected');
+      assert.ok(rejected && rejected.reason instanceof ResourceQuotaExceededError);
     } finally {
       await first.close();
       await second.close();
