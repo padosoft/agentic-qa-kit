@@ -22,6 +22,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyWebhookJourney()` checks order linkage, delivered state, valid
   signatures and bounded delivery attempts; it never treats an absent webhook
   observer as a pass.
+- `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
+  v1 contract, positive replay tolerance and constant-time HMAC comparison;
+  it does not perform payment calls or replace durable event idempotency.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
 

@@ -44,6 +44,13 @@
   verifies delivery before process return; observability 12/12, kit 126
   passed/2 platform skips, typecheck and lint pass.
 
+- **Stripe-style webhook signature boundary added.** Commerce now verifies the
+  raw request body, `t=` timestamp, one or more `v1=` HMAC signatures and a
+  positive replay tolerance using constant-time comparison. Evidence:
+  commerce **16/16**, typecheck, lint and diff-check pass. This is a provider
+  verification primitive, not evidence of live Stripe/payment settlement or
+  durable event idempotency.
+
 - **Formal risk coverage measurement shipped.** `@aqa/methodology` now
   computes the M2 weighted score (invariant mapping 35%, oracle-backed
   scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health

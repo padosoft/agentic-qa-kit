@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   InMemoryCommerceReference,
@@ -13,11 +14,37 @@ import {
   verifyCheckoutJourney,
   verifyRefundJourney,
   verifyShippingJourney,
+  verifyStripeWebhookSignature,
   verifyTaxJourney,
   verifyWebhookJourney,
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
+  it('verifies Stripe-style raw-body signatures and rejects replay windows', () => {
+    const secret = 'whsec_test_only';
+    const body = '{"id":"evt_test","type":"payment_intent.succeeded"}';
+    const timestamp = 1_700_000_000;
+    const signature = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+    const header = `t=${timestamp},v1=${signature}`;
+    assert.equal(
+      verifyStripeWebhookSignature(body, header, secret, {
+        now_ms: timestamp * 1_000,
+      }).ok,
+      true,
+    );
+    assert.equal(
+      verifyStripeWebhookSignature(body, header, secret, {
+        now_ms: (timestamp + 301) * 1_000,
+      }).reason,
+      'stale',
+    );
+    assert.equal(
+      verifyStripeWebhookSignature(`${body} `, header, secret, {
+        now_ms: timestamp * 1_000,
+      }).reason,
+      'invalid_signature',
+    );
+  });
   it('rejects floating point or malformed currency money', () => {
     assert.equal(Money.safeParse({ currency: 'EUR', amount_minor: '1099' }).success, true);
     assert.equal(Money.safeParse({ currency: 'eur', amount_minor: '10.99' }).success, false);

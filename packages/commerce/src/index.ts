@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export {
+  verifyStripeWebhookSignature,
+  type StripeWebhookVerification,
+  type StripeWebhookVerificationOptions,
+} from './stripe-webhook.js';
+
 /** Decimal minor units are strings so no binary floating point enters money math. */
 export const Money = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be an ISO-4217 code'),

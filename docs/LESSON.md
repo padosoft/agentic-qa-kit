@@ -771,3 +771,10 @@ payload-free span observer to the persisted event stream and drains it before
 `aqa run` returns. The complete-journey test uses a real local HTTP endpoint;
 Collector delivery failure remains a warning and can never mutate or replace
 the hash-chained audit source of truth.
+
+# 2026-09-17 — Webhook signatures require the raw body and a clock contract
+
+Provider-neutral webhook assertions are not enough to catch integration bugs.
+The Stripe-style boundary signs the exact raw body, accepts rotated `v1`
+signatures, rejects malformed/stale timestamps and uses a positive tolerance;
+the caller still needs durable event-effect idempotency after verification.
