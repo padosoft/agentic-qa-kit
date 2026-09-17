@@ -1360,3 +1360,11 @@ OpenAPI can document the SSE endpoint but not the message vocabulary and event
 payload contract. Keep a small event-type registry as the source for AsyncAPI,
 then make the stream adapter consume that same vocabulary. This prevents a
 consumer from discovering a transport that has no stable message semantics.
+
+# 2026-09-17 — schema references beat invented duplicate payloads
+
+When an API contract needs domain payloads, duplicating a second hand-written
+shape in OpenAPI creates a new drift source. Reference the versioned schemas
+package and model only the transport envelope locally. Keep genuinely generic
+endpoints visible as generic until their domain response is promoted, rather
+than publishing a plausible but unvalidated contract.

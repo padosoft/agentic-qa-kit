@@ -1088,3 +1088,15 @@
   kit admin HTTP test verifies content type and event operation, repository
   typecheck/lint/diff checks passed. Durable replay/cursor semantics remain the
   next eventing increment.
+
+# 2026-09-17 — OpenAPI domain schema references
+
+- Upgraded the generated OpenAPI contract from generic request/response objects
+  to versioned `@aqa/schemas` references for runs, run requests, findings,
+  profiles, scenarios, risk maps, projects, notifications, agents and SSO
+  configuration, with typed list/detail envelopes where the API already has a
+  stable shape.
+- Specialized endpoints that do not yet have a promoted domain envelope remain
+  explicitly generic; this is a measured contract gap, not a false claim of
+  complete SDK-generation readiness. Server tests **125 passed**, typecheck,
+  lint and diff checks passed locally.

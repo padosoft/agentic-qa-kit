@@ -58,6 +58,7 @@ const modules = [
   { file: 'finding.js', exportName: 'Finding', schemaName: 'finding' },
   { file: 'event.js', exportName: 'Event', schemaName: 'event' },
   { file: 'run.js', exportName: 'Run', schemaName: 'run' },
+  { file: 'run-request.js', exportName: 'RunRequest', schemaName: 'run-request' },
   { file: 'pack-manifest.js', exportName: 'PackManifest', schemaName: 'pack-manifest' },
   // v1.4 admin surface — Zod namespaces that back the admin API.
   { file: 'notification.js', exportName: 'Notification', schemaName: 'notification' },

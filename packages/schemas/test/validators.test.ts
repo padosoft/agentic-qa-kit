@@ -14,6 +14,7 @@ import {
   Project,
   RiskMap,
   Run,
+  RunRequest,
   SCHEMA_VERSION,
   SavedView,
   Scenario,
@@ -47,6 +48,7 @@ const validators = {
   finding: Finding.Finding,
   event: Event.Event,
   run: Run.Run,
+  'run-request': RunRequest.RunRequest,
   'pack-manifest': PackManifest.PackManifest,
   // v1.4 admin surface
   notification: Notification.Notification,
@@ -138,6 +140,7 @@ const invalidExpectations: Record<string, string[]> = {
   'project--missing-stack.json': ['stack'],
   'risk-map--empty-risks.json': ['risks'],
   'run--bad-state.json': ['state'],
+  'run-request--unknown-field.json': [],
   'scenario--no-oracles.json': ['oracles'],
 };
 

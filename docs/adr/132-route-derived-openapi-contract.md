@@ -14,10 +14,9 @@ methods, or path parameters actually served by the admin process.
 
 Generate an OpenAPI 3.1 document from the same route table used by the server.
 Expose it from `GET /openapi.json` and include operation IDs, bearer security,
-route permission metadata, path parameters, and the currently supported generic
-JSON/query envelopes. Domain request/response schemas remain owned by
-`@aqa/schemas`; the next contract slice will replace generic payloads with those
-versioned schemas.
+route permission metadata, path parameters, and versioned domain schema
+references. Domain schemas remain owned by `@aqa/schemas`; transport envelopes
+are generated around those references.
 
 Add a route-count test and an HTTP smoke assertion so every concrete route has a
 published operation and the running admin process serves the generated document.
@@ -27,9 +26,9 @@ published operation and the running admin process serves the generated document.
 - New routes automatically appear in the contract and route drift becomes a
   test failure instead of silent documentation debt.
 - Consumers can discover the API without depending on private source files.
-- This is not yet a complete domain schema registry: generic payloads must be
-  replaced with versioned schemas before external SDK generation is declared
-  production-ready.
+- A few specialized endpoints still expose intentionally generic response
+  envelopes until their domain response types are promoted into the schemas
+  package; those endpoints are visible rather than silently undocumented.
 - Evidence: server API tests (124) and kit tests (140, including two expected
   platform symlink skips), repository typecheck, Biome lint, and diff checks
   passed locally. Live reverse-proxy/OpenAPI consumer compatibility remains an
