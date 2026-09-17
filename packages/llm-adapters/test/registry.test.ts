@@ -8,13 +8,13 @@ describe('adapterFor', () => {
     assert.equal(a.provider, 'fixture');
   });
 
-  it('returns a scaffold that throws for live providers', async () => {
-    const a = adapterFor('anthropic');
+  it('returns a scaffold that throws for providers without a live adapter', async () => {
+    const a = adapterFor('google');
     await assert.rejects(
       () =>
         a.call({
-          provider: 'anthropic',
-          model: 'claude-opus-4-7',
+          provider: 'google',
+          model: 'gemini-test',
           messages: [{ role: 'user', content: 'hi' }],
         }),
       /not implemented at v0.3/,

@@ -11,6 +11,7 @@
 
 ## 2026-09-17
 
+- **Native Anthropic adapter shipped.** `@aqa/llm-adapters` now supports the Messages API with timeout, max-token bound, pre-request/response redaction, usage parsing, tool-schema forwarding and model provenance hash. Registry tests keep Google/Cohere/Bedrock explicitly scaffolded; Anthropic suite: 10/10.
 - **Dependency audit remediated.** `bun audit --json` is clean after upgrading Vite 8 + React plugin 6, esbuild 0.28, and pinning the vulnerable `fast-uri` range to 3.1.6 via the root override. Admin production build, kit typecheck/test/build and bundle execution remain green; the existing non-fatal CJS `import.meta` warnings are tracked separately.
 - **Tenant-scoped configuration resources implemented.** Packs, profiles, risks and scenarios now accept `org/project` scope through `StoreProvider`; new records use deterministic namespaced keys in Memory/PostgreSQL, API handlers propagate request scope, and legacy unscoped records remain readable for migration compatibility. Memory/store isolation and an HTTP API regression cover same-name profiles in separate projects; server suite: 101/101.
 - **PostgreSQL migrations serialized.** Store schema/table/index creation and version bookkeeping now run in one transaction-scoped advisory lock, closing the multi-replica first-boot race that `IF NOT EXISTS` alone does not prevent. The live PostgreSQL CI contract remains the authoritative evidence.

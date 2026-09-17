@@ -1,3 +1,4 @@
+import { AnthropicAdapter, type AnthropicOptions } from './anthropic.js';
 import { FixtureAdapter } from './fixture.js';
 import { OpenAiCompatibleAdapter, type OpenAiCompatibleOptions } from './openai-compatible.js';
 import type { LlmAdapter, LlmProvider } from './types.js';
@@ -12,15 +13,14 @@ class ScaffoldAdapter implements LlmAdapter {
 }
 
 /**
- * Return the right adapter for a given provider. Anthropic/OpenAI/Google/
- * Cohere/Ollama/vLLM/Bedrock all return ScaffoldAdapter at v0.3 — i.e. they
- * throw on call. This forces explicit fixture mode in tests and prevents
- * accidental live calls from leaking into CI.
+ * Return the right adapter for a given provider. Providers without a native
+ * bounded implementation still return a ScaffoldAdapter and fail explicitly.
  */
 export function adapterFor(
   provider: LlmProvider,
   opts?: {
     live?: OpenAiCompatibleOptions;
+    anthropic?: AnthropicOptions;
     fixtures?: Parameters<typeof FixtureAdapter.prototype.call> extends never
       ? never
       : Array<{
@@ -40,5 +40,6 @@ export function adapterFor(
   if (provider === 'openai' || provider === 'ollama' || provider === 'vllm') {
     return new OpenAiCompatibleAdapter(provider, opts?.live);
   }
+  if (provider === 'anthropic') return new AnthropicAdapter(opts?.anthropic);
   return new ScaffoldAdapter(provider);
 }

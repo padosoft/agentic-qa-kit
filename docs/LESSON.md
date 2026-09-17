@@ -348,3 +348,11 @@ not visible in application tests. Run `bun audit` after lockfile changes, update
 the owning toolchain where possible, and use a narrowly scoped override only
 when the vulnerable transitive range has a compatible fixed release. Re-run
 the UI build, CLI bundle and full tests after toolchain upgrades.
+
+# 2026-09-17 — provider-specific LLM contracts must not share fake adapters
+
+An OpenAI-compatible endpoint cannot stand in for Anthropic Messages semantics:
+headers, system placement, content blocks, stop reasons and tool schemas differ.
+Implement each live provider behind the same bounded/redacted interface and keep
+unsupported providers as explicit scaffolds, so the registry cannot silently
+claim coverage that the wire contract does not provide.
