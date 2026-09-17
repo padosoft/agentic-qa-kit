@@ -29,6 +29,7 @@ import {
   assertTenderAllocation,
   verifyCheckoutJourney,
   verifyCommerceJourneySuite,
+  verifyLoyaltyJourney,
   verifyRefundJourney,
   verifyShippingJourney,
   verifyStripeWebhookSignature,
@@ -492,6 +493,72 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(webhook.outcome.evidence_complete, true);
   });
 
+  it('verifies checkout-linked loyalty earning and ledger reconciliation', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-loyalty-journey',
+      price: { currency: 'EUR', amount_minor: '1999' },
+      on_hand: 1,
+    });
+    const result = await verifyLoyaltyJourney(merchant.asAdapter(), {
+      context: {
+        schema_version: '1',
+        merchant: 'reference',
+        environment: 'sandbox',
+        tenant: 'shop-loyalty',
+        run_id: 'run-loyalty',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity: { tenant: 'shop-loyalty', customer_id: 'customer-loyalty' },
+      sku: 'sku-loyalty-journey',
+      quantity: 1,
+      idempotencyKey: 'loyalty-checkout',
+      expectedPoints: 19,
+    });
+    assert.equal(result.outcome.status, 'pass', result.outcome.reason);
+    assert.equal(result.outcome.evidence_complete, true);
+    assert.match(result.evidence[0]?.detail ?? '', /balance=19/);
+  });
+
+  it('reads loyalty observations through the HTTP adapter boundary', async () => {
+    let requestedUrl = '';
+    const adapter = new HttpCommerceAdapter({
+      baseUrl: 'https://shop.test',
+      fetch: async (input) => {
+        requestedUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            account: {
+              schema_version: '1',
+              id: 'loyalty-account-1',
+              tenant: 'shop-a',
+              customer_id: 'customer-a',
+              balance_points: 10,
+              revision: 1,
+            },
+            transactions: [
+              {
+                schema_version: '1',
+                id: 'loyalty-tx-1',
+                account_id: 'loyalty-account-1',
+                kind: 'earn',
+                points: 10,
+                reference: 'order-1',
+                occurred_at: '2026-09-17T10:00:00Z',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await adapter.observeLoyalty({ tenant: 'shop-a', customer_id: 'customer-a' });
+    assert.equal(result.account.balance_points, 10);
+    assert.equal(result.transactions.length, 1);
+    assert.equal(requestedUrl, 'https://shop.test/customers/customer-a/loyalty');
+  });
+
   it('executes an isolated checkout exactly once and preserves minor-unit totals', () => {
     const merchant = new InMemoryCommerceReference();
     merchant.seedProduct({
@@ -667,7 +734,7 @@ describe('@aqa/commerce contracts', () => {
     merchant.seedProduct({
       sku: 'suite-sku',
       price: { currency: 'EUR', amount_minor: '1299' },
-      on_hand: 5,
+      on_hand: 6,
     });
     const context = {
       schema_version: '1' as const,
@@ -732,10 +799,18 @@ describe('@aqa/commerce contracts', () => {
         interval: 'month',
         idempotencyKey: 'suite-subscription',
       },
+      loyalty: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-loyalty-customer' },
+        sku: 'suite-sku',
+        quantity: 1,
+        idempotencyKey: 'suite-loyalty-checkout',
+        expectedPoints: 12,
+      },
     });
     assert.equal(result.outcome.status, 'pass', result.outcome.reason);
     assert.equal(result.outcome.evidence_complete, true);
-    assert.equal(Object.keys(result.journeys).length, 6);
+    assert.equal(Object.keys(result.journeys).length, 7);
     assert.ok(result.evidence.every((item) => item.step.includes('.')));
   });
 

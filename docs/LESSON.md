@@ -1,5 +1,11 @@
 # Lessons
 
+- **A loyalty ledger is not checkout evidence by itself.** Require an
+  authoritative account observation, tenant/customer binding, full ledger
+  reconciliation and an earn transaction referencing the exact order. Keep the
+  points formula provider-specific and test it only when the journey declares
+  an explicit expectation.
+
 - **LLM endpoint policy needs explicit private-network intent.** Provider
   adapters can share timeout/redaction code without sharing a safe egress
   boundary. Reject ambiguous and literal private destinations by default,

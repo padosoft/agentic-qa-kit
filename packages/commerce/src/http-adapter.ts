@@ -11,6 +11,9 @@ import {
   type FulfillmentLine,
   FulfillmentSnapshot,
   InventorySnapshot,
+  LoyaltyAccountSnapshot,
+  type LoyaltyObservation,
+  LoyaltyTransactionSnapshot,
   type Money,
   OrderSnapshot,
   PaymentSnapshot,
@@ -51,6 +54,7 @@ export interface HttpCommerceAdapterOptions {
     tax: string;
     shipping: string;
     webhooks: string;
+    loyalty: string;
   }>;
 }
 
@@ -96,6 +100,7 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
+      loyalty: '/customers/:customer_id/loyalty',
       ...opts.paths,
     };
   }
@@ -332,6 +337,21 @@ export class HttpCommerceAdapter implements CommerceAdapter {
     );
     if (!Array.isArray(raw)) throw new Error('commerce webhook response must be an array');
     return raw.map((item) => WebhookObservation.parse(item));
+  }
+
+  async observeLoyalty(identity: CommerceIdentity): Promise<LoyaltyObservation> {
+    const raw = (await this.request(
+      'GET',
+      pathTemplate(this.paths.loyalty, { customer_id: identity.customer_id }),
+      this.context(identity),
+      identity,
+    )) as Record<string, unknown>;
+    if (!Array.isArray(raw.transactions))
+      throw new Error('commerce loyalty response must include transactions array');
+    return {
+      account: LoyaltyAccountSnapshot.parse(raw.account),
+      transactions: raw.transactions.map((item) => LoyaltyTransactionSnapshot.parse(item)),
+    };
   }
 
   private context(identity?: CommerceIdentity): CommerceContext {

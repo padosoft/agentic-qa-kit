@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added the executable ecommerce loyalty journey.** `verifyLoyaltyJourney()`
+  now performs checkout, requires a checkout-linked earn event, validates
+  tenant/customer ownership and reconciles the complete observed ledger.
+  Added the HTTP observer path, reference merchant evidence and aggregate-suite
+  support. Commerce contracts are **32 pass / 0 fail** with one explicit
+  PostgreSQL skip. ADR-182 documents the provider-neutral boundary; real
+  loyalty vendors, expiration/promotions and durable atomicity remain live
+  integration evidence.
+
 - **Added the shared LLM transport boundary.** Every live provider adapter now
   fails closed on non-HTTPS endpoints, endpoint credentials/query/fragment
   data, literal private/local/metadata destinations and optional host
