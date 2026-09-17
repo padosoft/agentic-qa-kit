@@ -109,6 +109,33 @@ describe('PostgresRunnerQueue', () => {
     }
   });
 
+  it('persists priority ordering across PostgreSQL queue clients', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const queue = new PostgresRunnerQueue(dsn);
+    const prefix = `queue-priority-${randomUUID()}`;
+    try {
+      await queue.enqueue({
+        id: `${prefix}-low`,
+        payload: { project: 'demo' },
+        enqueued_at: '2026-05-17T10:00:00Z',
+        priority: -1,
+      });
+      await queue.enqueue({
+        id: `${prefix}-high`,
+        payload: { project: 'demo' },
+        enqueued_at: '2026-05-17T10:01:00Z',
+        priority: 10,
+      });
+      assert.equal((await queue.dequeue())?.id, `${prefix}-high`);
+    } finally {
+      await queue.close();
+    }
+  });
+
   it('serializes scoped quota admission across concurrent PostgreSQL clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {

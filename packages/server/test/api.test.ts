@@ -250,11 +250,12 @@ describe('makeApi', () => {
     const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
     const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
     const res = await route?.handle(
-      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke', priority: 5 } },
       c,
     );
     assert.equal(res?.status, 202);
     assert.equal(c.queue.size(), 1);
+    assert.equal(c.queue.snapshot()[0]?.priority, 5);
     assert.equal((events[0] as { type: string }).type, 'run.requested');
   });
 

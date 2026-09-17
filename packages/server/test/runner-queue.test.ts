@@ -18,6 +18,22 @@ describe('RunnerQueue', () => {
     assert.equal(q.dequeue()?.id, 'job-2');
   });
 
+  it('dequeues higher-priority jobs first while preserving FIFO ties', () => {
+    const q = new RunnerQueue();
+    q.enqueue({ ...JOB, id: 'low', priority: -1 });
+    q.enqueue({ ...JOB, id: 'high', priority: 10 });
+    q.enqueue({ ...JOB, id: 'normal', priority: 0 });
+    assert.equal(q.dequeue()?.id, 'high');
+    assert.equal(q.dequeue()?.id, 'normal');
+    assert.equal(q.dequeue()?.id, 'low');
+  });
+
+  it('rejects unbounded queue priorities', () => {
+    const q = new RunnerQueue();
+    assert.throws(() => q.enqueue({ ...JOB, priority: 11 }), /priority/);
+    assert.throws(() => q.enqueue({ ...JOB, priority: 1.5 }), /priority/);
+  });
+
   it('dequeues only jobs inside the runner scopes', () => {
     const q = new RunnerQueue();
     q.enqueue({

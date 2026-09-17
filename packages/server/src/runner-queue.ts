@@ -6,6 +6,8 @@ export interface RunnerJob {
   idempotency_key?: string;
   /** Canonical request fingerprint bound to the idempotency key. */
   idempotency_fingerprint?: string;
+  /** Bounded scheduling hint. Higher values are dequeued first; default is 0. */
+  priority?: number;
 }
 
 export interface RunnerScope {
@@ -87,6 +89,13 @@ export function validateQueueQuota(quota: QueueQuota): QueueQuota {
   return { ...quota };
 }
 
+export function validateJobPriority(priority: number | undefined): number {
+  if (priority === undefined) return 0;
+  if (!Number.isInteger(priority) || priority < -10 || priority > 10)
+    throw new Error('[server/queue] priority must be an integer between -10 and 10');
+  return priority;
+}
+
 export function assertQueueQuota(
   active: ReadonlyArray<Pick<EnqueuedJob, 'status' | 'payload'>>,
   job: RunnerJob,
@@ -151,6 +160,7 @@ export class RunnerQueue {
   }
 
   enqueue(job: RunnerJob): EnqueuedJob {
+    const priority = validateJobPriority(job.priority);
     if (job.idempotency_key) {
       const previous = this.idempotency.get(job.idempotency_key);
       if (previous) {
@@ -163,6 +173,7 @@ export class RunnerQueue {
     assertQueueQuota(this.jobs, job, this.quota);
     const enq: EnqueuedJob = {
       ...job,
+      ...(priority !== 0 ? { priority } : {}),
       status: 'queued',
       attempts: 0,
       max_attempts: this.maxAttempts,
@@ -191,9 +202,14 @@ export class RunnerQueue {
         j.lease_token = undefined;
       }
     }
-    const job = this.jobs.find(
-      (j) => j.status === 'queued' && matchesRunnerScopes(j.payload, scopes),
-    );
+    const job = this.jobs
+      .filter((j) => j.status === 'queued' && matchesRunnerScopes(j.payload, scopes))
+      .sort(
+        (a, b) =>
+          validateJobPriority(b.priority) - validateJobPriority(a.priority) ||
+          a.enqueued_at.localeCompare(b.enqueued_at) ||
+          a.id.localeCompare(b.id),
+      )[0];
     if (!job) return null;
     job.status = 'in_flight';
     job.attempts += 1;

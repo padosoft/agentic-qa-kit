@@ -460,6 +460,9 @@ export function makeApi(): ApiHandler[] {
             id: cryptoUuid(),
             payload,
             enqueued_at: new Date().toISOString(),
+            ...(parsedRequest.data.priority !== undefined
+              ? { priority: parsedRequest.data.priority }
+              : {}),
             ...(idempotencyKey
               ? {
                   idempotency_key: `${s.org}/${s.project}:${idempotencyKey}`,

@@ -51,3 +51,8 @@ The `aqa-runner-reaper` binary performs one PostgreSQL queue lease cleanup tick
 using `AQA_RUNNER_QUEUE_DSN`. It requeues expired jobs below their retry limit
 and terminally fails jobs at the limit. It is safe to run concurrently and is
 intended for a CronJob/systemd timer; it never prints the DSN or job payload.
+
+Run requests may include a bounded `priority` from `-10` to `10`. Higher
+priorities are leased first and equal priorities remain FIFO. This is not a
+fairness guarantee: production tenants needing starvation bounds still require
+load-tested scheduling policy and quotas.

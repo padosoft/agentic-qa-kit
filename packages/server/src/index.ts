@@ -19,6 +19,7 @@ export {
   ResourceQuotaExceededError,
   queueScope,
   validateQueueQuota,
+  validateJobPriority,
   type QueueQuota,
   type EnqueuedJob,
   type RunnerJob,

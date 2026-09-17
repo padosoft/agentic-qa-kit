@@ -1520,3 +1520,10 @@ Dependabot alerts in an example are not harmless documentation noise: users
 copy examples into production and inherit their constraints. Keep framework
 examples locked, run the ecosystem-native audit (`composer audit --locked` or
 `npm audit`) and upgrade the example baseline instead of suppressing advisories.
+
+# 2026-09-17 — priority is not fairness
+
+A bounded priority field improves urgent-run latency but does not prove tenant
+fairness or prevent starvation. Preserve FIFO ties, persist the value, and keep
+fairness/load-test policy as a separate explicit contract rather than claiming
+that a sort order is a scheduler.

@@ -1348,3 +1348,14 @@
 - Evidence: `composer audit --locked` reports **no security vulnerability
   advisories**. The docs-site npm audit is also currently clean; GitHub's older
   default-branch alerts may take time to refresh.
+
+# 2026-09-17 — bounded persistent queue priority
+
+- Added optional run priority `-10..10` to the request/schema/API boundary and
+  queue contracts. Memory and PostgreSQL queues lease higher priorities first,
+  preserve FIFO ties, and PostgreSQL persists the value through an additive
+  migration. ADR-155 documents that fairness/starvation SLOs are intentionally
+  not inferred from priority alone.
+- Evidence: server suite **131 passed / 0 failed**, server typecheck/Biome and
+  generated JSON Schema pass locally. PostgreSQL ordering remains a hosted
+  contract when `AQA_TEST_POSTGRES_DSN` is available.
