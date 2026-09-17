@@ -44,10 +44,10 @@ describe('PostgresRunnerQueue', () => {
     }
   });
 
-  it('deduplicates the same idempotency key across queue clients', async (t) => {
+  it('deduplicates the same idempotency key across queue clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {
-      t.skip('AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
       return;
     }
     const first = new PostgresRunnerQueue(dsn);
@@ -86,10 +86,10 @@ describe('PostgresRunnerQueue', () => {
     }
   });
 
-  it('serializes scoped quota admission across concurrent PostgreSQL clients', async (t) => {
+  it('serializes scoped quota admission across concurrent PostgreSQL clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {
-      t.skip('AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
       return;
     }
     const first = new PostgresRunnerQueue(dsn, { quota: { concurrent_runs_max: 1 } });

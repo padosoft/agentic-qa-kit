@@ -13,6 +13,12 @@
   tests, but make the durable store own the atomic revoke-and-insert boundary
   and require a cross-instance contract before claiming HA readiness.
 
+- **A synchronous child process can invalidate an E2E HTTP journey.** If the
+  fixture server lives in the parent process, `spawnSync` blocks its event loop
+  while the child waits for the response and the probe eventually aborts. Use
+  an asynchronous child process, preserve a hard timeout, and assert the real
+  request path rather than replacing it with a fixture response.
+
 ## 2026-09-17 — evidence-based enterprise review
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.

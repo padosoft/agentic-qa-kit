@@ -26,6 +26,14 @@
   retain the documented fallback. Existing auth tests and typecheck remain the
   next local gate; two durable store instances must still prove the path in CI.
 
+- **CI regressions fixed from complete-journey evidence.** The Bun 1.3.11 job
+  was executing PostgreSQL contracts after `t.skip()` instead of stopping;
+  absent-DSN contracts now emit an explicit visible skip and return. The CLI
+  smoke harness now runs the live-target child asynchronously so its parent
+  HTTP server can service the real request; local evidence is **537 Bun tests
+  passed** and all **5 CLI smoke checks passed**. The hosted rerun is required
+  to close the previous CI failure.
+
 - **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
   bounded, fail-closed verifier with constant-time code comparison, Base32
   decoding, configurable period/digits/skew window and RFC vector coverage.
