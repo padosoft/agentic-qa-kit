@@ -39,6 +39,7 @@ describe('per-adapter render', () => {
     const files = claudeAdapter.render(ctx);
     const paths = files.map((f) => f.path).sort();
     assert.ok(paths.includes('CLAUDE.md'));
+    assert.ok(paths.includes('AGENTS.md'));
     assert.ok(paths.some((p) => p.startsWith('.claude/skills/')));
     const instr = files.find((f) => f.path === 'CLAUDE.md');
     assert.match(instr?.contents ?? '', /Claude/);
@@ -56,6 +57,7 @@ describe('per-adapter render', () => {
     const files = geminiAdapter.render(ctx);
     const paths = files.map((f) => f.path).sort();
     assert.ok(paths.includes('GEMINI.md'));
+    assert.ok(paths.includes('AGENTS.md'));
     assert.ok(paths.some((p) => p.startsWith('.gemini/skills/')));
   });
 
@@ -63,6 +65,7 @@ describe('per-adapter render', () => {
     const files = copilotAdapter.render(ctx);
     const paths = files.map((f) => f.path).sort();
     assert.ok(paths.includes('.github/copilot-instructions.md'));
+    assert.ok(paths.includes('AGENTS.md'));
     assert.ok(paths.some((p) => p.startsWith('.github/skills/')));
   });
 
@@ -101,6 +104,16 @@ describe('renderForTargets', () => {
         assert.match(skill.path, /\/skills\/[^/]+\/SKILL\.md$/);
         assert.match(skill.contents, /^---\nname: [^\n]+\ndescription: .+\n---/);
       }
+    }
+  });
+
+  it('keeps the canonical bootstrap available for every single-target install', () => {
+    for (const adapter of adapters) {
+      const files = adapter.render(ctx);
+      assert.ok(
+        files.some((file) => file.path === 'AGENTS.md'),
+        adapter.target,
+      );
     }
   });
 });

@@ -1,3 +1,4 @@
+import { renderAgentsMd } from './common.js';
 import type { Adapter, RenderContext, RenderedFile } from './types.js';
 
 const INSTRUCTIONS = (ctx: RenderContext) => `# Gemini CLI instructions for \`${ctx.projectName}\`
@@ -31,6 +32,7 @@ export const geminiAdapter: Adapter = {
   capabilities: { skills: true, subagents: true, hooks: false, instruction_file: 'GEMINI.md' },
   render(ctx: RenderContext): RenderedFile[] {
     return [
+      { path: 'AGENTS.md', kind: 'instruction', contents: renderAgentsMd(ctx) },
       { path: 'GEMINI.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
       { path: '.gemini/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
     ];

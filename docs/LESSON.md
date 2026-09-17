@@ -1651,3 +1651,8 @@ evidence. A bounded import graph improves signal quality without executing
 untrusted code, but aliases, dynamic imports, generated files and other
 languages remain unresolved. Emit the resolver mode as a tag and keep the
 result explicitly heuristic rather than claiming complete reachability.
+# 2026-09-17 — generated agent instructions must be self-contained
+
+An adapter that tells an agent to read a canonical bootstrap must generate
+that bootstrap even when installed alone. Test each target in isolation and
+keep host discovery evidence separate from file-shape validation.

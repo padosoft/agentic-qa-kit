@@ -1,3 +1,4 @@
+import { renderAgentsMd } from './common.js';
 import type { Adapter, RenderContext, RenderedFile } from './types.js';
 
 const INSTRUCTIONS = (ctx: RenderContext) => `# Claude Code instructions for \`${ctx.projectName}\`
@@ -45,6 +46,7 @@ export const claudeAdapter: Adapter = {
   capabilities: { skills: true, subagents: true, hooks: true, instruction_file: 'CLAUDE.md' },
   render(ctx: RenderContext): RenderedFile[] {
     return [
+      { path: 'AGENTS.md', kind: 'instruction', contents: renderAgentsMd(ctx) },
       { path: 'CLAUDE.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
       { path: '.claude/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
       { path: '.claude/skills/aqa-validate/SKILL.md', kind: 'skill', contents: SKILL_AQA_VALIDATE },
