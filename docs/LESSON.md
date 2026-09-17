@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-17 — durable evidence needs read-time verification
+
+Writing a digest at artifact creation does not protect a later replay unless
+the reader recomputes it and validates the payload again. Use immutable
+identity keys and atomic writes locally, then treat WORM/Object-Lock and
+restore drills as separate deployment evidence.
+
 # 2026-09-17 — semantic confidence needs an inconclusive state
 
 An ensemble that is too small or disagrees should not be coerced into pass or

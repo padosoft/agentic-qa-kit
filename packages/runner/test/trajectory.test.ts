@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
-import { AgentTrajectoryRecorder, verifyAgentTrajectory } from '../dist/trajectory.js';
+import {
+  AgentTrajectoryRecorder,
+  AgentTrajectoryStore,
+  verifyAgentTrajectory,
+} from '../dist/trajectory.js';
 
 function recorder(options: Partial<ConstructorParameters<typeof AgentTrajectoryRecorder>[0]> = {}) {
   return new AgentTrajectoryRecorder({
@@ -92,5 +99,36 @@ describe('AgentTrajectoryRecorder', () => {
       }).ok,
       false,
     );
+  });
+
+  it('persists immutable artifacts and verifies their envelope on read', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-trajectory-'));
+    try {
+      const snapshot = recorder().snapshot();
+      const store = new AgentTrajectoryStore({ root });
+      const artifact = store.save(snapshot);
+      assert.equal(store.load(snapshot.run_id, snapshot.scenario_id).run_id, snapshot.run_id);
+      assert.equal(store.save(snapshot).digest, artifact.digest);
+      const envelope = JSON.parse(readFileSync(artifact.path, 'utf8')) as Record<string, unknown>;
+      envelope.snapshot_sha256 = '0'.repeat(64);
+      writeFileSync(artifact.path, JSON.stringify(envelope));
+      assert.throws(() => store.load(snapshot.run_id, snapshot.scenario_id), /integrity/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsafe path identities and oversized artifacts', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-trajectory-'));
+    try {
+      assert.throws(
+        () => new AgentTrajectoryStore({ root, max_bytes: 10 }).save(recorder().snapshot()),
+        /byte budget/,
+      );
+      const unsafe = recorder({ run_id: '../escape' }).snapshot();
+      assert.throws(() => new AgentTrajectoryStore({ root }).save(unsafe), /path segment/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

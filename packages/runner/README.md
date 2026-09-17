@@ -6,6 +6,11 @@ multi-trial policy and returns `inconclusive` for insufficient/disagreeing
 evidence; the second computes Brier/ECE metrics on a reviewed gold corpus.
 Both consume opaque scores and model identities, not private judge rationales.
 
+`AgentTrajectoryStore` persists validated, digest-bound trajectory envelopes
+with atomic writes, size bounds and immutable `(run_id, scenario_id)` keys.
+Reads verify the digest before returning the snapshot; mount the host root on
+WORM/Object-Lock storage when retention guarantees are required.
+
 Orchestrator runner for `agentic-qa-kit`. Ships:
 
 - **`RunLifecycle`** — state machine (pending → running → {succeeded, failed, aborted, budget_exceeded}).
