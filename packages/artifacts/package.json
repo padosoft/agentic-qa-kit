@@ -15,5 +15,8 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/artifacts.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.862.0"
+  },
   "publishConfig": { "access": "public" }
 }

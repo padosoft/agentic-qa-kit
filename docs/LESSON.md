@@ -321,3 +321,7 @@ Visibility leases without a maximum-attempt policy create infinite poison-job lo
 # 2026-09-17 — audit integrity requires a transaction boundary
 
 Reading the last audit event, mutating a finding, and appending the next event as three independent store calls allows concurrent writers to fork the hash chain or lose the status/audit pairing. The API must call one store primitive; PostgreSQL must serialize the complete sequence (including the empty-tail case) with a transaction-scoped advisory lock. A passing in-memory test is useful for the API contract, but only the live PostgreSQL concurrency branch proves the durable invariant.
+
+# 2026-09-17 — Object Lock is an adapter capability, not an authorization model
+
+An S3-compatible artifact adapter can request governance/compliance retention and verify content digests, but it cannot safely infer tenant identity from an artifact key. The API must derive the prefix from authenticated scope, and operators must enable bucket versioning, Object Lock and KMS policy separately. The adapter therefore accepts an explicit prefix and documents these controls instead of claiming that S3 alone makes artifacts enterprise-compliant.

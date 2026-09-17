@@ -21,6 +21,9 @@ export interface ArtifactStore {
   delete(ref: ArtifactRef): Promise<void>;
 }
 
+export { S3ArtifactStore } from './s3.js';
+export type { S3ArtifactClient, S3ArtifactStoreOptions } from './s3.js';
+
 const SENSITIVE_KEY =
   /(authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key|pan|cvv|iban)/i;
 
