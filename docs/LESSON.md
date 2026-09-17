@@ -1769,3 +1769,9 @@ profile without a host-owned driver would mislabel orchestrator events and
 findings. Require explicit injection, propagate actor identity through every
 audit event, and keep provider/model/tool-policy selection outside the generic
 runner until its contracts are implemented and verified.
+# 2026-09-17 — agent tool evidence must be opaque by default
+
+Agent trajectories often contain credentials, customer data and large tool
+responses. Audit the existence, identity, ordering, status and digests of tool
+calls, not their raw payloads. Enforce allowlists and budgets before dispatch;
+redaction after persistence is too late for an in-memory host boundary.
