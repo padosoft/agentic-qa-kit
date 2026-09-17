@@ -496,3 +496,8 @@
 
 - Added serialized flushes, stoppable bounded auto-flush and `shutdown()` drain semantics to `OtlpHttpSpanExporter`. Failed deliveries remain queued; shutdown fails if the bounded queue cannot drain instead of silently dropping telemetry.
 - Evidence: observability suite 11/11, workspace lint and diff-check pass. Server/runner boot wiring to a configured Collector and deployed Collector availability remain environment work.
+
+# 2026-09-17 — SCIM bearer boot integration
+
+- Added the standard `Bearer <token-id>.<secret>` verification helper and wired `ScimTokenManager` into `aqa admin` as an explicit option. The admin HTTP server now delegates `/scim/v2/*` routes to the API (the previous static-only path made the tested SCIM routes unreachable from the bundled server).
+- Evidence: auth 17 passed/1 PostgreSQL skip; kit 125 passed/2 platform skips; the real boot test covers unauthorized and authorized SCIM list requests, with lint/typecheck path green. Durable token storage and rate limiting remain deployment work.

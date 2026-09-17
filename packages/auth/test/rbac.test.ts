@@ -146,6 +146,18 @@ describe('SCIM bearer token lifecycle', () => {
       ['issued', 'rejected', 'rejected', 'revoked', 'issued', 'rotated', 'rejected', 'rejected'],
     );
   });
+
+  it('verifies the explicit SCIM bearer transport form without exposing the secret', async () => {
+    const records = new Map<string, import('../dist/index.js').ScimTokenRecord>();
+    const manager = new ScimTokenManager({
+      get: async (id) => records.get(id) ?? null,
+      put: async (record) => void records.set(record.id, record),
+    });
+    const issued = await manager.issue('org-a');
+    assert.equal(await manager.verifyBearer('org-a', `Bearer ${issued.id}.${issued.token}`), true);
+    assert.equal(await manager.verifyBearer('org-a', `Basic ${issued.id}.${issued.token}`), false);
+    assert.equal(await manager.verifyBearer('org-a', 'Bearer malformed'), false);
+  });
 });
 
 describe('SAML login boundary', () => {

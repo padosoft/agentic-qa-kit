@@ -23,7 +23,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { OidcSessionManager, allows } from '@aqa/auth';
+import { OidcSessionManager, allows, type ScimTokenManager } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -42,6 +42,10 @@ export interface AdminOptions {
   authorizeScope?: ApiContext['authorizeScope'];
   /** Verify dedicated runner credentials for dequeue/ACK routes. */
   runnerAuthorize?: ApiContext['runnerAuthorize'];
+  /** Verify dedicated SCIM bearer credentials for provisioning routes. */
+  scimAuthorize?: ApiContext['scimAuthorize'];
+  /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
+  scimTokenManager?: ScimTokenManager;
   /** Use a durable PostgreSQL runner queue instead of the local memory queue. */
   queueDsn?: string;
   /** Inject a queue implementation (useful for host applications/tests). */
@@ -120,6 +124,9 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   if (opts.authenticate && opts.oidc) {
     return { ok: false, error: 'admin: pass authenticate or oidc, not both' };
   }
+  if (opts.scimAuthorize && opts.scimTokenManager) {
+    return { ok: false, error: 'admin: pass scimAuthorize or scimTokenManager, not both' };
+  }
 
   const adminDistDir = opts.adminDistDir ?? defaultAdminDistDir();
   if (!existsSync(adminDistDir) || !statSync(adminDistDir).isDirectory()) {
@@ -185,6 +192,17 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         roles: ['admin' as const],
       })),
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
+    ...(opts.scimAuthorize
+      ? { scimAuthorize: opts.scimAuthorize }
+      : opts.scimTokenManager
+        ? {
+            scimAuthorize: (headers: Record<string, string>, org: string) =>
+              opts.scimTokenManager?.verifyBearer(
+                org,
+                headers.authorization ?? headers.Authorization,
+              ) ?? Promise.resolve(false),
+          }
+        : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     ...(eventBus ? { eventBus } : {}),
     projectRoot: opts.root,
@@ -519,7 +537,7 @@ async function handleRequest(
     return;
   }
 
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/scim/')) {
     await delegateToApi({ req, res, url, method, hctx });
     return;
   }

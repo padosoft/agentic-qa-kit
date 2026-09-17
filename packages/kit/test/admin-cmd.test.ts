@@ -12,7 +12,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { type OidcAdapter, OidcSessionManager } from '@aqa/auth';
+import { type OidcAdapter, OidcSessionManager, ScimTokenManager } from '@aqa/auth';
 import { MemoryStore } from '@aqa/store';
 import { runAdmin } from '../dist/commands/admin.js';
 
@@ -270,6 +270,42 @@ describe('aqa admin — boot + smoke', () => {
         headers: { authorization: 'Bearer runner-test' },
       });
       assert.equal(allowed.status, 204);
+    } finally {
+      await boot.close();
+    }
+  });
+
+  it('wires the standard SCIM bearer token manager into provisioning routes', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const records = new Map<string, import('@aqa/auth').ScimTokenRecord>();
+    const manager = new ScimTokenManager({
+      get: async (id) => records.get(id) ?? null,
+      put: async (record) => void records.set(record.id, record),
+    });
+    const issued = await manager.issue('org-scim');
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      scimTokenManager: manager,
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const denied = await fetchText(`${boot.url}/scim/v2/Users`, {
+        headers: { 'x-aqa-org': 'org-scim' },
+      });
+      assert.equal(denied.status, 401);
+      const allowed = await fetchText(`${boot.url}/scim/v2/Users`, {
+        headers: {
+          'x-aqa-org': 'org-scim',
+          authorization: `Bearer ${issued.id}.${issued.token}`,
+        },
+      });
+      assert.equal(allowed.status, 200);
+      assert.match(allowed.text, /totalResults/);
     } finally {
       await boot.close();
     }

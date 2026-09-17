@@ -76,6 +76,14 @@ export class ScimTokenManager {
     return true;
   }
 
+  /** Verify the transport form used by the SCIM HTTP boundary. */
+  async verifyBearer(tenant: string, authorization: string | undefined): Promise<boolean> {
+    const match = authorization?.trim().match(/^Bearer\s+([^\s.]+)\.([^\s]+)$/i);
+    if (!match?.[1] || !match[2])
+      return this.reject('unknown', tenant, this.now().toISOString(), 'invalid');
+    return this.verify(tenant, match[1], match[2]);
+  }
+
   async revoke(tenant: string, tokenId: string): Promise<boolean> {
     const record = await this.store.get(tokenId);
     if (!record || record.tenant !== tenant || record.revoked_at) return false;

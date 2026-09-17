@@ -716,3 +716,10 @@ Bounded export queues are not enough: background flushes can overlap and a
 process can exit with spans still pending. Serialize flushes, stop timers before
 shutdown, drain with a finite batch budget, and surface a failed drain while
 keeping the audit store independent from telemetry delivery.
+
+# 2026-09-17 — tested API routes must be reachable from the real boot path
+
+An API route can have complete handler tests yet remain dead in the product if
+the HTTP shell only delegates a narrower prefix. Keep the server's route-prefix
+allowlist aligned with the API registry and cover the boot process, especially
+for security-sensitive SCIM/provisioning endpoints.
