@@ -23,7 +23,9 @@ spec:
           port: 8080
     {{- if .Values.ingress.enabled }}
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
       ports:
         - protocol: TCP
           port: 8080

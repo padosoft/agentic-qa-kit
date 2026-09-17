@@ -223,6 +223,31 @@ jobs:
           AQA_TEST_CONTAINER_RUNTIME: docker
         run: bun test test/sandbox.test.ts
 
+  validate-helm:
+    name: Validate Helm deployment chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Lint chart
+        run: helm lint deploy/helm
+      - name: Render default and production-shaped values
+        run: |
+          helm template aqa deploy/helm > /tmp/aqa-default.yaml
+          helm template aqa deploy/helm \
+            --set ingress.enabled=true \
+            --set ingress.tls.enabled=true \
+            --set ingress.tls.secretName=aqa-tls \
+            > /tmp/aqa-production.yaml
+          test -s /tmp/aqa-default.yaml
+          test -s /tmp/aqa-production.yaml
+          grep -q 'PersistentVolumeClaim' /tmp/aqa-production.yaml
+          ! grep -q 'namespaceSelector: {}' /tmp/aqa-production.yaml
+
   build:
     name: Build
     runs-on: ubuntu-latest

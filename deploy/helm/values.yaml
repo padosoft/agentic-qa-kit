@@ -11,8 +11,22 @@ server:
   resources:
     requests: { cpu: "200m", memory: "256Mi" }
     limits:   { cpu: "1000m", memory: "1Gi" }
-  # Hash-chained audit log path (v0.2 contract — must be a writable volume in
-  # production; in-cluster default is an emptyDir for the scaffold).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: { drop: ["ALL"] }
+  auditPersistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: ""
+  # Hash-chained audit log path. In production this is backed by the PVC
+  # below; disabling persistence is an explicit non-production choice.
   auditLogPath: /var/lib/aqa/events.jsonl
 
 runner:
@@ -43,6 +57,10 @@ networkPolicy:
   #   - server: ingress only from ingress controller + runner pods
   #   - runner: egress to server + Postgres + DNS only (no internet by default)
   enabled: true
+  # Override for the namespace containing the ingress controller. An empty
+  # selector would allow every namespace and is intentionally not the default.
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
   # Extra egress CIDRs the runner is allowed to reach (e.g. the QA target).
   runnerExtraEgressCidrs: []
 

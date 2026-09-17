@@ -18,10 +18,22 @@ spec:
         {{- include "aqa.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: runner
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       containers:
         - name: runner
           image: "{{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}"
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
           env:
             - name: AQA_SERVER_URL
               value: "http://{{ .Release.Name }}-server:8080"

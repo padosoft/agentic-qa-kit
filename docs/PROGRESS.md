@@ -172,3 +172,10 @@
 - OIDC mode is fail-closed and cannot silently use the local admin identity. Loopback cookie security is configurable so HTTP development does not emit an unusable `Secure` cookie; non-loopback defaults to `Secure`.
 - Complete journey evidence: admin test performs login redirect, callback, authenticated API request, logout and post-logout denial. Auth tests: 8 passed; kit tests: 107 passed, 2 platform skips; kit typecheck and Biome passed.
 - Remaining enterprise gap: the session map is process-local; multi-replica production still needs a shared encrypted session store and reverse-proxy TLS contract.
+
+# 2026-09-17 — deployment hardening
+
+- Hardened the Helm chart: durable server audit PVC enabled by default, non-root UID/GID, RuntimeDefault seccomp, dropped capabilities, no service-account token, read-only root filesystem, termination grace period, server startup/readiness/liveness TCP probes, and constrained ingress-controller namespace selector instead of `{}`.
+- Documented the operational limits: TCP probes are temporary until a deployable server wrapper exposes a dedicated health endpoint; audit PVC is not WORM or a backup; operators must set the real ingress namespace labels.
+- Helm CLI is not installed in this Windows workspace, so chart rendering/lint remains a CI/operator-side verification gap for this increment.
+- Added a GitHub `Validate Helm deployment chart` job to lint and render both default and ingress/TLS production-shaped values, assert the audit PVC is rendered, and reject an unrestricted ingress namespace selector. Local Helm remains unavailable, but the verification is now executable in CI.

@@ -17,6 +17,10 @@ spec:
         {{- include "aqa.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
     spec:
+      securityContext:
+        {{- toYaml .Values.server.podSecurityContext | nindent 8 }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       containers:
         - name: server
           image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
@@ -47,6 +51,20 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          securityContext:
+            {{- toYaml .Values.server.containerSecurityContext | nindent 12 }}
+          startupProbe:
+            tcpSocket: { port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
           volumeMounts:
@@ -54,4 +72,9 @@ spec:
               mountPath: /var/lib/aqa
       volumes:
         - name: audit-log
+          {{- if .Values.server.auditPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-server-audit
+          {{- else }}
           emptyDir: {}
+          {{- end }}

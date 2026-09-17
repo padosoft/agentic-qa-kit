@@ -301,3 +301,7 @@ An HTTP LLM adapter is not production-grade merely because it parses a 200 respo
 # 2026-09-17 — OIDC local and production cookie policies differ
 
 An HttpOnly OIDC cookie that is always `Secure` cannot complete the login journey on the bundled local HTTP server; one that is never `Secure` is unsafe for production. Make the policy explicit, default it from loopback versus non-loopback deployment, and test both the authentication journey and post-logout denial.
+
+# 2026-09-17 — deployment templates need executable evidence
+
+Kubernetes YAML that looks hardened is not validated until rendered and linted by Helm (and ideally schema-checked against the target cluster version). When the local tool is unavailable, record that limitation and avoid calling the chart production-ready; review template indentation, selectors, PVC behavior and default namespace selectors manually, then make CI render the chart.
