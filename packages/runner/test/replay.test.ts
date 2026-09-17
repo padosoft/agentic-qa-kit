@@ -56,6 +56,19 @@ describe('verifyScenario', () => {
     );
   });
 
+  it('anchors replay success to the original fingerprint when supplied', async () => {
+    const r = await verifyScenario({
+      scenario: SCENARIO,
+      run_id: 'run-original-fingerprint',
+      attempts: 3,
+      expected_fingerprint: 'original-finding-fingerprint',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+    });
+    assert.equal(r.successes, 0);
+    assert.equal(r.deterministic, false);
+    assert.equal(r.fingerprint, 'original-finding-fingerprint');
+  });
+
   it('throws on attempts < 1', async () => {
     await assert.rejects(
       () =>

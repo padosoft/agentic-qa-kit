@@ -1241,3 +1241,10 @@ High-entropy detection is safest when attached to a secret-like assignment
 (`token=...`, `api_key: ...`) rather than scanning every opaque identifier.
 Organizations still need custom patterns, while binary screenshots/PDFs need a
 separate classifier instead of pretending text redaction protects them.
+
+# 2026-09-17 — replay must preserve failure identity
+
+“A finding appeared again” is weaker than “the original failure appeared
+again.” Stateful systems can produce different oracle failures on each run;
+persist the original fingerprint and require every replay attempt to match it,
+otherwise deterministic verification is a false green.

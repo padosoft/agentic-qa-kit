@@ -54,6 +54,7 @@ export async function verifyScenario(opts: VerifyOptions): Promise<VerifyResult>
   }> = [];
   let successes = 0;
   let observedFingerprint: string | undefined;
+  const targetFingerprint = opts.expected_fingerprint;
   for (let i = 0; i < opts.attempts; i += 1) {
     const result: ScenarioRunResult = await runScenario({
       scenario: opts.scenario,
@@ -68,19 +69,17 @@ export async function verifyScenario(opts: VerifyOptions): Promise<VerifyResult>
       ...(fingerprint ? { failure_fingerprint: fingerprint } : {}),
     });
     if (fingerprint && observedFingerprint === undefined) observedFingerprint = fingerprint;
-    if (
-      fingerprint !== undefined &&
-      fingerprint === observedFingerprint &&
-      (opts.expected_fingerprint === undefined || fingerprint === opts.expected_fingerprint)
-    ) {
+    const expected = targetFingerprint ?? observedFingerprint;
+    if (fingerprint !== undefined && expected !== undefined && fingerprint === expected) {
       successes += 1;
     }
   }
-  return {
+  const result: VerifyResult = {
     attempts: opts.attempts,
     successes,
     deterministic: successes === opts.attempts && opts.attempts >= 1,
     attempts_detail: detail,
-    ...(observedFingerprint ? { fingerprint: observedFingerprint } : {}),
   };
+  const resultFingerprint = targetFingerprint ?? observedFingerprint;
+  return resultFingerprint === undefined ? result : { ...result, fingerprint: resultFingerprint };
 }

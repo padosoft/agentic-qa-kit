@@ -38,6 +38,14 @@
   screenshots/PDFs, IPv6/provider-specific formats and enterprise secret
   classifiers remain deployment/provider-specific gaps.
 
+- **Replay identity hardening.** `verifyScenario()` now anchors all replay
+  successes to the persisted original failure fingerprint when one is
+  supplied, instead of accepting any later finding. Added a negative test for
+  a mismatched original fingerprint and ADR-125; unsupported/no-finding
+  attempts remain non-reproductions.
+- Evidence: runner **45/45 tests**, runner typecheck and repository lint passed.
+  Full workspace regression is required before the increment is complete.
+
 - **Runner capability preflight added.** `runScenario()` can now receive the
   configured driver's supported probe kinds and fails before executing steps or
   cleanup when a browser/SQL/shell/LLM/custom capability is absent. The gap is
