@@ -94,6 +94,25 @@ describe('ContainerSandbox', () => {
     assert.equal(timeout.ok, false);
     assert.match(timeout.error ?? '', /timed out/);
   });
+
+  it('executes a real OCI container when the integration runtime is enabled', async () => {
+    const runtime = process.env.AQA_TEST_CONTAINER_RUNTIME;
+    if (!runtime) {
+      assert.ok(true, 'real container contract requires AQA_TEST_CONTAINER_RUNTIME');
+      return;
+    }
+    const sb = new ContainerSandbox({
+      runtime,
+      image: process.env.AQA_TEST_CONTAINER_IMAGE ?? 'ubuntu:24.04',
+      budget: { max_calls: 2, per_call_timeout_ms: 30_000 },
+    });
+    const result = await sb.invoke({
+      tool: 'shell',
+      args: { command: 'id -u; test ! -w /; test -f /etc/os-release' },
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.match(String(result.output), /65532/);
+  });
 });
 
 describe('selectSandbox', () => {
