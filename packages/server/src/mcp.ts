@@ -180,11 +180,10 @@ export class AqaMcpServer {
   private initialized = false;
   private negotiatedVersion: string | undefined;
   private readonly supportedVersions: readonly string[];
+  private readonly port: McpRunPort;
 
-  constructor(
-    private readonly port: McpRunPort,
-    opts: { supported_versions?: readonly string[] } = {},
-  ) {
+  constructor(port: McpRunPort, opts: { supported_versions?: readonly string[] } = {}) {
+    this.port = port;
     this.supportedVersions = [...(opts.supported_versions ?? AQA_MCP_PROTOCOL_VERSIONS)];
     if (this.supportedVersions.length === 0)
       throw new Error('MCP needs one supported protocol version');
