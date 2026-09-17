@@ -5,6 +5,8 @@ export {
   signWebhook,
   type DurableWebhookRequest,
   type DeliveryResult,
+  type WebhookAuditEvent,
+  type WebhookAuditObserver,
   type WebhookDelivery,
   type WebhookRequest,
   type WebhookResponse,

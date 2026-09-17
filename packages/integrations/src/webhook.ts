@@ -31,6 +31,18 @@ export interface WebhookSecretResolver {
   resolve(secretRef: string): Promise<string>;
 }
 
+export interface WebhookAuditEvent {
+  kind: 'attempt' | 'outcome';
+  delivery_id: string;
+  org: string;
+  integration: string;
+  attempt: number;
+  status?: number;
+  outcome?: DeliveryResult['state'];
+}
+
+export type WebhookAuditObserver = (event: WebhookAuditEvent) => void | Promise<void>;
+
 export class WebhookDestinationPolicy {
   private readonly origins: ReadonlySet<string>;
 
@@ -206,16 +218,19 @@ export class PostgresWebhookQueue {
   private readonly ready: Promise<void>;
   private readonly resolver: WebhookSecretResolver;
   private readonly destinationPolicy: WebhookDestinationPolicy;
+  private readonly observer: WebhookAuditObserver | undefined;
 
   constructor(
     dsn: string,
     resolver: WebhookSecretResolver,
     destinationPolicy: WebhookDestinationPolicy,
+    observer?: WebhookAuditObserver,
   ) {
     if (!dsn.trim()) throw new Error('[integrations/webhook] DSN is empty');
     this.sql = postgres(dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
     this.resolver = resolver;
     this.destinationPolicy = destinationPolicy;
+    this.observer = observer;
     this.ready = this.initialize();
   }
 
@@ -274,6 +289,13 @@ export class PostgresWebhookQueue {
     const results: DeliveryResult[] = [];
     for (const row of rows) {
       const body = JSON.stringify(row.payload);
+      await this.observe({
+        kind: 'attempt',
+        delivery_id: row.id,
+        org: row.org,
+        integration: row.integration,
+        attempt: row.attempts,
+      });
       let response: WebhookResponse;
       try {
         response = await transport.send({
@@ -296,16 +318,43 @@ export class PostgresWebhookQueue {
       }
       if (response.status >= 200 && response.status < 300) {
         await this.sql`DELETE FROM aqa_webhook_deliveries WHERE id = ${row.id}`;
+        await this.observe({
+          kind: 'outcome',
+          delivery_id: row.id,
+          org: row.org,
+          integration: row.integration,
+          attempt: row.attempts,
+          status: response.status,
+          outcome: 'delivered',
+        });
         results.push({ id: row.id, state: 'delivered' });
       } else if (row.attempts >= MAX_ATTEMPTS) {
         await this
           .sql`UPDATE aqa_webhook_deliveries SET status = 'dead', locked_until = NULL, last_error = ${`HTTP ${response.status}`} WHERE id = ${row.id}`;
+        await this.observe({
+          kind: 'outcome',
+          delivery_id: row.id,
+          org: row.org,
+          integration: row.integration,
+          attempt: row.attempts,
+          status: response.status,
+          outcome: 'dead_lettered',
+        });
         results.push({ id: row.id, state: 'dead_lettered' });
       } else {
         const backoff = Math.min(MAX_BACKOFF_MS, 1_000 * 2 ** (row.attempts - 1));
         const delay = Math.max(backoff, response.retry_after_ms ?? 0);
         await this
           .sql`UPDATE aqa_webhook_deliveries SET next_attempt_at = ${new Date(now.getTime() + delay)}, locked_until = NULL, last_error = ${`HTTP ${response.status}`} WHERE id = ${row.id}`;
+        await this.observe({
+          kind: 'outcome',
+          delivery_id: row.id,
+          org: row.org,
+          integration: row.integration,
+          attempt: row.attempts,
+          status: response.status,
+          outcome: 'retrying',
+        });
         results.push({ id: row.id, state: 'retrying' });
       }
     }
@@ -327,5 +376,13 @@ export class PostgresWebhookQueue {
   private async recordFailure(row: DurableRow, message: string, now: Date): Promise<void> {
     await this
       .sql`UPDATE aqa_webhook_deliveries SET last_error = ${message}, locked_until = NULL, next_attempt_at = ${now} WHERE id = ${row.id}`;
+  }
+
+  private async observe(event: WebhookAuditEvent): Promise<void> {
+    try {
+      await this.observer?.(event);
+    } catch {
+      // Telemetry must never change delivery semantics.
+    }
   }
 }

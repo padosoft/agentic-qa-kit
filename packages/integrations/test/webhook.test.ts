@@ -79,10 +79,14 @@ describe('outbound webhooks', () => {
       return;
     }
     const id = `pg-${Date.now()}`;
+    const audit: string[] = [];
     const queue = new PostgresWebhookQueue(
       dsn,
       { resolve: async () => 'test-secret' },
       new WebhookDestinationPolicy(['https://example.test']),
+      async (event) => {
+        audit.push(`${event.kind}:${event.outcome ?? 'started'}:${event.delivery_id}`);
+      },
     );
     const transport: WebhookTransport = {
       send: async ({ headers }) => {
@@ -93,6 +97,7 @@ describe('outbound webhooks', () => {
     try {
       await queue.enqueue({ ...request(id), secret_ref: 'test/webhook' });
       assert.deepEqual(await queue.deliverDue(transport), [{ id, state: 'delivered' }]);
+      assert.deepEqual(audit, [`attempt:started:${id}`, `outcome:delivered:${id}`]);
     } finally {
       await queue.close();
     }

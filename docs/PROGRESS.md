@@ -1163,3 +1163,15 @@
   repository diff checks pass. No external provider was contacted.
 - Remaining: secret-manager implementation, audit/metrics observer, transport
   DNS/private-IP enforcement and real provider journeys.
+
+# 2026-09-17 — redacted webhook observability
+
+- Added an optional `PostgresWebhookQueue` observer for attempt/outcome
+  events. It exposes only stable delivery metadata and HTTP status, never URL,
+  payload, secret or secret reference; observer failures are isolated from
+  delivery.
+- Evidence: integrations suite **5 pass**, package typecheck/lint and diff
+  checks pass locally. PostgreSQL observer assertion runs with the existing
+  `AQA_TEST_POSTGRES_DSN` contract in CI.
+- Remaining: wire host metrics/log adapters, enforce transport DNS/private-IP
+  protections and prove real provider journeys.

@@ -11,6 +11,7 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - injectable transport, so tests never call a real vendor;
 - PostgreSQL queue with atomic `SKIP LOCKED` claims and operator redrive;
 - mandatory HTTPS destination-origin allowlisting for the durable queue.
+- redacted audit observer hooks for Prometheus/OTel/log adapters.
 
 ## Setup
 
@@ -27,3 +28,7 @@ require audit metrics, destination allowlisting and an authenticated operator
 workflow for DLQ redrive.
 The transport layer must additionally enforce DNS rebinding and private/link-local
 IP protections at connection time.
+
+The optional observer receives only delivery metadata (`attempt`/`outcome`,
+tenant, integration, stable ID, attempt number and HTTP status). It never
+receives the URL, payload, secret or secret reference.

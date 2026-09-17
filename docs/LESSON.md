@@ -1408,3 +1408,9 @@ loopback, link-local and metadata-service addresses at connection time.
 Keep Slack/Teams/Jira/PagerDuty payload rendering pure and deterministic. A
 formatter should never accept or serialize routing keys, tokens or secrets;
 the queue and secret resolver own delivery authentication, retry and audit.
+
+# 2026-09-17 — observe delivery metadata, not delivery content
+
+Webhook observability should expose stable IDs, tenant/integration, attempt,
+status and bounded outcome only. Payloads, URLs and secret references are not
+metrics labels or audit fields; observer failures must never block delivery.
