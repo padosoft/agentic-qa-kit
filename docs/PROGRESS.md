@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Shared OIDC session backend shipped.** `OidcSessionManager` now supports
+  an async shared store, and `PostgresOidcSessionStore` provides advisory-locked
+  tables, atomic one-time PKCE state consumption, durable session lookup and
+  revocation. The admin HTTP path uses async authentication/logout and closes
+  the backend on shutdown; two manager instances are covered by auth tests
+  (9/9). The local map remains the explicit dev default. ADR-028 records the
+  injection and production TLS/TTL responsibilities.
 - **Air-gap deployment path completed.** The installer now has a real
   `install` flow: archive path/link safety checks, SHA-256 verification,
   optional required Cosign blob verification, Docker/Podman image loading and

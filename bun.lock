@@ -54,6 +54,7 @@
       "name": "@aqa/auth",
       "version": "0.0.1",
       "dependencies": {
+        "postgres": "^3.4.9",
         "zod": "^3.25.28",
       },
     },
@@ -130,6 +131,10 @@
       "dependencies": {
         "@aqa/schemas": "workspace:*",
       },
+    },
+    "packages/observability": {
+      "name": "@aqa/observability",
+      "version": "0.0.1",
     },
     "packages/pack-author": {
       "name": "@aqa/pack-author",
@@ -255,6 +260,8 @@
     "@aqa/llm-adapters": ["@aqa/llm-adapters@workspace:packages/llm-adapters"],
 
     "@aqa/methodology": ["@aqa/methodology@workspace:packages/methodology"],
+
+    "@aqa/observability": ["@aqa/observability@workspace:packages/observability"],
 
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
 

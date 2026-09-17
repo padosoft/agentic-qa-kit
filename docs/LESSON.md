@@ -432,6 +432,14 @@ manifest must exclude its own file. Both are now covered by the executable
 bundle→verify path; image loading remains intentionally unverified locally
 because this workstation has no Docker daemon.
 
+# 2026-09-17 — HA auth requires async boundaries
+
+An in-memory OIDC session map cannot be made shared by wrapping it in a
+promise. The PKCE consume operation and session lookup must be asynchronous at
+the HTTP boundary, with one-time state consumption serialized by the durable
+backend. Keeping the old synchronous API but failing closed when a shared
+backend is configured prevents accidental use of stale local state.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration

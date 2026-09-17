@@ -163,7 +163,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     queue,
     authenticate:
       opts.authenticate ??
-      (opts.oidc ? async (headers) => opts.oidc?.authenticate(headers) ?? null : undefined) ??
+      (opts.oidc ? async (headers) => opts.oidc?.authenticateAsync(headers) ?? null : undefined) ??
       (async () => ({
         id: 'usr-local',
         email: 'local@aqa.test',
@@ -239,6 +239,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       const closable = queue as { close?: () => Promise<void> };
       await closable.close?.();
       await store.close();
+      await opts.oidc?.close();
     },
   };
 }
@@ -496,7 +497,7 @@ async function handleRequest(
     for (const [key, value] of Object.entries(req.headers)) {
       headers[key] = Array.isArray(value) ? value.join(',') : String(value ?? '');
     }
-    hctx.oidc.revoke(headers);
+    await hctx.oidc.revokeAsync(headers);
     res.statusCode = 204;
     res.setHeader('set-cookie', OidcSessionManager.clearCookie(hctx.oidcSecureCookie));
     res.end();

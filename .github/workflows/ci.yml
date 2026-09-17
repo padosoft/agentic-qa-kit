@@ -201,6 +201,7 @@ jobs:
         run: |
           bun test packages/store/test/store.test.ts
           bun test packages/server/test/postgres-queue.test.ts
+          bun test packages/auth/test/oidc-session.test.ts
 
   test-container-sandbox:
     name: Integration (OCI container sandbox)
