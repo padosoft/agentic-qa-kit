@@ -141,6 +141,7 @@ profiles:
 const packRoot = join(FIXTURE, 'packs', 'pack-ecosystem-live');
 cpSync(join(ROOT, 'packs', 'core'), packRoot, { recursive: true, force: true });
 mkdirSync(join(packRoot, 'scenarios'), { recursive: true });
+mkdirSync(join(packRoot, 'risks'), { recursive: true });
 writeFileSync(
   join(packRoot, 'pack.yaml'),
   `schema_version: "1"
@@ -154,7 +155,8 @@ applies_when:
 templates: []
 scenarios:
   - scenarios/live-finding.yaml
-risks: []
+risks:
+  - risks/live.yaml
 oracles: []
 probes: []
 `,
@@ -177,6 +179,22 @@ oracles:
     kind: http_status
     with: { expected: 201 }
 tags: [smoke]
+`,
+  'utf8',
+);
+writeFileSync(
+  join(packRoot, 'risks', 'live.yaml'),
+  `schema_version: "1"
+project: pack-ecosystem-live
+risks:
+  - id: r-ecosystem-live
+    category: integrity
+    title: ecosystem smoke response violates its invariant
+    severity: medium
+    likelihood: possible
+    invariants:
+      - id: inv-ecosystem-live
+        statement: The smoke endpoint returns the expected status.
 `,
   'utf8',
 );

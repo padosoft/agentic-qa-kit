@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Admin live Runs/Findings integration.** Runs and Findings now consume the
+  tenant-scoped API and show an explicit `live API` marker; fixture fallback is
+  retained only for an unavailable backend. The ecosystem fixture now declares
+  its referenced risk/invariant, fixing a real scenario-parse failure.
+- Evidence: rebuilt kit/admin and ran the complete ecosystem journey through a
+  real SUT, CLI run, API server and Chromium: **2/2 Playwright tests passed**
+  (live audit chain plus live Runs/Findings). Detail/restart/Postgres/tenant
+  switching journeys remain open. ADR-128 records the boundary.
+
 - **Documentation supply-chain audit remediated.** The independent `docs-site`
   npm lockfile had five high and one moderate advisory (Hugging Face/ONNX,
   `sharp`, `adm-zip`, `protobufjs` and `linkify-it`) that the root Bun audit

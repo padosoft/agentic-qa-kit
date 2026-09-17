@@ -2979,9 +2979,9 @@ function profileByName(n) {
 }
 
 // Findings grouped by signature (risk × scenario family)
-function clusteredFindings() {
+function clusteredFindings(source = FINDINGS) {
   const clusters = {};
-  for (const f of FINDINGS) {
+  for (const f of source) {
     const sig = f.risk_id + '::' + f.scenario_id.split('.').slice(0, 2).join('.');
     (clusters[sig] = clusters[sig] || {
       sig,
@@ -7306,18 +7306,40 @@ function PageDashboard({ onNavigate }) {
 
 // ---------------- Runs ----------------
 function PageRuns({ onNavigate, onOpenRun }) {
+  const [liveRuns, setLiveRuns] = React.useState(null);
   const [filterStatus, setFilterStatus] = React.useState('all');
   const [filterProfile, setFilterProfile] = React.useState('all');
   const [selected, setSelected] = React.useState(new Set());
 
-  const filtered = RUNS.filter((r) => {
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/runs'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body?.runs)) setLiveRuns(body.runs);
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const runs = liveRuns ?? RUNS;
+
+  const filtered = runs.filter((r) => {
     if (filterStatus !== 'all' && r.state !== filterStatus) return false;
     if (filterProfile !== 'all' && r.profile !== filterProfile) return false;
     return true;
   });
 
-  const statusCounts = RUNS.reduce(
-    (a, r) => ({ ...a, [r.state]: (a[r.state] || 0) + 1, all: RUNS.length }),
+  const statusCounts = runs.reduce(
+    (a, r) => ({ ...a, [r.state]: (a[r.state] || 0) + 1, all: runs.length }),
     {},
   );
 
@@ -7331,7 +7353,7 @@ function PageRuns({ onNavigate, onOpenRun }) {
     <div className="page" data-screen-label="02 Runs">
       <PageHeader
         title="Runs"
-        sub={`${RUNS.length} runs in gescat · last 30 days`}
+        sub={`${runs.length} runs in gescat · ${liveRuns !== null ? 'live API' : 'local preview'}`}
         actions={
           <>
             <button className="btn sm">
@@ -7524,8 +7546,8 @@ function PageRuns({ onNavigate, onOpenRun }) {
           </table>
         </div>
         <div className="pagination">
-          <span className="pagination-info">
-            Showing {filtered.length} of {RUNS.length} · page 1 of 1
+            <span className="pagination-info">
+            Showing {filtered.length} of {runs.length} · page 1 of 1
           </span>
           <div className="pagination-controls">
             <button className="iconbtn" disabled>
@@ -8051,17 +8073,37 @@ Object.assign(window, { PageDashboard, PageRuns, PageRunDetail, PageRunCompare }
 
 // ---------------- Findings ----------------
 function PageFindings({ onNavigate, onOpenFinding }) {
+  const [liveFindings, setLiveFindings] = React.useState(null);
   const [view, setView] = React.useState('clusters'); // clusters | list | kanban
   const [filterSev, setFilterSev] = React.useState(new Set());
   const [filterStatus, setFilterStatus] = React.useState(new Set());
 
-  const all = FINDINGS;
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/findings'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body?.findings)) setLiveFindings(body.findings);
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const all = liveFindings ?? FINDINGS;
   const filtered = all.filter((f) => {
     if (filterSev.size && !filterSev.has(f.severity)) return false;
     if (filterStatus.size && !filterStatus.has(f.status)) return false;
     return true;
   });
-  const clusters = clusteredFindings();
+  const clusters = clusteredFindings(all);
 
   const toggleFilter = (set, setter, v) => {
     const next = new Set(set);
@@ -8073,7 +8115,7 @@ function PageFindings({ onNavigate, onOpenFinding }) {
     <div className="page" data-screen-label="05 Findings">
       <PageHeader
         title="Findings"
-        sub={`${all.length} findings across ${new Set(all.map((f) => f.run_id)).size} runs · clustered by signature`}
+        sub={`${all.length} findings across ${new Set(all.map((f) => f.run_id)).size} runs · ${liveFindings !== null ? 'live API' : 'local preview'} · clustered by signature`}
         actions={
           <>
             <span className="seg">
@@ -8255,7 +8297,7 @@ function PageFindings({ onNavigate, onOpenFinding }) {
         </div>
       )}
 
-      {view === 'kanban' && <FindingsKanban findings={FINDINGS} />}
+      {view === 'kanban' && <FindingsKanban findings={all} />}
     </div>
   );
 }

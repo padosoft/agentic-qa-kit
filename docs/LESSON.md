@@ -1263,3 +1263,11 @@ The root Bun audit did not cover the separately installed `docs-site` npm
 lockfile. Enterprise supply-chain verification must audit every install graph
 used by build, docs, packaging, and runtime; a clean primary workspace is not
 evidence for a secondary lockfile.
+
+# 2026-09-17 — an e2e fixture must satisfy the same graph as production
+
+The live ecosystem journey failed before the browser started because its
+scenario referenced a risk that the generated pack manifest declared as empty.
+Fixture validity is part of the product journey: every scenario reference,
+API record and rendered row must be backed by the same schema and dependency
+graph as a real run.
