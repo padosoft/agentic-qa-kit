@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Commerce refund integrity hardened.** Payment validation now parses the
+  runtime snapshot, requires `partially_refunded` to carry a strictly positive
+  partial amount, requires all refund states to reconcile with the captured
+  amount, and rejects a successful refund larger than the observed cumulative
+  refunded amount. Regression coverage: commerce contracts **28 passed / 0
+  failed**; PostgreSQL provider coverage remains an external-DSN/CI journey.
+  Next: run the complete hosted matrix on the PR.
+
 - **Budget kill-switch API merged to `main`.** PR #62 was squash-merged as
   `b81cdbc` after the complete GitHub CI matrix passed: 10/10 jobs green,
   including Node 22, PostgreSQL 16, OCI sandbox, CLI smoke and Playwright
