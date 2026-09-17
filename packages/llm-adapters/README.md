@@ -15,6 +15,14 @@ region/credential configuration. Set
 `AQA_LLM_API_KEY`/`AQA_LLM_BASE_URL` or pass `live` options; credentials are
 never included in errors.
 
+Live adapters apply a shared fail-closed transport policy before dispatch:
+HTTPS is required, endpoint credentials/query strings are rejected, literal
+private/local/metadata destinations are denied, and `allowedHosts` can narrow
+egress further. Local models or private endpoints must explicitly set
+`allowPrivateNetwork: true`. This is a configuration guard; production still
+needs DNS-aware egress controls or a service-mesh policy to prevent DNS
+rebinding and enforce the resolved destination.
+
 For tests and CI, use the **FixtureAdapter**: record once, replay
 deterministically by content hash. This is the canonical pattern for keeping
 LLM-dependent code testable without live vendor calls.

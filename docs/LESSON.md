@@ -1,5 +1,12 @@
 # Lessons
 
+- **LLM endpoint policy needs explicit private-network intent.** Provider
+  adapters can share timeout/redaction code without sharing a safe egress
+  boundary. Reject ambiguous and literal private destinations by default,
+  require explicit opt-in for local/private models, and keep DNS rebinding
+  protection in the deployment network layer because a synchronous URL check
+  cannot prove the final resolved address.
+
 - **Subscription creation needs read-after-write proof.** Same-key retry,
   period ordering and amount validation are not enough if the provider cannot
   re-observe the exact tenant/customer subscription. Require the observation

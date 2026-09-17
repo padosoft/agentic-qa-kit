@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { assertEndpointAllowed } from './transport-policy.js';
 import type { LlmAdapter, LlmCallInput, LlmCallOutput } from './types.js';
 
 export interface GoogleOptions {
@@ -7,6 +8,8 @@ export interface GoogleOptions {
   timeoutMs?: number;
   fetch?: typeof globalThis.fetch;
   maxOutputTokens?: number;
+  allowPrivateNetwork?: boolean;
+  allowedHosts?: readonly string[];
 }
 
 function redact(value: string): string {
@@ -30,6 +33,7 @@ export class GoogleAdapter implements LlmAdapter {
       process.env.AQA_GOOGLE_BASE_URL ??
       'https://generativelanguage.googleapis.com/v1beta'
     ).replace(/\/$/, '');
+    assertEndpointAllowed(baseUrl, this.opts);
     const maxTokens = Math.min(
       input.max_tokens ?? this.opts.maxOutputTokens ?? 4096,
       this.opts.maxOutputTokens ?? Number.MAX_SAFE_INTEGER,

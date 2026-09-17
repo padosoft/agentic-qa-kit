@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added the shared LLM transport boundary.** Every live provider adapter now
+  fails closed on non-HTTPS endpoints, endpoint credentials/query/fragment
+  data, literal private/local/metadata destinations and optional host
+  allow-list violations. Local/private models require explicit
+  `allowPrivateNetwork: true`; added 20 adapter tests total and ADR-181.
+  Evidence: adapter build/typecheck, **20 passed / 0 failed**, Biome and diff
+  checks. DNS-aware egress enforcement remains deployment evidence.
+
 - **Added executable subscription coverage.** `verifySubscriptionJourney()`
   now checks idempotent create retry, plan/amount/interval, period ordering,
   tenant/customer ownership and authoritative read-after-write observation.

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { assertEndpointAllowed } from './transport-policy.js';
 import type { LlmAdapter, LlmCallInput, LlmCallOutput } from './types.js';
 
 export interface AnthropicOptions {
@@ -8,6 +9,8 @@ export interface AnthropicOptions {
   fetch?: typeof globalThis.fetch;
   maxOutputTokens?: number;
   apiVersion?: string;
+  allowPrivateNetwork?: boolean;
+  allowedHosts?: readonly string[];
 }
 
 function redact(value: string): string {
@@ -34,6 +37,7 @@ export class AnthropicAdapter implements LlmAdapter {
       process.env.AQA_ANTHROPIC_BASE_URL ??
       'https://api.anthropic.com'
     ).replace(/\/$/, '');
+    assertEndpointAllowed(baseUrl, this.opts);
     const apiKey = this.opts.apiKey ?? process.env.AQA_ANTHROPIC_API_KEY;
     const maxTokens = Math.min(
       input.max_tokens ?? this.opts.maxOutputTokens ?? 4096,
