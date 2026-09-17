@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Finding, type Scenario } from '@aqa/schemas';
+import { Finding, type RiskMap, type Scenario } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 import type { FindingsWriter } from './findings.js';
 import { RunLifecycle } from './lifecycle.js';
@@ -33,6 +33,8 @@ export interface RunScenarioOptions {
   findings?: FindingsWriter;
   /** Used to seed Finding.id when oracles fail. */
   findingIdSeed?: number;
+  /** Resolved risk declaration used to derive finding severity and risk_id. */
+  risk?: RiskMap.Risk;
 }
 
 const MISSING_PROBE_RUNNER: ProbeRunner = async (p) => ({
@@ -272,10 +274,10 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       id: `AQA-${year}-${seed}`,
       run_id: opts.run_id,
       scenario_id: opts.scenario.id,
-      risk_id: opts.scenario.risk_refs[0],
+      risk_id: opts.risk?.id ?? opts.scenario.risk_refs[0],
       title: `${opts.scenario.title} — oracle(s) failed`,
       summary: failed.map((f) => `[${f.oracle_id}] ${f.reason}`).join('; '),
-      severity: 'high',
+      severity: opts.risk?.severity ?? 'high',
       status: 'draft',
       execution_mode: 'orchestrator',
       discovered_at: new Date().toISOString(),

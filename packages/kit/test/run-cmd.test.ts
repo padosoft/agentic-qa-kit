@@ -134,6 +134,20 @@ function fixtureProject(): { root: string; packDir: string } {
   writeFileSync(join(root, 'src', 'server.ts'), 'export {};\n', 'utf8');
   runInit({ root, projectName: 'smoke-fixture' });
 
+  const riskMapPath = join(root, '.aqa', 'risk-map.yaml');
+  const riskMap = yamlParse(readFileSync(riskMapPath, 'utf8')) as {
+    risks: Array<Record<string, unknown>>;
+  };
+  riskMap.risks.push({
+    id: 'r-smoke',
+    category: 'integration',
+    title: 'Smoke fixture risk',
+    severity: 'medium',
+    likelihood: 'unlikely',
+    invariants: [{ id: 'inv-smoke', statement: 'The smoke endpoint responds successfully.' }],
+  });
+  writeFileSync(riskMapPath, yamlStringify(riskMap), 'utf8');
+
   const packDir = join(root, 'local-pack');
   mkdirSync(join(packDir, 'scenarios'), { recursive: true });
   writeFileSync(join(packDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');

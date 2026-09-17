@@ -52,7 +52,7 @@ import {
   makeHttpProbeRunner,
   runScenario,
 } from '@aqa/runner';
-import { type Event, Profile, Project, Scenario } from '@aqa/schemas';
+import { type Event, Profile, Project, RiskMap, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
 
@@ -352,6 +352,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   let project: Project.Project;
   let profilesFile: Profile.ProfilesFile;
+  let projectRiskMap: RiskMap.RiskMap;
   try {
     project = Project.Project.parse(readYaml<unknown>(projectPath));
   } catch (e) {
@@ -361,6 +362,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     profilesFile = Profile.ProfilesFile.parse(readYaml<unknown>(profilesPath));
   } catch (e) {
     return makeError(`.aqa/profiles.yaml: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const riskMapPath = join(opts.root, '.aqa', 'risk-map.yaml');
+  if (!existsSync(riskMapPath)) {
+    return makeError('.aqa/risk-map.yaml not found — add the project risk map before running');
+  }
+  try {
+    projectRiskMap = RiskMap.RiskMap.parse(readYaml<unknown>(riskMapPath));
+  } catch (e) {
+    return makeError(`.aqa/risk-map.yaml: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Default-profile policy: when --profile is omitted, prefer "smoke" if it
@@ -537,6 +547,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const executionErrors: string[] = [];
   const scenarioOutcomes: Array<{ scenario_id: string; outcome: string }> = [];
   const executedScenarios: Scenario.Scenario[] = [];
+  const riskCatalog = new Map(projectRiskMap.risks.map((risk) => [risk.id, risk]));
   const now = opts.now ?? Date.now;
   const budgetDeadline =
     profile.budget_minutes === undefined ? undefined : now() + profile.budget_minutes * 60 * 1000;
@@ -570,6 +581,28 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     for (const rel of missing) missingScenarios.push(`${pack.manifest.name}:${rel}`);
     for (const rel of unsafe) unsafeScenarioPaths.push(`${pack.manifest.name}:${rel}`);
 
+    for (const relativeRiskPath of pack.manifest.risks ?? []) {
+      if (isAbsolute(relativeRiskPath)) {
+        packErrors.push(`${packDir}: unsafe risk path ${relativeRiskPath}`);
+        continue;
+      }
+      const riskPath = resolve(packDir, relativeRiskPath);
+      if (!isInside(packDir, riskPath) || !existsSync(riskPath)) {
+        packErrors.push(
+          `${packDir}: risk file is missing or escapes pack root: ${relativeRiskPath}`,
+        );
+        continue;
+      }
+      try {
+        const parsedRiskMap = RiskMap.RiskMap.parse(readYaml<unknown>(riskPath));
+        for (const risk of parsedRiskMap.risks) riskCatalog.set(risk.id, risk);
+      } catch (e) {
+        packErrors.push(
+          `${packDir}: invalid risk file ${relativeRiskPath}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
     for (const scenarioPath of paths) {
       let scenario: Scenario.Scenario;
       try {
@@ -579,6 +612,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       if (!tagsMatch(scenario.tags ?? [], profile.tags)) continue;
+      const missingRiskRefs = scenario.risk_refs.filter((riskId) => !riskCatalog.has(riskId));
+      if (missingRiskRefs.length > 0) {
+        scenarioErrors.push(`${scenarioPath}: unresolved risk_refs: ${missingRiskRefs.join(', ')}`);
+        continue;
+      }
+      const resolvedRisk = riskCatalog.get(scenario.risk_refs[0] ?? '');
       scenariosRun += 1;
       executedScenarios.push(scenario);
       // runScenario itself appends `finding_emitted` to events and pushes the
@@ -620,6 +659,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           ...(probeRunner ? { probeRunner } : {}),
           ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
           findingIdSeed: scenariosRun,
+          ...(resolvedRisk ? { risk: resolvedRisk } : {}),
         });
         scenarioOutcomes.push({ scenario_id: scenario.id, outcome: scenarioResult.outcome });
         events.append({

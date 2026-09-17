@@ -964,3 +964,11 @@ Adding a budget failure only to the orchestrator is incomplete if report and
 admin reconstruct state from the audit event. Persist a reason/state marker
 and teach the shared derivation function about it; otherwise downstream views
 silently collapse governed aborts into generic failures.
+
+# 2026-09-17 — risk references need an execution-time resolver
+
+Declaring `risk_refs` in a scenario is not enough if the runner always emits
+the same severity. Resolve the project and selected-pack risk catalogs before
+execution, fail closed on missing references, and pass the typed risk into the
+finding builder. This keeps coverage gaps visible and makes severity traceable
+to an auditable declaration.

@@ -68,6 +68,26 @@ describe('runScenario', () => {
     assert.equal(result.finding, null);
   });
 
+  it('derives finding severity from the resolved risk declaration', async () => {
+    const result = await runScenario({
+      scenario: SCENARIO,
+      run_id: 'run-risk-severity',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+      risk: {
+        id: 'r-auth',
+        category: 'auth',
+        title: 'Authentication risk',
+        severity: 'critical',
+        likelihood: 'likely',
+        invariants: [],
+        owners: [],
+        tags: [],
+      },
+    });
+    assert.equal(result.finding?.risk_id, 'r-auth');
+    assert.equal(result.finding?.severity, 'critical');
+  });
+
   it('does not turn a missing probe runner into a security finding', async () => {
     const result = await runScenario({
       scenario: {

@@ -742,3 +742,8 @@
 
 - Extended the shared run-state derivation so `budget_exceeded: true` is preserved as the terminal `budget_exceeded` state in reports and admin projections, while execution/replay/canonical artifact errors remain fail-closed. This prevents a governed timeout from being flattened into an indistinguishable generic failure.
 - Evidence: schemas build and validator suite **35 passed**; generated schema artifacts remain valid and `git diff --check` passes.
+
+# 2026-09-17 — risk-map resolution in real scenario execution
+
+- `aqa run` now loads `.aqa/risk-map.yaml`, ingests validated risk catalogs declared by selected packs, rejects scenarios with unresolved `risk_refs` as coverage errors, and passes the resolved risk into the runner. Findings derive `risk_id` and severity from that declaration instead of hard-coding `high`.
+- Evidence: runner + kit build/bundle/typecheck, **47 targeted tests passed** with one explicit symlink-capability skip. The default scaffold remains intentionally minimal; projects must add risks for custom scenarios, while first-party packs provide their own risk catalog files.
