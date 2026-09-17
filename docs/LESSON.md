@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — every durable adapter needs a transaction-scoped bootstrap lock
+
+`CREATE TABLE IF NOT EXISTS` is not sufficient under concurrent PostgreSQL
+startup: PostgreSQL can still race while creating the relation type. The
+trajectory adapter now acquires a stable `pg_advisory_xact_lock` and performs
+DDL on that same transaction client. A hosted integration run remains required
+to prove the fix against the real driver and database.
+
 # 2026-09-17 — package test manifests are part of the evidence boundary
 
 Adding a test file is not enough if the package test script does not execute

@@ -11,6 +11,17 @@
 
 ## 2026-09-17
 
+## 2026-09-18
+
+- **Closed the PostgreSQL trajectory migration race in code.** Hosted CI showed
+  that two trajectory-store instances could concurrently create the same
+  PostgreSQL relation, despite `IF NOT EXISTS`, producing a `pg_type` duplicate
+  error. Production clients now bootstrap inside one transaction protected by
+  `pg_advisory_xact_lock`; injected test clients retain a migration-only
+  fallback. Local runner evidence is **67 pass / 0 fail**, typecheck and Biome
+  are green. The hosted PostgreSQL contract must be rerun before this boundary
+  is considered verified.
+
 - **Added live PostgreSQL trajectory evidence to CI.** The runner package test
   script now includes the trajectory suite, and the PostgreSQL integration job
   runs a two-instance trajectory contract with retry, immutable-conflict and

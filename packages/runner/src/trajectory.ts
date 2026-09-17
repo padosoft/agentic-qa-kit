@@ -147,6 +147,8 @@ export interface PostgresTrajectoryStoreOptions {
 
 export interface PostgresTrajectoryClient {
   unsafe(query: string, parameters?: unknown[]): Promise<unknown>;
+  /** Optional transaction primitive; required for race-free production bootstrap. */
+  begin?<T>(callback: (transaction: PostgresTrajectoryClient) => Promise<T>): Promise<T>;
 }
 
 interface StoredPostgresTrajectory {
@@ -245,16 +247,28 @@ export class PostgresAgentTrajectoryStore {
   }
 
   private async migrate(): Promise<void> {
-    await this.query(
-      `CREATE TABLE IF NOT EXISTS aqa_agent_trajectories (
-        run_id text NOT NULL,
-        scenario_id text NOT NULL,
-        snapshot_sha256 text NOT NULL CHECK (snapshot_sha256 ~ '^[a-f0-9]{64}$'),
-        envelope jsonb NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        PRIMARY KEY (run_id, scenario_id)
-      )`,
-    );
+    const createTable = async (client: PostgresTrajectoryClient): Promise<void> => {
+      await client.unsafe(
+        `CREATE TABLE IF NOT EXISTS aqa_agent_trajectories (
+          run_id text NOT NULL,
+          scenario_id text NOT NULL,
+          snapshot_sha256 text NOT NULL CHECK (snapshot_sha256 ~ '^[a-f0-9]{64}$'),
+          envelope jsonb NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (run_id, scenario_id)
+        )`,
+      );
+    };
+    if (this.sql.begin) {
+      await this.sql.begin(async (transaction) => {
+        await transaction.unsafe(
+          "SELECT pg_advisory_xact_lock(hashtext('aqa_agent_trajectories_migration'))",
+        );
+        await createTable(transaction);
+      });
+      return;
+    }
+    await createTable(this.sql);
   }
 
   private async query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {
