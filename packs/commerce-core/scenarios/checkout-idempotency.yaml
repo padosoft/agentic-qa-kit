@@ -1,0 +1,27 @@
+schema_version: "1"
+id: scn-commerce-checkout-idempotency
+title: Retrying checkout with one key must not duplicate the order
+risk_refs: [r-checkout-idempotency]
+invariant_refs: [inv-checkout-idempotency]
+preconditions:
+  - "a sandbox customer and an in-stock SKU exist"
+steps:
+  - id: create-cart
+    kind: http
+    with: { method: "POST", url: "/api/cart", body: { sku: "demo-sku", quantity: 1 } }
+  - id: checkout-first
+    kind: http
+    with: { method: "POST", url: "/api/checkout", body: { cart_id: "@create-cart.body.id" }, headers: { "Idempotency-Key": "aqa-checkout-1" } }
+  - id: checkout-retry
+    kind: http
+    with: { method: "POST", url: "/api/checkout", body: { cart_id: "@create-cart.body.id" }, headers: { "Idempotency-Key": "aqa-checkout-1" } }
+oracles:
+  - id: same-order
+    kind: response_contains
+    probe_id: checkout-retry
+    with: { jsonpath: "$.order_id", equals: "@checkout-first.body.order_id" }
+  - id: retry-success
+    kind: http_status
+    probe_id: checkout-retry
+    with: { expected: 200 }
+tags: [ecommerce, checkout, idempotency]

@@ -1,0 +1,31 @@
+schema_version: "1"
+id: scn-commerce-tax-shipping-currency
+title: Tax and shipping quotes must be currency-safe and reconcile to checkout
+risk_refs: [r-commerce-money-integrity]
+invariant_refs: [inv-money-reconciliation]
+preconditions:
+  - "a cart has a priced SKU and a valid shipping address"
+steps:
+  - id: quote-tax
+    kind: http
+    with: { method: "POST", url: "/api/tax/quote", body: { cart_id: "${CART_ID}", country: "IT" } }
+  - id: quote-shipping
+    kind: http
+    with: { method: "POST", url: "/api/shipping/quote", body: { cart_id: "${CART_ID}", country: "IT", postal_code: "00100" } }
+  - id: checkout-total
+    kind: http
+    with: { method: "GET", url: "/api/cart/${CART_ID}/totals" }
+oracles:
+  - id: tax-currency
+    kind: custom
+    probe_id: quote-tax
+    with: { assertion: "tax.currency equals cart.currency and amount_minor is non-negative integer" }
+  - id: shipping-currency
+    kind: custom
+    probe_id: quote-shipping
+    with: { assertion: "every shipping rate uses cart.currency and has a bounded positive ETA" }
+  - id: total-reconciles
+    kind: custom
+    probe_id: checkout-total
+    with: { assertion: "subtotal + tax + shipping - discount equals total in minor units" }
+tags: [ecommerce, tax, shipping, money]

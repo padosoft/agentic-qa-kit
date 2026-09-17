@@ -11,6 +11,17 @@
 
 ## 2026-09-17
 
+- **Commerce assurance pack.** Added the opt-in `pack-commerce-core`, selected
+  only for ecommerce/commerce/shop/storefront project tags. It defines five
+  release-gate journeys (checkout idempotency, inventory oversell, tax/shipping
+  money reconciliation, refund idempotency and webhook replay) plus five risks
+  and invariants; it is provider-neutral and treats missing authoritative
+  observations as incomplete rather than passing.
+- Evidence: all five scenarios and the risk map parse through the real Zod
+  schemas; bundled-pack integrity test **13/13** and kit bundle now contains
+  **6 packs**. ADR-130 records the opt-in boundary. Real merchant/provider
+  journeys remain deployment evidence.
+
 - **Conditional admin edits.** Profile, risk and scenario detail reads now
   emit strong content ETags; their PUT boundaries honor `If-Match` and reject
   stale writes with `412 PRECONDITION_FAILED` before persistence. Profile,

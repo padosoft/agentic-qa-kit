@@ -1,0 +1,6 @@
+schema_version: "1"
+id: o-commerce-http-status
+kind: http_status
+description: "Assert the commerce endpoint returns the expected status."
+inputs:
+  expected: "Integer status code."

@@ -1,0 +1,43 @@
+schema_version: "1"
+project: pack-commerce-core
+risks:
+  - id: r-checkout-idempotency
+    category: integrity
+    title: Retried checkout creates a second order or payment
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-checkout-idempotency
+        statement: A retry with the same idempotency key returns the same order and payment identity exactly once.
+  - id: r-inventory-oversell
+    category: integrity
+    title: Concurrent checkout oversells finite inventory
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-inventory-no-oversell
+        statement: Committed plus reserved inventory never exceeds on-hand inventory unless backorder is explicitly enabled.
+  - id: r-commerce-money-integrity
+    category: integrity
+    title: Tax, shipping, discount or currency arithmetic changes the payable total
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-money-reconciliation
+        statement: Subtotal, tax, discount, shipping and total reconcile in one currency using integer minor units.
+  - id: r-refund-overcharge
+    category: business_logic
+    title: Refund retries duplicate money or exceed the captured amount
+    severity: critical
+    likelihood: unlikely
+    invariants:
+      - id: inv-refund-idempotency
+        statement: A refund retry is exactly-once and cumulative refunds never exceed the captured payment.
+  - id: r-webhook-replay
+    category: integrity
+    title: Duplicate or invalid webhook delivery repeats a business effect
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-webhook-replay
+        statement: Webhooks require valid signatures and a durable event key so the side effect is applied once.
