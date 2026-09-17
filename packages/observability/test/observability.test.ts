@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   MetricsRegistry,
+  OtlpHttpSpanExporter,
   StructuredLogger,
   Tracer,
   evaluateSlo,
@@ -96,6 +97,56 @@ describe('@aqa/observability', () => {
     assert.throws(
       () => evaluateSlo({ name: 'bad', target: 0, total_events: 1, bad_events: 0 }),
       /target/,
+    );
+  });
+
+  it('exports bounded, redacted OTLP JSON and retries failed batches', async () => {
+    const requests: RequestInit[] = [];
+    let fail = true;
+    const exporter = new OtlpHttpSpanExporter({
+      endpoint: 'http://collector.test/v1/traces',
+      service_name: 'aqa-server',
+      max_batch_size: 2,
+      max_queue_size: 2,
+      fetcher: async (_input, init) => {
+        requests.push(init ?? {});
+        if (fail) {
+          fail = false;
+          return new Response('', { status: 503 });
+        }
+        return new Response('', { status: 200 });
+      },
+    });
+    exporter.export({
+      name: 'run',
+      context: { trace_id: 'a'.repeat(32), span_id: 'b'.repeat(16) },
+      started_at: '2026-09-17T10:00:00.000Z',
+      ended_at: '2026-09-17T10:00:01.000Z',
+      duration_ms: 1_000,
+      status: 'ok',
+      attributes: { authorization: 'Bearer secret', project: 'shop' },
+    });
+    await assert.rejects(() => exporter.flush(), /503/);
+    assert.equal(exporter.pendingCount(), 1);
+    assert.equal(await exporter.flush(), 1);
+    const body = String(requests[1]?.body);
+    assert.doesNotMatch(body, /secret/);
+    assert.match(body, /shop/);
+  });
+
+  it('rejects invalid OTLP exporter limits and protocols', () => {
+    assert.throws(
+      () => new OtlpHttpSpanExporter({ endpoint: 'file:///tmp/traces', service_name: 'aqa' }),
+      /http or https/,
+    );
+    assert.throws(
+      () =>
+        new OtlpHttpSpanExporter({
+          endpoint: 'http://collector.test',
+          service_name: 'aqa',
+          max_queue_size: 0,
+        }),
+      /max_queue_size/,
     );
   });
 });

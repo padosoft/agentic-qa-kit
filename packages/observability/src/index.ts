@@ -23,6 +23,115 @@ export interface SpanRecord {
 
 export type SpanExporter = (span: SpanRecord) => void;
 
+export interface OtlpSpanExporterOptions {
+  endpoint: string;
+  service_name: string;
+  headers?: Record<string, string>;
+  max_batch_size?: number;
+  max_queue_size?: number;
+  fetcher?: typeof fetch;
+}
+
+/** Bounded OTLP/HTTP JSON exporter; telemetry is never the audit source of truth. */
+export class OtlpHttpSpanExporter {
+  private readonly endpoint: string;
+  private readonly serviceName: string;
+  private readonly headers: Record<string, string>;
+  private readonly maxBatchSize: number;
+  private readonly maxQueueSize: number;
+  private readonly fetcher: typeof fetch;
+  private pending: SpanRecord[] = [];
+
+  constructor(options: OtlpSpanExporterOptions) {
+    const endpoint = new URL(options.endpoint);
+    if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:')
+      throw new Error('OTLP endpoint must use http or https');
+    if (!options.service_name.trim()) throw new Error('OTLP service_name is required');
+    this.endpoint = endpoint.toString();
+    this.serviceName = options.service_name.trim();
+    this.headers = { ...options.headers };
+    this.maxBatchSize = positiveInteger(options.max_batch_size ?? 100, 'max_batch_size');
+    this.maxQueueSize = positiveInteger(options.max_queue_size ?? 1_000, 'max_queue_size');
+    this.fetcher = options.fetcher ?? fetch;
+  }
+
+  export(span: SpanRecord): void {
+    if (this.pending.length >= this.maxQueueSize) this.pending.shift();
+    this.pending.push({ ...span, attributes: redactSpanAttributes(span.attributes) });
+  }
+
+  pendingCount(): number {
+    return this.pending.length;
+  }
+
+  async flush(): Promise<number> {
+    if (!this.pending.length) return 0;
+    const batch = this.pending.splice(0, this.maxBatchSize);
+    const response = await this.fetcher(this.endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...this.headers },
+      body: JSON.stringify({
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: this.serviceName } }],
+            },
+            scopeSpans: [{ scope: { name: '@aqa/observability' }, spans: batch.map(toOtlpSpan) }],
+          },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      this.pending = [...batch, ...this.pending].slice(-this.maxQueueSize);
+      throw new Error(`OTLP export failed with HTTP ${response.status}`);
+    }
+    return batch.length;
+  }
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`OTLP ${name} must be positive`);
+  return value;
+}
+
+function toOtlpSpan(span: SpanRecord): Record<string, unknown> {
+  return {
+    name: span.name,
+    traceId: span.context.trace_id,
+    spanId: span.context.span_id,
+    ...(span.parent_span_id ? { parentSpanId: span.parent_span_id } : {}),
+    startTimeUnixNano: Date.parse(span.started_at) * 1_000_000,
+    endTimeUnixNano: Date.parse(span.ended_at) * 1_000_000,
+    status: { code: span.status === 'ok' ? 1 : 2 },
+    attributes: Object.entries(span.attributes).map(([key, value]) => ({
+      key,
+      value:
+        typeof value === 'boolean'
+          ? { boolValue: value }
+          : typeof value === 'number'
+            ? { doubleValue: value }
+            : { stringValue: value },
+    })),
+  };
+}
+
+function redactSpanAttributes(
+  attributes: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [
+      key,
+      SENSITIVE.test(key)
+        ? '[REDACTED]'
+        : typeof value === 'string'
+          ? value
+              .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+              .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
+          : value,
+    ]),
+  );
+}
+
 const HEX_32 = /^[0-9a-f]{32}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
 

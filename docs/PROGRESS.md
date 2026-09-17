@@ -357,3 +357,8 @@
 
 - Updated Claude, Codex, Gemini and Copilot adapters to render the standard directory form `<skills-root>/<skill-name>/SKILL.md` instead of a flat `aqa-*.md` file. Added a contract test that validates the path and frontmatter for every target.
 - This improves discovery compatibility but does not prove every installed host version discovers the files; host-version installation tests remain a separate complete-journey gap.
+
+# 2026-09-17 — OTLP trace export slice
+
+- Added a bounded `OtlpHttpSpanExporter` with OTLP/HTTP JSON payloads, explicit flush, failed-batch retry, queue limits, endpoint validation and span-attribute redaction. It is injectable through `fetcher`, so tests do not require a Collector.
+- Evidence: observability typecheck and 9/9 tests; repository lint. Timer/shutdown integration, Collector deployment, Prometheus metric wiring and dashboards remain open.

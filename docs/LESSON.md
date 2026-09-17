@@ -544,3 +544,9 @@ A skill filename that looks descriptive is not enough for agent hosts. Render
 each skill as its own directory with `SKILL.md` and validate frontmatter/path
 contracts centrally; host installation and discovery still require real versioned
 journey tests.
+
+# 2026-09-17 — telemetry export must be bounded and non-authoritative
+
+An OTLP exporter must not turn an outage into unbounded memory growth or make
+telemetry the audit record. Bound the queue, retry a failed batch, redact before
+serialization, and keep immutable hash-chained events as the source of truth.
