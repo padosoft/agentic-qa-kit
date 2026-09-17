@@ -10,5 +10,6 @@ steps:
 oracles:
   - id: o-state-preserved
     kind: response_contains
+    probe_id: probe-fill
     with: { in: "page", value: "{{expected_text}}" }
 tags: [web, ux]

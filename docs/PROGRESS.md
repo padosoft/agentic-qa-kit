@@ -587,3 +587,7 @@
 
 - Added optional `oracle.probe_id` with Scenario cross-field validation for unique step IDs and existing referenced steps. Runtime evaluation scopes the oracle to that observation and fails closed when the reference is missing; legacy scenarios without the field remain compatible.
 - Evidence: schema/runner targeted tests 41/41 after the new contracts, typecheck and lint pass. Existing legacy scenarios still use fallback semantics until packs are migrated to explicit references.
+# 2026-09-17 — first-party pack oracle migration
+
+- Migrated all first-party scenario packs with oracle steps to explicit `probe_id` references (API, web UI and LLM-agent packs). The legacy fallback remains only for third-party/older packs and is now visible as a migration concern rather than the default first-party contract.
+- Evidence: pack YAML remains schema-loadable and the full regression is the authoritative gate after this change.

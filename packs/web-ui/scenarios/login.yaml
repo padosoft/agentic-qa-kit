@@ -10,5 +10,6 @@ steps:
 oracles:
   - id: o-not-redirected
     kind: response_not_contains
+    probe_id: probe-login-with-evil-redirect
     with: { in: "url", value: "attacker.example" }
 tags: [web, auth]

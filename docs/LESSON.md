@@ -806,3 +806,6 @@ Duplicating hash-chain logic in a UI invites drift in canonical JSON, especially
 # 2026-09-17 — oracle output scope must be explicit
 
 Aggregating every probe response makes a scenario oracle non-local: a success from one step can mask a failure in another. Add a typed `probe_id` reference, validate it against unique scenario steps, and fail closed when the referenced observation is absent. Keep legacy fallback behavior explicit and temporary rather than silently treating all outputs as interchangeable.
+# 2026-09-17 — migrate producers after strengthening a contract
+
+Adding a compatibility field without migrating first-party producers leaves the risky behavior dominant. After introducing typed oracle references, update every bundled pack and fixture so new installations exercise the precise contract; keep compatibility only at the external boundary.
