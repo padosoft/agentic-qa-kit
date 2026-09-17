@@ -778,3 +778,11 @@ Provider-neutral webhook assertions are not enough to catch integration bugs.
 The Stripe-style boundary signs the exact raw body, accepts rotated `v1`
 signatures, rejects malformed/stale timestamps and uses a positive tolerance;
 the caller still needs durable event-effect idempotency after verification.
+
+# 2026-09-17 — Signature verification does not make side effects idempotent
+
+Retries can carry a valid signature and still execute capture, fulfillment or
+entitlement logic twice. Claim a logical effect key atomically before running
+the effect, treat the same event as a duplicate, and reject a different event
+reusing that key. The PostgreSQL unique-key contract is the multi-replica
+boundary; signature verification remains a separate prior check.

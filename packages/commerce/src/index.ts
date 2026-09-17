@@ -5,6 +5,13 @@ export {
   type StripeWebhookVerification,
   type StripeWebhookVerificationOptions,
 } from './stripe-webhook.js';
+export {
+  applyWebhookEffectOnce,
+  InMemoryWebhookEffectLedger,
+  PostgresWebhookEffectLedger,
+  type WebhookClaim,
+  type WebhookEffectLedger,
+} from './webhook-ledger.js';
 
 /** Decimal minor units are strings so no binary floating point enters money math. */
 export const Money = z.object({

@@ -44,6 +44,13 @@
   verifies delivery before process return; observability 12/12, kit 126
   passed/2 platform skips, typecheck and lint pass.
 
+- **Durable webhook effect ledger added.** Commerce now exposes an explicit
+  `applyWebhookEffectOnce` boundary plus in-memory and PostgreSQL ledgers. A
+  unique logical effect key is claimed atomically; duplicate deliveries are
+  skipped and a different event for the same effect fails closed. Evidence:
+  commerce **17 passed, 1 PostgreSQL skip**, typecheck, lint and diff-check
+  pass. Live provider settlement and reconciliation remain separate.
+
 - **Stripe-style webhook signature boundary added.** Commerce now verifies the
   raw request body, `t=` timestamp, one or more `v1=` HMAC signatures and a
   positive replay tolerance using constant-time comparison. Evidence:

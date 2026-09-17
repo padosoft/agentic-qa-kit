@@ -25,6 +25,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.
+- `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
+  the business side effect idempotent across retries and replicas, rejecting
+  reuse of one logical effect key by a different event.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
 

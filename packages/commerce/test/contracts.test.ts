@@ -3,9 +3,12 @@ import { createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   InMemoryCommerceReference,
+  InMemoryWebhookEffectLedger,
   InventorySnapshot,
   JourneyOutcome,
   Money,
+  PostgresWebhookEffectLedger,
+  applyWebhookEffectOnce,
   assertNoOversell,
   assertOrderIntegrity,
   assertPromotionRedeemable,
@@ -20,6 +23,44 @@ import {
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
+  it('applies a logical webhook effect once and rejects event-key conflicts', async () => {
+    const ledger = new InMemoryWebhookEffectLedger();
+    let effects = 0;
+    assert.equal(
+      await applyWebhookEffectOnce(ledger, 'order-1:payment_captured', 'evt-1', () => {
+        effects += 1;
+      }),
+      'applied',
+    );
+    assert.equal(
+      await applyWebhookEffectOnce(ledger, 'order-1:payment_captured', 'evt-1', () => {
+        effects += 1;
+      }),
+      'duplicate',
+    );
+    await assert.rejects(
+      () => applyWebhookEffectOnce(ledger, 'order-1:payment_captured', 'evt-2', () => undefined),
+      /conflicts/,
+    );
+    assert.equal(effects, 1);
+  });
+
+  it(
+    'claims webhook effects atomically across PostgreSQL ledger instances',
+    { skip: !process.env.AQA_TEST_POSTGRES_DSN },
+    async () => {
+      const dsn = process.env.AQA_TEST_POSTGRES_DSN as string;
+      const key = `commerce-effect-${Date.now()}`;
+      const first = new PostgresWebhookEffectLedger(dsn);
+      const second = new PostgresWebhookEffectLedger(dsn);
+      assert.equal(await first.claim(key, 'evt-1'), 'claimed');
+      assert.equal(await second.claim(key, 'evt-1'), 'duplicate');
+      assert.equal(await second.claim(key, 'evt-2'), 'conflict');
+      await first.close();
+      await second.close();
+    },
+  );
+
   it('verifies Stripe-style raw-body signatures and rejects replay windows', () => {
     const secret = 'whsec_test_only';
     const body = '{"id":"evt_test","type":"payment_intent.succeeded"}';
