@@ -43,6 +43,8 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifySettlementJourney()` reconciles captured payment, successful refunds,
   lost chargebacks and net provider settlement when the adapter exposes that
   observation capability.
+- `verifyPostPurchaseJourney()` validates observed fulfillment/tracking and an
+  optional idempotent return/RMA request bound to the original order.
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.

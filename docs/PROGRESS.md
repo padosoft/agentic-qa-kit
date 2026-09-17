@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Added executable post-purchase/RMA coverage.** `verifyPostPurchaseJourney()`
+  now requires fulfillment observation and validates tracking/order quantity
+  invariants; it can also create and retry a typed return request with strict
+  order/currency bounds. Commerce contracts remain **30 pass / 0 fail**;
+  carrier/WMS/refund-on-return integrations remain external evidence.
+
 - **Added executable settlement reconciliation.** Commerce adapters can expose
   `settlement_observer`; `verifySettlementJourney()` now binds checkout
   payment identity to parsed refunds/chargebacks and applies the net-total
