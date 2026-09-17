@@ -331,3 +331,8 @@
 
 - Added `GET /api/risk-coverage`, requiring org/project scope and `risk-map:read`. It loads tenant-scoped risks and scenarios plus persisted run oracle events, ignores incomplete scenario observations, and delegates scoring to `@aqa/methodology`.
 - Complete API evidence: server suite 108 tests (107 passed, 1 live PostgreSQL EventBus skip); server typecheck and repository lint passed. Admin UI projection and durable event retention/aggregation remain open.
+
+# 2026-09-17 — SLO/error-budget decision slice
+
+- Added `evaluateSlo()` to `@aqa/observability`: validates event counts and target, computes allowed bad events, remaining budget, burn rate and explicit `no_data`/`within_budget`/`budget_warning`/`budget_exhausted` reason codes.
+- Evidence: observability typecheck and 7/7 tests; repository lint passed. Runtime metric wiring, OTel Collector export and operational dashboards/alerts remain open.

@@ -11,6 +11,8 @@ Provider-neutral observability primitives for production AQA deployments.
 - Cardinality limits to prevent untrusted scenario/project labels exhausting
   the process.
 - Structured JSON logs with pre-write secret redaction.
+- `evaluateSlo()` for pure SLO/error-budget decisions with explicit
+  `healthy`/`warning`/`breached` status and no-data handling.
 
 The package deliberately has no cloud SDK dependency. Production deployments
 should export spans and metrics to their existing OTel Collector/Prometheus

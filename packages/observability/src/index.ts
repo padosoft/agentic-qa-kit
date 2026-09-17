@@ -283,6 +283,79 @@ function redact(value: unknown, key = ''): unknown {
 }
 
 export type LogSink = (line: string) => void;
+
+export type SloStatus = 'healthy' | 'warning' | 'breached';
+
+export interface SloObservation {
+  name: string;
+  target: number;
+  total_events: number;
+  bad_events: number;
+}
+
+export interface SloReport extends SloObservation {
+  good_events: number;
+  allowed_bad_events: number;
+  error_budget_remaining: number;
+  burn_rate: number;
+  status: SloStatus;
+  reason: 'no_data' | 'within_budget' | 'budget_warning' | 'budget_exhausted';
+}
+
+/**
+ * Evaluate an SLO from counted events. This is intentionally pure so the same
+ * error-budget decision can be used by an exporter, API and release gate.
+ */
+export function evaluateSlo(observation: SloObservation): SloReport {
+  if (!observation.name.trim()) throw new Error('SLO name is required');
+  if (!Number.isFinite(observation.target) || observation.target <= 0 || observation.target > 1)
+    throw new Error('SLO target must be > 0 and <= 1');
+  if (!Number.isInteger(observation.total_events) || observation.total_events < 0)
+    throw new Error('SLO total_events must be a non-negative integer');
+  if (!Number.isInteger(observation.bad_events) || observation.bad_events < 0)
+    throw new Error('SLO bad_events must be a non-negative integer');
+  if (observation.bad_events > observation.total_events)
+    throw new Error('SLO bad_events cannot exceed total_events');
+  const allowedBad = Number((observation.total_events * (1 - observation.target)).toFixed(6));
+  const remaining =
+    allowedBad === 0
+      ? observation.bad_events === 0
+        ? 1
+        : 0
+      : (allowedBad - observation.bad_events) / allowedBad;
+  const errorBudgetRemaining = Math.max(0, Math.min(1, remaining));
+  const burnRate =
+    allowedBad === 0
+      ? observation.bad_events === 0
+        ? 0
+        : Number.POSITIVE_INFINITY
+      : observation.bad_events / allowedBad;
+  const reason =
+    observation.total_events === 0
+      ? 'no_data'
+      : errorBudgetRemaining <= 0
+        ? 'budget_exhausted'
+        : errorBudgetRemaining < 0.2
+          ? 'budget_warning'
+          : 'within_budget';
+  return {
+    ...observation,
+    good_events: observation.total_events - observation.bad_events,
+    allowed_bad_events: Number(allowedBad.toFixed(6)),
+    error_budget_remaining: Number(errorBudgetRemaining.toFixed(6)),
+    burn_rate: Number.isFinite(burnRate) ? Number(burnRate.toFixed(6)) : burnRate,
+    status:
+      reason === 'no_data'
+        ? 'warning'
+        : reason === 'budget_exhausted'
+          ? 'breached'
+          : reason === 'budget_warning'
+            ? 'warning'
+            : 'healthy',
+    reason,
+  };
+}
+
 export class StructuredLogger {
   constructor(private readonly sink: LogSink = (line) => console.error(line)) {}
 

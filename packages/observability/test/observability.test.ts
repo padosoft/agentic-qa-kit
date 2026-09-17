@@ -4,6 +4,7 @@ import {
   MetricsRegistry,
   StructuredLogger,
   Tracer,
+  evaluateSlo,
   formatTraceParent,
   parseTraceParent,
 } from '../dist/index.js';
@@ -68,5 +69,33 @@ describe('@aqa/observability', () => {
     const line = lines[0] ?? '';
     assert.doesNotMatch(line, /super-secret|hidden/);
     assert.match(line, /REDACTED/);
+  });
+
+  it('computes a bounded error budget with explicit reason codes', () => {
+    const report = evaluateSlo({
+      name: 'run_success',
+      target: 0.99,
+      total_events: 100,
+      bad_events: 1,
+    });
+    assert.equal(report.status, 'breached');
+    assert.equal(report.reason, 'budget_exhausted');
+    assert.equal(report.error_budget_remaining, 0);
+    assert.equal(report.burn_rate, 1);
+    assert.equal(
+      evaluateSlo({ name: 'empty', target: 0.99, total_events: 0, bad_events: 0 }).reason,
+      'no_data',
+    );
+  });
+
+  it('rejects impossible SLO observations', () => {
+    assert.throws(
+      () => evaluateSlo({ name: 'bad', target: 0.99, total_events: 2, bad_events: 3 }),
+      /cannot exceed/,
+    );
+    assert.throws(
+      () => evaluateSlo({ name: 'bad', target: 0, total_events: 1, bad_events: 0 }),
+      /target/,
+    );
   });
 });

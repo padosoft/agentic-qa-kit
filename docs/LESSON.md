@@ -508,3 +508,10 @@ auditable.
 The server must not reimplement risk scoring. It normalizes tenant-scoped
 store records and complete oracle event groups into `measureRiskCoverage()`;
 partial event groups are excluded, and missing replay evidence remains a gap.
+
+# 2026-09-17 — SLO math needs explicit no-data semantics
+
+An empty telemetry window is not a healthy SLO. Error-budget evaluation now
+returns `no_data` with warning status, validates impossible counters, rounds
+floating-point budget boundaries, and separates the pure decision from future
+metric/exporter wiring.
