@@ -52,6 +52,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyDunningJourney()` validates provider-observed failed renewal attempts,
   contiguous retry history, subscription ownership, amount/currency linkage and
   expected past-due state.
+- `verifyDisputeJourney()` validates provider-observed chargebacks, exact
+  order/payment linkage, tenant isolation, amount bounds, evidence deadlines
+  and expected dispute state.
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.
