@@ -36,7 +36,7 @@ export const copilotAdapter: Adapter = {
   render(ctx: RenderContext): RenderedFile[] {
     return [
       { path: '.github/copilot-instructions.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
-      { path: '.github/skills/aqa-run.md', kind: 'skill', contents: SKILL_AQA_RUN },
+      { path: '.github/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
     ];
   },
 };

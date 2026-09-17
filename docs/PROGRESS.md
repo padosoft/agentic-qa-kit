@@ -352,3 +352,8 @@
 
 - Hardened `@aqa/cost` with validated non-negative budgets/token counts, a fail-closed `assertCanDispatch()` boundary, and an explicit irreversible-in-instance `halt(reason)` kill switch. Unknown model pricing remains blocked and no provider call is counted when admission rejects it.
 - Evidence: cost package typecheck and 8/8 tests; repository lint. Runtime worker integration, distributed halt persistence, provider reconciliation and auditable `budget_exceeded` events remain open.
+
+# 2026-09-17 — interoperable agent skill rendering
+
+- Updated Claude, Codex, Gemini and Copilot adapters to render the standard directory form `<skills-root>/<skill-name>/SKILL.md` instead of a flat `aqa-*.md` file. Added a contract test that validates the path and frontmatter for every target.
+- This improves discovery compatibility but does not prove every installed host version discovers the files; host-version installation tests remain a separate complete-journey gap.

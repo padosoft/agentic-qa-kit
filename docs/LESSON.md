@@ -537,3 +537,10 @@ Charging after an LLM response cannot prevent the response that crosses a
 budget. Keep reconciliation separate from pre-call admission: unknown pricing,
 invalid token counts, budget exhaustion and operator halt must fail closed before
 the provider boundary, then be wired to durable worker state and audit events.
+
+# 2026-09-17 — skill discovery is a filesystem contract
+
+A skill filename that looks descriptive is not enough for agent hosts. Render
+each skill as its own directory with `SKILL.md` and validate frontmatter/path
+contracts centrally; host installation and discovery still require real versioned
+journey tests.
