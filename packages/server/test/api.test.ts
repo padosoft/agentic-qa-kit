@@ -330,6 +330,58 @@ describe('makeApi', () => {
     assert.equal(res?.status, 400);
   });
 
+  it('GET /api/runs/:id/events refuses a tampered audit chain', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-events-integrity',
+      started_at: '2026-09-16T10:00:00Z',
+      finished_at: '2026-09-16T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
+      totals: {
+        scenarios: 1,
+        findings: 0,
+        probes: 0,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-events-integrity',
+    });
+    const event = {
+      schema_version: '1' as const,
+      seq: 0,
+      prev_hash: null,
+      hash: '0'.repeat(64),
+      ts: '2026-09-16T10:00:00Z',
+      run_id: 'run-events-integrity',
+      kind: 'run_started' as const,
+      actor: { type: 'orchestrator' as const, id: 'test' },
+      payload: {},
+    };
+    await c.store.appendEvent(event);
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs/:id/events');
+    const res = await route?.handle(
+      { headers: TENANT_HEADERS, params: { id: 'run-events-integrity' } },
+      c,
+    );
+    assert.equal(res?.status, 500);
+    assert.deepEqual(res?.body, {
+      error: 'run audit chain integrity verification failed',
+      code: 'AUDIT_CHAIN_INVALID',
+    });
+  });
+
   it('POST /api/runs enqueues a job', async () => {
     const events: unknown[] = [];
     const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
