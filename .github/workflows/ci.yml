@@ -306,6 +306,23 @@ jobs:
       - name: Run CLI smoke checks
         run: bun run test:e2e-cli
 
+      - name: Run performance evidence threshold journey
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          cat > "$fixture/k6.json" <<'JSON'
+          {"metrics":{"http_req_duration":{"values":{"p(95)":250}}}}
+          JSON
+          cat > "$fixture/thresholds.json" <<'JSON'
+          {"max_p95_ms":100}
+          JSON
+          set +e
+          node packages/kit/dist/cli.cjs ingest k6 "$fixture/k6.json" --threshold-file "$fixture/thresholds.json"
+          exit_code=$?
+          set -e
+          test "$exit_code" -eq 2
+          test -n "$(find .aqa/ingest -name '*.threshold.json' -print -quit)"
+
   e2e:
     name: E2E (Playwright, admin UI)
     runs-on: ubuntu-latest

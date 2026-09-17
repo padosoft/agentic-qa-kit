@@ -695,3 +695,10 @@ A threshold violation is not an ingestion failure: the report must still be
 stored for diagnosis, while the CLI returns a distinct non-zero gate code and
 stores policy/violations separately. This preserves both CI enforcement and the
 ability to audit what was measured.
+
+# 2026-09-17 — CI fixture gates are wiring evidence, not load evidence
+
+An inline k6 summary is useful to prove the published CLI, exit-code contract
+and artifact path in CI, but it is not proof that k6 or Locust executed against
+a real SUT. Keep the fixture journey labelled and require a separately provisioned
+load environment before claiming performance validity.

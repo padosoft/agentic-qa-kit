@@ -481,3 +481,8 @@
 
 - Added `aqa ingest k6|locust <file> --threshold-file <policy.json>`. The report remains the primary redacted evidence artifact; the numeric policy and structured violations are persisted in a separate threshold artifact. A failed threshold returns exit code 2 while ingestion itself remains recorded, making CI behavior explicit and inspectable.
 - Evidence: kit suite 124 passed, 2 platform symlink skips; root lint and diff-check pass. CI workflow wiring and live load execution remain open.
+
+# 2026-09-17 — CI performance threshold journey
+
+- Added a CI step to the existing built CLI smoke job. It feeds a non-secret k6 JSON fixture and policy into the published CJS bundle, asserts the expected gate exit code `2`, and checks that the separate threshold artifact was written. This proves CI wiring without pretending to execute a real load generator.
+- Evidence: workflow diff is syntactically scoped to the existing `e2e-cli` build job; local workspace build passed (admin chunk-size warning remains non-fatal). A GitHub Actions run is required for authoritative hosted-runner evidence.
