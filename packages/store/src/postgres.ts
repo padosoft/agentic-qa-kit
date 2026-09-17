@@ -60,27 +60,34 @@ export class PostgresStore implements StoreProvider {
     return (await unsafe(text, values)) as T[];
   }
   private async migrate(): Promise<void> {
-    await this.q(
-      'CREATE TABLE IF NOT EXISTS aqa_store_schema (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
-    );
-    await this.q(
-      'INSERT INTO aqa_store_schema (version) VALUES (1) ON CONFLICT (version) DO NOTHING',
-    );
-    await this.q(
-      'CREATE TABLE IF NOT EXISTS aqa_store_records (kind text NOT NULL, record_key text NOT NULL, org text, project text, payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (kind, record_key))',
-    );
-    await this.q(
-      'CREATE INDEX IF NOT EXISTS aqa_store_records_scope_idx ON aqa_store_records (kind, org, project)',
-    );
-    await this.q(
-      'CREATE TABLE IF NOT EXISTS aqa_store_events (event_hash text PRIMARY KEY, seq bigint NOT NULL, run_id text, org text, project text, ts timestamptz NOT NULL, payload jsonb NOT NULL)',
-    );
-    await this.q(
-      'CREATE INDEX IF NOT EXISTS aqa_store_events_run_idx ON aqa_store_events (run_id, seq)',
-    );
-    await this.q(
-      'CREATE INDEX IF NOT EXISTS aqa_store_events_scope_idx ON aqa_store_events (org, project, ts DESC)',
-    );
+    await this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      // DDL IF NOT EXISTS is not enough: two fresh application replicas can
+      // still race on version bookkeeping. Keep migration/version updates in
+      // one transaction and serialize them across processes.
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_store_schema'))");
+      await query(
+        'CREATE TABLE IF NOT EXISTS aqa_store_schema (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
+      );
+      await query(
+        'INSERT INTO aqa_store_schema (version) VALUES (1) ON CONFLICT (version) DO NOTHING',
+      );
+      await query(
+        'CREATE TABLE IF NOT EXISTS aqa_store_records (kind text NOT NULL, record_key text NOT NULL, org text, project text, payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (kind, record_key))',
+      );
+      await query(
+        'CREATE INDEX IF NOT EXISTS aqa_store_records_scope_idx ON aqa_store_records (kind, org, project)',
+      );
+      await query(
+        'CREATE TABLE IF NOT EXISTS aqa_store_events (event_hash text PRIMARY KEY, seq bigint NOT NULL, run_id text, org text, project text, ts timestamptz NOT NULL, payload jsonb NOT NULL)',
+      );
+      await query(
+        'CREATE INDEX IF NOT EXISTS aqa_store_events_run_idx ON aqa_store_events (run_id, seq)',
+      );
+      await query(
+        'CREATE INDEX IF NOT EXISTS aqa_store_events_scope_idx ON aqa_store_events (org, project, ts DESC)',
+      );
+    });
   }
   private async wait(): Promise<void> {
     await this.ready;

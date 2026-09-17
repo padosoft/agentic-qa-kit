@@ -333,3 +333,10 @@ scenario from overwriting another tenant during `PUT` or `DELETE`. The storage
 key itself must carry the authenticated scope, while legacy unscoped keys need a
 deliberate compatibility rule. New namespaced records are now isolated in both
 adapters; full migration of legacy global records remains an operational task.
+
+# 2026-09-17 — migration idempotency needs serialization
+
+`CREATE TABLE IF NOT EXISTS` makes a statement repeatable, not a multi-step
+bootstrap safe across replicas. Version insertion, table creation and index
+creation must share a transaction-scoped advisory lock; otherwise two fresh
+servers can observe an incomplete schema/version state during startup.
