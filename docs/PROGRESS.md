@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added the executable dispute/chargeback journey.** `verifyDisputeJourney()`
+  now requires provider-observed non-empty chargeback evidence, validates
+  exact order/payment linkage, tenant/customer ownership, duplicate IDs,
+  amount/currency bounds and opened-dispute evidence deadlines. Added the HTTP
+  observer and explicit reference seeding path. Commerce contracts are **36
+  pass / 0 fail** with explicit PostgreSQL skips. ADR-184 records that
+  inducing a network dispute and proving representment remains live provider
+  sandbox evidence.
+
 - **Added the executable subscription dunning journey.** Versioned dunning
   attempts now expose contiguous retry history, amount/currency linkage and
   scheduling metadata. `verifyDunningJourney()` requires a provider-observed

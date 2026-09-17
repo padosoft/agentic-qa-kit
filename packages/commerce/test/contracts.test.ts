@@ -29,6 +29,7 @@ import {
   assertTenderAllocation,
   verifyCheckoutJourney,
   verifyCommerceJourneySuite,
+  verifyDisputeJourney,
   verifyDunningJourney,
   verifyLoyaltyJourney,
   verifyRefundJourney,
@@ -658,6 +659,114 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(result.subscription.status, 'past_due');
     assert.equal(result.attempts[0]?.attempt_number, 1);
     assert.equal(requestedUrl, 'https://shop.test/subscriptions/sub-http/dunning');
+  });
+
+  it('verifies provider-linked dispute evidence and expected chargeback state', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-dispute-journey',
+      price: { currency: 'EUR', amount_minor: '1999' },
+      on_hand: 1,
+    });
+    const identity = { tenant: 'shop-dispute', customer_id: 'customer-dispute' };
+    const cart = merchant.createCart(identity);
+    merchant.addLine(identity, cart.id, 'sku-dispute-journey', 1);
+    const checkout = merchant.checkout(identity, cart.id, 'dispute-checkout');
+    merchant.seedDispute(checkout.order, checkout.payment, [
+      {
+        schema_version: '1',
+        id: 'chargeback-journey-1',
+        order_id: checkout.order.id,
+        payment_id: checkout.payment.payment_id,
+        amount: checkout.payment.amount,
+        status: 'opened',
+        reason: 'fraudulent',
+        opened_at: '2026-09-17T10:00:00Z',
+        evidence_due_at: '2026-09-24T10:00:00Z',
+      },
+    ]);
+    const result = await verifyDisputeJourney(merchant.asAdapter(), {
+      context: {
+        schema_version: '1',
+        merchant: 'reference',
+        environment: 'sandbox',
+        tenant: identity.tenant,
+        run_id: 'run-dispute',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity,
+      orderId: checkout.order.id,
+      expectedStatus: 'opened',
+    });
+    assert.equal(result.outcome.status, 'pass', result.outcome.reason);
+    assert.match(result.evidence[0]?.detail ?? '', /chargebacks=1/);
+  });
+
+  it('reads dispute observations through the HTTP adapter boundary', async () => {
+    let requestedUrl = '';
+    const order = {
+      schema_version: '1',
+      id: 'order-http-dispute',
+      revision: 1,
+      tenant: 'shop-a',
+      customer_id: 'customer-a',
+      lines: [
+        {
+          sku: 'sku-1',
+          quantity: 1,
+          unit_price: { currency: 'EUR', amount_minor: '1000' },
+          line_total: { currency: 'EUR', amount_minor: '1000' },
+        },
+      ],
+      subtotal: { currency: 'EUR', amount_minor: '1000' },
+      tax: { currency: 'EUR', amount_minor: '0' },
+      discount: { currency: 'EUR', amount_minor: '0' },
+      total: { currency: 'EUR', amount_minor: '1000' },
+      currency: 'EUR',
+      status: 'paid',
+    };
+    const payment = {
+      schema_version: '1',
+      order_id: order.id,
+      provider: 'test-provider',
+      payment_id: 'payment-http-dispute',
+      amount: order.total,
+      refunded_amount: { currency: 'EUR', amount_minor: '0' },
+      status: 'captured',
+      observed_at: '2026-09-17T10:00:00Z',
+    };
+    const adapter = new HttpCommerceAdapter({
+      baseUrl: 'https://shop.test',
+      fetch: async (input) => {
+        requestedUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            order,
+            payment,
+            chargebacks: [
+              {
+                schema_version: '1',
+                id: 'chargeback-http-1',
+                order_id: order.id,
+                payment_id: payment.payment_id,
+                amount: payment.amount,
+                status: 'lost',
+                reason: 'fraudulent',
+                opened_at: '2026-09-17T10:00:00Z',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await adapter.observeDisputes(
+      { tenant: 'shop-a', customer_id: 'customer-a' },
+      order.id,
+    );
+    assert.equal(result.chargebacks[0]?.status, 'lost');
+    assert.equal(requestedUrl, 'https://shop.test/orders/order-http-dispute/disputes');
   });
 
   it('executes an isolated checkout exactly once and preserves minor-unit totals', () => {

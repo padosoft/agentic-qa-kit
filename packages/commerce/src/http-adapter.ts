@@ -8,6 +8,7 @@ import {
   CommerceCapabilities,
   type CommerceContext,
   type CommerceIdentity,
+  type DisputeObservation,
   DunningAttemptSnapshot,
   type DunningObservation,
   type FulfillmentLine,
@@ -54,6 +55,7 @@ export interface HttpCommerceAdapterOptions {
     subscriptions: string;
     subscription: string;
     dunning: string;
+    disputes: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -101,6 +103,7 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       subscriptions: '/subscriptions',
       subscription: '/subscriptions/:subscription_id',
       dunning: '/subscriptions/:subscription_id/dunning',
+      disputes: '/orders/:order_id/disputes',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -325,6 +328,22 @@ export class HttpCommerceAdapter implements CommerceAdapter {
     return {
       subscription: SubscriptionSnapshot.parse(raw.subscription),
       attempts: raw.attempts.map((item) => DunningAttemptSnapshot.parse(item)),
+    };
+  }
+
+  async observeDisputes(identity: CommerceIdentity, orderId: string): Promise<DisputeObservation> {
+    const raw = (await this.request(
+      'GET',
+      pathTemplate(this.paths.disputes, { order_id: orderId }),
+      this.context(identity),
+      identity,
+    )) as Record<string, unknown>;
+    if (!Array.isArray(raw.chargebacks))
+      throw new Error('commerce dispute response must include chargebacks array');
+    return {
+      order: OrderSnapshot.parse(raw.order),
+      payment: PaymentSnapshot.parse(raw.payment),
+      chargebacks: raw.chargebacks.map((item) => ChargebackSnapshot.parse(item)),
     };
   }
 

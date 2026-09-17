@@ -1,5 +1,10 @@
 # Lessons
 
+- **Settlement and dispute evidence are different journeys.** A net settlement
+  can be mathematically correct while an active chargeback is unlinked,
+  duplicated or missing its evidence deadline. Observe and validate the
+  chargeback directly, then reconcile it separately in settlement.
+
 - **Subscription dunning must be observed, not inferred.** Require a provider
   event sequence with contiguous attempt numbers, exact subscription
   amount/currency, retry timing metadata and a failed attempt. A local fixture

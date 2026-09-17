@@ -227,6 +227,7 @@ export const CommerceCapabilities = z.object({
   returns: z.boolean().default(false),
   subscription_observer: z.boolean().default(false),
   dunning_observer: z.boolean().default(false),
+  dispute_observer: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -416,6 +417,21 @@ export function assertChargebackIntegrity(
     throw new Error('chargeback exceeds captured payment');
   if (item.status === 'opened' && !item.evidence_due_at)
     throw new Error('opened chargeback requires evidence_due_at');
+}
+
+export function assertDisputeIntegrity(
+  order: OrderSnapshot,
+  payment: PaymentSnapshot,
+  chargebacks: readonly ChargebackSnapshot[],
+): void {
+  const seen = new Set<string>();
+  for (const chargeback of chargebacks) {
+    const item = ChargebackSnapshot.parse(chargeback);
+    if (seen.has(item.id)) throw new Error('dispute observation contains duplicate chargeback ids');
+    seen.add(item.id);
+    assertChargebackIntegrity(order, payment, item);
+  }
+  if (chargebacks.length === 0) throw new Error('dispute observation contains no chargeback');
 }
 
 /**
@@ -632,6 +648,7 @@ export interface CommerceAdapter {
   observeWebhooks?(orderId: string): Promise<readonly WebhookObservation[]>;
   observeLoyalty?(identity: CommerceIdentity): Promise<LoyaltyObservation>;
   observeDunning?(identity: CommerceIdentity, subscriptionId: string): Promise<DunningObservation>;
+  observeDisputes?(identity: CommerceIdentity, orderId: string): Promise<DisputeObservation>;
 }
 
 export type LoyaltyObservation = {
@@ -642,6 +659,12 @@ export type LoyaltyObservation = {
 export type DunningObservation = {
   subscription: SubscriptionSnapshot;
   attempts: readonly DunningAttemptSnapshot[];
+};
+
+export type DisputeObservation = {
+  order: OrderSnapshot;
+  payment: PaymentSnapshot;
+  chargebacks: readonly ChargebackSnapshot[];
 };
 
 export type CommerceJourneyEvidence = {
@@ -701,6 +724,14 @@ export type DunningJourneyOptions = {
   minimumAttempts?: number;
 };
 
+export type DisputeJourneyOptions = {
+  context: CommerceContext;
+  identity: CommerceIdentity;
+  orderId: string;
+  expectedStatus?: ChargebackSnapshot['status'];
+  minimumDisputes?: number;
+};
+
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
   refund: RefundJourneyOptions;
@@ -713,6 +744,7 @@ export type CommerceJourneySuiteOptions = {
   subscription?: SubscriptionJourneyOptions;
   loyalty?: LoyaltyJourneyOptions;
   dunning?: DunningJourneyOptions;
+  dispute?: DisputeJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -1435,6 +1467,62 @@ export async function verifyDunningJourney(
   }
 }
 
+/** Verifies provider-observed chargeback linkage and dispute evidence. */
+export async function verifyDisputeJourney(
+  adapter: CommerceAdapter,
+  opts: DisputeJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.dispute_observer || !adapter.observeDisputes) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks dispute observation capability',
+        },
+        evidence,
+      };
+    }
+    if (!opts.orderId.trim()) throw new Error('order id is required');
+    const observed = await adapter.observeDisputes(opts.identity, opts.orderId);
+    const order = OrderSnapshot.parse(observed.order);
+    const payment = PaymentSnapshot.parse(observed.payment);
+    const chargebacks = observed.chargebacks.map((item) => ChargebackSnapshot.parse(item));
+    if (order.id !== opts.orderId)
+      throw new Error('dispute observation returned a different order');
+    if (order.tenant !== opts.identity.tenant || order.customer_id !== opts.identity.customer_id)
+      throw new Error('dispute observation crosses tenant or customer boundary');
+    assertDisputeIntegrity(order, payment, chargebacks);
+    const minimumDisputes = opts.minimumDisputes ?? 1;
+    if (!Number.isSafeInteger(minimumDisputes) || minimumDisputes < 1)
+      throw new Error('minimum disputes must be a positive safe integer');
+    if (chargebacks.length < minimumDisputes)
+      throw new Error('dispute observation has fewer chargebacks than required');
+    if (opts.expectedStatus && !chargebacks.some((item) => item.status === opts.expectedStatus))
+      throw new Error('dispute observation does not contain the expected status');
+    evidence.push({
+      step: 'dispute.observed',
+      ok: true,
+      detail: `order=${order.id}; chargebacks=${chargebacks.length}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'dispute journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1461,6 +1549,7 @@ export async function verifyCommerceJourneySuite(
     journeys.subscription = await verifySubscriptionJourney(adapter, opts.subscription);
   if (opts.loyalty) journeys.loyalty = await verifyLoyaltyJourney(adapter, opts.loyalty);
   if (opts.dunning) journeys.dunning = await verifyDunningJourney(adapter, opts.dunning);
+  if (opts.dispute) journeys.dispute = await verifyDisputeJourney(adapter, opts.dispute);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1557,6 +1646,7 @@ export class InMemoryCommerceReference {
   private readonly loyaltyAccounts = new Map<string, LoyaltyAccountSnapshot>();
   private readonly loyaltyTransactions = new Map<string, LoyaltyTransactionSnapshot[]>();
   private readonly dunning = new Map<string, DunningObservation>();
+  private readonly disputes = new Map<string, ChargebackSnapshot[]>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
 
@@ -2028,6 +2118,27 @@ export class InMemoryCommerceReference {
     return observed;
   }
 
+  /** Seed explicit provider-like dispute evidence for contract tests. */
+  seedDispute(
+    order: OrderSnapshot,
+    payment: PaymentSnapshot,
+    chargebacks: readonly ChargebackSnapshot[],
+  ): void {
+    const orderItem = OrderSnapshot.parse(order);
+    const paymentItem = PaymentSnapshot.parse(payment);
+    const parsed = chargebacks.map((item) => ChargebackSnapshot.parse(item));
+    assertDisputeIntegrity(orderItem, paymentItem, parsed);
+    this.disputes.set(orderItem.id, parsed);
+  }
+
+  observeDisputes(identity: CommerceIdentity, orderId: string): DisputeObservation {
+    const order = this.getOrder(identity, orderId);
+    const payment = this.getPayment(identity, orderId);
+    const chargebacks = this.disputes.get(order.id);
+    if (!chargebacks) throw new Error('dispute observation not found');
+    return { order, payment, chargebacks };
+  }
+
   /** Exposes the reference merchant through the same async contract as real providers. */
   asAdapter(): CommerceAdapter {
     return {
@@ -2046,6 +2157,7 @@ export class InMemoryCommerceReference {
         shipping_quote: true,
         loyalty_observer: true,
         dunning_observer: true,
+        dispute_observer: true,
       }),
       createCart: async (identity) => this.createCart(identity),
       addLine: async (identity, cartId, sku, quantity) =>
@@ -2071,6 +2183,7 @@ export class InMemoryCommerceReference {
       observeLoyalty: async (identity) => this.observeLoyalty(identity),
       observeDunning: async (identity, subscriptionId) =>
         this.observeDunning(identity, subscriptionId),
+      observeDisputes: async (identity, orderId) => this.observeDisputes(identity, orderId),
     };
   }
 
