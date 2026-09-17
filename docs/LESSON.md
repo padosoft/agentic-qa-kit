@@ -1513,3 +1513,10 @@ An in-process metrics registry is not operationally useful until the host
 exposes it, but an unauthenticated non-loopback scrape can leak tenant labels.
 Make exposure opt-in and fail closed at boot unless the host supplies an
 explicit scrape authorizer; keep payloads out of metric labels by construction.
+
+# 2026-09-17 — examples are part of the supply chain
+
+Dependabot alerts in an example are not harmless documentation noise: users
+copy examples into production and inherit their constraints. Keep framework
+examples locked, run the ecosystem-native audit (`composer audit --locked` or
+`npm audit`) and upgrade the example baseline instead of suppressing advisories.

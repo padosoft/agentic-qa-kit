@@ -1339,3 +1339,12 @@
 - Evidence: kit typecheck, Biome and admin journey suite **140 passed / 2
   platform skips**. Prometheus deployment, alert rules and host metric
   instrumentation remain operator/application integration work.
+
+# 2026-09-17 — example dependency security baseline
+
+- Upgraded `examples/laravel-app` from the unlocked Laravel 11 constraint to
+  Laravel 12.69.2 and committed the Composer lockfile. This removes the two
+  runtime Dependabot advisories without suppressing Composer security policy.
+- Evidence: `composer audit --locked` reports **no security vulnerability
+  advisories**. The docs-site npm audit is also currently clean; GitHub's older
+  default-branch alerts may take time to refresh.
