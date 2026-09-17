@@ -25,6 +25,7 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import {
   OidcSessionManager,
+  PostgresScimRateLimiter,
   PostgresScimTokenStore,
   ScimRateLimiter,
   ScimTokenManager,
@@ -52,6 +53,8 @@ export interface AdminOptions {
   scimAuthorize?: ApiContext['scimAuthorize'];
   /** Override the default bounded process-local SCIM abuse limiter. */
   scimRateLimit?: ApiContext['scimRateLimit'];
+  /** PostgreSQL DSN for a shared SCIM abuse limiter in HA deployments. */
+  scimRateLimitDsn?: string;
   /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
   scimTokenManager?: ScimTokenManager;
   /** PostgreSQL DSN for the built-in durable SCIM token store. */
@@ -197,7 +200,10 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const scimTokenStore = scimTokenDsn ? new PostgresScimTokenStore(scimTokenDsn) : undefined;
   const scimTokenManager =
     opts.scimTokenManager ?? (scimTokenStore ? new ScimTokenManager(scimTokenStore) : undefined);
-  const scimRateLimiter = new ScimRateLimiter();
+  const scimRateLimitDsn = opts.scimRateLimitDsn ?? process.env.AQA_SCIM_RATE_LIMIT_DSN;
+  const scimRateLimiter = scimRateLimitDsn
+    ? new PostgresScimRateLimiter(scimRateLimitDsn)
+    : new ScimRateLimiter();
   const api = makeApi();
   const ctx = {
     store,
@@ -296,6 +302,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       await store.close();
       await eventBus?.close();
       await scimTokenStore?.close();
+      if ('close' in scimRateLimiter) await scimRateLimiter.close();
       await opts.oidc?.close();
     },
   };

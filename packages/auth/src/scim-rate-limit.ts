@@ -5,8 +5,12 @@ export interface ScimRateLimitOptions {
   now?: () => number;
 }
 
+export interface ScimRateLimit {
+  allow(tenant: string): boolean | Promise<boolean>;
+}
+
 /** Bounded process-local limiter for a SCIM boundary; use a shared store in HA deployments. */
-export class ScimRateLimiter {
+export class ScimRateLimiter implements ScimRateLimit {
   private readonly windows = new Map<string, number[]>();
   private readonly maxRequests: number;
   private readonly windowMs: number;

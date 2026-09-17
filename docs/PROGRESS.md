@@ -27,6 +27,15 @@
   pass. The limiter is intentionally process-local; a shared Redis/Postgres
   implementation is required before multi-replica deployment.
 
+- **Shared SCIM limiter added for HA.** `PostgresScimRateLimiter` now uses a
+  serialized schema migration and a transaction-scoped advisory lock per
+  tenant, making the fixed-window admission decision atomic across replicas.
+  `aqa admin` accepts `scimRateLimitDsn` / `AQA_SCIM_RATE_LIMIT_DSN`, and Helm
+  plus CI render assertions expose the DSN. Evidence: auth **19 passed, 4
+  PostgreSQL-dependent skips**, server build/typecheck, workspace typecheck,
+  lint and diff-check pass. The hosted PostgreSQL job must execute the new
+  cross-instance contract before claiming live HA evidence.
+
 - **Formal risk coverage measurement shipped.** `@aqa/methodology` now
   computes the M2 weighted score (invariant mapping 35%, oracle-backed
   scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health

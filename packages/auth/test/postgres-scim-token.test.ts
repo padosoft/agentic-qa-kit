@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { PostgresScimTokenStore, ScimTokenManager } from '../dist/index.js';
+import {
+  PostgresScimRateLimiter,
+  PostgresScimTokenStore,
+  ScimTokenManager,
+} from '../dist/index.js';
 import { PostgresSamlReplayGuard } from '../dist/index.js';
 
 describe('PostgresScimTokenStore', () => {
@@ -38,6 +42,23 @@ describe('PostgresSamlReplayGuard', () => {
       await first.close();
       const second = new PostgresSamlReplayGuard(dsn);
       assert.equal(await second.claim(assertionId, expiresAt), false);
+      await second.close();
+    },
+  );
+});
+
+describe('PostgresScimRateLimiter', () => {
+  it(
+    'shares an atomic tenant window across limiter instances',
+    { skip: !process.env.AQA_TEST_POSTGRES_DSN },
+    async () => {
+      const dsn = process.env.AQA_TEST_POSTGRES_DSN as string;
+      const tenant = `postgres-rate-${Date.now()}`;
+      const first = new PostgresScimRateLimiter(dsn, { max_requests: 1, window_ms: 60_000 });
+      const second = new PostgresScimRateLimiter(dsn, { max_requests: 1, window_ms: 60_000 });
+      assert.equal(await first.allow(tenant), true);
+      assert.equal(await second.allow(tenant), false);
+      await first.close();
       await second.close();
     },
   );

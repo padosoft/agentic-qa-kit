@@ -755,3 +755,11 @@ directory operations. The HTTP boundary now returns an explicit 429 through an
 injected tenant limiter. Process-local state is safe only for a single
 replica; production HA must replace it with an atomic shared counter and keep
 the limit key tenant/token scoped rather than trusting a client IP header.
+
+# 2026-09-17 — HA rate limits need an atomic storage decision
+
+A process-local counter protects one admin process only. The shared SCIM
+implementation serializes each tenant's window inside a PostgreSQL transaction
+and advisory lock, then wires the same DSN through the runtime and Helm. The
+unit fallback remains useful for development, but only the cross-instance
+database contract can support a multi-replica production claim.
