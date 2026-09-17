@@ -22,6 +22,7 @@
     "@aqa/methodology": "workspace:*",
     "@aqa/pack-author": "workspace:*",
     "@aqa/pack-scanner": "workspace:*",
+    "@aqa/observability": "workspace:*",
     "@aqa/schemas": "workspace:*",
     "@aqa/store": "workspace:*",
     "postgres": "^3.4.9",

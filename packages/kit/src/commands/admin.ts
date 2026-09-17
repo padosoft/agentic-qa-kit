@@ -33,6 +33,7 @@ import {
   ScimTokenManager,
   allows,
 } from '@aqa/auth';
+import { safeErrorMessage } from '@aqa/observability';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -318,7 +319,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         res.setHeader('content-type', 'application/json');
         res.end(
           JSON.stringify({
-            error: err instanceof Error ? err.message : `internal error: ${String(err)}`,
+            error: safeErrorMessage(err),
           }),
         );
       } catch {
@@ -635,9 +636,7 @@ async function handleRequest(
     } catch (error) {
       res.statusCode = 400;
       res.setHeader('content-type', 'application/json');
-      res.end(
-        JSON.stringify({ error: error instanceof Error ? error.message : 'OIDC callback failed' }),
-      );
+      res.end(JSON.stringify({ error: safeErrorMessage(error, 'OIDC callback failed') }));
     }
     return;
   }

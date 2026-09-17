@@ -1218,3 +1218,12 @@ An admin API should not emit `Access-Control-Allow-Origin: *` while its
 authentication model may use cookies or credentials. Default to same-origin,
 allow exact configured origins, vary caches by Origin, and reject disallowed
 state-changing cross-origin requests before route handling.
+
+# 2026-09-17 — error messages are an outbound data boundary
+
+Database and provider exceptions are not safe merely because they are
+diagnostic. A shared HTTP sanitizer must remove credential-bearing DSNs,
+tokens and payment identifiers, normalize control characters and enforce a
+hard bound; detailed diagnostics belong only in redacted, access-controlled
+logs. Sanitizing only the logger still leaves an independent API disclosure
+path.

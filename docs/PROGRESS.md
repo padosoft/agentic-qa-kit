@@ -11,6 +11,16 @@
 
 ## 2026-09-17
 
+- **HTTP error disclosure hardening.** Added shared `safeErrorMessage()` in
+  `@aqa/observability` and wired it into server and bundled-admin failure
+  responses. DSNs, bearer tokens, JWTs, cloud keys, PAN/IBAN values, secret
+  assignments and control characters are redacted or bounded before HTTP
+  exposure; ADR-123 and the threat model record the residual DLP gap.
+- Evidence: observability test **13/13 passed**, server and kit typechecks
+  passed, and Biome lint passed. Full workspace regression is still required
+  after this increment; PostgreSQL/browser/provider live journeys remain
+  explicit deployment evidence gaps.
+
 - **Runner capability preflight added.** `runScenario()` can now receive the
   configured driver's supported probe kinds and fails before executing steps or
   cleanup when a browser/SQL/shell/LLM/custom capability is absent. The gap is

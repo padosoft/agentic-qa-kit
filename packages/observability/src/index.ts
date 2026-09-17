@@ -458,6 +458,29 @@ function redact(value: unknown, key = ''): unknown {
   return value;
 }
 
+/** Return a bounded error string safe to expose at an HTTP boundary. */
+export function safeErrorMessage(error: unknown, fallback = 'internal error'): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const redacted = raw
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(
+      /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?):\/\/[^\s)]+/gi,
+      '[REDACTED-DSN]',
+    )
+    .replace(
+      /([?&\s])(?:password|passwd|pwd|token|secret|api[_-]?key)=([^&\s]+)/gi,
+      '$1[REDACTED]=[REDACTED]',
+    )
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED-AWS-KEY]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED-JWT]')
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[REDACTED-PAN]')
+    .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, '[REDACTED-IBAN]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .trim()
+    .slice(0, 500);
+  return redacted || fallback;
+}
+
 export type LogSink = (line: string) => void;
 
 export type SloStatus = 'healthy' | 'warning' | 'breached';

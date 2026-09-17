@@ -9,6 +9,7 @@ import {
   formatTraceParent,
   makeEventSpanObserver,
   parseTraceParent,
+  safeErrorMessage,
 } from '../dist/index.js';
 
 describe('@aqa/observability', () => {
@@ -92,6 +93,18 @@ describe('@aqa/observability', () => {
     const line = lines[0] ?? '';
     assert.doesNotMatch(line, /super-secret|hidden/);
     assert.match(line, /REDACTED/);
+  });
+
+  it('sanitizes infrastructure errors before HTTP exposure', () => {
+    const message = safeErrorMessage(
+      new Error(
+        'connect postgres://checkout:super-secret@db.internal/shop?sslmode=require Bearer abc password=hidden-value 4111 1111 1111 1111',
+      ),
+    );
+    assert.doesNotMatch(message, /super-secret|abc|hidden-value|4111/);
+    assert.match(message, /REDACTED/);
+    assert.ok(message.length <= 500);
+    assert.equal(safeErrorMessage(new Error('')), 'internal error');
   });
 
   it('computes a bounded error budget with explicit reason codes', () => {

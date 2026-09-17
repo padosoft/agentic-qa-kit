@@ -4,6 +4,7 @@ import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth
 import { ScimProvisioner } from '@aqa/auth';
 import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
 import { measureRiskCoverage } from '@aqa/methodology';
+import { safeErrorMessage } from '@aqa/observability';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
 import {
@@ -1654,7 +1655,7 @@ export function makeApi(): ApiHandler[] {
           const user = await new ScimProvisioner(scimDirectory(ctx), org).create(resource);
           return asResponse(scimUserResource(user), 201);
         } catch (error) {
-          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
         }
       },
     },
@@ -1693,7 +1694,7 @@ export function makeApi(): ApiHandler[] {
           );
           return asResponse(scimUserResource(user));
         } catch (error) {
-          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
         }
       },
     },
@@ -1716,7 +1717,7 @@ export function makeApi(): ApiHandler[] {
           );
           return asResponse(scimUserResource(user));
         } catch (error) {
-          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
         }
       },
     },
