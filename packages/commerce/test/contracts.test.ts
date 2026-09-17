@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import {
   HttpCommerceAdapter,
@@ -52,6 +53,86 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(calls[0]?.headers.get('X-Tenant'), 'tenant-a');
     assert.equal(calls[0]?.url, 'https://shop.test/carts');
     assert.deepEqual(calls[0]?.body, undefined);
+  });
+
+  it('runs the complete checkout journey through a real local HTTP boundary', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-http-journey',
+      price: { currency: 'EUR', amount_minor: '1250' },
+      on_hand: 3,
+    });
+    const service = merchant.asAdapter();
+    const identity = { tenant: 'tenant-http', customer_id: 'customer-http' };
+    const context = {
+      schema_version: '1' as const,
+      merchant: 'local-http-merchant',
+      environment: 'sandbox' as const,
+      tenant: identity.tenant,
+      run_id: 'run-http-journey',
+      policy_revision: 'test-policy-1',
+      capabilities: {},
+    };
+    const server = createServer(async (req, res) => {
+      try {
+        const body = await new Promise<string>((resolve, reject) => {
+          let value = '';
+          req.setEncoding('utf8');
+          req.on('data', (chunk) => {
+            value += chunk;
+          });
+          req.on('end', () => resolve(value));
+          req.on('error', reject);
+        });
+        const payload = body ? JSON.parse(body) : undefined;
+        const url = new URL(req.url ?? '/', 'http://local.test');
+        const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+        let result: unknown;
+        if (req.method === 'GET' && url.pathname === '/aqa/capabilities') {
+          result = await service.capabilities(context);
+        } else if (req.method === 'GET' && parts[0] === 'inventory') {
+          result = await service.getInventory(parts[1] ?? '');
+        } else if (req.method === 'POST' && parts[0] === 'carts' && parts.length === 1) {
+          result = await service.createCart(identity);
+        } else if (req.method === 'POST' && parts[0] === 'carts' && parts[2] === 'lines') {
+          result = await service.addLine(identity, parts[1] ?? '', payload.sku, payload.quantity);
+        } else if (req.method === 'POST' && parts[0] === 'carts' && parts[2] === 'checkout') {
+          result = await service.checkout(identity, parts[1] ?? '', payload.idempotency_key);
+        } else if (req.method === 'GET' && parts[0] === 'orders' && parts[2] === 'payment') {
+          result = await service.getPayment(identity, parts[1] ?? '');
+        } else if (req.method === 'GET' && parts[0] === 'orders') {
+          result = await service.getOrder(identity, parts[1] ?? '');
+        } else {
+          res.writeHead(404);
+          res.end(JSON.stringify({ error: 'not found' }));
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (error) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const adapter = new HttpCommerceAdapter({ baseUrl: `http://127.0.0.1:${port}` });
+      const journey = await verifyCheckoutJourney(adapter, {
+        context,
+        identity,
+        sku: 'sku-http-journey',
+        quantity: 1,
+        idempotencyKey: 'checkout-http-1',
+      });
+      assert.equal(journey.outcome.status, 'pass', journey.outcome.reason);
+      assert.equal(journey.outcome.evidence_complete, true);
+      assert.equal(journey.evidence.length, 4);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it('applies a logical webhook effect once and rejects event-key conflicts', async () => {

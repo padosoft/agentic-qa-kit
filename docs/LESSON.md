@@ -57,6 +57,11 @@
   edge, bound responses and require a second authoritative read for payment,
   order and inventory reconciliation.
 
+- **A local HTTP journey is stronger but still not provider evidence.** Route
+  the typed adapter through a real server boundary and re-run the complete
+  journey to catch path/header/serialization regressions, then keep that result
+  distinct from a real merchant/payment sandbox with external reconciliation.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

@@ -77,6 +77,11 @@
   parsed; tenant context and idempotency keys are explicit. A real merchant
   sandbox journey and provider-specific auth/webhooks remain deployment work.
 
+- **Commerce transport journey verified.** A local HTTP server backed by the
+  reference merchant now runs the full checkout journey through
+  `HttpCommerceAdapter`, including inventory-before/after and idempotent retry.
+  This proves the transport contract, not a third-party merchant sandbox.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the
