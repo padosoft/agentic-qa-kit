@@ -241,6 +241,10 @@
       "name": "@aqa/pack-api-core",
       "version": "0.1.0",
     },
+    "packs/commerce-core": {
+      "name": "@aqa/pack-commerce-core",
+      "version": "0.1.0",
+    },
     "packs/core": {
       "name": "@aqa/pack-core",
       "version": "0.1.0",
@@ -295,6 +299,8 @@
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
 
     "@aqa/pack-author": ["@aqa/pack-author@workspace:packages/pack-author"],
+
+    "@aqa/pack-commerce-core": ["@aqa/pack-commerce-core@workspace:packs/commerce-core"],
 
     "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
 
