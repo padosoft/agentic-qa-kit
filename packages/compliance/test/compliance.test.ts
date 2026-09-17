@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
+import { verifyEventChainBrowser } from '../dist/audit-verify-browser.js';
 import {
   CONTROL_MAPPINGS,
   controlsCoverage,
@@ -81,5 +82,17 @@ describe('parseEventLines', () => {
     const lines = `${JSON.stringify({ prev_hash: null, hash: 'x', a: 1 })}\n\n${JSON.stringify({ prev_hash: 'x', hash: 'y', a: 2 })}\n`;
     const events = parseEventLines(lines);
     assert.equal(events.length, 2);
+  });
+});
+
+describe('verifyEventChainBrowser', () => {
+  it('matches the node verifier and rejects partial or reordered chains', async () => {
+    const e1 = makeEvent(ZERO, { kind: 'run.start', t: 1 }, 0);
+    const e2 = makeEvent(e1.hash, { kind: 'scenario', t: 2 }, 1);
+    const e3 = makeEvent(e2.hash, { kind: 'run.end', t: 3 }, 2);
+    assert.equal((await verifyEventChainBrowser([e1, e2, e3])).ok, true);
+    assert.equal((await verifyEventChainBrowser([e1, e2, e3], 2)).ok, true);
+    assert.equal((await verifyEventChainBrowser([e2, e1])).ok, false);
+    assert.equal((await verifyEventChainBrowser([e1, { ...e2, kind: 'altered' }])).bad_index, 1);
   });
 });

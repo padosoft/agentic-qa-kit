@@ -6,6 +6,7 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { verifyEventChainBrowser } from '@aqa/compliance/browser';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 // Expose the YAML parser/stringifier on `window` so ScenarioYamlWizard
@@ -3867,37 +3868,14 @@ async function validateChainStep(chain, upto) {
 }
 
 async function validateCanonicalChain(chain, upto) {
-  const zeroHash = '0'.repeat(64);
-  let expectedPrev = zeroHash;
-  for (let i = 0; i < upto; i++) {
-    const event = chain[i];
-    if (!event) return { index: i, expected: 'record', got: 'missing' };
-    const expectedField = i === 0 ? null : expectedPrev;
-    if (event.prev_hash !== expectedField) {
-      return { index: i, expected: String(expectedField), got: String(event.prev_hash) };
-    }
-    const { hash: recordedHash, prev_hash: _prevHash, ...rest } = event;
-    const recomputed = await sha256Hex(expectedPrev + canonicalStringify(rest));
-    if (recomputed !== recordedHash) {
-      return { index: i, expected: recomputed, got: String(recordedHash) };
-    }
-    expectedPrev = recordedHash;
-  }
-  return null;
-}
-
-function canonicalStringify(value) {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
-  const object = value;
-  const keys = Object.keys(object).sort();
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalStringify(object[key])}`).join(',')}}`;
-}
-
-async function sha256Hex(value) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const result = await verifyEventChainBrowser(chain, upto);
+  if (result.ok) return null;
+  const event = chain[result.bad_index];
+  return {
+    index: result.bad_index,
+    expected: result.reason === 'hash mismatch' ? 'recomputed hash' : 'previous hash',
+    got: event?.hash ?? event?.prev_hash ?? 'missing',
+  };
 }
 
 // -------------------------------------------------------------

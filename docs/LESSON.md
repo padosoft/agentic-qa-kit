@@ -800,3 +800,6 @@ TOTP verification alone does not establish a usable MFA product. Enrollment must
 # 2026-09-17 — execution failure is not a finding
 
 An oracle receiving no observation must not manufacture evidence of a SUT vulnerability. Keep transport/execution state and assertion state separate; a missing driver blocks the run and produces a coverage gap, while a finding requires a valid observation that violates an oracle. Tests that want a successful run must inject or boot a real driver explicitly.
+# 2026-09-17 — browser audit verification must share canonicalization
+
+Duplicating hash-chain logic in a UI invites drift in canonical JSON, especially when the API record contains nested actor/payload objects. Keep canonicalization in a runtime-neutral module and expose a browser WebCrypto entrypoint; a Node verifier and a browser verifier can differ in crypto API without differing in the signed bytes.

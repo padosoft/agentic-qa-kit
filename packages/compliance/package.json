@@ -6,7 +6,13 @@
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./browser": {
+      "types": "./dist/audit-verify-browser.d.ts",
+      "default": "./dist/audit-verify-browser.js"
+    }
+  },
   "bin": { "aqa-audit-verify": "./dist/bin/audit-verify.js" },
   "files": ["dist", "README.md", "controls"],
   "scripts": {

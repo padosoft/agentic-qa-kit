@@ -579,3 +579,7 @@
 
 - Separated probe execution state from oracle assertion state. Missing drivers, transport errors and cleanup failures now produce `execution_status=failed`, block `aqa run`, and do not create security findings. `aqa run` records bounded execution-error samples in `run_finished`; success fixtures inject an explicit probe driver instead of relying on an implicit no-op.
 - Evidence: runner/kit journey tests 36/36 and pack-scaffold integration updated; full regression pending after this increment. This closes the false-green boundary but does not yet provide browser/SQL/shell drivers for every pack.
+# 2026-09-17 — shared browser/backend audit verifier
+
+- Added a runtime-neutral canonical JSON implementation and a WebCrypto-only `@aqa/compliance/browser` verifier. The admin audit viewer now consumes that package boundary instead of carrying a second hash implementation; prefix verification supports animated progress while rejecting tampered, reordered or partial chains.
+- Evidence: compliance browser/node contract 8/8, full workspace typecheck and lint, admin production build passed. The admin bundle still reports the existing non-fatal chunk-size warning; WORM storage, signed checkpoints and completeness attestations remain separate operational controls.
