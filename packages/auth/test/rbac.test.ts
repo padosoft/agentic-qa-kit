@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   OidcAdapter,
+  SamlLoginBoundary,
+  SamlValidationError,
   ScimProvisioner,
   ScimTokenManager,
   ScimValidationError,
@@ -143,6 +145,71 @@ describe('SCIM bearer token lifecycle', () => {
       events.map((event) => event.action),
       ['issued', 'rejected', 'rejected', 'revoked', 'issued', 'rotated', 'rejected', 'rejected'],
     );
+  });
+});
+
+describe('SAML login boundary', () => {
+  it('validates audience, time window and atomic replay claim', async () => {
+    let now = new Date('2026-01-01T00:00:00.000Z');
+    const claims = {
+      assertion_id: 'assertion-1',
+      issuer: 'https://idp.example/saml',
+      audience: 'https://aqa.example/saml/metadata',
+      subject: 'user-1',
+      email: 'user@example.test',
+      roles: ['developer', 'unknown-role'],
+      issued_at: '2025-12-31T23:59:00.000Z',
+      expires_at: '2026-01-01T00:05:00.000Z',
+    };
+    const claimed = new Set<string>();
+    const boundary = new SamlLoginBoundary({
+      issuer: claims.issuer,
+      audience: claims.audience,
+      verifySignature: async () => claims,
+      replayGuard: {
+        claim: async (id) => {
+          if (claimed.has(id)) return false;
+          claimed.add(id);
+          return true;
+        },
+      },
+      now: () => now,
+    });
+    const principal = await boundary.authenticate('<signed-assertion/>');
+    assert.deepEqual(principal.roles, ['developer']);
+    await assert.rejects(() => boundary.authenticate('<signed-assertion/>'), SamlValidationError);
+    now = new Date('2026-01-01T00:06:00.000Z');
+    const expired = new SamlLoginBoundary({
+      issuer: claims.issuer,
+      audience: claims.audience,
+      verifySignature: async () => ({ ...claims, assertion_id: 'assertion-expired' }),
+      replayGuard: { claim: async () => true },
+      now: () => now,
+    });
+    await assert.rejects(() => expired.authenticate('<signed-assertion/>'), /expired/);
+  });
+
+  it('fails closed on issuer, audience and malformed claim errors', async () => {
+    const base = {
+      assertion_id: 'assertion-2',
+      issuer: 'issuer',
+      audience: 'audience',
+      subject: 'user-2',
+      email: 'user2@example.test',
+      issued_at: '2026-01-01T00:00:00.000Z',
+      expires_at: '2026-01-01T00:05:00.000Z',
+    };
+    const make = (value: unknown) =>
+      new SamlLoginBoundary({
+        issuer: 'issuer',
+        audience: 'audience',
+        verifySignature: async () => value,
+        replayGuard: { claim: async () => true },
+        now: () => new Date('2026-01-01T00:01:00.000Z'),
+      });
+    await assert.rejects(() => make({ ...base, issuer: 'other' }).authenticate('x'), /issuer/);
+    await assert.rejects(() => make({ ...base, audience: 'other' }).authenticate('x'), /audience/);
+    await assert.rejects(() => make({ ...base, email: 'bad' }).authenticate('x'), /email/);
   });
 });
 

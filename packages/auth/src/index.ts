@@ -11,6 +11,15 @@ export {
 export { rolePermissions, allows, type PermissionName, type RoleName } from './rbac.js';
 export { OidcAdapter } from './oidc.js';
 export {
+  SamlLoginBoundary,
+  SamlValidationError,
+  type SamlAssertion,
+  type SamlLoginOptions,
+  type SamlPrincipal,
+  type SamlReplayGuard,
+  type SamlSignatureVerifier,
+} from './saml.js';
+export {
   ScimTokenManager,
   type IssuedScimToken,
   type ScimTokenAudit,

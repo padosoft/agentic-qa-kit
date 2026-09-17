@@ -627,6 +627,13 @@ test to a process exit code. If thresholds are absent, keep the metric visible
 without inventing a pass criterion; execution, threshold policy and functional
 oracles must remain separate.
 
+# 2026-09-17 — SAML support needs a crypto adapter boundary
+
+Do not implement XML signature verification with ad-hoc regexes. Let a maintained
+provider adapter verify and parse the assertion, then enforce issuer, audience,
+time, replay and least-privilege role rules in a small deterministic boundary;
+otherwise “SAML supported” is only a dangerous parsing claim.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with
