@@ -41,6 +41,8 @@ export class OtlpHttpSpanExporter {
   private readonly maxQueueSize: number;
   private readonly fetcher: typeof fetch;
   private pending: SpanRecord[] = [];
+  private flushInFlight: Promise<number> | undefined;
+  private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: OtlpSpanExporterOptions) {
     const endpoint = new URL(options.endpoint);
@@ -65,6 +67,46 @@ export class OtlpHttpSpanExporter {
   }
 
   async flush(): Promise<number> {
+    if (this.flushInFlight) return this.flushInFlight;
+    const operation = this.flushOnce();
+    this.flushInFlight = operation;
+    try {
+      return await operation;
+    } finally {
+      if (this.flushInFlight === operation) this.flushInFlight = undefined;
+    }
+  }
+
+  /** Start bounded background delivery; failures remain queued for retry. */
+  startAutoFlush(intervalMs = 5_000): void {
+    if (!Number.isInteger(intervalMs) || intervalMs < 1)
+      throw new Error('OTLP flush interval must be positive');
+    this.stopAutoFlush();
+    this.timer = setInterval(() => {
+      void this.flush().catch(() => {
+        // The bounded queue is retained; the next tick or shutdown retries it.
+      });
+    }, intervalMs);
+  }
+
+  stopAutoFlush(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+  }
+
+  /** Stop background work and drain every queued batch before process exit. */
+  async shutdown(maxBatches = Math.ceil(this.maxQueueSize / this.maxBatchSize)): Promise<number> {
+    if (!Number.isInteger(maxBatches) || maxBatches < 1)
+      throw new Error('OTLP shutdown maxBatches must be positive');
+    this.stopAutoFlush();
+    let exported = 0;
+    for (let batch = 0; batch < maxBatches && this.pendingCount() > 0; batch += 1)
+      exported += await this.flush();
+    if (this.pendingCount() > 0) throw new Error('OTLP shutdown could not drain pending spans');
+    return exported;
+  }
+
+  private async flushOnce(): Promise<number> {
     if (!this.pending.length) return 0;
     const batch = this.pending.splice(0, this.maxBatchSize);
     const response = await this.fetcher(this.endpoint, {

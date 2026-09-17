@@ -149,4 +149,44 @@ describe('@aqa/observability', () => {
       /max_queue_size/,
     );
   });
+
+  it('serializes concurrent flushes and drains on shutdown', async () => {
+    let calls = 0;
+    const exporter = new OtlpHttpSpanExporter({
+      endpoint: 'http://collector.test/v1/traces',
+      service_name: 'aqa-server',
+      max_batch_size: 1,
+      fetcher: async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return new Response('', { status: 200 });
+      },
+    });
+    const span = (id: string) => ({
+      name: id,
+      context: { trace_id: 'a'.repeat(32), span_id: id.padStart(16, '0') },
+      started_at: '2026-09-17T10:00:00.000Z',
+      ended_at: '2026-09-17T10:00:01.000Z',
+      duration_ms: 1_000,
+      status: 'ok' as const,
+      attributes: {},
+    });
+    exporter.export(span('1'));
+    exporter.export(span('2'));
+    const [first, second] = await Promise.all([exporter.flush(), exporter.flush()]);
+    assert.equal(first, 1);
+    assert.equal(second, 1);
+    assert.equal(await exporter.shutdown(), 1);
+    assert.equal(calls, 2);
+  });
+
+  it('validates and stops the auto-flush lifecycle', () => {
+    const exporter = new OtlpHttpSpanExporter({
+      endpoint: 'http://collector.test/v1/traces',
+      service_name: 'aqa-server',
+    });
+    assert.throws(() => exporter.startAutoFlush(0), /interval/);
+    exporter.startAutoFlush(60_000);
+    exporter.stopAutoFlush();
+  });
 });

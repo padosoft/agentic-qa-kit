@@ -709,3 +709,10 @@ Preserving a generic tool field such as k6 `rate` is insufficient for a
 cross-tool gate. Adapters must map it to explicit domain measurements such as
 `failure_rate` or `check_rate`; otherwise a policy evaluator can be technically
 correct yet silently skip the intended metric.
+
+# 2026-09-17 — telemetry needs an explicit shutdown contract
+
+Bounded export queues are not enough: background flushes can overlap and a
+process can exit with spans still pending. Serialize flushes, stop timers before
+shutdown, drain with a finite batch budget, and surface a failed drain while
+keeping the audit store independent from telemetry delivery.

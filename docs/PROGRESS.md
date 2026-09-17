@@ -491,3 +491,8 @@
 
 - Corrected the k6 adapter so `http_req_failed.rate` normalizes to `failure_rate` and `checks.rate` to `check_rate`; the prior generic `rate` measurement could make those explicit policies silently pass.
 - Evidence: ingest suite 11/11, workspace lint and diff-check pass. The CLI/CI journey now exercises the same normalized measurement contract.
+
+# 2026-09-17 — OTLP exporter lifecycle hardening
+
+- Added serialized flushes, stoppable bounded auto-flush and `shutdown()` drain semantics to `OtlpHttpSpanExporter`. Failed deliveries remain queued; shutdown fails if the bounded queue cannot drain instead of silently dropping telemetry.
+- Evidence: observability suite 11/11, workspace lint and diff-check pass. Server/runner boot wiring to a configured Collector and deployed Collector availability remain environment work.
