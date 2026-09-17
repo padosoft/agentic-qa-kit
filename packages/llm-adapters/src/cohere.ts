@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { assertEndpointAllowed } from './transport-policy.js';
 import type { LlmAdapter, LlmCallInput, LlmCallOutput } from './types.js';
 
 export interface CohereOptions {
@@ -7,6 +8,8 @@ export interface CohereOptions {
   timeoutMs?: number;
   fetch?: typeof globalThis.fetch;
   maxOutputTokens?: number;
+  allowPrivateNetwork?: boolean;
+  allowedHosts?: readonly string[];
 }
 function redact(value: string): string {
   return value
@@ -28,6 +31,7 @@ export class CohereAdapter implements LlmAdapter {
       process.env.AQA_COHERE_BASE_URL ??
       'https://api.cohere.com'
     ).replace(/\/$/, '');
+    assertEndpointAllowed(baseUrl, this.opts);
     const maxTokens = Math.min(
       input.max_tokens ?? this.opts.maxOutputTokens ?? 4096,
       this.opts.maxOutputTokens ?? Number.MAX_SAFE_INTEGER,

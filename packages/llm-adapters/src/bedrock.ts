@@ -1,4 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
+import { assertEndpointAllowed } from './transport-policy.js';
 import type { LlmAdapter, LlmCallInput, LlmCallOutput } from './types.js';
 
 export interface BedrockOptions {
@@ -11,6 +12,8 @@ export interface BedrockOptions {
   fetch?: typeof globalThis.fetch;
   maxOutputTokens?: number;
   now?: () => Date;
+  allowPrivateNetwork?: boolean;
+  allowedHosts?: readonly string[];
 }
 
 function redact(value: string): string {
@@ -93,6 +96,7 @@ export class BedrockAdapter implements LlmAdapter {
       );
     }
     const endpoint = this.opts.endpoint ?? `https://bedrock-runtime.${region}.amazonaws.com`;
+    assertEndpointAllowed(endpoint, this.opts);
     const url = new URL(`/model/${encodeURIComponent(input.model)}/converse`, endpoint);
     const maxTokens = Math.min(
       input.max_tokens ?? this.opts.maxOutputTokens ?? 4096,

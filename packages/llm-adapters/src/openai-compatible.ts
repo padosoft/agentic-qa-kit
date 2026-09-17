@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { assertEndpointAllowed } from './transport-policy.js';
 import type { LlmAdapter, LlmCallInput, LlmCallOutput, LlmProvider } from './types.js';
 
 export interface OpenAiCompatibleOptions {
@@ -8,6 +9,9 @@ export interface OpenAiCompatibleOptions {
   fetch?: typeof globalThis.fetch;
   /** Hard cap sent to the provider; prevents an unbounded generation. */
   maxOutputTokens?: number;
+  /** Private/local endpoints are denied unless explicitly enabled. */
+  allowPrivateNetwork?: boolean;
+  allowedHosts?: readonly string[];
 }
 
 function redact(value: string): string {
@@ -43,6 +47,7 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
       process.env.AQA_LLM_BASE_URL ??
       this.defaultBaseUrl()
     ).replace(/\/$/, '');
+    assertEndpointAllowed(baseUrl, this.opts);
     const apiKey = this.opts.apiKey ?? process.env.AQA_LLM_API_KEY;
     const maxTokens = Math.min(
       input.max_tokens ?? this.opts.maxOutputTokens ?? 4096,

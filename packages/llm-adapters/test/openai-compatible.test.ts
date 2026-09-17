@@ -42,6 +42,7 @@ describe('OpenAiCompatibleAdapter', () => {
     const adapter = adapterFor('vllm', {
       live: {
         timeoutMs: 5,
+        allowPrivateNetwork: true,
         fetch: async () =>
           new Response(JSON.stringify({ error: { message: 'Bearer secret' } }), { status: 401 }),
       },
