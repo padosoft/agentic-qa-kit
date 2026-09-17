@@ -34,8 +34,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
@@ -171,10 +170,18 @@ function discoverInDir(parentDir: string, candidates: string[]): void {
  */
 function bundledKitPacksDir(): string {
   // dist/commands/run.js → dist/packs
-  const here =
-    typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+  const here = commandModuleDir();
   const bundledPath = resolve(here, 'packs');
   return existsSync(bundledPath) ? bundledPath : resolve(here, '..', 'packs');
+}
+
+function commandModuleDir(): string {
+  if (typeof __dirname !== 'undefined') return __dirname;
+  const entry = process.argv[1];
+  const name = entry ? basename(entry) : '';
+  if (entry && (name === 'cli.cjs' || name === 'run.js' || name === 'admin.js'))
+    return dirname(resolve(entry));
+  return resolve(process.cwd(), 'dist', 'commands');
 }
 
 function defaultPacksRoot(projectRoot: string): string[] {

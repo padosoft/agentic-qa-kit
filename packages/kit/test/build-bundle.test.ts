@@ -86,6 +86,16 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
     });
     assert.equal(admin.status, 0, `bundled admin failed: ${admin.stderr}`);
   });
+
+  it('does not retain ESM-only import.meta path dependencies in the CJS artifact', () => {
+    if (!existsSync(bundlePath)) return;
+    const bundle = readFileSync(bundlePath, 'utf8');
+    assert.doesNotMatch(
+      bundle,
+      /import\.meta/,
+      'the published CJS CLI must resolve bundled assets without import.meta',
+    );
+  });
 });
 
 describe('publish-prep — package.json rewrite', () => {

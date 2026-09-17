@@ -606,6 +606,13 @@ Compute `totalResults` from the already tenant-scoped and filter-matched set,
 then slice the page. Never paginate a global result before applying tenant
 authorization, or page boundaries can leak both counts and identities.
 
+# 2026-09-17 — test the published bundle at its real asset boundary
+
+An ESM source test and `cli --help` can both pass while a CJS artifact fails
+when it resolves bundled packs or the admin SPA. Asset discovery must be tested
+from the actual `dist/cli.cjs` entrypoint, and the built artifact should reject
+ESM-only path primitives rather than relying on a non-fatal bundler warning.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with

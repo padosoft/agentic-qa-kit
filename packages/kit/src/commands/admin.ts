@@ -22,8 +22,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { OidcSessionManager, allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
@@ -268,25 +267,25 @@ function closeServer(server: Server): Promise<void> {
 
 function defaultAdminDistDir(): string {
   // This file compiles to dist/commands/admin.js; the bundled SPA sits
-  // at dist/admin/. Resolve relative to the current ESM URL so it works
-  // both in the source tree and inside an npm-installed tarball.
-  // Using import.meta.url keeps this self-contained — no env var, no
-  // build-time string substitution.
-  const moduleDir =
-    typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+  // at dist/admin/. Resolve from the command entrypoint so the published CJS
+  // bundle does not depend on import.meta, while direct ESM commands remain
+  // usable during development.
+  const moduleDir = commandModuleDir();
   const bundledPath = resolve(moduleDir, 'admin');
   const sourcePath = resolve(moduleDir, '..', 'admin');
   if (existsSync(bundledPath)) return bundledPath;
   if (existsSync(sourcePath)) return sourcePath;
 
-  const url = new URL('../admin/', import.meta.url);
-  // pathname is URL-encoded; on Windows it begins with `/C:/...` which
-  // node treats as a valid path when normalized.
-  let p = decodeURIComponent(url.pathname);
-  if (process.platform === 'win32' && /^\/[A-Za-z]:\//.test(p)) {
-    p = p.slice(1);
-  }
-  return normalize(p.replace(/\/+$/, ''));
+  return normalize(sourcePath);
+}
+
+function commandModuleDir(): string {
+  if (typeof __dirname !== 'undefined') return __dirname;
+  const entry = process.argv[1];
+  const name = entry ? basename(entry) : '';
+  if (entry && (name === 'cli.cjs' || name === 'run.js' || name === 'admin.js'))
+    return dirname(resolve(entry));
+  return resolve(process.cwd(), 'dist', 'commands');
 }
 
 interface SeedReport {

@@ -411,4 +411,9 @@
 # 2026-09-17 — repository regression gate
 
 - Ran the workspace gates after the enterprise slices: typecheck passed, `bun test` passed with 490 tests and 4 environment-dependent PostgreSQL skips, and the documentation plus workspace build passed.
-- Remaining build warnings are recorded rather than hidden: the admin SPA emits a 578.94 kB minified chunk, and the CJS CLI bundle reports three `import.meta` compatibility warnings. These are optimization/packaging gaps, not evidence of a clean production release.
+- At that point the build still reported two known warning classes: the admin SPA emitted a 578.94 kB minified chunk and the CJS CLI reported `import.meta` compatibility warnings. The latter was resolved in the follow-up CJS bundle runtime-path slice below; the chunk-size warning remains.
+
+# 2026-09-17 — CJS bundle runtime path hardening
+
+- Removed ESM-only `import.meta` path resolution from the CLI run/admin commands. Runtime assets now resolve from the CJS entrypoint or recognized direct command path, with bounded package-relative fallback.
+- Evidence: kit typecheck and 121/123 tests passed (2 symlink-capability skips); the rebuilt bundle emits no `import.meta` warning, contains no `import.meta` token, and completed a real temporary-project journey (`init` → `run`, 2 scenarios, 2 findings). A long-lived bundled admin HTTP journey remains to be added to CI; the admin SPA chunk remains 578.94 kB.
