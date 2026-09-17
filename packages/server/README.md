@@ -24,6 +24,10 @@ state first, and consumers reconcile after reconnects. Payloads are bounded to
 7,500 UTF-8 bytes to stay below PostgreSQL notification limits; subscriber
 failures are isolated from publishers.
 
+`POST /api/runs` requires `x-aqa-org` and `x-aqa-project`. Clients may send
+`Idempotency-Key`; retries with the same tenant-qualified key and payload
+return the original queue job, while a changed payload returns `409`.
+
 The protected `POST /api/admin/migrate-legacy-configuration` endpoint performs
 the explicit legacy configuration migration using `x-aqa-org` and/or
 `x-aqa-project` scope headers. It requires `admin:everything` and never
