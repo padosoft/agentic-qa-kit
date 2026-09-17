@@ -2,6 +2,7 @@
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
+import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
@@ -42,6 +43,7 @@ const VALUE_FLAGS = new Set([
   'finding-id',
   'attempts',
   'base-url',
+  'tool',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -105,6 +107,7 @@ ${bold('Commands')}
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
+  ingest <junit|sast> <file>         Normalize external test/security results into redacted evidence
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
@@ -342,6 +345,32 @@ async function main(): Promise<number> {
       console.info(`    ${dim('attempts: ')}${result.successes}/${result.attempts}`);
       console.info(`    ${dim('evidence: ')}${result.verificationPath}`);
       return result.deterministic ? 0 : 2;
+    }
+    case 'ingest': {
+      printHeader('ingest');
+      const kind = args.positionals[0];
+      const file = args.positionals[1];
+      if (kind !== 'junit' && kind !== 'sast' && kind !== 'semgrep') {
+        console.error(red('aqa ingest: kind must be junit, sast, or semgrep'));
+        return 1;
+      }
+      if (!file) {
+        console.error(red('aqa ingest: missing <file>'));
+        return 1;
+      }
+      const result = runIngest({
+        root: cwd,
+        kind,
+        file,
+        ...(args.values.has('tool') ? { tool: args.values.get('tool') ?? '' } : {}),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} ${result.report?.records.length ?? 0} record(s) ingested`);
+      console.info(`    ${dim('evidence: ')}${result.artifact_path}`);
+      return 0;
     }
     case 'admin': {
       printHeader('admin');

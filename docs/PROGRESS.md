@@ -314,3 +314,9 @@
 
 - Extended `@aqa/clustering` with stable `root_cause_id` derivation and explainable priority (`severity × confidence × blast_radius / cost_to_fix_estimate`) while preserving conservative fingerprint-only grouping. Optional finding estimates are schema-validated and bounded; missing estimates default to neutral `1`.
 - Evidence and remaining gap: clustering tests/typecheck/lint prove deterministic grouping and prioritization. Cross-fingerprint semantic clustering, persistent root-cause lifecycle, and bulk status transitions remain separate work.
+
+# 2026-09-17 — external result ingestion slice
+
+- Added `@aqa/ingest` and `aqa ingest junit|sast <file>`. JUnit pass/failure/error/skip and Semgrep-compatible SAST results now normalize into a common bounded report with stable fingerprints; CLI writes through the redaction-aware artifact store under `.aqa/ingest/`.
+- JUnit rejects `DOCTYPE`/`ENTITY` declarations and all inputs are capped at 10 MiB. Ingestion remains evidence-only: it does not auto-verify or close findings. Playwright trace, k6, mutation and provider-specific adapters remain open.
+- Evidence: ingest package typecheck and 4/4 tests; kit typecheck and 117 tests (115 passed, 2 platform skips); repository lint passed.

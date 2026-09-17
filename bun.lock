@@ -97,6 +97,10 @@
         "@aqa/schemas": "workspace:*",
       },
     },
+    "packages/ingest": {
+      "name": "@aqa/ingest",
+      "version": "0.0.1",
+    },
     "packages/kit": {
       "name": "@aqa/kit",
       "version": "1.9.0",
@@ -107,6 +111,7 @@
         "@aqa/adapters": "workspace:*",
         "@aqa/artifacts": "workspace:*",
         "@aqa/auth": "workspace:*",
+        "@aqa/ingest": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
         "@aqa/reporter": "workspace:*",
@@ -254,6 +259,8 @@
     "@aqa/cost": ["@aqa/cost@workspace:packages/cost"],
 
     "@aqa/generator": ["@aqa/generator@workspace:packages/generator"],
+
+    "@aqa/ingest": ["@aqa/ingest@workspace:packages/ingest"],
 
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
 

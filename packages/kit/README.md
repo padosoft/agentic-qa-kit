@@ -150,6 +150,19 @@ exit code `2` means the replay completed but was flaky or non-deterministic.
 This is an evidence-producing replay primitive: it does not silently close the
 finding or claim that CI, deployment, or a pull request has been verified.
 
+## Ingest external test and security results
+
+Normalize JUnit or Semgrep-compatible output into redacted AQA evidence:
+
+```bash
+aqa ingest junit test-results/junit.xml
+aqa ingest sast semgrep.json --tool semgrep
+```
+
+The parser is size bounded and rejects XML external-entity declarations. Ingest
+does not automatically verify or close findings; policy-controlled linkage is
+an explicit later step.
+
 Each command is exposed as a single function with explicit options. They do touch disk (writes for
 `runInit`, reads for `runValidate`/`runDoctor`/`profileRepo`), but only against the `root` you pass
 in — easy to unit-test against a temp directory, no TTY required.

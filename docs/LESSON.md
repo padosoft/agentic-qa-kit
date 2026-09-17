@@ -487,3 +487,10 @@ A deterministic fingerprint can safely provide a stable root-cause key; it
 cannot prove that two different fingerprints are the same bug. Keep semantic
 similarity and human-approved linking as a later workflow, and make ranking
 inputs explicit and bounded so priority remains explainable in an audit.
+
+# 2026-09-17 — ingestion is not verification
+
+External test output is untrusted input. Normalize it behind a size limit,
+reject XML external entities, redact before persistence, and retain warnings
+from partial tool runs. A parsed JUnit/SAST record is evidence, not proof that
+an AQA finding is fixed or safe to close.
