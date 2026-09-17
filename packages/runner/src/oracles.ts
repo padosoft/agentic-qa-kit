@@ -20,12 +20,47 @@ export interface ProbeRunResult {
 
 export type OracleEvaluator = (
   oracle: Scenario.Oracle,
-  ctx: { probes: readonly ProbeRunResult[] },
+  ctx: { probes: readonly ProbeRunResult[]; allProbes?: readonly ProbeRunResult[] },
 ) => OracleResult;
 
 function transportError(ctx: { probes: readonly ProbeRunResult[] }): string | null {
   const failed = ctx.probes.find((probe) => probe.error);
   return failed?.error ? `transport error on probe "${failed.probe_id}": ${failed.error}` : null;
+}
+
+function readJsonPath(value: unknown, path: string): { found: boolean; value?: unknown } {
+  if (!path.startsWith('$.')) return { found: false };
+  const segments = path
+    .slice(2)
+    .split('.')
+    .filter(Boolean)
+    .flatMap((segment) => segment.replace(/\[(\d+)\]$/u, '.$1').split('.'));
+  let current: unknown = value;
+  for (const segment of segments) {
+    if (
+      current === null ||
+      current === undefined ||
+      (typeof current !== 'object' && !Array.isArray(current))
+    ) {
+      return { found: false };
+    }
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) return { found: false };
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return { found: true, value: current };
+}
+
+function referenceValue(
+  value: unknown,
+  probes: readonly ProbeRunResult[],
+): { found: boolean; value?: unknown } {
+  if (typeof value !== 'string' || !value.startsWith('@')) return { found: true, value };
+  const match = /^@([^\.]+)\.(body|status)(?:\.(.*))?$/u.exec(value);
+  if (!match) return { found: false };
+  const probe = probes.find((candidate) => candidate.probe_id === match[1]);
+  if (!probe) return { found: false };
+  const base = match[2] === 'status' ? probe.status : probe.body;
+  return match[3] ? readJsonPath(base, `$.${match[3]}`) : { found: true, value: base };
 }
 
 const httpStatus: OracleEvaluator = (oracle, ctx) => {
@@ -46,6 +81,31 @@ const responseContains: OracleEvaluator = (oracle, ctx) => {
   const error = transportError(ctx);
   if (error) {
     return { oracle_id: oracle.id, passed: false, reason: error, agreement: 0 };
+  }
+  if (typeof oracle.with.jsonpath === 'string') {
+    const path = oracle.with.jsonpath;
+    const expected = referenceValue(oracle.with.equals, ctx.allProbes ?? ctx.probes);
+    const observations = ctx.probes
+      .map((probe) => readJsonPath(probe.body, path))
+      .filter((item) => item.found);
+    const passed =
+      expected.found && observations.some((item) => Object.is(item.value, expected.value));
+    return {
+      oracle_id: oracle.id,
+      passed,
+      reason: passed
+        ? `jsonpath ${path} equals the expected value`
+        : `jsonpath ${path} did not equal the expected value`,
+      agreement: passed ? 1 : 0,
+    };
+  }
+  if ('equals' in oracle.with) {
+    return {
+      oracle_id: oracle.id,
+      passed: false,
+      reason: 'response_contains with.equals requires a valid with.jsonpath',
+      agreement: 0,
+    };
   }
   const needle = String(oracle.with.value ?? '');
   const haystack = ctx.probes.map((p) => JSON.stringify(p.body ?? '')).join(' ');
@@ -84,7 +144,7 @@ export const builtInOracles: Record<string, OracleEvaluator> = {
 
 export function evaluateOracle(
   oracle: Scenario.Oracle,
-  ctx: { probes: readonly ProbeRunResult[] },
+  ctx: { probes: readonly ProbeRunResult[]; allProbes?: readonly ProbeRunResult[] },
   registry: Record<string, OracleEvaluator> = builtInOracles,
 ): OracleResult {
   const ev = registry[oracle.kind];
@@ -106,5 +166,5 @@ export function evaluateOracle(
       agreement: 0,
     };
   }
-  return ev(oracle, { probes: [probe] });
+  return ev(oracle, { probes: [probe], allProbes: ctx.probes });
 }

@@ -46,6 +46,38 @@ describe('builtInOracles', () => {
     assert.equal(r.passed, false);
     assert.match(r.reason, /missing probe/);
   });
+
+  it('compares a response JSON path with a prior probe output', () => {
+    const r = evaluateOracle(
+      {
+        id: 'o-same-id',
+        kind: 'response_contains',
+        probe_id: 'p2',
+        with: { jsonpath: '$.id', equals: '@p1.body.id' },
+        weight: 1,
+      },
+      {
+        probes: [
+          { probe_id: 'p1', body: { id: 'item-1' } },
+          { probe_id: 'p2', body: { id: 'item-1' } },
+        ],
+      },
+    );
+    assert.equal(r.passed, true);
+  });
+
+  it('fails closed for an unsupported equality shape instead of matching an empty string', () => {
+    const r = evaluateOracle(
+      {
+        id: 'o-invalid',
+        kind: 'response_contains',
+        with: { jsonpath: '$.missing', equals: '@missing.body.id' },
+        weight: 1,
+      },
+      { probes: [{ probe_id: 'p1', body: { id: 'item-1' } }] },
+    );
+    assert.equal(r.passed, false);
+  });
   it('response_not_contains rejects forbidden string', () => {
     const r = evaluateOracle(
       { id: 'o-no-pwned', kind: 'response_not_contains', with: { value: 'PWNED' }, weight: 1 },

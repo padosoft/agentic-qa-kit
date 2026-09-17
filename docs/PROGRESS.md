@@ -11,6 +11,16 @@
 
 ## 2026-09-17
 
+- **Closed two runner false-green paths.** HTTP probes now reject unknown
+  fields and resolve `auth: "${NAME}"` only from host-injected secrets;
+  missing secrets are execution errors, never anonymous requests. The
+  `response_contains` oracle now compares bounded JSONPath values with literal
+  or prior-probe references such as `@probe-1.body.id`, instead of silently
+  ignoring `jsonpath`/`equals`. Runner regression suite is **37 pass / 0
+  fail** including missing-secret, secret-injection and cross-step equality
+  cases. ADR-185 records the boundary; provider-specific token rotation
+  remains a live integration journey.
+
 - **Added the executable dispute/chargeback journey.** `verifyDisputeJourney()`
   now requires provider-observed non-empty chargeback evidence, validates
   exact order/payment linkage, tenant/customer ownership, duplicate IDs,

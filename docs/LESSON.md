@@ -1,5 +1,11 @@
 # Lessons
 
+- **Never ignore a probe field or oracle comparator.** A pack that writes
+  `auth`, `jsonpath` or `equals` while the driver/oracle ignores it can pass
+  against the wrong request or an empty string. Unknown fields must fail
+  closed; secret references need host injection; cross-step comparisons need
+  an explicit, bounded reference resolver.
+
 - **Settlement and dispute evidence are different journeys.** A net settlement
   can be mathematically correct while an active chargeback is unlinked,
   duplicated or missing its evidence deadline. Observe and validate the
