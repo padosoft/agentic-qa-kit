@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Conditional admin edits.** Profile, risk and scenario detail reads now
+  emit strong content ETags; their PUT boundaries honor `If-Match` and reject
+  stale writes with `412 PRECONDITION_FAILED` before persistence. A server
+  regression proves the newer value survives a stale client update. The forms
+  still need to capture/send ETags in their complete editing journeys.
+- Evidence: server suite **123/123**, server/kit typechecks and Biome pass;
+  ADR-129 records the backward-compatible migration boundary.
+
 - **Admin live Runs/Findings integration.** Runs and Findings now consume the
   tenant-scoped API and show an explicit `live API` marker; fixture fallback is
   retained only for an unavailable backend. The ecosystem fixture now declares

@@ -1271,3 +1271,10 @@ scenario referenced a risk that the generated pack manifest declared as empty.
 Fixture validity is part of the product journey: every scenario reference,
 API record and rendered row must be backed by the same schema and dependency
 graph as a real run.
+
+# 2026-09-17 — conflict detection must cross the HTTP boundary
+
+An optimistic-editor helper cannot prevent lost updates while the API still
+accepts unconditional last-write-wins PUTs. Version/content identity must be
+returned by reads and enforced before persistence; a stale write must return a
+machine-readable 412 and leave the newer server value untouched.

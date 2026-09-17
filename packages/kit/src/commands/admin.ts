@@ -744,6 +744,9 @@ async function delegateToApi(args: {
   const out = await matched.route.handle({ headers, params, body }, hctx.ctx);
   res.statusCode = out.status;
   res.setHeader('content-type', 'application/json');
+  for (const [name, value] of Object.entries(out.headers ?? {})) {
+    res.setHeader(name, value);
+  }
   res.end(JSON.stringify(out.body));
 }
 

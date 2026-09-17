@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { ScimProvisioner } from '@aqa/auth';
@@ -94,6 +94,7 @@ export interface ApiRequest {
 export interface ApiResponse {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
 }
 
 export interface ApiHandler {
@@ -299,6 +300,20 @@ function requireScope(req: ApiRequest): { org: string; project: string } | ApiRe
 
 function asResponse(value: unknown, status = 200): ApiResponse {
   return { status, body: value };
+}
+
+function entityTag(value: unknown): string {
+  return `"${createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex')}"`;
+}
+
+function conditionalConflict(req: ApiRequest, current: unknown): ApiResponse | null {
+  const ifMatch = req.headers['if-match'] ?? req.headers['If-Match'];
+  if (!ifMatch || ifMatch === '*' || ifMatch === entityTag(current)) return null;
+  return {
+    status: 412,
+    body: { error: 'resource changed since it was read', code: 'PRECONDITION_FAILED' },
+    headers: { ETag: entityTag(current) },
+  };
 }
 
 function notFound(what: string): ApiResponse {
@@ -985,7 +1000,7 @@ export function makeApi(): ApiHandler[] {
         if (!name) return notFound('profile');
         const profile = await ctx.store.loadProfile(name, scope(req));
         if (!profile) return notFound('profile');
-        return asResponse({ profile });
+        return { ...asResponse({ profile }), headers: { ETag: entityTag(profile) } };
       },
     },
     {
@@ -1025,8 +1040,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
+        const existing = await ctx.store.loadProfile(pathName, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
         await ctx.store.saveProfile(profile, scope(req));
-        return asResponse({ profile });
+        return { ...asResponse({ profile }), headers: { ETag: entityTag(profile) } };
       },
     },
     {
@@ -1060,7 +1080,7 @@ export function makeApi(): ApiHandler[] {
         if (!id) return notFound('risk');
         const risk = await ctx.store.loadRisk(id, scope(req));
         if (!risk) return notFound('risk');
-        return asResponse({ risk });
+        return { ...asResponse({ risk }), headers: { ETag: entityTag(risk) } };
       },
     },
     {
@@ -1089,8 +1109,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
+        const existing = await ctx.store.loadRisk(pathId, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
         await ctx.store.saveRisk(risk, scope(req));
-        return asResponse({ risk });
+        return { ...asResponse({ risk }), headers: { ETag: entityTag(risk) } };
       },
     },
     {
@@ -1179,7 +1204,7 @@ export function makeApi(): ApiHandler[] {
         if (!id) return notFound('scenario');
         const scenario = await ctx.store.loadScenario(id, scope(req));
         if (!scenario) return notFound('scenario');
-        return asResponse({ scenario });
+        return { ...asResponse({ scenario }), headers: { ETag: entityTag(scenario) } };
       },
     },
     {
@@ -1236,8 +1261,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
+        const existing = await ctx.store.loadScenario(pathId, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
         await ctx.store.saveScenario(scenario, scope(req));
-        return asResponse({ scenario });
+        return { ...asResponse({ scenario }), headers: { ETag: entityTag(scenario) } };
       },
     },
     {

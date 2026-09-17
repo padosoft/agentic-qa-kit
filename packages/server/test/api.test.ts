@@ -1021,6 +1021,28 @@ probes: []
       assert.equal((res?.body as { profile: { name: string } }).profile.name, 'smoke');
     });
 
+    it('returns an ETag and rejects a stale If-Match before writing', async () => {
+      const c = ctx();
+      await c.store.saveProfile(validProfile);
+      const get = makeApi().find((r) => r.method === 'GET' && r.path === '/api/profiles/:name');
+      const put = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      const snapshot = await get?.handle({ headers: {}, params: { name: 'smoke' } }, c);
+      const etag = snapshot?.headers?.ETag;
+      assert.ok(etag);
+      await c.store.saveProfile({ ...validProfile, tags: ['server-edit'] });
+      const stale = await put?.handle(
+        {
+          headers: { 'If-Match': etag },
+          params: { name: 'smoke' },
+          body: { ...validProfile, tags: ['client-edit'] },
+        },
+        c,
+      );
+      assert.equal(stale?.status, 412);
+      assert.equal((stale?.body as { code: string }).code, 'PRECONDITION_FAILED');
+      assert.deepEqual((await c.store.loadProfile('smoke'))?.tags, ['server-edit']);
+    });
+
     it('rejects a body that fails Profile schema parsing (400)', async () => {
       // PR #30 iter 9 (Copilot): server must parse the Profile schema
       // before persisting; the admin UI's client-side validation is
