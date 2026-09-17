@@ -1561,3 +1561,11 @@ still exceed its usage cap if validation and increment are separate. Keep
 redemption idempotency and cap enforcement in one shared ledger transaction,
 serialize by promotion code, and expose exhaustion as an explicit outcome
 rather than a generic provider error.
+
+# 2026-09-17 — a persisted control still needs a safe operator boundary
+
+Persisting an emergency stop is only half the production feature. The control
+API must derive its key from authenticated tenant scope, use a dedicated write
+permission, bound the reason, and return an explicit unavailable response when
+the durable controller is not configured. Never accept a budget key directly
+from an admin request body.

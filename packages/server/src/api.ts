@@ -3,6 +3,7 @@ import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { ScimProvisioner } from '@aqa/auth';
 import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
+import type { BudgetHaltController } from '@aqa/cost';
 import { measureRiskCoverage } from '@aqa/methodology';
 import { safeErrorMessage } from '@aqa/observability';
 import { runPackNew } from '@aqa/pack-author';
@@ -87,6 +88,8 @@ export interface ApiContext {
   projectRoot?: string;
   /** Shared idempotency state for mutating API requests. */
   idempotency?: ApiIdempotencyStore;
+  /** Optional durable LLM budget control plane. */
+  budgetControl?: BudgetHaltController;
 }
 
 export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -145,6 +148,11 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
 function scimOrg(req: ApiRequest): string | undefined {
   const value = req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'];
   return value?.trim() || undefined;
+}
+
+function budgetKey(req: ApiRequest): { org: string; project: string } | ApiResponse {
+  const value = requireScope(req);
+  return value;
 }
 
 async function authorizeScim(
@@ -1468,6 +1476,35 @@ export function makeApi(): ApiHandler[] {
         const to = req.params.to ?? new Date().toISOString();
         const summary = await ctx.store.costSummary({ org: s.org, project: s.project, from, to });
         return asResponse({ summary } satisfies { summary: CostSummary.CostSummary });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/cost/halt',
+      requires: 'cost:read',
+      async handle(req, ctx) {
+        const s = budgetKey(req);
+        if ('status' in s) return s;
+        if (!ctx.budgetControl)
+          return asResponse({ error: 'durable budget control is not configured' }, 503);
+        const reason = await ctx.budgetControl.getHaltReason(`${s.org}/${s.project}`);
+        return asResponse({ halted: reason !== null, ...(reason ? { reason } : {}) });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/cost/halt',
+      requires: 'cost:edit',
+      async handle(req, ctx) {
+        const s = budgetKey(req);
+        if ('status' in s) return s;
+        if (!ctx.budgetControl)
+          return asResponse({ error: 'durable budget control is not configured' }, 503);
+        const body = req.body as { reason?: unknown } | undefined;
+        if (typeof body?.reason !== 'string' || !body.reason.trim())
+          return asResponse({ error: 'reason is required' }, 400);
+        await ctx.budgetControl.halt(`${s.org}/${s.project}`, body.reason);
+        return asResponse({ halted: true, reason: body.reason.trim().slice(0, 200) }, 202);
       },
     },
 

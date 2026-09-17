@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Exposed the durable budget kill-switch through the admin API.** Added
+  tenant-derived `GET/POST /api/cost/halt` routes, an admin-only `cost:edit`
+  permission, fail-closed `503` behavior when the durable controller is absent,
+  and `AQA_BUDGET_DSN` wiring through `aqa admin` and Helm. The request can
+  never choose another tenant's budget key. ADR-159 records the boundary.
+- Evidence: server suite **132 passed / 0 failed**, auth/server/kit typechecks
+  pass, and Helm CI asserts the production DSN mapping. A deployed operator
+  incident exercise remains operational evidence.
+
 - **Promotion redemption slice merged to `main`.** PR #61 was squash-merged as
   `4feefb7` after the full CI matrix passed, including the PostgreSQL 16
   two-client redemption race and Playwright/CLI acceptance jobs. This closes

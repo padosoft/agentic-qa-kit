@@ -22,6 +22,7 @@ export const Permission = z.enum([
   'agents:edit',
   'audit:read',
   'cost:read',
+  'cost:edit',
   'settings:read',
   'settings:edit',
   'admin:everything',
