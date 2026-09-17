@@ -4,6 +4,7 @@ import { MemoryStore } from '@aqa/store';
 import { RunnerQueue } from '../dist/index.js';
 import {
   AqaMcpServer,
+  McpHttpTransport,
   type McpPrincipal,
   type McpRunPort,
   createMcpRunPort,
@@ -240,4 +241,109 @@ test('binds the MCP lifecycle to the real queue and tenant-scoped store', async 
     { ...principal, org: 'other-org' },
   );
   assert.equal((crossTenant?.result as { structuredContent: unknown }).structuredContent, null);
+});
+
+test('serves authenticated MCP initialize and follow-up requests over JSON HTTP', async () => {
+  const transport = new McpHttpTransport(port(), {
+    authenticate: async (headers) => (headers.authorization === 'Bearer mcp' ? principal : null),
+  });
+  const unauthorized = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+    }),
+  );
+  assert.equal(unauthorized.status, 401);
+  const initializedResponse = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer mcp', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-06-18' },
+      }),
+    }),
+  );
+  assert.equal(initializedResponse.status, 200);
+  const sessionId = initializedResponse.headers.get('Mcp-Session-Id');
+  assert.ok(sessionId);
+  assert.equal(transport.sessionCount, 1);
+  const listed = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer mcp',
+        'content-type': 'application/json',
+        'Mcp-Session-Id': sessionId,
+        'MCP-Protocol-Version': '2025-06-18',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+    }),
+  );
+  assert.equal(listed.status, 200);
+  assert.equal(listed.headers.get('Mcp-Session-Id'), sessionId);
+  assert.match(await listed.text(), /aqa_plan_run/);
+});
+
+test('binds an MCP session to its authenticated principal and supports termination', async () => {
+  const transport = new McpHttpTransport(port(), {
+    authenticate: async (headers) =>
+      headers.authorization === 'Bearer other' ? { ...principal, id: 'other' } : principal,
+  });
+  const init = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer mcp', 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+    }),
+  );
+  const sessionId = init.headers.get('Mcp-Session-Id');
+  assert.ok(sessionId);
+  const mismatched = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer other',
+        'content-type': 'application/json',
+        'Mcp-Session-Id': sessionId,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+    }),
+  );
+  assert.equal(mismatched.status, 403);
+  const deleted = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer mcp', 'Mcp-Session-Id': sessionId },
+    }),
+  );
+  assert.equal(deleted.status, 204);
+  assert.equal(transport.sessionCount, 0);
+});
+
+test('fails closed on unsupported HTTP shape, oversized body and expired sessions', async () => {
+  let now = 1000;
+  const transport = new McpHttpTransport(port(), {
+    authenticate: async () => principal,
+    max_body_bytes: 10,
+    session_ttl_ms: 100,
+    now: () => now,
+  });
+  const unsupported = await transport.handle(
+    new Request('https://aqa.test/mcp', { method: 'GET' }),
+  );
+  assert.equal(unsupported.status, 405);
+  const oversized = await transport.handle(
+    new Request('https://aqa.test/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': '11' },
+      body: '{}123456789',
+    }),
+  );
+  assert.equal(oversized.status, 413);
+  now = 1201;
+  assert.equal(transport.sessionCount, 0);
 });

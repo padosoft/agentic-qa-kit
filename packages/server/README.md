@@ -67,8 +67,12 @@ instance to an authenticated connection and injects an `McpRunPort`; the
 allowlisted tools are limited to planning, starting, status, cancellation and
 metadata-only evidence. Tenant scope is derived from `McpPrincipal`, starts
 require an idempotency key, and raw event/tool payloads are never returned.
-The host still owns MCP transport, authentication and the live queue/provider
-implementation; the included tests prove the JSON-RPC policy boundary only.
-For the built-in control-plane binding, `createMcpRunPort(ctx)` delegates to
-the existing `RunnerQueue` and `StoreProvider` with the same tenant fencing,
-profile validation, queue idempotency and bounded evidence counts used by REST.
+`McpHttpTransport` adds an authenticated Fetch-compatible JSON
+request/response transport with bounded bodies and sessions, principal
+binding, protocol checks, idle expiry and `DELETE` termination. It is
+request/response only: hosts that need unsolicited SSE notifications must add
+that stream with the same session boundary. Multi-replica deployments need
+sticky routing or a shared session registry. For the built-in control-plane
+binding, `createMcpRunPort(ctx)` delegates to the existing `RunnerQueue` and
+`StoreProvider` with the same tenant fencing, profile validation, queue
+idempotency and bounded evidence counts used by REST.

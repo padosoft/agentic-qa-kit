@@ -6,9 +6,10 @@ import { IdempotencyConflictError, ResourceQuotaExceededError } from './runner-q
 /**
  * Transport-neutral MCP control surface for AQA.
  *
- * HTTP/SSE or streamable-HTTP belongs to the host application. This module
- * owns the security-critical JSON-RPC/tool contract so every transport gets
- * the same allowlist, tenant boundary and bounded result shape.
+ * The HTTP transport below deliberately supports the request/response subset
+ * of streamable HTTP. SSE is not needed by the current control surface, which
+ * has no unsolicited server notifications; hosts can still mount the handler
+ * behind their own framework or gateway.
  */
 
 export const AQA_MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18'] as const;
@@ -388,4 +389,156 @@ export class AqaMcpServer {
   get protocolVersion(): string | undefined {
     return this.negotiatedVersion;
   }
+}
+
+export interface McpHttpTransportOptions {
+  /** Resolve the caller from request headers; return null on failed auth. */
+  authenticate: (headers: Record<string, string>) => Promise<McpPrincipal | null>;
+  max_body_bytes?: number;
+  max_sessions?: number;
+  session_ttl_ms?: number;
+  now?: () => number;
+}
+
+interface McpSession {
+  readonly id: string;
+  readonly principal: McpPrincipal;
+  readonly server: AqaMcpServer;
+  last_seen_ms: number;
+}
+
+function jsonResponse(body: unknown, status: number, sessionId?: string): Response {
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+  });
+  if (sessionId) headers.set('Mcp-Session-Id', sessionId);
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+function headersRecord(headers: Headers): Record<string, string> {
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
+}
+
+/**
+ * Minimal authenticated MCP streamable-HTTP request/response transport.
+ *
+ * Sessions are intentionally in-process and bounded. A multi-replica host
+ * must provide sticky routing or replace this boundary with a shared session
+ * registry; silently making session state global would weaken tenant binding.
+ */
+export class McpHttpTransport {
+  private readonly authenticate: McpHttpTransportOptions['authenticate'];
+  private readonly maxBodyBytes: number;
+  private readonly maxSessions: number;
+  private readonly sessionTtlMs: number;
+  private readonly now: () => number;
+  private readonly sessions = new Map<string, McpSession>();
+
+  constructor(port: McpRunPort, options: McpHttpTransportOptions) {
+    this.authenticate = options.authenticate;
+    this.maxBodyBytes = options.max_body_bytes ?? 262_144;
+    this.maxSessions = options.max_sessions ?? 1_000;
+    this.sessionTtlMs = options.session_ttl_ms ?? 30 * 60 * 1_000;
+    this.now = options.now ?? Date.now;
+    if (!Number.isSafeInteger(this.maxBodyBytes) || this.maxBodyBytes < 1)
+      throw new Error('MCP max_body_bytes must be a positive integer');
+    if (!Number.isSafeInteger(this.maxSessions) || this.maxSessions < 1)
+      throw new Error('MCP max_sessions must be a positive integer');
+    if (!Number.isSafeInteger(this.sessionTtlMs) || this.sessionTtlMs < 1)
+      throw new Error('MCP session_ttl_ms must be a positive integer');
+    this.port = port;
+  }
+
+  private readonly port: McpRunPort;
+
+  /** Handle one Fetch API request; safe to mount in Bun, Node or a Hono route. */
+  async handle(request: Request): Promise<Response> {
+    this.expireSessions();
+    if (request.method !== 'POST' && request.method !== 'DELETE') {
+      return new Response(null, { status: 405, headers: { Allow: 'POST, DELETE' } });
+    }
+    const principal = await this.authenticate(headersRecord(request.headers));
+    if (!principal) return jsonResponse({ error: 'unauthorized' }, 401);
+    const sessionId = request.headers.get('Mcp-Session-Id');
+    const protocolHeader = request.headers.get('MCP-Protocol-Version');
+
+    if (request.method === 'DELETE') {
+      if (!sessionId) return jsonResponse({ error: 'Mcp-Session-Id is required' }, 400);
+      const session = this.sessions.get(sessionId);
+      if (!session) return jsonResponse({ error: 'unknown MCP session' }, 404);
+      if (!samePrincipal(session.principal, principal))
+        return jsonResponse({ error: 'MCP session principal mismatch' }, 403);
+      this.sessions.delete(sessionId);
+      return new Response(null, { status: 204 });
+    }
+
+    const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim();
+    if (contentType !== 'application/json')
+      return jsonResponse({ error: 'MCP requests must use application/json' }, 415);
+    const advertisedLength = request.headers.get('content-length');
+    if (advertisedLength && Number(advertisedLength) > this.maxBodyBytes)
+      return jsonResponse({ error: 'MCP request body exceeds configured limit' }, 413);
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength > this.maxBodyBytes)
+      return jsonResponse({ error: 'MCP request body exceeds configured limit' }, 413);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return jsonResponse({ error: 'invalid JSON' }, 400);
+    }
+
+    let session: McpSession | undefined;
+    if (sessionId) {
+      session = this.sessions.get(sessionId);
+      if (!session) return jsonResponse({ error: 'unknown MCP session' }, 404);
+      if (!samePrincipal(session.principal, principal))
+        return jsonResponse({ error: 'MCP session principal mismatch' }, 403);
+      if (protocolHeader && protocolHeader !== session.server.protocolVersion)
+        return jsonResponse({ error: 'MCP protocol version mismatch' }, 400, session.id);
+      session.last_seen_ms = this.now();
+    } else {
+      if (!isRecord(payload) || payload.method !== 'initialize')
+        return jsonResponse({ error: 'Mcp-Session-Id is required after initialize' }, 400);
+      if (this.sessions.size >= this.maxSessions)
+        return jsonResponse({ error: 'MCP session capacity exhausted' }, 503);
+      const id = randomUUID();
+      const server = new AqaMcpServer(this.port);
+      session = { id, principal, server, last_seen_ms: this.now() };
+      this.sessions.set(id, session);
+    }
+
+    const response = await session.server.handle(payload, principal);
+    if (!response)
+      return new Response(null, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+    if (
+      !sessionId &&
+      (response.error !== undefined || !isRecord(payload) || payload.method !== 'initialize')
+    ) {
+      this.sessions.delete(session.id);
+      return jsonResponse(response, 400);
+    }
+    return jsonResponse(response, 200, session.id);
+  }
+
+  get sessionCount(): number {
+    this.expireSessions();
+    return this.sessions.size;
+  }
+
+  private expireSessions(): void {
+    const cutoff = this.now() - this.sessionTtlMs;
+    for (const [id, session] of this.sessions) {
+      if (session.last_seen_ms <= cutoff) this.sessions.delete(id);
+    }
+  }
+}
+
+function samePrincipal(left: McpPrincipal, right: McpPrincipal): boolean {
+  return left.id === right.id && left.org === right.org && left.project === right.project;
 }
