@@ -11,6 +11,17 @@
 
 ## 2026-09-17
 
+- **Documentation supply-chain audit remediated.** The independent `docs-site`
+  npm lockfile had five high and one moderate advisory (Hugging Face/ONNX,
+  `sharp`, `adm-zip`, `protobufjs` and `linkify-it`) that the root Bun audit
+  could not see. Upgraded the docs toolchain, regenerated the lockfile, and
+  ignored its generated search index. Evidence: `npm ci --ignore-scripts`,
+  `npm run check`, `npm run build`, and `npm audit --json` all pass; audit
+  result is **0 vulnerabilities**. ADR-127 records the separate-gate rule.
+- The historical PR review still records the pre-remediation advisory state;
+  hosted CI/default-branch evidence must be refreshed after merge. The root
+  audit is currently clean as well.
+
 - **Report audit-chain verification.** `aqa report` now verifies every parsed
   event with `@aqa/compliance.verifyEventChain` before reconstructing state or
   writing Markdown/JSON output. Tampered payloads fail closed; fixtures now

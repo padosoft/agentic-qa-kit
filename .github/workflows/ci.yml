@@ -54,6 +54,14 @@ jobs:
         working-directory: docs-site
         run: npm ci
 
+      - name: Audit documentation dependency graph
+        working-directory: docs-site
+        run: npm audit --audit-level=high
+
+      - name: Check documentation source
+        working-directory: docs-site
+        run: npm run check
+
       - name: Lint (Biome)
         run: bun run lint
 

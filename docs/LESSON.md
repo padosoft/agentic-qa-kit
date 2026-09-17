@@ -1256,3 +1256,10 @@ trusts the same JSONL fields without invoking it. Every consumer that derives
 release or compliance output from audit events must verify the chain first;
 local verification still does not replace an independent checkpoint or WORM
 store for completeness and authorship.
+
+# 2026-09-17 — one repository can have multiple dependency perimeters
+
+The root Bun audit did not cover the separately installed `docs-site` npm
+lockfile. Enterprise supply-chain verification must audit every install graph
+used by build, docs, packaging, and runtime; a clean primary workspace is not
+evidence for a secondary lockfile.
