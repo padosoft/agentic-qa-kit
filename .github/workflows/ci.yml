@@ -282,6 +282,7 @@ jobs:
           test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_TOKEN_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_RATE_LIMIT_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_BUDGET_DSN' /tmp/aqa-production.yaml)" -eq 1
           grep -q 'kind: CronJob' /tmp/aqa-production.yaml
           grep -q 'name: AQA_BUDGET_LEDGER_DSN' /tmp/aqa-production.yaml
           grep -q 'name: AQA_RUNNER_QUEUE_DSN' /tmp/aqa-production.yaml

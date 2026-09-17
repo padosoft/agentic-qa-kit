@@ -30,6 +30,10 @@ function ctx(
     scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
     packTrustedKeys?: Readonly<Record<string, string>>;
     packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
+    budgetControl?: {
+      halt: (key: string, reason: string) => Promise<void>;
+      getHaltReason: (key: string) => Promise<string | null>;
+    };
     runnerAuthorize?: (
       headers: Record<string, string>,
     ) => Promise<
@@ -45,6 +49,7 @@ function ctx(
     ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
+    ...(opts.budgetControl ? { budgetControl: opts.budgetControl } : {}),
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
@@ -533,6 +538,40 @@ describe('makeApi', () => {
     const ok = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
     assert.equal(ok?.status, 200);
     assert.ok((ok?.body as { summary: { total_usd: number } }).summary);
+  });
+
+  it('GET/POST /api/cost/halt is scoped, authorized and fail-closed without a controller', async () => {
+    const calls: Array<[string, string]> = [];
+    const reasons = new Map<string, string>();
+    const c = ctx({
+      budgetControl: {
+        async halt(key, reason) {
+          calls.push([key, reason]);
+          reasons.set(key, reason);
+        },
+        async getHaltReason(key) {
+          return reasons.get(key) ?? null;
+        },
+      },
+    });
+    const get = makeApi().find((r) => r.method === 'GET' && r.path === '/api/cost/halt');
+    const post = makeApi().find((r) => r.method === 'POST' && r.path === '/api/cost/halt');
+    assert.equal((await get?.handle({ headers: {}, params: {} }, c))?.status, 400);
+    assert.equal(
+      (await post?.handle({ headers: TENANT_HEADERS, params: {}, body: {} }, c))?.status,
+      400,
+    );
+    assert.equal(
+      (await post?.handle({ headers: TENANT_HEADERS, params: {}, body: { reason: 'incident' } }, c))
+        ?.status,
+      202,
+    );
+    assert.deepEqual(calls, [['padosoft/demo', 'incident']]);
+    assert.deepEqual((await get?.handle({ headers: TENANT_HEADERS, params: {} }, c))?.body, {
+      halted: true,
+      reason: 'incident',
+    });
+    assert.equal((await get?.handle({ headers: TENANT_HEADERS, params: {} }, ctx()))?.status, 503);
   });
 
   it('GET /api/notifications requires x-aqa-org', async () => {

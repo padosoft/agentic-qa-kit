@@ -35,6 +35,8 @@ export {
   type WorkerRunResult,
 } from './worker.js';
 export { runBudgetReaper } from './budget-reaper-cli.js';
+export { PostgresBudgetLedger } from '@aqa/cost';
+export type { BudgetHaltController } from '@aqa/cost';
 export { runRunnerReaper } from './runner-reaper-cli.js';
 export {
   MemoryEventBus,

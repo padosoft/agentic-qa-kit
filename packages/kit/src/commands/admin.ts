@@ -84,6 +84,10 @@ export interface AdminOptions {
   idempotencyDsn?: string;
   /** Inject an API idempotency store (useful for host applications/tests). */
   idempotency?: ApiContext['idempotency'];
+  /** PostgreSQL DSN for the shared LLM budget kill-switch. */
+  budgetDsn?: string;
+  /** Inject a budget kill-switch controller (useful for host applications/tests). */
+  budgetControl?: ApiContext['budgetControl'];
   /** Optional bounded Prometheus registry exposed at GET /metrics. */
   metrics?: MetricsRegistry;
   /** Authorize Prometheus scrapes when metrics are exposed off loopback. */
@@ -217,6 +221,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const {
     makeApi,
     PostgresApiIdempotencyStore,
+    PostgresBudgetLedger,
     PostgresEventBus,
     PostgresRunnerQueue,
     RunnerQueue,
@@ -237,12 +242,21 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const idempotency =
     opts.idempotency ??
     (idempotencyDsn ? new PostgresApiIdempotencyStore(idempotencyDsn) : undefined);
+  if (opts.budgetControl && opts.budgetDsn) {
+    await store.close();
+    await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
+    return { ok: false, error: 'admin: pass budgetControl or budgetDsn, not both' };
+  }
+  const budgetDsn = opts.budgetDsn ?? process.env.AQA_BUDGET_DSN;
+  const budgetControl =
+    opts.budgetControl ?? (budgetDsn ? new PostgresBudgetLedger(budgetDsn) : undefined);
   const seedReport = await seedStoreFromRuns(
     store,
     opts.runsRoot ?? join(opts.root, '.aqa', 'runs'),
   );
 
   if (opts.queue && opts.queueDsn) {
+    await (budgetControl as { close?: () => Promise<void> } | undefined)?.close?.();
     return { ok: false, error: 'admin: pass queue or queueDsn, not both' };
   }
   const queueDsn = opts.queueDsn ?? process.env.AQA_QUEUE_DSN;
@@ -257,6 +271,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     await store.close();
     await (queue as { close?: () => Promise<void> }).close?.();
     await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
+    await (budgetControl as { close?: () => Promise<void> } | undefined)?.close?.();
     return {
       ok: false,
       error:
@@ -274,6 +289,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     await store.close();
     await (queue as { close?: () => Promise<void> }).close?.();
     await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
+    await (budgetControl as { close?: () => Promise<void> } | undefined)?.close?.();
     return {
       ok: false,
       error: 'admin: durable runner queue requires runnerAuthorize or AQA_RUNNER_TOKEN',
@@ -284,6 +300,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     const closableQueue = queue as { close?: () => Promise<void> };
     await closableQueue.close?.();
     await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
+    await (budgetControl as { close?: () => Promise<void> } | undefined)?.close?.();
     return { ok: false, error: 'admin: pass eventBus or eventBusDsn, not both' };
   }
   const eventBusDsn = opts.eventBusDsn ?? process.env.AQA_EVENT_BUS_DSN;
@@ -334,6 +351,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     ...(eventBus ? { eventBus } : {}),
     ...(idempotency ? { idempotency } : {}),
+    ...(budgetControl ? { budgetControl } : {}),
     projectRoot: opts.root,
   };
 
@@ -404,6 +422,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       await closable.close?.();
       await store.close();
       await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
+      await (budgetControl as { close?: () => Promise<void> } | undefined)?.close?.();
       await eventBus?.close();
       await scimTokenStore?.close();
       if ('close' in scimRateLimiter) await scimRateLimiter.close();

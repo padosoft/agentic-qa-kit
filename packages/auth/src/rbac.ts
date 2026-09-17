@@ -22,6 +22,7 @@ export const rolePermissions: Record<Role, ReadonlyArray<Permission>> = {
     'agents:read',
     'audit:read',
     'cost:read',
+    'cost:edit',
     'settings:read',
   ],
   developer: [

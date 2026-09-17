@@ -56,3 +56,8 @@ Run requests may include a bounded `priority` from `-10` to `10`. Higher
 priorities are leased first and equal priorities remain FIFO. This is not a
 fairness guarantee: production tenants needing starvation bounds still require
 load-tested scheduling policy and quotas.
+
+When `AQA_BUDGET_DSN` is configured, the admin API exposes tenant-scoped
+`GET/POST /api/cost/halt`. Reads require `cost:read`; the emergency write
+requires admin-only `cost:edit`, derives the ledger key from `x-aqa-org` and
+`x-aqa-project`, and returns `503` when no durable controller is configured.
