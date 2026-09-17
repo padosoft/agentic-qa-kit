@@ -340,3 +340,11 @@ adapters; full migration of legacy global records remains an operational task.
 bootstrap safe across replicas. Version insertion, table creation and index
 creation must share a transaction-scoped advisory lock; otherwise two fresh
 servers can observe an incomplete schema/version state during startup.
+
+# 2026-09-17 — dependency clean is a release gate, not a dashboard badge
+
+Dependabot findings included transitive parser/URL vulnerabilities that were
+not visible in application tests. Run `bun audit` after lockfile changes, update
+the owning toolchain where possible, and use a narrowly scoped override only
+when the vulnerable transitive range has a compatible fixed release. Re-run
+the UI build, CLI bundle and full tests after toolchain upgrades.
