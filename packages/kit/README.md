@@ -123,6 +123,11 @@ worker leases durable. Both clients are closed during graceful shutdown.
 The PostgreSQL service, credentials, TLS policy, migrations and backups remain
 operator responsibilities; the CLI does not print the DSN or credentials.
 
+Host applications can inject a bounded `MetricsRegistry` into `runAdmin` to
+expose `GET /metrics` in Prometheus text format. Scraping is opt-in; a
+non-loopback bind fails closed unless `metricsAuthorize` is supplied. Metric
+labels must remain bounded and payload-free.
+
 ## Project profiler
 
 `profileRepo(root)` inspects the repo and returns a `ProjectProfile`:
