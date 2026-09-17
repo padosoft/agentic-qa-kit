@@ -11,6 +11,14 @@ export {
 export { rolePermissions, allows, type PermissionName, type RoleName } from './rbac.js';
 export { OidcAdapter } from './oidc.js';
 export {
+  ScimTokenManager,
+  type IssuedScimToken,
+  type ScimTokenAudit,
+  type ScimTokenAuditEvent,
+  type ScimTokenRecord,
+  type ScimTokenStore,
+} from './scim-token.js';
+export {
   OidcSessionManager,
   type OidcLoginStart,
   type OidcPendingLogin,

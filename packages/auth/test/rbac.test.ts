@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   OidcAdapter,
   ScimProvisioner,
+  ScimTokenManager,
   ScimValidationError,
   allows,
   enforceMfa,
@@ -104,6 +105,44 @@ describe('SCIM provisioning', () => {
     const scim = new ScimProvisioner(directory, 'org-a');
     await assert.rejects(() => scim.create({ userName: '', emails: [] }), /userName/);
     void entries;
+  });
+});
+
+describe('SCIM bearer token lifecycle', () => {
+  it('stores only hashes, verifies tenant-bound tokens, and rotates with audit events', async () => {
+    const records = new Map<string, import('../dist/index.js').ScimTokenRecord>();
+    const events: Array<{ action: string; reason?: string }> = [];
+    let now = new Date('2026-01-01T00:00:00.000Z');
+    const manager = new ScimTokenManager(
+      {
+        get: async (id) => records.get(id) ?? null,
+        put: async (record) => void records.set(record.id, record),
+      },
+      (event) =>
+        void events.push({
+          action: event.action,
+          ...(event.reason ? { reason: event.reason } : {}),
+        }),
+      () => now,
+    );
+
+    const first = await manager.issue('org-a', 1_000);
+    const stored = records.get(first.id);
+    assert.ok(stored);
+    assert.notEqual(stored.token_hash, first.token);
+    assert.equal(await manager.verify('org-a', first.id, first.token), true);
+    assert.equal(await manager.verify('org-b', first.id, first.token), false);
+    assert.equal(await manager.verify('org-a', first.id, 'wrong-token'), false);
+
+    const next = await manager.rotate('org-a', first.id, 1_000);
+    assert.equal(await manager.verify('org-a', first.id, first.token), false);
+    assert.equal(await manager.verify('org-a', next.id, next.token), true);
+    now = new Date('2026-01-01T00:00:02.000Z');
+    assert.equal(await manager.verify('org-a', next.id, next.token), false);
+    assert.deepEqual(
+      events.map((event) => event.action),
+      ['issued', 'rejected', 'rejected', 'revoked', 'issued', 'rotated', 'rejected', 'rejected'],
+    );
   });
 });
 

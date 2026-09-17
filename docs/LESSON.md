@@ -613,6 +613,13 @@ when it resolves bundled packs or the admin SPA. Asset discovery must be tested
 from the actual `dist/cli.cjs` entrypoint, and the built artifact should reject
 ESM-only path primitives rather than relying on a non-fatal bundler warning.
 
+# 2026-09-17 — SCIM bearer tokens need a lifecycle, not just verification
+
+Keep only a digest at rest, bind every verification to the tenant, use constant-
+time comparison, expire and rotate tokens, and emit classified audit events
+without including the presented secret. The route verifier still needs an
+atomic durable store and rate limiter before production signoff.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with
