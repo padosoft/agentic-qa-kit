@@ -56,12 +56,25 @@ const PW_SCENARIO = {
 
 describe('buildReplayArtifacts', () => {
   it('emits repro.sh + repro.curl for HTTP scenarios', () => {
-    const out = buildReplayArtifacts({ finding: FINDING, scenario: HTTP_SCENARIO });
+    const out = buildReplayArtifacts({
+      finding: FINDING,
+      scenario: {
+        ...HTTP_SCENARIO,
+        steps: [
+          {
+            ...HTTP_SCENARIO.steps[0],
+            with: { ...HTTP_SCENARIO.steps[0].with, body: { note: "O'Reilly" } },
+          },
+        ],
+      },
+      base_url: 'https://shop.example.test',
+    });
     const paths = out.map((a) => a.path).sort();
     assert.deepEqual(paths, ['replay/repro.curl', 'replay/repro.sh']);
     const sh = out.find((a) => a.path === 'replay/repro.sh');
     assert.match(sh?.contents ?? '', /curl/);
-    assert.match(sh?.contents ?? '', /POST '\/items'/);
+    assert.match(sh?.contents ?? '', /'POST' 'https:\/\/shop\.example\.test\/items'/);
+    assert.match(sh?.contents ?? '', /O'.*Reilly/);
     assert.match(sh?.contents ?? '', /AQA-2026-0001/);
   });
 

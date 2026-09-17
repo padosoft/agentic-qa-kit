@@ -37,11 +37,12 @@ function curlFor(probe: Scenario.Probe, baseUrl?: string): string {
     : baseUrl
       ? new URL(rawUrl, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString()
       : rawUrl;
-  const headers = Object.entries(w.headers ?? {})
-    .map(([k, v]) => `  -H ${shellQuote(`${k}: ${v}`)}`)
-    .join(' \\\n');
-  const body = w.body !== undefined ? ` \\\n  --data '${JSON.stringify(w.body)}'` : '';
-  return `curl -fsS -X ${method} '${url}' \\\n${headers || '  # (no headers)'}${body}`;
+  const safeArgs = ['curl', '-sS', '-X', shellQuote(method), shellQuote(url)];
+  for (const [k, v] of Object.entries(w.headers ?? {})) {
+    safeArgs.push('-H', shellQuote(`${k}: ${v}`));
+  }
+  if (w.body !== undefined) safeArgs.push('--data-raw', shellQuote(JSON.stringify(w.body)));
+  return safeArgs.join(' ');
 }
 
 /**
