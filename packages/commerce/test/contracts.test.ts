@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
+  HttpCommerceAdapter,
   InMemoryCommerceReference,
   InMemoryWebhookEffectLedger,
   InventorySnapshot,
@@ -23,6 +24,36 @@ import {
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
+  it('HttpCommerceAdapter performs bounded, tenant-scoped checkout calls', async () => {
+    const calls: Array<{ url: string; headers: Headers; body: unknown }> = [];
+    const cart = {
+      schema_version: '1',
+      id: 'cart-http',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      revision: 0,
+      lines: [],
+      status: 'open',
+    };
+    const adapter = new HttpCommerceAdapter({
+      baseUrl: 'https://shop.test',
+      headers: (_context, identity) => ({ 'X-Tenant': identity?.tenant ?? 'observer' }),
+      fetch: async (input, init) => {
+        calls.push({
+          url: String(input),
+          headers: new Headers(init?.headers),
+          body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+        });
+        return new Response(JSON.stringify(cart), { status: 201 });
+      },
+    });
+    const result = await adapter.createCart({ tenant: 'tenant-a', customer_id: 'customer-a' });
+    assert.equal(result.id, 'cart-http');
+    assert.equal(calls[0]?.headers.get('X-Tenant'), 'tenant-a');
+    assert.equal(calls[0]?.url, 'https://shop.test/carts');
+    assert.deepEqual(calls[0]?.body, undefined);
+  });
+
   it('applies a logical webhook effect once and rejects event-key conflicts', async () => {
     const ledger = new InMemoryWebhookEffectLedger();
     let effects = 0;

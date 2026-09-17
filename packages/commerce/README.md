@@ -12,6 +12,8 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - Decimal-safe `Money` values using ISO currency plus integer minor units.
 - Versioned tenant/run context and order, payment, inventory snapshots.
 - Explicit `pass`, `fail`, `blocked`, `unsupported`, and `inconclusive` outcomes.
+- `HttpCommerceAdapter` for live provider-neutral HTTP merchants, with origin
+  allowlisting, bounded responses, tenant context and typed snapshot parsing.
 - Fail-closed currency and inventory invariants.
 - Provider-neutral `CommerceAdapter` contract for HTTP, browser and observer-backed merchants.
 - `verifyCheckoutJourney()` checks capability preflight, exact inventory effects,

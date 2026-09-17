@@ -71,6 +71,12 @@
   local no-DSN runs are explicitly skipped. Merchant schema/RLS/provider
   reconciliation remains open.
 
+- **Live HTTP commerce adapter added.** `@aqa/commerce` now maps typed carts,
+  checkout, payments, refunds, tax, shipping and webhook observations to a
+  configurable allowlisted HTTP merchant API. Responses are bounded and Zod
+  parsed; tenant context and idempotency keys are explicit. A real merchant
+  sandbox journey and provider-specific auth/webhooks remain deployment work.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

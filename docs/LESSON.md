@@ -51,6 +51,12 @@
   the hosted service job. A local unit fixture cannot prove transaction mode,
   timeout or connection lifecycle against the actual client.
 
+- **Commerce contracts need a live transport boundary.** In-memory journeys
+  prove arithmetic and idempotency semantics, not API routing or tenant header
+  propagation. Keep the HTTP adapter provider-neutral, parse snapshots at the
+  edge, bound responses and require a second authoritative read for payment,
+  order and inventory reconciliation.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

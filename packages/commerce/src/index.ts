@@ -12,6 +12,7 @@ export {
   type WebhookClaim,
   type WebhookEffectLedger,
 } from './webhook-ledger.js';
+export { HttpCommerceAdapter, type HttpCommerceAdapterOptions } from './http-adapter.js';
 
 /** Decimal minor units are strings so no binary floating point enters money math. */
 export const Money = z.object({
