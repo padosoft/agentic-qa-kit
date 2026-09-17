@@ -1432,3 +1432,8 @@ order, and require tracking/timestamps before claiming shipped or delivered.
 Subscription state must carry its own period and cancellation semantics;
 chargebacks must link to the exact payment and bound amount/evidence timing.
 Neither can be inferred safely from an order status of `paid`.
+
+# 2026-09-17 — loyalty is a ledger, not a counter
+
+Reconcile points from immutable, idempotent transactions. A mutable balance
+alone cannot expose duplicate earn/redeem events or prevent negative value.

@@ -1197,6 +1197,17 @@
 - Remaining: provider-backed subscription/dunning/dispute journeys and
   loyalty/cancellation adapters.
 
+# 2026-09-17 — ecommerce loyalty ledger
+
+- Added `LoyaltyAccountSnapshot` and `LoyaltyTransactionSnapshot` with exact
+  balance reconciliation, duplicate transaction detection, sign invariants and
+  negative-balance protection.
+- Evidence: `@aqa/commerce` suite **26 passed / 0 failed**, typecheck, lint and
+  diff checks pass locally. Provider redemption and durable ledger journeys
+  remain adapter evidence.
+- Remaining: real billing/dispute/loyalty providers, cancellation workflows and
+  complete ecommerce journey coverage.
+
 # 2026-09-17 — redacted webhook observability
 
 - Added an optional `PostgresWebhookQueue` observer for attempt/outcome

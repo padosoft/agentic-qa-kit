@@ -16,6 +16,7 @@ import {
   applyWebhookEffectOnce,
   assertChargebackIntegrity,
   assertFulfillmentIntegrity,
+  assertLoyaltyLedgerIntegrity,
   assertNoOversell,
   assertOrderIntegrity,
   assertPromotionRedeemable,
@@ -795,6 +796,53 @@ describe('@aqa/commerce contracts', () => {
           opened_at: '2026-09-17T10:00:00Z',
         }),
       /exact order payment/,
+    );
+  });
+
+  it('reconciles loyalty balance from an idempotent transaction ledger', () => {
+    const account = {
+      schema_version: '1' as const,
+      id: 'loyalty-1',
+      tenant: 'shop-a',
+      customer_id: 'customer-a',
+      balance_points: 70,
+      revision: 3,
+    };
+    const transactions = [
+      {
+        schema_version: '1' as const,
+        id: 'lt-1',
+        account_id: 'loyalty-1',
+        kind: 'earn' as const,
+        points: 100,
+        reference: 'order-1',
+        occurred_at: '2026-09-17T10:00:00Z',
+      },
+      {
+        schema_version: '1' as const,
+        id: 'lt-2',
+        account_id: 'loyalty-1',
+        kind: 'redeem' as const,
+        points: -30,
+        reference: 'order-2',
+        occurred_at: '2026-09-17T11:00:00Z',
+      },
+    ];
+    assertLoyaltyLedgerIntegrity(account, transactions);
+    assert.throws(
+      () =>
+        assertLoyaltyLedgerIntegrity(account, [
+          ...transactions,
+          { ...transactions[0], id: 'lt-3', points: 10 },
+        ]),
+      /does not reconcile/,
+    );
+    assert.throws(
+      () =>
+        assertLoyaltyLedgerIntegrity(account, [
+          { ...transactions[0], kind: 'redeem' as const, points: 10 },
+        ]),
+      /must reduce/,
     );
   });
 });

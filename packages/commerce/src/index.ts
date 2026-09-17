@@ -116,6 +116,27 @@ export const ChargebackSnapshot = z.object({
 });
 export type ChargebackSnapshot = z.infer<typeof ChargebackSnapshot>;
 
+export const LoyaltyTransactionSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  account_id: z.string().min(1),
+  kind: z.enum(['earn', 'redeem', 'expire', 'adjust']),
+  points: z.number().int(),
+  reference: z.string().min(1),
+  occurred_at: z.string().datetime({ offset: true }),
+});
+export type LoyaltyTransactionSnapshot = z.infer<typeof LoyaltyTransactionSnapshot>;
+
+export const LoyaltyAccountSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  tenant: z.string().min(1),
+  customer_id: z.string().min(1),
+  balance_points: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+});
+export type LoyaltyAccountSnapshot = z.infer<typeof LoyaltyAccountSnapshot>;
+
 export const RefundSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -321,6 +342,31 @@ export function assertChargebackIntegrity(
     throw new Error('chargeback exceeds captured payment');
   if (item.status === 'opened' && !item.evidence_due_at)
     throw new Error('opened chargeback requires evidence_due_at');
+}
+
+export function assertLoyaltyLedgerIntegrity(
+  account: LoyaltyAccountSnapshot,
+  transactions: readonly LoyaltyTransactionSnapshot[],
+): void {
+  const item = LoyaltyAccountSnapshot.parse(account);
+  const seen = new Set<string>();
+  let balance = 0;
+  for (const transaction of transactions) {
+    const entry = LoyaltyTransactionSnapshot.parse(transaction);
+    if (entry.account_id !== item.id)
+      throw new Error('loyalty transaction targets another account');
+    if (seen.has(entry.id)) throw new Error(`duplicate loyalty transaction: ${entry.id}`);
+    seen.add(entry.id);
+    if (entry.points === 0) throw new Error('loyalty transaction points must be non-zero');
+    if ((entry.kind === 'earn' || entry.kind === 'adjust') && entry.points < 0)
+      throw new Error(`${entry.kind} transaction cannot reduce points`);
+    if ((entry.kind === 'redeem' || entry.kind === 'expire') && entry.points > 0)
+      throw new Error(`${entry.kind} transaction must reduce points`);
+    balance += entry.points;
+    if (balance < 0) throw new Error('loyalty ledger balance cannot be negative');
+  }
+  if (balance !== item.balance_points)
+    throw new Error('loyalty balance does not reconcile to ledger');
 }
 
 /** A fulfillment or RMA line can never exceed the original order quantity. */
