@@ -3,6 +3,7 @@ import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { ScimProvisioner } from '@aqa/auth';
 import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
+import { verifyEventChain } from '@aqa/compliance';
 import type { BudgetHaltController } from '@aqa/cost';
 import { measureRiskCoverage } from '@aqa/methodology';
 import { safeErrorMessage } from '@aqa/observability';
@@ -1180,6 +1181,16 @@ export function makeApi(): ApiHandler[] {
         const observations = [];
         for (const run of runs) {
           const events = await ctx.store.listEvents(run.id);
+          const chain = verifyEventChain(events);
+          if (!chain.ok) {
+            return asResponse(
+              {
+                error: 'run audit chain integrity verification failed',
+                code: 'AUDIT_CHAIN_INVALID',
+              },
+              500,
+            );
+          }
           const byScenario = new Map<string, typeof events>();
           for (const event of events) {
             if (event.kind !== 'oracle_evaluated' || !event.scenario_id) continue;

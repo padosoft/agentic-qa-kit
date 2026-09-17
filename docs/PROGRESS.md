@@ -13,6 +13,12 @@
 
 ## 2026-09-18
 
+- **Started the evidence-integrity macro task.** The server coverage projection
+  now verifies every run's hash-chained audit events before deriving risk
+  coverage and returns a bounded `AUDIT_CHAIN_INVALID` error on tampering. The
+  first server contract is green locally; full workspace gates and hosted
+  PostgreSQL/HTTP evidence remain required.
+
 - **Hardened the DR evidence CLI after automated review.** Restore evidence now
   must reconcile `observed_rto_minutes` with the raw `started_at` and
   `completed_at` timestamps, bundled-entrypoint tests cover both DR commands

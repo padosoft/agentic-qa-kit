@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aqa/auth": "workspace:*",
+    "@aqa/compliance": "workspace:*",
     "@aqa/cost": "workspace:*",
     "@aqa/methodology": "workspace:*",
     "@aqa/pack-author": "workspace:*",
