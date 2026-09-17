@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added atomic ecommerce promotion redemption.** `PromotionRedemptionLedger`
+  now models `claimed`, `duplicate`, `conflict` and `exhausted` outcomes. The
+  PostgreSQL implementation serializes each promotion code, enforces the hard
+  redemption cap across replicas and preserves idempotent retry semantics;
+  ADR-158 documents the provider-neutral boundary.
+- Evidence: commerce typecheck and **29 tests passed** locally; a two-client
+  PostgreSQL race is wired into the CI persistence contract. Provider settlement
+  and financial reconciliation remain deployment evidence.
+
 - **Enterprise safety tranche merged to `main`.** PR #60 was squash-merged as
   `4cdc3af` after the complete hosted CI matrix passed: Meta, Helm rendering,
   typecheck/lint, Bun and Node 22 tests, build plus CycloneDX SBOM, PostgreSQL

@@ -215,6 +215,7 @@ jobs:
           bun test packages/server/test/postgres-queue.test.ts
           bun test packages/server/test/postgres-idempotency.test.ts
           bun test packages/cost/test/postgres-ledger.test.ts
+          bun test packages/commerce/test/promotion-ledger.test.ts
           bun test packages/auth/test/oidc-session.test.ts
           bun test packages/auth/test/postgres-scim-token.test.ts
           bun test packages/integrations/test/webhook.test.ts
