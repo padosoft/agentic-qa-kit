@@ -13,7 +13,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -95,6 +95,33 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
       /import\.meta/,
       'the published CJS CLI must resolve bundled assets without import.meta',
     );
+  });
+
+  it('serves the health endpoint from the real bundled admin process', async () => {
+    if (!existsSync(bundlePath)) return;
+    const port = 32_000 + Math.floor(Math.random() * 1_000);
+    const child = spawn(process.execPath, [bundlePath, 'admin', '--port', String(port)], {
+      cwd: kitRoot,
+      stdio: 'ignore',
+    });
+    try {
+      let response: Response | undefined;
+      for (let attempt = 0; attempt < 30 && !response; attempt += 1) {
+        try {
+          response = await fetch(`http://127.0.0.1:${port}/api/healthz`);
+          break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+      assert.ok(response, 'bundled admin did not become reachable within 3 seconds');
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: true });
+    } finally {
+      if (child.exitCode === null) child.kill();
+      if (child.exitCode === null)
+        await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    }
   });
 });
 

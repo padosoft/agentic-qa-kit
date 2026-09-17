@@ -14,8 +14,8 @@ Resolve command assets from the running entrypoint (`__dirname` for CJS and the 
 
 ## Consequences
 
-The artifact no longer relies on an ESM-only primitive and the build emits no `import.meta` warning. The installed CLI still requires a separate complete admin HTTP journey in CI; unit tests and CLI run evidence do not prove a long-lived server lifecycle.
+The artifact no longer relies on an ESM-only primitive and the build emits no `import.meta` warning. The kit suite now includes a bounded complete admin HTTP smoke for the real CJS process; deeper authenticated UI journeys remain covered by Playwright.
 
 ## Evidence
 
-Kit typecheck and 121/123 tests passed (2 platform-dependent symlink skips). A built `dist/cli.cjs` completed `init` and a real `run` journey from a temporary project with 2 scenarios and 2 findings; the CJS artifact contains no `import.meta` token.
+Kit typecheck and 122/124 tests passed (2 platform-dependent symlink skips). A built `dist/cli.cjs` completed `init` and a real `run` journey from a temporary project with 2 scenarios and 2 findings; the real bundled admin process served `/api/healthz` and shut down cleanly; the CJS artifact contains no `import.meta` token.

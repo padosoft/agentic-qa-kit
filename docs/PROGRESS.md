@@ -416,7 +416,12 @@
 # 2026-09-17 — CJS bundle runtime path hardening
 
 - Removed ESM-only `import.meta` path resolution from the CLI run/admin commands. Runtime assets now resolve from the CJS entrypoint or recognized direct command path, with bounded package-relative fallback.
-- Evidence: kit typecheck and 121/123 tests passed (2 symlink-capability skips); the rebuilt bundle emits no `import.meta` warning, contains no `import.meta` token, and completed a real temporary-project journey (`init` → `run`, 2 scenarios, 2 findings). A long-lived bundled admin HTTP journey remains to be added to CI; the admin SPA chunk remains 578.94 kB.
+- Evidence: kit typecheck and 121/123 tests passed (2 symlink-capability skips); the rebuilt bundle emits no `import.meta` warning, contains no `import.meta` token, and completed a real temporary-project journey (`init` → `run`, 2 scenarios, 2 findings). The follow-up bundle suite now covers the real admin process health endpoint; the admin SPA chunk remains 578.94 kB.
+
+# 2026-09-17 — bundled admin process journey
+
+- Added a process-level test that starts the published CJS bundle, waits for `/api/healthz`, validates the JSON response, and terminates the child process in a `finally` block. This closes the prior asset-resolution smoke gap without claiming full authenticated UI coverage.
+- Evidence: kit typecheck and 122/124 tests passed (2 symlink-capability skips); the real bundled admin health journey passed.
 
 # 2026-09-17 — SCIM token lifecycle slice
 
