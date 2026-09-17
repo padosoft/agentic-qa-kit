@@ -5,6 +5,9 @@ export {
   methodologyCheck,
   riskCoverage,
   measureRiskCoverage,
+  attackTreeForRisk,
+  evaluateAttackTree,
+  validateAttackTree,
   type CoverageStatus,
   type CoverageRunObservation,
   type RiskCoverageInput,
@@ -13,4 +16,8 @@ export {
   type StrideCategory,
   type FmeaScore,
   type MethodologyReport,
+  type AttackTree,
+  type AttackTreeLeaf,
+  type AttackTreeNode,
+  type AttackTreeOperator,
 } from './methodology.js';

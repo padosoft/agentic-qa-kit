@@ -104,6 +104,82 @@ export function methodologyCheck(map: RiskMap.RiskMap): MethodologyReport[] {
   });
 }
 
+export type AttackTreeOperator = 'all' | 'any';
+
+export interface AttackTreeLeaf {
+  id: string;
+  kind: 'leaf';
+  statement: string;
+  risk_refs?: string[];
+}
+
+export interface AttackTreeNode {
+  id: string;
+  kind: 'node';
+  operator: AttackTreeOperator;
+  children: AttackTree[];
+}
+
+export type AttackTree = AttackTreeLeaf | AttackTreeNode;
+
+const ATTACK_TREE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MAX_ATTACK_TREE_NODES = 64;
+const MAX_ATTACK_TREE_DEPTH = 16;
+
+/** Validate a bounded AND/OR attack tree before it enters evidence storage. */
+export function validateAttackTree(tree: AttackTree): void {
+  const ids = new Set<string>();
+  let count = 0;
+  const visit = (current: AttackTree, depth: number): void => {
+    count += 1;
+    if (count > MAX_ATTACK_TREE_NODES) throw new Error('attack tree exceeds node limit');
+    if (depth > MAX_ATTACK_TREE_DEPTH) throw new Error('attack tree exceeds depth limit');
+    if (!ATTACK_TREE_ID.test(current.id)) throw new Error(`invalid attack tree id: ${current.id}`);
+    if (ids.has(current.id)) throw new Error(`duplicate attack tree id: ${current.id}`);
+    ids.add(current.id);
+    if (current.kind === 'leaf') {
+      if (current.statement.trim().length < 8)
+        throw new Error(`attack leaf statement is too short: ${current.id}`);
+      return;
+    }
+    if (current.children.length < 1 || current.children.length > 16)
+      throw new Error(`attack tree node must have 1..16 children: ${current.id}`);
+    for (const child of current.children) visit(child, depth + 1);
+  };
+  visit(tree, 0);
+}
+
+/** Evaluate whether the supplied compromised leaves satisfy the attack tree. */
+export function evaluateAttackTree(
+  tree: AttackTree,
+  compromisedLeaves: ReadonlySet<string>,
+): boolean {
+  validateAttackTree(tree);
+  const evaluate = (current: AttackTree): boolean =>
+    current.kind === 'leaf'
+      ? compromisedLeaves.has(current.id)
+      : current.operator === 'all'
+        ? current.children.every(evaluate)
+        : current.children.some(evaluate);
+  return evaluate(tree);
+}
+
+/** Create a conservative attack-tree skeleton from a risk's declared invariants. */
+export function attackTreeForRisk(risk: RiskMap.Risk): AttackTreeNode {
+  const rootId = `attack-${risk.id}`.slice(0, 64);
+  const leaves = (
+    risk.invariants.length ? risk.invariants : [{ id: 'risk', statement: risk.title }]
+  ).map((invariant) => ({
+    id: `${rootId}-${invariant.id}`.slice(0, 64),
+    kind: 'leaf' as const,
+    statement: invariant.statement,
+    risk_refs: [risk.id],
+  }));
+  const tree: AttackTreeNode = { id: rootId, kind: 'node', operator: 'any', children: leaves };
+  validateAttackTree(tree);
+  return tree;
+}
+
 export type CoverageStatus = 'covered' | 'partial' | 'gap' | 'stale';
 
 export interface RiskCoverageObservation {

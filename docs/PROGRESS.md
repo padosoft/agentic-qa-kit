@@ -372,3 +372,8 @@
 
 - Added `aqa risk discover --method fmea`, generating six bounded failure-mode hypotheses for ambiguous requirements, invalid input, dependency outage, concurrency races, configuration drift and detection gaps. Each has a stable ID, one invariant, framework tag, scope tag and schema validation.
 - Evidence: kit typecheck, risk-discovery tests including the FMEA map, and repository lint. Attack trees, source-aware analysis, LLM-assisted hypotheses and human approval/versioning remain open.
+
+# 2026-09-17 — attack tree methodology slice
+
+- Added bounded AND/OR attack-tree contracts to `@aqa/methodology`: validation rejects duplicate IDs, malformed leaves, excessive depth and node counts; evaluation consumes only an explicit compromised-leaf set; `attackTreeForRisk()` creates an invariant-linked skeleton.
+- Evidence: methodology typecheck and 12/12 tests; repository lint. Persistence/schema integration, graph visualization, source-aware derivation and human-reviewed attack paths remain open.

@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  attackTreeForRisk,
+  evaluateAttackTree,
   fmeaScore,
   measureRiskCoverage,
   methodologyCheck,
   owaspOf,
   riskCoverage,
   strideOf,
+  validateAttackTree,
 } from '../dist/index.js';
 
 const RISK_AUTH = {
@@ -75,6 +78,50 @@ describe('methodologyCheck', () => {
     assert.equal(orphan?.has_framework_anchor, false);
     const anchored = reports.find((r) => r.risk_id === 'r-auth-x');
     assert.equal(anchored?.has_framework_anchor, true);
+  });
+});
+
+describe('attack trees', () => {
+  it('builds and evaluates an invariant-linked attack tree', () => {
+    const tree = attackTreeForRisk({
+      ...RISK_AUTH,
+      invariants: [{ id: 'inv-auth', statement: 'protected action requires a valid principal' }],
+    });
+    assert.equal(tree.children.length, 1);
+    assert.equal(evaluateAttackTree(tree, new Set()), false);
+    assert.equal(evaluateAttackTree(tree, new Set([tree.children[0]?.id ?? ''])), true);
+  });
+
+  it('supports explicit all/any composition and rejects duplicate IDs', () => {
+    const tree = {
+      id: 'root',
+      kind: 'node' as const,
+      operator: 'all' as const,
+      children: [
+        { id: 'a', kind: 'leaf' as const, statement: 'first condition holds' },
+        {
+          id: 'branch',
+          kind: 'node' as const,
+          operator: 'any' as const,
+          children: [
+            { id: 'b', kind: 'leaf' as const, statement: 'second condition holds' },
+            { id: 'c', kind: 'leaf' as const, statement: 'third condition holds' },
+          ],
+        },
+      ],
+    };
+    assert.equal(evaluateAttackTree(tree, new Set(['a', 'c'])), true);
+    assert.equal(evaluateAttackTree(tree, new Set(['a'])), false);
+    const first = tree.children[0];
+    assert.ok(first);
+    assert.throws(() => validateAttackTree({ ...tree, children: [first, first] }), /duplicate/);
+  });
+
+  it('bounds malformed trees before evaluation', () => {
+    assert.throws(
+      () => validateAttackTree({ id: 'root', kind: 'node', operator: 'all', children: [] }),
+      /1..16/,
+    );
   });
 });
 

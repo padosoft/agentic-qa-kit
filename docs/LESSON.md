@@ -564,3 +564,10 @@ FMEA discovery should produce operational failure hypotheses—cause/effect
 controls and detection invariants—not merely rename security threats. Keep the
 baseline bounded and reviewable until real process data can justify occurrence,
 detection and severity scoring.
+
+# 2026-09-17 — attack trees need bounded semantics
+
+An attack-tree feature must define AND/OR evaluation and reject cycles-by-ID,
+duplicate nodes, excessive depth and oversized fan-out before persistence. A
+risk-derived tree is only a reviewable skeleton until evidence marks leaves as
+observed or compromised.
