@@ -223,6 +223,34 @@ describe('makeApi', () => {
     assert.equal((events[0] as { type: string }).type, 'run.requested');
   });
 
+  it('POST /api/runs/:id/cancel is tenant-scoped and fences the queued job', async () => {
+    const events: unknown[] = [];
+    const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
+    const create = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const created = await create?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    const jobId = (created?.body as { job: { id: string } }).job.id;
+    const cancel = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs/:id/cancel');
+    const denied = await cancel?.handle(
+      {
+        headers: { 'x-aqa-org': 'other', 'x-aqa-project': 'demo' },
+        params: { id: jobId },
+        body: {},
+      },
+      c,
+    );
+    assert.equal(denied?.status, 404);
+    const cancelled = await cancel?.handle(
+      { headers: TENANT_HEADERS, params: { id: jobId }, body: { reason: 'operator stop' } },
+      c,
+    );
+    assert.equal(cancelled?.status, 200);
+    assert.equal(c.queue.snapshot()[0]?.status, 'cancelled');
+    assert.equal((events.at(-1) as { type: string }).type, 'run.cancelled');
+  });
+
   it('POST /api/runs requires tenant scope and deduplicates retries', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');

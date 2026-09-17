@@ -993,3 +993,10 @@ Checking the URL supplied to `page.goto()` does not constrain redirects,
 subresources or form-triggered requests. Install the network policy on the
 BrowserContext before the page exists and abort every non-HTTP or
 non-allowlisted request.
+
+# 2026-09-17 — cancellation must be a distinct durable state
+
+Marking a force-killed job `done` hides an operator abort and lets reporting
+claim success. Persist `cancelled`, clear the lease/fencing token, scope the
+mutation to the tenant and reject late ACKs; worker-side cooperative abort is
+a separate step and must not be implied by the queue mutation.

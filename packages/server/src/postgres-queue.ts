@@ -62,13 +62,13 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     await this.q(`SELECT pg_advisory_lock(${lockKey})`);
     try {
       await this.q(
-        "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 5, failure_reason text, updated_at timestamptz NOT NULL DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 5, failure_reason text, updated_at timestamptz NOT NULL DEFAULT now())",
       );
       await this.q(
         'ALTER TABLE aqa_runner_jobs DROP CONSTRAINT IF EXISTS aqa_runner_jobs_status_check',
       );
       await this.q(
-        "ALTER TABLE aqa_runner_jobs ADD CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed'))",
+        "ALTER TABLE aqa_runner_jobs ADD CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled'))",
       );
       await this.q(
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS max_attempts integer NOT NULL DEFAULT 5',
@@ -270,6 +270,30 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     const rows = await this.q(
       "UPDATE aqa_runner_jobs SET status = 'failed', leased_until = NULL, lease_token = NULL, failure_reason = $3, updated_at = now() WHERE id = $1 AND status = 'in_flight' AND lease_token = $2 RETURNING id",
       [id, leaseToken, reason.slice(0, 1000)],
+    );
+    return rows.length === 1;
+  }
+
+  async cancel(
+    id: string,
+    reason: string,
+    scope?: { org: string; project: string },
+  ): Promise<boolean> {
+    await this.wait();
+    if (!reason.trim()) return false;
+    const values: unknown[] = [id, reason.trim().slice(0, 1000)];
+    let scopeSql = '';
+    if (scope) {
+      values.push(scope.org, scope.project);
+      scopeSql = ` AND payload->>'org' = $${values.length - 1} AND payload->>'project' = $${values.length}`;
+    }
+    const rows = await this.q(
+      `UPDATE aqa_runner_jobs
+       SET status = 'cancelled', leased_until = NULL, lease_token = NULL,
+           failure_reason = $2, updated_at = now()
+       WHERE id = $1 AND status IN ('queued', 'in_flight')${scopeSql}
+       RETURNING id`,
+      values,
     );
     return rows.length === 1;
   }

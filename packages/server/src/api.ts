@@ -440,6 +440,32 @@ export function makeApi(): ApiHandler[] {
       },
     },
     {
+      method: 'POST',
+      path: '/api/runs/:id/cancel',
+      requires: 'runs:create',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('run job');
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const body = (req.body ?? {}) as { reason?: unknown };
+        if (body.reason !== undefined && (typeof body.reason !== 'string' || !body.reason.trim())) {
+          return {
+            status: 400,
+            body: { error: 'reason must be a non-empty string when provided' },
+          };
+        }
+        const cancelled = await ctx.queue.cancel(
+          id,
+          typeof body.reason === 'string' ? body.reason : 'cancelled by operator',
+          s,
+        );
+        if (!cancelled) return notFound('run job');
+        await publishApiEvent(ctx, req, 'run.cancelled', { job_id: id });
+        return asResponse({ id, cancelled: true });
+      },
+    },
+    {
       method: 'GET',
       path: '/api/runs/:id/events',
       requires: 'runs:read',

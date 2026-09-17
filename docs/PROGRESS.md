@@ -762,3 +762,8 @@
 
 - Playwright contexts now install a route-level network policy before the first page is created. Every HTTP(S) request is checked for credentials and an allowlisted origin; non-HTTP schemes and off-origin requests are aborted. This covers redirects and subresources that structured action URL validation cannot see.
 - Evidence: runner build and **18 tests passed**, including an injected off-origin browser request that is aborted. Real Chromium/provider redirect evidence remains a hosted deployment journey.
+
+# 2026-09-17 — tenant-scoped durable job cancellation
+
+- Added `cancelled` as a terminal queue state in Memory and PostgreSQL adapters. `POST /api/runs/:id/cancel` requires tenant scope, records a bounded reason, clears the lease token and publishes `run.cancelled`; late worker ACKs are fenced and cross-tenant cancellation is indistinguishable from not-found.
+- Evidence: server build, **112 tests passed** across API and queue suites. This is cooperative cancellation state: a worker already executing must observe the cancelled job and abort its driver; no false claim of process interruption is made.

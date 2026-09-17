@@ -104,6 +104,23 @@ describe('RunnerQueue', () => {
     );
   });
 
+  it('cancels queued or leased jobs as a terminal state and fences late ACKs', () => {
+    const q = new RunnerQueue();
+    const job = q.enqueue({
+      ...JOB,
+      id: 'cancel-1',
+      payload: { org: 'acme', project: 'shop' },
+    });
+    const lease = q.dequeue();
+    assert.equal(
+      q.cancel(job.id, 'customer requested cancellation', { org: 'acme', project: 'shop' }),
+      true,
+    );
+    assert.equal(q.ack(job.id, lease?.lease_token), false);
+    assert.equal(q.snapshot().find((candidate) => candidate.id === job.id)?.status, 'cancelled');
+    assert.equal(q.cancel(job.id, 'again', { org: 'acme', project: 'shop' }), false);
+  });
+
   it('enforces per-tenant concurrent run and scenario quotas', () => {
     const q = new RunnerQueue({ quota: { concurrent_runs_max: 1, concurrent_scenarios_max: 3 } });
     q.enqueue({ ...JOB, id: 'quota-1', payload: { org: 'o', project: 'p', scenario_count: 2 } });

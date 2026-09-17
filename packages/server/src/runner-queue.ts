@@ -14,7 +14,7 @@ export interface QueueQuota {
 }
 
 export interface EnqueuedJob extends RunnerJob {
-  status: 'queued' | 'in_flight' | 'done' | 'failed';
+  status: 'queued' | 'in_flight' | 'done' | 'failed' | 'cancelled';
   attempts: number;
   max_attempts: number;
   failure_reason?: string | undefined;
@@ -28,6 +28,11 @@ export interface RunnerQueueLike {
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
   ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
   fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
+  cancel(
+    id: string,
+    reason: string,
+    scope?: { org: string; project: string },
+  ): boolean | Promise<boolean>;
 }
 
 export class IdempotencyConflictError extends Error {
@@ -187,6 +192,17 @@ export class RunnerQueue {
       return false;
     job.status = 'failed';
     job.failure_reason = reason.slice(0, 1000);
+    job.leased_until = undefined;
+    job.lease_token = undefined;
+    return true;
+  }
+
+  cancel(id: string, reason: string, scope?: { org: string; project: string }): boolean {
+    const job = this.jobs.find((candidate) => candidate.id === id);
+    if (!job || (job.status !== 'queued' && job.status !== 'in_flight')) return false;
+    if (scope && queueScope(job.payload) !== `${scope.org}/${scope.project}`) return false;
+    job.status = 'cancelled';
+    job.failure_reason = reason.trim().slice(0, 1000) || 'cancelled by operator';
     job.leased_until = undefined;
     job.lease_token = undefined;
     return true;
