@@ -19,6 +19,12 @@
   an asynchronous child process, preserve a hard timeout, and assert the real
   request path rather than replacing it with a fixture response.
 
+- **Hash-chain validity is not completeness.** A truncated prefix can still
+  verify perfectly, and an operator who can rewrite the file can recompute the
+  whole chain. Persist a checkpoint with sequence bounds, count, head and full
+  canonical digest; sign it only with an explicitly trusted key and retain it
+  outside the mutable run directory.
+
 ## 2026-09-17 — evidence-based enterprise review
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { verifyEventChainBrowser } from '../dist/audit-verify-browser.js';
 import {
   CONTROL_MAPPINGS,
   controlsCoverage,
+  createAuditCheckpoint,
   parseEventLines,
+  verifyAuditCheckpoint,
   verifyEventChain,
 } from '../dist/index.js';
 
@@ -25,6 +27,12 @@ function makeEvent(prev: string, body: Record<string, unknown>, index: number) {
   const rest = { ...body };
   const hash = createHash('sha256').update(prev).update(canon(rest)).digest('hex');
   return { prev_hash: index === 0 ? null : prev, ...rest, hash };
+}
+
+function makeCheckpointChain() {
+  const first = makeEvent(ZERO, { run_id: 'run-checkpoint', seq: 0, kind: 'run.start' }, 0);
+  const second = makeEvent(first.hash, { run_id: 'run-checkpoint', seq: 1, kind: 'run.end' }, 1);
+  return [first, second];
 }
 
 describe('controls catalog', () => {
@@ -82,6 +90,34 @@ describe('parseEventLines', () => {
     const lines = `${JSON.stringify({ prev_hash: null, hash: 'x', a: 1 })}\n\n${JSON.stringify({ prev_hash: 'x', hash: 'y', a: 2 })}\n`;
     const events = parseEventLines(lines);
     assert.equal(events.length, 2);
+  });
+});
+
+describe('audit checkpoints', () => {
+  it('binds the complete event set and rejects truncation or replacement', () => {
+    const events = makeCheckpointChain();
+    const checkpoint = createAuditCheckpoint(events);
+    assert.equal(verifyAuditCheckpoint(events, checkpoint).ok, true);
+    assert.equal(verifyAuditCheckpoint(events.slice(0, 1), checkpoint).ok, false);
+    assert.equal(verifyAuditCheckpoint([{ ...events[1], seq: 0 }], checkpoint).ok, false);
+  });
+
+  it('signs and verifies the checkpoint with an explicit trusted key', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const events = makeCheckpointChain();
+    const checkpoint = createAuditCheckpoint(events, {
+      key_id: 'audit-key-1',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    assert.equal(
+      verifyAuditCheckpoint(
+        events,
+        checkpoint,
+        publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      ).ok,
+      true,
+    );
+    assert.equal(verifyAuditCheckpoint(events, checkpoint).ok, false);
   });
 });
 
