@@ -838,3 +838,8 @@
 
 - Added the `aqa-budget-reaper` one-shot server entrypoint and an optional Helm `CronJob` with `concurrencyPolicy: Forbid`, bounded retry history, non-root/read-only security context and DSN-from-Secret wiring. Enabling the chart without a PostgreSQL Secret fails at template time; the binary fails closed without `AQA_BUDGET_LEDGER_DSN`.
 - Evidence: server build, typecheck, **122 tests passed**, CLI missing-DSN negative check, and CI Helm lint/template assertions updated. Helm is not installed in this Windows workspace, so rendered-chart evidence remains CI-authoritative.
+
+# 2026-09-17 — versioned pricing catalog identity
+
+- Added `PricingCatalog` parsing with schema/version/effective timestamp validation, deterministic model ordering and SHA-256 identity. `BudgetTracker` can consume the catalog and exposes `pricing_version`/`pricing_sha256` in every snapshot, making cost evidence attributable to a precise listino.
+- Evidence: cost build/typecheck and **12 tests passed**, including digest mismatch rejection. Signed catalog distribution, admin configuration/rotation and durable usage records carrying the catalog identity remain open.

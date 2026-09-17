@@ -1114,3 +1114,10 @@ Closing a page on abort is not sufficient if the fake or provider resolves the
 current await during close; the runner can otherwise continue and emit a normal
 body. Re-check the signal after browser awaits and convert the path to an
 execution error before oracle evaluation.
+
+# 2026-09-17 — cost evidence needs pricing identity
+
+Token counts without the applied pricing version are not reproducible financial
+evidence. Canonicalize model ordering, hash the catalog and carry version/hash
+with the tracker snapshot. Signature, distribution and rotation are separate
+trust controls; a local digest alone does not prove operator-approved pricing.

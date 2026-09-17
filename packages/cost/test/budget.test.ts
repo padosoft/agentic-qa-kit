@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { BudgetDispatchBlockedError, BudgetTracker } from '../dist/budget.js';
+import { parsePricingCatalog } from '../dist/catalog.js';
 import { MemoryBudgetLedger } from '../dist/ledger.js';
 import { BudgetReaper } from '../dist/reaper.js';
 
@@ -77,6 +78,19 @@ describe('BudgetTracker', () => {
       () => t.charge({ model: 'claude-sonnet-4-6', tokens_in: -1, tokens_out: 0 }),
       /token counts/,
     );
+  });
+
+  it('pins a versioned pricing catalog digest into tracker state', () => {
+    const catalog = parsePricingCatalog({
+      schema_version: '1',
+      version: '2026-q3',
+      effective_at: '2026-07-01T00:00:00Z',
+      models: { 'test-model': { input_per_mtok: 1, output_per_mtok: 2 } },
+    });
+    const tracker = new BudgetTracker({ budget_usd: 1, pricing_catalog: catalog });
+    assert.equal(tracker.snapshot().pricing_version, '2026-q3');
+    assert.equal(tracker.snapshot().pricing_sha256, catalog.sha256);
+    assert.throws(() => parsePricingCatalog({ ...catalog, sha256: 'bad' }), /sha256 mismatch/);
   });
 });
 

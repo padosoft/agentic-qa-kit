@@ -1,3 +1,4 @@
+import type { PricingCatalog } from './catalog.js';
 import { type ModelPricing, defaultPricing } from './pricing.js';
 
 export interface LlmCall {
@@ -15,6 +16,8 @@ export interface BudgetState {
   exhausted: boolean;
   pricing_error?: string;
   halted_reason?: string;
+  pricing_version?: string;
+  pricing_sha256?: string;
 }
 
 export class BudgetDispatchBlockedError extends Error {
@@ -27,6 +30,7 @@ export class BudgetDispatchBlockedError extends Error {
 export interface BudgetTrackerOptions {
   budget_usd: number | null;
   pricing?: Record<string, ModelPricing>;
+  pricing_catalog?: PricingCatalog;
 }
 
 /**
@@ -43,7 +47,9 @@ export class BudgetTracker {
   constructor(opts: BudgetTrackerOptions) {
     if (opts.budget_usd !== null && (!Number.isFinite(opts.budget_usd) || opts.budget_usd < 0))
       throw new Error('[cost] budget_usd must be null or a non-negative finite number');
-    this.pricing = opts.pricing ?? defaultPricing;
+    if (opts.pricing && opts.pricing_catalog)
+      throw new Error('[cost] pricing and pricing_catalog are mutually exclusive');
+    this.pricing = opts.pricing_catalog?.models ?? opts.pricing ?? defaultPricing;
     this.state = {
       budget_usd: opts.budget_usd,
       spent_usd: 0,
@@ -51,6 +57,12 @@ export class BudgetTracker {
       tokens_out: 0,
       calls: 0,
       exhausted: false,
+      ...(opts.pricing_catalog
+        ? {
+            pricing_version: opts.pricing_catalog.version,
+            pricing_sha256: opts.pricing_catalog.sha256,
+          }
+        : {}),
     };
   }
 
