@@ -634,6 +634,12 @@ provider adapter verify and parse the assertion, then enforce issuer, audience,
 time, replay and least-privilege role rules in a small deterministic boundary;
 otherwise “SAML supported” is only a dangerous parsing claim.
 
+# 2026-09-17 — a DR document must separate contract from proof
+
+A runbook can define the exact restore checks, but it cannot prove a provider’s
+WAL, KMS, object-lock or replication behavior. Keep those infrastructure gates
+explicit and require a timed isolated drill before claiming production recovery.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with

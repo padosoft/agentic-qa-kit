@@ -437,3 +437,8 @@
 
 - Added a provider-neutral SAML login boundary. An injected maintained XML signature/parser adapter feeds exact issuer/audience, required identity, time-window, atomic replay-claim and least-privilege role validation; no hand-written XML crypto is shipped.
 - Evidence: auth typecheck and 16/17 tests (one PostgreSQL session skip); repository Biome check and diff check pass. Real IdP metadata/certificate rollover, durable replay storage and external SAML HTTP journey remain open.
+
+# 2026-09-17 — DR and restore operational contract
+
+- Added `docs/operations/dr-runbook.md` with approved RPO/RTO inputs, Postgres/WAL and artifact-store backup contract, isolated restore sequence, digest/tenant/queue checks, quarterly drill criteria and explicit infrastructure boundary. Added ADR-052.
+- Evidence: documentation is present and scoped honestly; no live provider backup/restore was claimed. A real drill with KMS, WAL/PITR, object retention and measured RTO/RPO remains required.
