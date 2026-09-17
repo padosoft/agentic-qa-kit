@@ -33,6 +33,10 @@ const MISSING_PROBE_RUNNER: ProbeRunner = async (p) => ({
 
 export interface HttpProbeRunnerOptions {
   baseUrl: string;
+  /** Origins allowed for absolute URLs; defaults to the base URL origin. */
+  allowed_origins?: string[];
+  /** Maximum response body size retained as evidence. */
+  max_response_bytes?: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -41,6 +45,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
   const base = opts.baseUrl.replace(/\/+$/, '');
+  const baseOrigin = new URL(opts.baseUrl).origin;
+  const allowedOrigins = new Set(opts.allowed_origins ?? [baseOrigin]);
+  const maxResponseBytes = opts.max_response_bytes ?? 1_048_576;
   return async (probe) => {
     if (probe.kind !== 'http') {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
@@ -62,11 +69,53 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
     const url = /^https?:\/\//i.test(rawUrl)
       ? rawUrl
       : `${base}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return { probe_id: probe.id, error: 'http probe URL is invalid' };
+    }
+    if (!allowedOrigins.has(origin)) {
+      return { probe_id: probe.id, error: `http probe origin is not allowlisted: ${origin}` };
+    }
+    if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 1) {
+      return { probe_id: probe.id, error: 'max_response_bytes must be a positive integer' };
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), probe.timeout_ms);
     try {
-      const res = await fetch(url, { method, headers, body, signal: controller.signal });
-      const rawBody = await res.text();
+      const res = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+        redirect: 'manual',
+      });
+      const reader = res.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      if (reader) {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > maxResponseBytes) {
+            await reader.cancel();
+            return { probe_id: probe.id, error: `response body exceeds ${maxResponseBytes} bytes` };
+          }
+          chunks.push(next.value);
+        }
+      }
+      const rawBody = new TextDecoder().decode(
+        chunks.length === 1
+          ? chunks[0]
+          : chunks.reduce((all, chunk) => {
+              const joined = new Uint8Array(all.length + chunk.length);
+              joined.set(all);
+              joined.set(chunk, all.length);
+              return joined;
+            }, new Uint8Array()),
+      );
       let parsedBody: unknown = rawBody;
       try {
         parsedBody = rawBody ? JSON.parse(rawBody) : rawBody;

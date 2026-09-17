@@ -187,4 +187,36 @@ describe('runScenario', () => {
     });
     assert.match(result.error ?? '', /unsupported probe kind/i);
   });
+
+  it('makeHttpProbeRunner blocks non-allowlisted origins and oversized responses', async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response('0123456789');
+    }) as typeof fetch;
+    try {
+      const runner = makeHttpProbeRunner({
+        baseUrl: 'https://shop.example',
+        max_response_bytes: 5,
+      });
+      const external = await runner({
+        id: 'external',
+        kind: 'http',
+        with: { method: 'GET', url: 'https://evil.example/data' },
+        timeout_ms: 1000,
+      });
+      assert.match(external.error ?? '', /not allowlisted/);
+      assert.equal(calls, 0);
+      const oversized = await runner({
+        id: 'large',
+        kind: 'http',
+        with: { method: 'GET', url: '/large' },
+        timeout_ms: 1000,
+      });
+      assert.match(oversized.error ?? '', /exceeds 5 bytes/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
