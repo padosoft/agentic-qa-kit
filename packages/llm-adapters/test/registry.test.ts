@@ -8,7 +8,7 @@ describe('adapterFor', () => {
     assert.equal(a.provider, 'fixture');
   });
 
-  it('returns a scaffold that throws for providers without a live adapter', async () => {
+  it('returns Bedrock adapter and fails closed when credentials are absent', async () => {
     const a = adapterFor('bedrock');
     await assert.rejects(
       () =>
@@ -17,7 +17,7 @@ describe('adapterFor', () => {
           model: 'bedrock-test',
           messages: [{ role: 'user', content: 'hi' }],
         }),
-      /not implemented at v0.3/,
+      /requires AWS region and credentials/,
     );
   });
 });

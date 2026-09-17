@@ -1,4 +1,5 @@
 import { AnthropicAdapter, type AnthropicOptions } from './anthropic.js';
+import { BedrockAdapter, type BedrockOptions } from './bedrock.js';
 import { CohereAdapter, type CohereOptions } from './cohere.js';
 import { FixtureAdapter } from './fixture.js';
 import { GoogleAdapter, type GoogleOptions } from './google.js';
@@ -25,6 +26,7 @@ export function adapterFor(
     anthropic?: AnthropicOptions;
     google?: GoogleOptions;
     cohere?: CohereOptions;
+    bedrock?: BedrockOptions;
     fixtures?: Parameters<typeof FixtureAdapter.prototype.call> extends never
       ? never
       : Array<{
@@ -47,5 +49,6 @@ export function adapterFor(
   if (provider === 'anthropic') return new AnthropicAdapter(opts?.anthropic);
   if (provider === 'google') return new GoogleAdapter(opts?.google);
   if (provider === 'cohere') return new CohereAdapter(opts?.cohere);
+  if (provider === 'bedrock') return new BedrockAdapter(opts?.bedrock);
   return new ScaffoldAdapter(provider);
 }

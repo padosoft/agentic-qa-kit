@@ -15,16 +15,16 @@ with semantically wrong prompts, tools or accounting.
 ## Decision
 
 Implement one adapter per provider contract behind the shared `LlmAdapter`
-interface. Google and Cohere now have native bounded adapters with injected
-fetch transports, timeout cancellation, output caps, redaction, tool mapping,
-usage parsing and model provenance hashes. Providers without a verified wire
-contract, currently Bedrock, remain explicit scaffolds and fail closed.
+interface. Google, Cohere and Bedrock now have native bounded adapters with
+injected fetch transports, timeout cancellation, output caps, redaction, tool
+mapping, usage parsing and model provenance hashes. Bedrock signs the Runtime
+Converse request with AWS SigV4 and fails closed when region/credentials are
+absent.
 
 ## Consequences
 
 Fixtures and tests can validate each provider without credentials or network
 access. Provider-specific auth, regional routing and response semantics are
-visible in code rather than hidden behind a false compatibility claim. Bedrock
-still requires a separate AWS SigV4/runtime implementation before it may be
-registered as live.
-
+visible in code rather than hidden behind a false compatibility claim. IAM,
+credential rotation, regional routing and private endpoint reachability remain
+deployment responsibilities.

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { BedrockAdapter } from '../dist/bedrock.js';
 import { CohereAdapter } from '../dist/cohere.js';
 import { GoogleAdapter } from '../dist/google.js';
 
@@ -84,5 +85,37 @@ describe('provider-specific LLM adapters', () => {
       () => failing.call({ ...input, provider: 'cohere' }),
       /LLM 503: Bearer \[REDACTED\]/,
     );
+  });
+
+  it('Bedrock signs the Converse request without requiring an AWS SDK', async () => {
+    let authorization = '';
+    let securityToken = '';
+    const adapter = new BedrockAdapter({
+      region: 'eu-west-1',
+      accessKeyId: 'AKIATESTKEY00000000',
+      secretAccessKey: 'secret',
+      sessionToken: 'session',
+      endpoint: 'https://bedrock.test',
+      now: () => new Date('2026-01-02T03:04:05.000Z'),
+      fetch: async (_url, init) => {
+        const headers = new Headers(init?.headers);
+        authorization = headers.get('authorization') ?? '';
+        securityToken = headers.get('x-amz-security-token') ?? '';
+        return new Response(
+          JSON.stringify({
+            output: { message: { content: [{ text: 'bedrock answer' }] } },
+            usage: { inputTokens: 7, outputTokens: 8 },
+            stopReason: 'end_turn',
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await adapter.call({ ...input, provider: 'bedrock', model: 'amazon.test' });
+    assert.match(authorization, /^AWS4-HMAC-SHA256 Credential=AKIA/);
+    assert.equal(securityToken, 'session');
+    assert.equal(result.text, 'bedrock answer');
+    assert.equal(result.tokens_in, 7);
+    assert.equal(result.tokens_out, 8);
   });
 });
