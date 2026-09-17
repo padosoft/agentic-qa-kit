@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, sign, verify } from 'node:crypto';
 
 export interface BackupInventory {
   schema_version: '1';
@@ -22,6 +22,20 @@ export interface BackupInventory {
   objectives: {
     rpo_minutes: number;
     rto_minutes: number;
+  };
+}
+
+export interface BackupInventorySigner {
+  key_id: string;
+  private_key_pem: string;
+}
+
+export interface SignedBackupInventory {
+  inventory: BackupInventory;
+  signature: {
+    algorithm: 'ed25519';
+    key_id: string;
+    signature: string;
   };
 }
 
@@ -70,6 +84,55 @@ export function canonicalBackupInventory(input: unknown): string {
 
 export function backupInventorySha256(input: unknown): string {
   return createHash('sha256').update(canonicalBackupInventory(input), 'utf8').digest('hex');
+}
+
+export function signBackupInventory(
+  input: unknown,
+  signer: BackupInventorySigner,
+): SignedBackupInventory {
+  const inventory = parseBackupInventory(input);
+  if (!signer.key_id.trim()) throw new Error('backup inventory signer key_id is required');
+  return {
+    inventory,
+    signature: {
+      algorithm: 'ed25519',
+      key_id: signer.key_id.trim(),
+      signature: sign(
+        null,
+        Buffer.from(canonicalBackupInventory(inventory), 'utf8'),
+        signer.private_key_pem,
+      ).toString('base64url'),
+    },
+  };
+}
+
+export function verifyBackupInventory(
+  signed: unknown,
+  trustedPublicKeyPem?: string,
+): { ok: boolean; reason?: string } {
+  try {
+    if (!isRecord(signed) || !isRecord(signed.signature))
+      throw new Error('backup inventory signature is missing');
+    const inventory = parseBackupInventory(signed.inventory);
+    const signature = signed.signature;
+    if (signature.algorithm !== 'ed25519')
+      throw new Error('unsupported backup inventory signature');
+    if (typeof signature.key_id !== 'string' || !signature.key_id.trim())
+      throw new Error('backup inventory signature key_id is required');
+    if (typeof signature.signature !== 'string' || !signature.signature)
+      throw new Error('backup inventory signature value is required');
+    if (!trustedPublicKeyPem) throw new Error('backup inventory has no trusted public key');
+    const valid = verify(
+      null,
+      Buffer.from(canonicalBackupInventory(inventory), 'utf8'),
+      trustedPublicKeyPem,
+      Buffer.from(signature.signature, 'base64url'),
+    );
+    if (!valid) throw new Error('backup inventory signature mismatch');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

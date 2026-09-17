@@ -29,5 +29,9 @@ export {
   backupInventorySha256,
   canonicalBackupInventory,
   parseBackupInventory,
+  signBackupInventory,
+  verifyBackupInventory,
+  type BackupInventorySigner,
+  type SignedBackupInventory,
   type BackupInventory,
 } from './dr-manifest.js';

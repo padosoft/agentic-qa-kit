@@ -10,7 +10,9 @@ import {
   createAuditCheckpoint,
   parseBackupInventory,
   parseEventLines,
+  signBackupInventory,
   verifyAuditCheckpoint,
+  verifyBackupInventory,
   verifyEventChain,
 } from '../dist/index.js';
 
@@ -117,6 +119,24 @@ describe('backup inventory contract', () => {
     assert.throws(
       () => parseBackupInventory({ ...inventory, objectives: { rpo_minutes: 0, rto_minutes: 60 } }),
       /positive integer/,
+    );
+  });
+
+  it('signs and verifies the canonical inventory with an explicit trust root', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const signed = signBackupInventory(inventory, {
+      key_id: 'dr-key-2026',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    assert.deepEqual(verifyBackupInventory(signed, publicKeyPem), { ok: true });
+    assert.equal(verifyBackupInventory(signed).ok, false);
+    assert.equal(
+      verifyBackupInventory(
+        { ...signed, inventory: { ...signed.inventory, operator_run_id: 'tampered' } },
+        publicKeyPem,
+      ).ok,
+      false,
     );
   });
 });

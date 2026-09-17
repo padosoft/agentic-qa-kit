@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Added Ed25519 signatures for DR inventory evidence.** Backup inventories
+  can now be signed over their canonical representation and verified against an
+  explicitly supplied trusted public key; missing trust roots and tampered
+  payloads fail closed. Evidence: compliance tests **13 passed / 0 failed**,
+  build/typecheck/Biome/diff-check pass. Key custody/rotation remains an
+  external KMS/Vault responsibility.
+
 - **Added a machine-validatable DR backup inventory contract.**
   `@aqa/compliance` now parses and canonicalizes a redacted recovery manifest
   containing PITR target/LSN, schema version, artifact manifest digest/object

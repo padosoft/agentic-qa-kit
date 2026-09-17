@@ -1597,3 +1597,11 @@ manifest digest, immutable image digest, operator drill ID and explicit RPO/RTO
 objectives. Canonicalize it before signing or hashing, reject path-like or
 unbounded identifiers, and keep credentials out of the manifest. The contract
 still does not prove that infrastructure performed a restore.
+
+# 2026-09-17 — signatures need an explicit trust root
+
+Hashing an inventory detects accidental changes but does not establish who
+attested it. Sign the canonical manifest with Ed25519 and require the caller to
+provide the trusted public key during verification; never infer trust from the
+embedded key ID and never claim that repository code manages KMS/Vault key
+custody or rotation.
