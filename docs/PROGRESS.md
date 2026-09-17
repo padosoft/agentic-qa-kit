@@ -506,3 +506,8 @@
 
 - Added `PostgresScimTokenStore` with serialized schema migration, hash-only records, tenant/index support, expiry cleanup and explicit close. Helm now maps `AQA_SCIM_TOKEN_DSN` in all PostgreSQL modes, and the CI Helm assertions cover the new production wiring.
 - Evidence: auth typecheck and 17 passed/2 environment skips (the new PostgreSQL round-trip is skipped without DSN); lint and diff-check pass. The hosted PostgreSQL job must execute the round-trip before claiming durable production evidence; atomic rotation/rate limiting remain open.
+
+# 2026-09-17 — durable SAML replay guard
+
+- Added `PostgresSamlReplayGuard` with serialized migration, expiry index and atomic single-claim semantics. The existing SAML boundary can now use a durable replay store without weakening its maintained signature-verifier adapter boundary.
+- Evidence: auth suite 17 passed/3 PostgreSQL-dependent skips without DSN, typecheck and lint pass. The hosted PostgreSQL job now invokes the combined SCIM/SAML persistence contract; real IdP metadata/certificate rollover and HTTP login wiring remain open.

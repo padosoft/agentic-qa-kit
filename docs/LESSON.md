@@ -730,3 +730,9 @@ Hash-only token lifecycle logic is not durable merely because its interface is
 async. Provide a storage implementation with serialized migration, tenant
 indexes, expiry handling and close semantics, then wire its DSN through the
 deployment chart and exercise it in the real database job.
+
+# 2026-09-17 — replay prevention must be atomic at the storage boundary
+
+Checking an assertion ID and inserting it as two operations permits concurrent
+replay. Use a unique key with an atomic insert result, retain expiry cleanup,
+and keep XML signature verification outside the persistence implementation.

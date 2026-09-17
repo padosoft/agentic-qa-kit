@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { PostgresScimTokenStore, ScimTokenManager } from '../dist/index.js';
+import { PostgresSamlReplayGuard } from '../dist/index.js';
 
 describe('PostgresScimTokenStore', () => {
   it(
@@ -20,6 +21,24 @@ describe('PostgresScimTokenStore', () => {
       await second.revoke(issued.tenant, issued.id);
       assert.equal(await second.verify(issued.tenant, issued.id, issued.token), false);
       await secondStore.close();
+    },
+  );
+});
+
+describe('PostgresSamlReplayGuard', () => {
+  it(
+    'claims an assertion once across store instances',
+    { skip: !process.env.AQA_TEST_POSTGRES_DSN },
+    async () => {
+      const dsn = process.env.AQA_TEST_POSTGRES_DSN as string;
+      const first = new PostgresSamlReplayGuard(dsn);
+      const assertionId = `postgres-saml-${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 60_000).toISOString();
+      assert.equal(await first.claim(assertionId, expiresAt), true);
+      await first.close();
+      const second = new PostgresSamlReplayGuard(dsn);
+      assert.equal(await second.claim(assertionId, expiresAt), false);
+      await second.close();
     },
   );
 });

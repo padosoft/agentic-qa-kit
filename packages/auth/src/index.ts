@@ -36,3 +36,4 @@ export {
 } from './oidc-session.js';
 export { PostgresOidcSessionStore } from './postgres-session.js';
 export { PostgresScimTokenStore } from './postgres-scim-token.js';
+export { PostgresSamlReplayGuard } from './postgres-saml-replay.js';
