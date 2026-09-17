@@ -13,6 +13,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - Versioned tenant/run context and order, payment, inventory snapshots.
 - Explicit `pass`, `fail`, `blocked`, `unsupported`, and `inconclusive` outcomes.
 - Fail-closed currency and inventory invariants.
+- Provider-neutral `CommerceAdapter` contract for HTTP, browser and observer-backed merchants.
+- `verifyCheckoutJourney()` checks capability preflight, exact inventory effects,
+  snapshot integrity and idempotent checkout retries with structured evidence.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
 
@@ -39,6 +42,23 @@ const identity = { tenant: 'shop-a', customer_id: 'customer-a' };
 const cart = merchant.createCart(identity);
 merchant.addLine(identity, cart.id, 'sku-1', 1);
 const result = merchant.checkout(identity, cart.id, 'stable-key');
+```
+
+To run the same journey through the adapter contract:
+
+```ts
+const journey = await verifyCheckoutJourney(merchant.asAdapter(), {
+  context: {
+    schema_version: '1', merchant: 'reference', environment: 'sandbox',
+    tenant: 'shop-a', run_id: 'run-1', policy_revision: 'policy-1',
+    capabilities: {},
+  },
+  identity,
+  sku: 'sku-1',
+  quantity: 1,
+  idempotencyKey: 'stable-key',
+});
+// journey.outcome.status === 'pass' only when observations are complete.
 ```
 
 Use it as a test merchant, not as a production payment implementation. Real

@@ -83,6 +83,15 @@ export const JourneyOutcome = z.object({
 });
 export type JourneyOutcome = z.infer<typeof JourneyOutcome>;
 
+export const CommerceCapabilities = z.object({
+  checkout: z.boolean(),
+  refunds: z.boolean(),
+  inventory_observer: z.boolean(),
+  webhook_observer: z.boolean(),
+  idempotency: z.boolean(),
+});
+export type CommerceCapabilities = z.infer<typeof CommerceCapabilities>;
+
 export const CartSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -98,6 +107,120 @@ export type CommerceIdentity = {
   tenant: string;
   customer_id: string;
 };
+
+/**
+ * Provider-neutral contract for a commerce system under test. Implementations
+ * may call HTTP, a browser, or a read-only database observer, but they must
+ * return validated snapshots rather than provider-specific response blobs.
+ */
+export interface CommerceAdapter {
+  capabilities(context: CommerceContext): Promise<CommerceCapabilities>;
+  createCart(identity: CommerceIdentity): Promise<CartSnapshot>;
+  addLine(
+    identity: CommerceIdentity,
+    cartId: string,
+    sku: string,
+    quantity: number,
+  ): Promise<CartSnapshot>;
+  checkout(
+    identity: CommerceIdentity,
+    cartId: string,
+    idempotencyKey: string,
+  ): Promise<CheckoutResult>;
+  getOrder(identity: CommerceIdentity, orderId: string): Promise<OrderSnapshot>;
+  getPayment(identity: CommerceIdentity, orderId: string): Promise<PaymentSnapshot>;
+  getInventory(sku: string): Promise<InventorySnapshot>;
+  refund(
+    identity: CommerceIdentity,
+    orderId: string,
+    amount: Money,
+    idempotencyKey: string,
+  ): Promise<RefundResult>;
+}
+
+export type CommerceJourneyEvidence = {
+  step: string;
+  ok: boolean;
+  detail: string;
+};
+
+export type CheckoutJourneyOptions = {
+  context: CommerceContext;
+  identity: CommerceIdentity;
+  sku: string;
+  quantity: number;
+  idempotencyKey: string;
+};
+
+/**
+ * Runs the minimum safe checkout journey against any adapter. A provider is
+ * never marked as passing when it cannot expose the required observations or
+ * when an idempotent retry produces a second effect.
+ */
+export async function verifyCheckoutJourney(
+  adapter: CommerceAdapter,
+  opts: CheckoutJourneyOptions,
+): Promise<{ outcome: JourneyOutcome; evidence: readonly CommerceJourneyEvidence[] }> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  const record = (step: string, ok: boolean, detail: string) => {
+    evidence.push({ step, ok, detail });
+  };
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.checkout || !capabilities.idempotency || !capabilities.inventory_observer) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout, idempotency, or inventory observation',
+        },
+        evidence,
+      };
+    }
+    const before = InventorySnapshot.parse(await adapter.getInventory(opts.sku));
+    assertInventoryIntegrity(before);
+    record('inventory.before', true, `revision=${before.revision}`);
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    assertCartIntegrity(updatedCart);
+    record('cart.add_line', true, `cart=${updatedCart.id}`);
+    const first = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    const retry = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    if (JSON.stringify(first) !== JSON.stringify(retry)) {
+      throw new Error('idempotent checkout retry returned a different result');
+    }
+    record('checkout.idempotent_retry', true, `order=${first.order.id}`);
+    const order = OrderSnapshot.parse(await adapter.getOrder(opts.identity, first.order.id));
+    const payment = PaymentSnapshot.parse(await adapter.getPayment(opts.identity, first.order.id));
+    assertOrderIntegrity(order);
+    assertPaymentIntegrity(payment);
+    const after = InventorySnapshot.parse(await adapter.getInventory(opts.sku));
+    assertInventoryIntegrity(after);
+    if (after.committed - before.committed !== opts.quantity) {
+      throw new Error('checkout did not commit the requested inventory quantity exactly once');
+    }
+    record('postconditions', true, `order=${order.status}; payment=${payment.status}`);
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'checkout journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
 
 export type ReferenceProduct = {
   sku: string;
@@ -352,6 +475,27 @@ export class InMemoryCommerceReference {
     return stock;
   }
 
+  /** Exposes the reference merchant through the same async contract as real providers. */
+  asAdapter(): CommerceAdapter {
+    return {
+      capabilities: async () => ({
+        checkout: true,
+        refunds: true,
+        inventory_observer: true,
+        webhook_observer: false,
+        idempotency: true,
+      }),
+      createCart: async (identity) => this.createCart(identity),
+      addLine: async (identity, cartId, sku, quantity) =>
+        this.addLine(identity, cartId, sku, quantity),
+      checkout: async (identity, cartId, key) => this.checkout(identity, cartId, key),
+      getOrder: async (identity, orderId) => this.getOrder(identity, orderId),
+      getPayment: async (identity, orderId) => this.getPayment(identity, orderId),
+      getInventory: async (sku) => this.getInventory(sku),
+      refund: async (identity, orderId, amount, key) => this.refund(identity, orderId, amount, key),
+    };
+  }
+
   private authorizeCart(identity: CommerceIdentity, cartId: string): CartSnapshot {
     const cart = this.carts.get(cartId);
     if (!cart || cart.tenant !== identity.tenant || cart.customer_id !== identity.customer_id)
@@ -374,6 +518,86 @@ export function assertSameCurrency(...money: Money[]): string {
     throw new Error('cross-currency arithmetic requires an explicit FX operation');
   }
   return currency;
+}
+
+export function assertMoneyNonNegative(money: Money, label = 'money'): void {
+  Money.parse(money);
+  if (BigInt(money.amount_minor) < 0n) throw new Error(`${label} cannot be negative`);
+}
+
+export function assertCartIntegrity(cart: CartSnapshot): void {
+  const currency =
+    cart.lines.length > 0
+      ? assertSameCurrency(...cart.lines.map((line) => line.unit_price))
+      : undefined;
+  for (const line of cart.lines) {
+    assertMoneyNonNegative(line.unit_price, `${line.sku}.unit_price`);
+    assertMoneyNonNegative(line.line_total, `${line.sku}.line_total`);
+    const expected = BigInt(line.unit_price.amount_minor) * BigInt(line.quantity);
+    if (BigInt(line.line_total.amount_minor) !== expected) {
+      throw new Error(`line total mismatch for ${line.sku}`);
+    }
+    if (currency && line.line_total.currency !== currency) {
+      throw new Error(`line total currency mismatch for ${line.sku}`);
+    }
+  }
+}
+
+export function assertOrderIntegrity(order: OrderSnapshot): void {
+  assertCartIntegrity({
+    schema_version: '1',
+    id: `order-lines-${order.id}`,
+    tenant: order.tenant,
+    customer_id: order.customer_id,
+    revision: 0,
+    lines: order.lines,
+    status: 'checked_out',
+  });
+  const currency = assertSameCurrency(order.subtotal, order.tax, order.discount, order.total);
+  const subtotal = order.lines.reduce(
+    (sum, line) => sum + BigInt(line.line_total.amount_minor),
+    0n,
+  );
+  const expectedTotal =
+    subtotal + BigInt(order.tax.amount_minor) - BigInt(order.discount.amount_minor);
+  if (order.subtotal.currency !== currency || BigInt(order.subtotal.amount_minor) !== subtotal) {
+    throw new Error('order subtotal does not match its lines');
+  }
+  if (BigInt(order.total.amount_minor) !== expectedTotal || expectedTotal < 0n) {
+    throw new Error('order total does not match subtotal, tax, and discount');
+  }
+}
+
+export function assertPaymentIntegrity(payment: PaymentSnapshot): void {
+  assertSameCurrency(payment.amount, payment.refunded_amount);
+  if (BigInt(payment.refunded_amount.amount_minor) > BigInt(payment.amount.amount_minor)) {
+    throw new Error('payment refunded amount exceeds captured amount');
+  }
+  const fullyRefunded =
+    BigInt(payment.refunded_amount.amount_minor) === BigInt(payment.amount.amount_minor);
+  if (fullyRefunded !== (payment.status === 'refunded')) {
+    throw new Error('payment refund status does not match refunded amount');
+  }
+}
+
+export function assertInventoryIntegrity(snapshot: InventorySnapshot): void {
+  if (snapshot.reserved + snapshot.committed > snapshot.on_hand && !snapshot.backorder_allowed) {
+    throw new Error(`inventory oversell: ${snapshot.sku} exceeds on_hand`);
+  }
+  if (snapshot.revision < 0) throw new Error(`inventory revision is invalid for ${snapshot.sku}`);
+}
+
+function validateCheckoutResult(result: CheckoutResult): CheckoutResult {
+  const order = OrderSnapshot.parse(result.order);
+  const payment = PaymentSnapshot.parse(result.payment);
+  const inventory = result.inventory.map((snapshot) => InventorySnapshot.parse(snapshot));
+  assertOrderIntegrity(order);
+  assertPaymentIntegrity(payment);
+  inventory.forEach(assertInventoryIntegrity);
+  if (payment.order_id !== order.id || payment.amount.currency !== order.currency) {
+    throw new Error('checkout payment does not belong to order');
+  }
+  return { order, payment, inventory };
 }
 
 export function assertNoOversell(snapshot: InventorySnapshot): void {

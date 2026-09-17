@@ -6,7 +6,9 @@ import {
   JourneyOutcome,
   Money,
   assertNoOversell,
+  assertOrderIntegrity,
   assertSameCurrency,
+  verifyCheckoutJourney,
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
@@ -158,6 +160,61 @@ describe('@aqa/commerce contracts', () => {
           'refund-2',
         ),
       /exceeds captured/,
+    );
+  });
+
+  it('runs the provider-neutral checkout journey with complete evidence', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'journey-sku',
+      price: { currency: 'EUR', amount_minor: '1299' },
+      on_hand: 2,
+    });
+    const result = await verifyCheckoutJourney(merchant.asAdapter(), {
+      context: {
+        schema_version: '1',
+        merchant: 'reference',
+        environment: 'sandbox',
+        tenant: 'shop-a',
+        run_id: 'run-1',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity: { tenant: 'shop-a', customer_id: 'journey-customer' },
+      sku: 'journey-sku',
+      quantity: 1,
+      idempotencyKey: 'journey-checkout',
+    });
+    assert.equal(result.outcome.status, 'pass');
+    assert.equal(result.outcome.evidence_complete, true);
+    assert.equal(result.evidence.length, 4);
+  });
+
+  it('rejects a provider result whose line total is mathematically false', () => {
+    assert.throws(
+      () =>
+        assertOrderIntegrity({
+          schema_version: '1',
+          id: 'order-1',
+          revision: 1,
+          tenant: 'shop-a',
+          customer_id: 'customer-a',
+          lines: [
+            {
+              sku: 'sku-a',
+              quantity: 2,
+              unit_price: { currency: 'EUR', amount_minor: '100' },
+              line_total: { currency: 'EUR', amount_minor: '100' },
+            },
+          ],
+          subtotal: { currency: 'EUR', amount_minor: '100' },
+          tax: { currency: 'EUR', amount_minor: '0' },
+          discount: { currency: 'EUR', amount_minor: '0' },
+          total: { currency: 'EUR', amount_minor: '100' },
+          currency: 'EUR',
+          status: 'paid',
+        }),
+      /line total mismatch/,
     );
   });
 });

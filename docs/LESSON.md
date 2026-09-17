@@ -356,3 +356,12 @@ headers, system placement, content blocks, stop reasons and tool schemas differ.
 Implement each live provider behind the same bounded/redacted interface and keep
 unsupported providers as explicit scaffolds, so the registry cannot silently
 claim coverage that the wire contract does not provide.
+
+# 2026-09-17 — commerce adapters must prove effects, not response shapes
+
+A commerce provider can return schema-valid order/payment objects while still
+charging twice or overselling stock. The adapter contract therefore needs a
+capability preflight and an executable journey that compares before/after
+inventory, validates arithmetic invariants, and retries the same idempotency
+key. Missing observers are `unsupported`; malformed or inconsistent snapshots
+are `error`; neither is a successful checkout.
