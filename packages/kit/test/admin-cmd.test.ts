@@ -142,6 +142,16 @@ describe('aqa admin — boot + smoke', () => {
       assert.equal(openApi.openapi, '3.1.0');
       assert.ok(openApi.paths['/api/runs/{id}']);
 
+      const asyncApiRes = await fetchText(`${boot.url}/asyncapi.json`);
+      assert.equal(asyncApiRes.status, 200);
+      assert.match(asyncApiRes.contentType, /application\/asyncapi\+json/);
+      const asyncApi = JSON.parse(asyncApiRes.text) as {
+        asyncapi: string;
+        operations: Record<string, unknown>;
+      };
+      assert.equal(asyncApi.asyncapi, '3.0.0');
+      assert.ok(asyncApi.operations.receive_run_requested);
+
       const usersRes = await fetchText(`${boot.url}/api/users`);
       assert.equal(usersRes.status, 200);
       const users = JSON.parse(usersRes.text) as {

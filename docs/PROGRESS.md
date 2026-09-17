@@ -1077,3 +1077,14 @@
   after reconnect and reverse-proxy deployment evidence.
 - Next: add bounded replay/cursor semantics to the event bus and recovery
   refetches on stream reconnect.
+
+# 2026-09-17 — AsyncAPI live event contract
+
+- Added an AsyncAPI 3.0 document generated from the supported live event
+  registry and exposed it from `GET /asyncapi.json`. It documents the
+  tenant-scoped `BusEvent` envelope, `runs:read` permission, and the current
+  run/finding notification types for SSE and future WebSocket adapters.
+- Evidence: server contract suite passed with the AsyncAPI operation assertion,
+  kit admin HTTP test verifies content type and event operation, repository
+  typecheck/lint/diff checks passed. Durable replay/cursor semantics remain the
+  next eventing increment.

@@ -1353,3 +1353,10 @@ a tenant-scoped event, parse it in the actual SPA, render connection state, and
 assert it in Playwright. Keep that event as an invalidation hint and re-read
 authoritative projections; EventSource retry does not recover events missed
 during a disconnected interval.
+
+# 2026-09-17 — describe events separately from HTTP routes
+
+OpenAPI can document the SSE endpoint but not the message vocabulary and event
+payload contract. Keep a small event-type registry as the source for AsyncAPI,
+then make the stream adapter consume that same vocabulary. This prevents a
+consumer from discovering a transport that has no stable message semantics.

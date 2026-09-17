@@ -34,3 +34,8 @@ export {
   type EventHandler,
 } from './event-bus.js';
 export { buildOpenApiDocument, type OpenApiDocument } from './openapi.js';
+export {
+  buildAsyncApiDocument,
+  LIVE_EVENT_TYPES,
+  type AsyncApiDocument,
+} from './asyncapi.js';

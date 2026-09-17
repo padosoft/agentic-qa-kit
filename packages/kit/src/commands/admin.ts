@@ -35,7 +35,7 @@ import {
 } from '@aqa/auth';
 import { safeErrorMessage } from '@aqa/observability';
 import { Event, Finding, Run } from '@aqa/schemas';
-import { buildOpenApiDocument } from '@aqa/server';
+import { buildAsyncApiDocument, buildOpenApiDocument } from '@aqa/server';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
 
@@ -619,6 +619,13 @@ async function handleRequest(
     res.setHeader('content-type', 'application/vnd.oai.openapi+json');
     res.setHeader('cache-control', 'no-store');
     res.end(JSON.stringify(buildOpenApiDocument(hctx.api)));
+    return;
+  }
+  if (method === 'GET' && url.pathname === '/asyncapi.json') {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/asyncapi+json');
+    res.setHeader('cache-control', 'no-store');
+    res.end(JSON.stringify(buildAsyncApiDocument()));
     return;
   }
 

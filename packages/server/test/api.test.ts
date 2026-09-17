@@ -6,7 +6,13 @@ import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
-import { type QueueQuota, RunnerQueue, buildOpenApiDocument, makeApi } from '../dist/index.js';
+import {
+  type QueueQuota,
+  RunnerQueue,
+  buildAsyncApiDocument,
+  buildOpenApiDocument,
+  makeApi,
+} from '../dist/index.js';
 
 const FAKE_USER = {
   id: '1',
@@ -79,6 +85,17 @@ describe('makeApi', () => {
     assert.ok(operations.every((operation) => typeof operation.operationId === 'string'));
     assert.ok(operations.some((operation) => operation['x-aqa-permission'] === 'runs:read'));
     assert.ok(document.paths['/api/runs/{id}']?.get);
+  });
+
+  it('publishes an AsyncAPI operation for every supported live event type', () => {
+    const document = buildAsyncApiDocument();
+    assert.equal(document.asyncapi, '3.0.0');
+    assert.deepEqual(Object.keys(document.operations).sort(), [
+      'receive_finding_status_changed',
+      'receive_run_cancelled',
+      'receive_run_requested',
+    ]);
+    assert.equal(document.components.schemas.BusEvent.type, 'object');
   });
 
   it('exposes the v1.4 route surface (>= 28 routes)', () => {
