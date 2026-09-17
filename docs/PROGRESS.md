@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added the bounded MCP control surface.** `AqaMcpServer` negotiates an
+  explicitly supported protocol version and exposes only tenant-scoped plan,
+  start, status, cancel and metadata-only evidence tools. Permission checks,
+  principal-derived scope, bounded inputs and idempotent starts are enforced
+  before the host port is called. Evidence: server MCP suite **4 pass / 0
+  fail**, package build/typecheck/Biome green. Streamable HTTP authentication,
+  real queue/provider binding and deployed MCP journey remain required.
+  ADR-192 records the transport-neutral boundary.
+
 - **Closed the trajectory verification loop.** `verifyAgentTrajectory()` now
   checks identity, contiguous sequence, SHA-256 digests, token reconciliation
   and (when supplied) one-to-one correspondence with agent hash-chain events.

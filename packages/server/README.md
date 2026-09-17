@@ -61,3 +61,11 @@ When `AQA_BUDGET_DSN` is configured, the admin API exposes tenant-scoped
 `GET/POST /api/cost/halt`. Reads require `cost:read`; the emergency write
 requires admin-only `cost:edit`, derives the ledger key from `x-aqa-org` and
 `x-aqa-project`, and returns `503` when no durable controller is configured.
+
+`AqaMcpServer` is the provider-neutral MCP control boundary. A host binds one
+instance to an authenticated connection and injects an `McpRunPort`; the
+allowlisted tools are limited to planning, starting, status, cancellation and
+metadata-only evidence. Tenant scope is derived from `McpPrincipal`, starts
+require an idempotency key, and raw event/tool payloads are never returned.
+The host still owns MCP transport, authentication and the live queue/provider
+implementation; the included tests prove the JSON-RPC policy boundary only.

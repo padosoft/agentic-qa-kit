@@ -53,3 +53,17 @@ export {
   LIVE_EVENT_TYPES,
   type AsyncApiDocument,
 } from './asyncapi.js';
+export {
+  AQA_MCP_PROTOCOL_VERSIONS,
+  AqaMcpServer,
+  type AqaMcpProtocolVersion,
+  type McpEvidenceSummary,
+  type McpJsonRpcRequest,
+  type McpJsonRpcResponse,
+  type McpPermission,
+  type McpPrincipal,
+  type McpRunPlan,
+  type McpRunPort,
+  type McpRunSelector,
+  type McpRunStatus,
+} from './mcp.js';
