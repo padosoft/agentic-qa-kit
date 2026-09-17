@@ -377,19 +377,28 @@ describe('PostgresStore', () => {
       const beforeTransitionHashes = new Set(
         (await reopened.listEvents(FINDING.run_id)).map((event) => event.hash),
       );
-      const transitions = await Promise.all([
+      // Concurrent decisions are serialized by the database advisory lock.
+      // Depending on lock acquisition order, one decision may legitimately
+      // become invalid after the other reaches a terminal state; that is a
+      // conflict, not evidence that the store lost atomicity.
+      const transitions = await Promise.allSettled([
         reopened.transitionFindingStatus(FINDING.id, 'rejected', 'ci-a', 'first decision'),
         reopened.transitionFindingStatus(FINDING.id, 'fixed', 'ci-b', 'second decision'),
       ]);
-      assert.equal(transitions.filter(Boolean).length, 2);
+      const fulfilled = transitions.filter((result) => result.status === 'fulfilled');
+      const rejected = transitions.filter((result) => result.status === 'rejected');
+      assert.ok(fulfilled.length >= 1);
+      for (const result of rejected) {
+        assert.match(String(result.reason), /status transition .* is not allowed/);
+      }
       const auditEvents = (await reopened.listEvents(FINDING.run_id)).filter(
         (event) =>
           event.payload.action === 'finding_status_changed' &&
           !beforeTransitionHashes.has(event.hash),
       );
-      assert.equal(auditEvents.length, 2);
-      assert.equal(new Set(auditEvents.map((event) => event.seq)).size, 2);
-      assert.equal(new Set(auditEvents.map((event) => event.hash)).size, 2);
+      assert.equal(auditEvents.length, fulfilled.length);
+      assert.equal(new Set(auditEvents.map((event) => event.seq)).size, fulfilled.length);
+      assert.equal(new Set(auditEvents.map((event) => event.hash)).size, fulfilled.length);
     } finally {
       await reopened.close();
     }

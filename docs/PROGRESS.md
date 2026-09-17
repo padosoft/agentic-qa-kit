@@ -1027,3 +1027,8 @@
 - Fixed the CLI smoke fixture so its scenario risk/invariant references are backed by the generated project risk map; the smoke now validates the same resolution path as a real project.
 - Fixed PAN redaction false positives for structured run/checkpoint identifiers whose timestamp digits happen to satisfy Luhn. Conventional contiguous/grouped card numbers remain redacted, while immutable artifact keys remain byte-stable.
 - Evidence: `@aqa/observability` **15 passed**, `@aqa/kit` **140 tests / 138 passed / 2 platform skips**, and `bun run test:e2e-cli` **5/5 passed** locally. The fix is ready for the next hosted CI run; production browser/provider, live merchant/payment atomicity and durable deployment evidence remain open by design.
+
+# 2026-09-17 — deterministic PostgreSQL concurrent status evidence
+
+- Corrected the PostgreSQL store contract to model concurrent finding decisions as serialized optimistic conflicts: one or both transitions may commit according to lock order, while an invalid terminal-state transition is an explicit rejected operation rather than an unhandled test failure.
+- Evidence: local workspace regression remains green; the hosted PostgreSQL contract had exposed this order-dependent assertion and the fix is queued for CI revalidation.

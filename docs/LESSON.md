@@ -1317,3 +1317,12 @@ timestamped run ID can contain 13–19 digits and accidentally look like a PAN.
 Redaction now rejects overly segmented identifier formats while preserving
 normal contiguous or conventionally grouped card-number detection. Checkpoint
 keys and audit hashes must never change as a side effect of DLP.
+
+# 2026-09-17 — concurrent state-machine tests need conflict semantics
+
+An atomic database lock does not make two incompatible state transitions both
+valid. A concurrent `draft → rejected` and `draft → fixed` pair is serialized;
+depending on lock order, the second operation can correctly fail because the
+first changed the state. Durable tests must assert atomicity plus explicit
+conflict handling, not assume scheduler order or require both incompatible
+writes to commit.
