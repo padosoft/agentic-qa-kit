@@ -20,6 +20,12 @@
   pass. This validates submitted evidence; it does not execute a cluster
   restore.
 
+- **Restore-drill evidence merged to `main`.** PR #68 was squash-merged as
+  `d7d1298` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The evidence validator is now
+  released; actual PITR/object restore and measured production RTO/RPO remain
+  operational evidence.
+
 - **Hardened AI scenario generation provenance and fallback validity.** Review
   queue items now retain provider/model/version plus SHA-256 hashes for the
   invariant, prompt and raw model response, while raw prompt/response text is
