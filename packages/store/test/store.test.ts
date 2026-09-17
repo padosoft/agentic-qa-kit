@@ -312,6 +312,22 @@ describe('PostgresStore', () => {
         )?.tags,
         ['beta'],
       );
+      const legacyProfile = { ...profile, name: `legacy-${Date.now()}` };
+      await reopened.saveProfile(legacyProfile);
+      const migrated = await reopened.migrateLegacyConfiguration({
+        org: 'ci-org',
+        project: 'legacy-project',
+      });
+      assert.equal(migrated.conflicts.length, 0);
+      assert.ok(migrated.migrated >= 1);
+      assert.equal(await reopened.loadProfile(legacyProfile.name), null);
+      assert.deepEqual(
+        await reopened.loadProfile(legacyProfile.name, {
+          org: 'ci-org',
+          project: 'legacy-project',
+        }),
+        legacyProfile,
+      );
 
       const user = {
         id: 'ci-user',
