@@ -1126,3 +1126,16 @@
   `AQA_TEST_POSTGRES_DSN`; CI/deployment evidence is still required.
 - Next: add outbound webhook delivery with retry/DLQ semantics and define
   PostgreSQL event-log retention/pruning before production rollout.
+
+# 2026-09-17 — outbound webhook foundation
+
+- Added `@aqa/integrations` with a provider-neutral delivery state machine:
+  stable delivery IDs, exact-body HMAC-SHA256 signing, bounded exponential
+  retry with `Retry-After`, per-integration rate limiting and explicit DLQ after
+  five attempts.
+- Evidence: package tests **3 passed**, package typecheck, repository lint and
+  diff checks pass locally. The implementation uses an injectable transport and
+  memory queue; no external vendor or secret was contacted.
+- Remaining before production integrations: durable PostgreSQL queue, secret
+  manager integration, redacted audit/metrics, operator-controlled redrive,
+  destination allowlisting and real provider journeys.

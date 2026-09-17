@@ -1384,3 +1384,11 @@ notification, subscribe before replaying, deduplicate IDs from the overlap,
 and explicitly signal a missing/unavailable cursor. Replay reduces recovery
 cost but cannot replace the authoritative projection refetch or an operator
 owned retention policy.
+
+# 2026-09-17 — webhook delivery is a reliability subsystem
+
+Vendor calls must leave the request path. Stable delivery IDs, signing the
+exact serialized body, bounded retry, `Retry-After`, per-integration rate
+limits and a visible DLQ are one contract. An in-memory queue can prove the
+state machine, but cannot be presented as production durability without an
+atomic persistent queue, secret rotation and an audited redrive path.
