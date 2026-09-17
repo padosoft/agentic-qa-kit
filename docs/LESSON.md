@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Server projections must verify evidence before aggregation
+
+The CLI coverage gate already rejected tampered event chains, but the server
+projection could still aggregate the same persisted records. Every consumer
+that turns audit events into a release or coverage decision must verify the
+chain first and fail closed with a stable operator-facing error code.
+
 # 2026-09-18 — CLI evidence must validate claimed timing against raw timestamps
 
 An RTO field that is merely below the approved objective can still be false.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,6 +80,22 @@ after(() => {
 });
 
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
+
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.fromEntries(
+      Object.entries(current as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, item]),
+    );
+  });
+}
+
+function eventHash(event: Record<string, unknown>, prevHash = '0'.repeat(64)): string {
+  const { prev_hash: _prevHash, hash: _hash, ...rest } = event;
+  return createHash('sha256').update(prevHash).update(canonical(rest)).digest('hex');
+}
 
 describe('makeApi', () => {
   it('publishes an OpenAPI operation for every concrete route with permission metadata', () => {
@@ -182,18 +198,18 @@ describe('makeApi', () => {
       },
       artifact_dir: '.aqa/runs/run-coverage-demo',
     });
-    await c.store.appendEvent({
+    const event = {
       schema_version: '1',
       seq: 0,
       prev_hash: null,
-      hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       ts: '2026-09-16T10:01:00Z',
       run_id: 'run-coverage-demo',
       kind: 'oracle_evaluated',
       actor: { type: 'orchestrator', id: 'test' },
       scenario_id: 'checkout-total',
       payload: { oracle_id: 'total', passed: true },
-    });
+    };
+    await c.store.appendEvent({ ...event, hash: eventHash(event) });
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/risk-coverage');
     const missing = await route?.handle({ headers: {}, params: {} }, c);
     assert.equal(missing?.status, 400);
@@ -205,6 +221,68 @@ describe('makeApi', () => {
     assert.equal(coverage.length, 1);
     assert.equal(coverage[0]?.risk_id, 'risk-checkout');
     assert.equal(coverage[0]?.pass_rate_30d, 1);
+  });
+
+  it('fails closed when risk coverage reads a tampered audit chain', async () => {
+    const c = ctx();
+    await c.store.saveRisk(
+      {
+        id: 'risk-tampered-coverage',
+        category: 'business_logic',
+        title: 'Tampered coverage evidence',
+        severity: 'high',
+        likelihood: 'likely',
+        invariants: [{ id: 'inv-tampered', statement: 'audit chain is intact' }],
+        owners: [],
+        tags: [],
+      },
+      { org: 'padosoft', project: 'demo' },
+    );
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-tampered-coverage',
+      started_at: '2026-09-16T10:00:00Z',
+      finished_at: '2026-09-16T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'a'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 0,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-tampered-coverage',
+    });
+    await c.store.appendEvent({
+      schema_version: '1',
+      seq: 0,
+      prev_hash: null,
+      hash: 'f'.repeat(64),
+      ts: '2026-09-16T10:01:00Z',
+      run_id: 'run-tampered-coverage',
+      kind: 'oracle_evaluated',
+      actor: { type: 'orchestrator', id: 'test' },
+      scenario_id: 'checkout-total',
+      payload: { oracle_id: 'total', passed: true },
+    });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/risk-coverage');
+    const response = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(response?.status, 500);
+    assert.deepEqual(response?.body, {
+      error: 'run audit chain integrity verification failed',
+      code: 'AUDIT_CHAIN_INVALID',
+    });
   });
 
   it('POST /api/admin/migrate-legacy-configuration requires an explicit destination scope', async () => {
