@@ -1662,3 +1662,9 @@ If a scenario carries oracle weights but the runner averages assertions
 equally, the configuration is misleading and confidence can be distorted.
 Aggregate only after evaluating each oracle, use a zero-safe denominator, and
 keep deterministic agreement distinct from calibrated probability.
+# 2026-09-17 — an offline bundle has two release identities
+
+An air-gap artifact is not coherent merely because its tarball hash verifies:
+the chart and loaded image tags must describe the same release. Derive image
+references from the chart application version and fail closed when the source
+of truth is missing; registry and cluster evidence remain separate.

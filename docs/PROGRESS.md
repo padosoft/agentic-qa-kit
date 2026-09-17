@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Aligned air-gap image tags with the Helm release.** The bundle script now
+  derives server/runner image tags from `deploy/helm/Chart.yaml` `appVersion`
+  and fails closed when that value is absent, removing the previous `0.6.0`
+  versus chart `1.1.0` drift. Shell syntax and Helm render CI remain the
+  repository evidence; registry publication and a real offline cluster remain
+  operational evidence.
+
 - **Aligned finding confidence with declared oracle weights.** Runner findings
   now use a weighted mean of oracle agreement instead of an unweighted average;
   severity remains derived from the resolved risk. Evidence: runner build,

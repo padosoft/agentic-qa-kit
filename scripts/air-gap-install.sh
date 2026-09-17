@@ -20,10 +20,20 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/helm"
 BUNDLE_OUT="${BUNDLE_OUT:-${REPO_ROOT}/.aqa/tmp/aqa-air-gap-bundle.tar.gz}"
-IMAGES=(
-  "ghcr.io/padosoft/agentic-qa-kit-server:0.6.0"
-  "ghcr.io/padosoft/agentic-qa-kit-runner:0.6.0"
-)
+chart_app_version() {
+  local version
+  version="$(awk -F '\"' '$1 ~ /^[[:space:]]*appVersion:/ { print $2; exit }' "${CHART_DIR}/Chart.yaml")"
+  [[ -n "${version}" ]] || die "chart appVersion is missing from ${CHART_DIR}/Chart.yaml"
+  printf '%s' "${version}"
+}
+
+airgap_images() {
+  local version
+  version="$(chart_app_version)"
+  printf '%s\n' \
+    "ghcr.io/padosoft/agentic-qa-kit-server:${version}" \
+    "ghcr.io/padosoft/agentic-qa-kit-runner:${version}"
+}
 
 log() { printf '[air-gap-install] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -62,12 +72,13 @@ cmd_bundle() {
   mkdir -p "${stage}/helm"
   cp -r "${CHART_DIR}/." "${stage}/helm/"
 
-  log "saving ${#IMAGES[@]} images"
+  mapfile -t images_to_save < <(airgap_images)
+  log "saving ${#images_to_save[@]} images for chart appVersion $(chart_app_version)"
   mkdir -p "${stage}/images"
   if ! command -v docker >/dev/null 2>&1; then
     log "WARN: docker not found — bundle will not contain image tarballs"
   else
-    for img in "${IMAGES[@]}"; do
+    for img in "${images_to_save[@]}"; do
       local out_name
       out_name="$(printf '%s' "${img}" | tr '/:' '__').tar"
       docker save -o "${stage}/images/${out_name}" "${img}" || \
