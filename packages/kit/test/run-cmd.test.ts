@@ -261,6 +261,44 @@ describe('aqa run', () => {
     }
   });
 
+  it('executes manifest-declared custom resources through the real run boundary', async () => {
+    const { root, packDir } = fixtureProject();
+    mkdirSync(join(packDir, 'probes'), { recursive: true });
+    mkdirSync(join(packDir, 'oracles'), { recursive: true });
+    writeFileSync(
+      join(packDir, 'pack.yaml'),
+      SMOKE_PACK_MANIFEST.replace(
+        'oracles: []\nprobes: []',
+        'oracles: [oracles/ok.yaml]\nprobes: [probes/health.yaml]',
+      ),
+      'utf8',
+    );
+    writeFileSync(
+      join(packDir, 'probes', 'health.yaml'),
+      'id: health\nkind: http\nwith: { url: /healthz }\n',
+      'utf8',
+    );
+    writeFileSync(
+      join(packDir, 'oracles', 'ok.yaml'),
+      'id: ok\nkind: http_status\nwith: { expected: 200 }\n',
+      'utf8',
+    );
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      SMOKE_SCENARIO.replace(
+        'kind: http\n    with: { method: "GET", url: "/healthz" }',
+        'kind: custom\n    with: { ref: health }',
+      ).replace(
+        'kind: http_status\n    with: { expected: 200 }',
+        'kind: custom\n    with: { ref: ok }',
+      ),
+      'utf8',
+    );
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, true, `custom resource run must succeed: ${JSON.stringify(result)}`);
+    assert.equal(result.scenariosRun, 1);
+  });
+
   it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
     const { root, packDir } = fixtureProject();
     const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
