@@ -346,9 +346,29 @@ describe('runScenario', () => {
         return 'Order confirmation customer@example.test';
       },
     };
+    let networkHandler:
+      | ((route: {
+          request(): { url(): string };
+          abort(): Promise<void>;
+          continue(): Promise<void>;
+        }) => Promise<void>)
+      | undefined;
     const fakeBrowser = {
       async newContext() {
-        return { newPage: async () => page, close: async () => calls.push('context-close') };
+        return {
+          route: async (
+            _pattern: string,
+            handler: (route: {
+              request(): { url(): string };
+              abort(): Promise<void>;
+              continue(): Promise<void>;
+            }) => Promise<void>,
+          ) => {
+            networkHandler = handler;
+          },
+          newPage: async () => page,
+          close: async () => calls.push('context-close'),
+        };
       },
       async close() {
         calls.push('browser-close');
@@ -358,6 +378,9 @@ describe('runScenario', () => {
       baseUrl: 'http://shop.test',
       browserFactory: { launch: async () => fakeBrowser as never },
     });
+    let aborted = false;
+    // The route is installed lazily with the browser context; trigger the
+    // probe below first so the injected test factory has registered it.
     const result = await runner({
       id: 'probe-browser',
       kind: 'playwright',
@@ -371,6 +394,15 @@ describe('runScenario', () => {
       },
       timeout_ms: 1_000,
     });
+    assert.ok(networkHandler);
+    await networkHandler({
+      request: () => ({ url: 'https://evil.test/redirected-resource' }),
+      abort: async () => {
+        aborted = true;
+      },
+      continue: async () => undefined,
+    });
+    assert.equal(aborted, true);
     assert.equal((result.body as { title: string }).title, 'Checkout');
     assert.match((result.body as { text: string }).text, /\[REDACTED-EMAIL\]/);
     assert.deepEqual(calls.slice(0, 4), [

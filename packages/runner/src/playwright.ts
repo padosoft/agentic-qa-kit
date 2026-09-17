@@ -15,8 +15,15 @@ interface BrowserPage {
 }
 
 interface BrowserContext {
+  route(url: string, handler: (route: BrowserRoute) => Promise<void>): Promise<void>;
   newPage(): Promise<BrowserPage>;
   close(): Promise<void>;
+}
+
+interface BrowserRoute {
+  request(): { url(): string };
+  abort(): Promise<void>;
+  continue(): Promise<void>;
 }
 
 interface BrowserLike {
@@ -63,6 +70,27 @@ function resolveAllowedUrl(
   return url.toString();
 }
 
+function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
+  const normalized = new Set<string>();
+  for (const raw of origins) {
+    const origin = new URL(raw);
+    if (
+      origin.username ||
+      origin.password ||
+      origin.pathname !== '/' ||
+      origin.search ||
+      origin.hash
+    ) {
+      throw new Error(
+        `playwright allowlist entry must be an origin without credentials or path: ${raw}`,
+      );
+    }
+    normalized.add(origin.origin);
+  }
+  if (normalized.size === 0) throw new Error('playwright origin allowlist must not be empty');
+  return normalized;
+}
+
 async function loadDefaultBrowserFactory(): Promise<BrowserFactory> {
   // Keep Playwright out of the CLI bundle. The host installs it only when a
   // browser journey is enabled at runtime.
@@ -77,8 +105,12 @@ async function loadDefaultBrowserFactory(): Promise<BrowserFactory> {
 export function makePlaywrightProbeRunner(
   opts: PlaywrightProbeRunnerOptions,
 ): PlaywrightProbeRunner {
-  const baseUrl = new URL(opts.baseUrl).toString();
-  const allowedOrigins = new Set(opts.allowedOrigins ?? [new URL(baseUrl).origin]);
+  const parsedBaseUrl = new URL(opts.baseUrl);
+  if (parsedBaseUrl.username || parsedBaseUrl.password) {
+    throw new Error('playwright baseUrl must not contain credentials');
+  }
+  const baseUrl = parsedBaseUrl.toString();
+  const allowedOrigins = normalizeAllowedOrigins(opts.allowedOrigins ?? [parsedBaseUrl.origin]);
   const maxTextBytes = opts.maxTextBytes ?? 256 * 1024;
   if (!Number.isInteger(maxTextBytes) || maxTextBytes < 1) {
     throw new Error('playwright maxTextBytes must be a positive integer');
@@ -94,7 +126,25 @@ export function makePlaywrightProbeRunner(
         .then((factory) => factory.launch({ headless: opts.headless ?? true }))
         .then(async (launched) => {
           browser = launched;
-          return launched.newContext({ baseURL: baseUrl }) as Promise<BrowserContext>;
+          const browserContext = await launched.newContext({ baseURL: baseUrl });
+          await browserContext.route('**/*', async (route) => {
+            try {
+              const requestUrl = new URL(route.request().url());
+              if (
+                !/^https?:$/.test(requestUrl.protocol) ||
+                requestUrl.username ||
+                requestUrl.password ||
+                !allowedOrigins.has(requestUrl.origin)
+              ) {
+                await route.abort();
+                return;
+              }
+              await route.continue();
+            } catch {
+              await route.abort();
+            }
+          });
+          return browserContext;
         });
     }
     return contextPromise;

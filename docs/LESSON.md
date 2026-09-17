@@ -986,3 +986,10 @@ An origin allowlist on the initial URL is not enough if a client follows a
 redirect. Use manual redirects, validate `Location` against the same explicit
 allowlist, reject credential-bearing URLs and surface the blocked response as
 execution evidence rather than silently following it.
+
+# 2026-09-17 — validate every browser request, not only navigation inputs
+
+Checking the URL supplied to `page.goto()` does not constrain redirects,
+subresources or form-triggered requests. Install the network policy on the
+BrowserContext before the page exists and abort every non-HTTP or
+non-allowlisted request.

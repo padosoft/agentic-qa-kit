@@ -757,3 +757,8 @@
 
 - Hardened the real HTTP probe boundary: configured origins are normalized and validated, credential-bearing base/target URLs are rejected, redirects are never followed automatically, and redirect targets are checked against the same allowlist before being reported. Private origins remain usable only when explicitly allowlisted.
 - Evidence: runner build and **18 tests passed**, including credential and off-origin redirect denial. DNS pinning/rebinding defense and browser network interception remain separate deployment controls.
+
+# 2026-09-17 — browser network allowlist enforcement
+
+- Playwright contexts now install a route-level network policy before the first page is created. Every HTTP(S) request is checked for credentials and an allowlisted origin; non-HTTP schemes and off-origin requests are aborted. This covers redirects and subresources that structured action URL validation cannot see.
+- Evidence: runner build and **18 tests passed**, including an injected off-origin browser request that is aborted. Real Chromium/provider redirect evidence remains a hosted deployment journey.
