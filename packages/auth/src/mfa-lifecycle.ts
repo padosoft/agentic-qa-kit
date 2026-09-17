@@ -7,6 +7,7 @@ export interface MfaSecretProtector {
 }
 
 export interface MfaCredential {
+  tenant_id: string;
   user_id: string;
   protected_secret: string;
   recovery_code_hashes: readonly string[];
@@ -14,32 +15,33 @@ export interface MfaCredential {
 }
 
 export interface MfaCredentialStore {
-  get(userId: string): Promise<MfaCredential | undefined>;
+  get(tenantId: string, userId: string): Promise<MfaCredential | undefined>;
   put(credential: MfaCredential): Promise<void>;
-  delete(userId: string): Promise<void>;
+  delete(tenantId: string, userId: string): Promise<void>;
 }
 
 export class InMemoryMfaCredentialStore implements MfaCredentialStore {
   private readonly records = new Map<string, MfaCredential>();
 
-  async get(userId: string): Promise<MfaCredential | undefined> {
-    const value = this.records.get(userId);
+  async get(tenantId: string, userId: string): Promise<MfaCredential | undefined> {
+    const value = this.records.get(`${tenantId}:${userId}`);
     return value ? { ...value, recovery_code_hashes: [...value.recovery_code_hashes] } : undefined;
   }
 
   async put(credential: MfaCredential): Promise<void> {
-    this.records.set(credential.user_id, {
+    this.records.set(`${credential.tenant_id}:${credential.user_id}`, {
       ...credential,
       recovery_code_hashes: [...credential.recovery_code_hashes],
     });
   }
 
-  async delete(userId: string): Promise<void> {
-    this.records.delete(userId);
+  async delete(tenantId: string, userId: string): Promise<void> {
+    this.records.delete(`${tenantId}:${userId}`);
   }
 }
 
 export interface MfaEnrollment {
+  tenant_id: string;
   user_id: string;
   secret_base32: string;
   otpauth_uri: string;
@@ -71,12 +73,17 @@ export class MfaLifecycle {
       throw new Error('[auth/mfa] recovery_code_count must be between 5 and 20');
   }
 
-  async beginEnrollment(userId: string, accountName: string): Promise<MfaEnrollment> {
-    if (!userId.trim() || !accountName.trim())
+  async beginEnrollment(
+    tenantId: string,
+    userId: string,
+    accountName: string,
+  ): Promise<MfaEnrollment> {
+    if (!tenantId.trim() || !userId.trim() || !accountName.trim())
       throw new Error('[auth/mfa] user and account are required');
     const secret = encodeBase32(randomBytes(20));
     const recoveryCodes = Array.from({ length: this.count }, () => formatRecoveryCode());
     return {
+      tenant_id: tenantId,
       user_id: userId,
       secret_base32: secret,
       otpauth_uri: `otpauth://totp/${encodeURIComponent(this.options.issuer)}:${encodeURIComponent(accountName)}?secret=${secret}&issuer=${encodeURIComponent(this.options.issuer)}`,
@@ -84,8 +91,14 @@ export class MfaLifecycle {
     };
   }
 
-  async confirmEnrollment(userId: string, enrollment: MfaEnrollment, code: string): Promise<void> {
-    if (enrollment.user_id !== userId) throw new Error('[auth/mfa] enrollment user mismatch');
+  async confirmEnrollment(
+    tenantId: string,
+    userId: string,
+    enrollment: MfaEnrollment,
+    code: string,
+  ): Promise<void> {
+    if (enrollment.tenant_id !== tenantId || enrollment.user_id !== userId)
+      throw new Error('[auth/mfa] enrollment scope mismatch');
     if (
       !verifyTotp({ secret_base32: enrollment.secret_base32, code, now_ms: this.now().getTime() })
     )
@@ -93,6 +106,7 @@ export class MfaLifecycle {
     const protectedSecret = await this.options.protector.protect(enrollment.secret_base32);
     if (!protectedSecret) throw new Error('[auth/mfa] secret protection returned empty data');
     await this.options.store.put({
+      tenant_id: tenantId,
       user_id: userId,
       protected_secret: protectedSecret,
       recovery_code_hashes: enrollment.recovery_codes.map(hashRecoveryCode),
@@ -100,15 +114,15 @@ export class MfaLifecycle {
     });
   }
 
-  async verify(userId: string, code: string): Promise<boolean> {
-    const credential = await this.options.store.get(userId);
+  async verify(tenantId: string, userId: string, code: string): Promise<boolean> {
+    const credential = await this.options.store.get(tenantId, userId);
     if (!credential) return false;
     const secret = await this.options.protector.reveal(credential.protected_secret);
     return verifyTotp({ secret_base32: secret, code, now_ms: this.now().getTime() });
   }
 
-  async consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
-    const credential = await this.options.store.get(userId);
+  async consumeRecoveryCode(tenantId: string, userId: string, code: string): Promise<boolean> {
+    const credential = await this.options.store.get(tenantId, userId);
     if (!credential) return false;
     const candidate = Buffer.from(hashRecoveryCode(code), 'hex');
     const remaining = credential.recovery_code_hashes.filter((stored) => {

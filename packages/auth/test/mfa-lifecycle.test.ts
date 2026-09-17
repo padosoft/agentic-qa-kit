@@ -18,25 +18,28 @@ describe('MfaLifecycle', () => {
     const now = new Date('2026-09-17T12:00:00.000Z');
     const store = new InMemoryMfaCredentialStore();
     const lifecycle = new MfaLifecycle({ store, protector, issuer: 'AQA', now: () => now });
-    const enrollment = await lifecycle.beginEnrollment('user-1', 'user@example.test');
+    const enrollment = await lifecycle.beginEnrollment('tenant-1', 'user-1', 'user@example.test');
     assert.match(enrollment.otpauth_uri, /^otpauth:\/\/totp\//);
-    assert.equal(await lifecycle.verify('user-1', '000000'), false);
+    assert.equal(await lifecycle.verify('tenant-1', 'user-1', '000000'), false);
     const code = totpCode(enrollment.secret_base32, now.getTime());
     assert.equal(
       verifyTotp({ secret_base32: enrollment.secret_base32, code, now_ms: now.getTime() }),
       true,
     );
-    await lifecycle.confirmEnrollment('user-1', enrollment, code);
-    assert.equal(await lifecycle.verify('user-1', code), true);
-    assert.equal((await store.get('user-1'))?.protected_secret.startsWith('wrapped:'), true);
+    await lifecycle.confirmEnrollment('tenant-1', 'user-1', enrollment, code);
+    assert.equal(await lifecycle.verify('tenant-1', 'user-1', code), true);
     assert.equal(
-      (await store.get('user-1'))?.recovery_code_hashes.includes(
+      (await store.get('tenant-1', 'user-1'))?.protected_secret.startsWith('wrapped:'),
+      true,
+    );
+    assert.equal(
+      (await store.get('tenant-1', 'user-1'))?.recovery_code_hashes.includes(
         enrollment.recovery_codes[0] ?? '',
       ),
       false,
     );
     await assert.rejects(
-      () => lifecycle.confirmEnrollment('user-1', enrollment, '000000'),
+      () => lifecycle.confirmEnrollment('tenant-1', 'user-1', enrollment, '000000'),
       /invalid enrollment/,
     );
   });
@@ -44,17 +47,18 @@ describe('MfaLifecycle', () => {
   it('consumes a recovery code once and preserves remaining recovery codes', async () => {
     const store = new InMemoryMfaCredentialStore();
     const lifecycle = new MfaLifecycle({ store, protector, issuer: 'AQA' });
-    const enrollment = await lifecycle.beginEnrollment('user-2', 'user2@example.test');
+    const enrollment = await lifecycle.beginEnrollment('tenant-2', 'user-2', 'user2@example.test');
     await lifecycle.confirmEnrollment(
+      'tenant-2',
       'user-2',
       enrollment,
       totpCode(enrollment.secret_base32, Date.now()),
     );
     const recovery = enrollment.recovery_codes[0] ?? '';
-    assert.equal(await lifecycle.consumeRecoveryCode('user-2', recovery), true);
-    assert.equal(await lifecycle.consumeRecoveryCode('user-2', recovery), false);
+    assert.equal(await lifecycle.consumeRecoveryCode('tenant-2', 'user-2', recovery), true);
+    assert.equal(await lifecycle.consumeRecoveryCode('tenant-2', 'user-2', recovery), false);
     assert.equal(
-      (await store.get('user-2'))?.recovery_code_hashes.length,
+      (await store.get('tenant-2', 'user-2'))?.recovery_code_hashes.length,
       enrollment.recovery_codes.length - 1,
     );
   });

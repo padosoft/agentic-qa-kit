@@ -15,4 +15,5 @@ The existing RFC 6238 verifier and IdP MFA enforcement covered authentication ch
 ## Evidence and limits
 
 - `packages/auth/test/mfa-lifecycle.test.ts` proves enrollment confirmation, protected storage boundary and one-time recovery consumption.
+- `PostgresMfaCredentialStore` supplies the durable composite `(tenant_id, user_id)` persistence boundary; its integration contract is skipped unless `AQA_TEST_POSTGRES_DSN` is configured.
 - Production still requires a durable tenant/user-scoped credential store, envelope encryption with KMS/Vault, audit events, abuse/rate limits, and WebAuthn/passkey support.

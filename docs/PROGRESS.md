@@ -573,4 +573,5 @@
 # 2026-09-17 — MFA enrollment and recovery lifecycle boundary
 
 - Added `MfaLifecycle` with generated TOTP enrollment material, `otpauth` URI, confirmation before activation, protected-secret injection, and one-time recovery-code consumption. Raw TOTP secrets and recovery codes are never persisted by the lifecycle; production must provide a KMS/Vault-backed protector and durable store.
-- Evidence: auth typecheck, lifecycle tests 2/2, repository lint and diff-check pass. PostgreSQL credential persistence, provider-backed secret protection, rate limiting/audit integration and WebAuthn remain open deployment work.
+- Added `PostgresMfaCredentialStore` with idempotent migration and composite tenant/user key; the store persists only protected secret material and recovery-code hashes.
+- Evidence: auth build/typecheck, lifecycle tests 2/2, PostgreSQL contract 1 skip without DSN, repository lint and diff-check pass. Provider-backed secret protection, rate limiting/audit integration and WebAuthn remain open deployment work.

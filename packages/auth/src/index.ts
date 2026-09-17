@@ -46,6 +46,7 @@ export { ScimRateLimiter } from './scim-rate-limit.js';
 export { PostgresScimRateLimiter } from './postgres-scim-rate-limit.js';
 export type { ScimRateLimit, ScimRateLimitOptions } from './scim-rate-limit.js';
 export { PostgresSamlReplayGuard } from './postgres-saml-replay.js';
+export { PostgresMfaCredentialStore } from './postgres-mfa.js';
 export {
   InMemoryMfaCredentialStore,
   MfaLifecycle,

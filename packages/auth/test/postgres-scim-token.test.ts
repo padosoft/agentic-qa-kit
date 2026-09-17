@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  PostgresMfaCredentialStore,
   PostgresScimRateLimiter,
   PostgresScimTokenStore,
   ScimTokenManager,
@@ -59,6 +60,31 @@ describe('PostgresScimRateLimiter', () => {
       assert.equal(await first.allow(tenant), true);
       assert.equal(await second.allow(tenant), false);
       await first.close();
+      await second.close();
+    },
+  );
+});
+
+describe('PostgresMfaCredentialStore', () => {
+  it(
+    'persists tenant-scoped protected MFA metadata across store instances',
+    { skip: !process.env.AQA_TEST_POSTGRES_DSN },
+    async () => {
+      const dsn = process.env.AQA_TEST_POSTGRES_DSN as string;
+      const tenant = `tenant-${Date.now()}`;
+      const first = new PostgresMfaCredentialStore(dsn);
+      await first.put({
+        tenant_id: tenant,
+        user_id: 'mfa-user',
+        protected_secret: 'kms:ciphertext',
+        recovery_code_hashes: ['hash-a'],
+        enabled_at: new Date().toISOString(),
+      });
+      await first.close();
+      const second = new PostgresMfaCredentialStore(dsn);
+      const loaded = await second.get(tenant, 'mfa-user');
+      assert.equal(loaded?.protected_secret, 'kms:ciphertext');
+      assert.deepEqual(loaded?.recovery_code_hashes, ['hash-a']);
       await second.close();
     },
   );
