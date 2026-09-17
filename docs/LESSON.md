@@ -1056,3 +1056,10 @@ unsafe once jobs are shared through PostgreSQL. Require an explicit verifier or
 a deployment token before boot, use a constant-time comparison boundary, and
 keep the token out of diagnostics. A static token is only a bootstrap fallback;
 enterprise deployments still need mTLS or short-lived identity with rotation.
+
+# 2026-09-17 — browser cancellation needs post-await checks
+
+Closing a page on abort is not sufficient if the fake or provider resolves the
+current await during close; the runner can otherwise continue and emit a normal
+body. Re-check the signal after browser awaits and convert the path to an
+execution error before oracle evaluation.

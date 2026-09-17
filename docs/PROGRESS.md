@@ -802,3 +802,8 @@
 
 - `runAdmin` now refuses to boot with `AQA_QUEUE_DSN` unless a dedicated `runnerAuthorize` callback or `AQA_RUNNER_TOKEN` is configured. The environment-token fallback accepts only `Bearer <token>` and compares SHA-256 digests with `timingSafeEqual`; the raw token is never logged or persisted.
 - Evidence: kit build/bundle, typecheck, **14 admin tests passed**, and `git diff --check` passed. OIDC/mTLS/short-lived runner identity and rotation remain the production-grade credential path; the static token is a bounded bootstrap fallback.
+
+# 2026-09-17 — Playwright cooperative cancellation
+
+- Browser probe runners now accept the worker signal, reject pre-cancelled probes, close the active page on abort, re-check cancellation after browser awaits, and remove listeners in `finally`. Cancellation is reported as execution failure and cannot become an oracle finding.
+- Evidence: runner build/typecheck, **21 tests passed**, including active-page closure, and `git diff --check` passed. Native provider cancellation, browser context/process cleanup and hosted Chromium evidence remain open.

@@ -12,6 +12,7 @@ interface BrowserPage {
   title(): Promise<string>;
   url(): string;
   innerText(selector: string, options: { timeout: number }): Promise<string>;
+  close?: () => Promise<void>;
 }
 
 interface BrowserContext {
@@ -149,12 +150,19 @@ export function makePlaywrightProbeRunner(
     }
     return contextPromise;
   };
-  const runner = (async (probe: Scenario.Probe) => {
+  const runner = (async (probe: Scenario.Probe, externalSignal?: AbortSignal) => {
     if (probe.kind !== 'playwright') {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
     }
+    if (externalSignal?.aborted)
+      return { probe_id: probe.id, error: 'playwright probe cancelled before dispatch' };
+    let page: BrowserPage | undefined;
+    const abort = () => {
+      void page?.close?.();
+    };
+    externalSignal?.addEventListener('abort', abort, { once: true });
     try {
-      const page = await (await context()).newPage();
+      page = await (await context()).newPage();
       const withConfig = probe.with;
       const rawUrl = asString(withConfig.url);
       if (rawUrl)
@@ -189,7 +197,9 @@ export function makePlaywrightProbeRunner(
           await page.locator(selector).waitFor({ state: 'visible', timeout });
         else throw new Error(`unsupported or malformed playwright action: ${String(type)}`);
       }
+      if (externalSignal?.aborted) throw new Error('playwright probe cancelled');
       const text = await page.innerText('body', { timeout: probe.timeout_ms });
+      if (externalSignal?.aborted) throw new Error('playwright probe cancelled');
       const bytes = Buffer.byteLength(text, 'utf8');
       if (bytes > maxTextBytes)
         return { probe_id: probe.id, error: `page text exceeds ${maxTextBytes} bytes` };
@@ -198,10 +208,14 @@ export function makePlaywrightProbeRunner(
         body: { url: page.url(), title: await page.title(), text: redact(text) },
       };
     } catch (error) {
+      if (externalSignal?.aborted)
+        return { probe_id: probe.id, error: 'playwright probe cancelled' };
       return {
         probe_id: probe.id,
         error: redact(error instanceof Error ? error.message : String(error)),
       };
+    } finally {
+      externalSignal?.removeEventListener('abort', abort);
     }
   }) as unknown as PlaywrightProbeRunner;
   runner.close = async () => {

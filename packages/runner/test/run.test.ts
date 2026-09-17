@@ -436,6 +436,52 @@ describe('runScenario', () => {
     assert.deepEqual(calls.slice(-2), ['context-close', 'browser-close']);
   });
 
+  it('makePlaywrightProbeRunner closes the active page on cooperative cancellation', async () => {
+    let closed = false;
+    let release: (() => void) | undefined;
+    const page = {
+      goto: async () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      click: async () => undefined,
+      fill: async () => undefined,
+      press: async () => undefined,
+      locator: () => ({ waitFor: async () => undefined }),
+      title: async () => 'cancelled',
+      url: () => 'http://shop.test',
+      innerText: async () => '',
+      close: async () => {
+        closed = true;
+        release?.();
+      },
+    };
+    const runner = makePlaywrightProbeRunner({
+      baseUrl: 'http://shop.test',
+      browserFactory: {
+        launch: async () =>
+          ({
+            newContext: async () => ({
+              route: async () => undefined,
+              newPage: async () => page,
+              close: async () => undefined,
+            }),
+            close: async () => undefined,
+          }) as never,
+      },
+    });
+    const controller = new AbortController();
+    const pending = runner(
+      { id: 'cancelled-browser', kind: 'playwright', with: { url: '/' }, timeout_ms: 5_000 },
+      controller.signal,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    const result = await pending;
+    assert.equal(closed, true);
+    assert.match(result.error ?? '', /cancel/i);
+  });
+
   it('makePostgresSqlProbeRunner requires an explicit DSN and bounds timeout policy', async () => {
     assert.throws(
       () => makePostgresSqlProbeRunner({ connectionString: '' }),
