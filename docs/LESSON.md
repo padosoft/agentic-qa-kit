@@ -1174,3 +1174,11 @@ re-check those values atomically at the merchant mutation boundary.
 An in-memory consumed-approval set is useful for unit tests but is not a
 multi-replica security boundary. Make production authorization asynchronous and
 claim the approval in a shared unique-key ledger before allowing the mutation.
+
+# 2026-09-17 — WebAuthn counters are not universal
+
+WebAuthn signature counters are valuable clone-detection evidence, but a
+credential may legitimately be counterless. Require strict monotonicity only
+when registration records counter support; otherwise retain the one-time
+challenge and cryptographic assertion checks. Never treat an injected verifier
+or memory store as evidence of a real browser/provider ceremony.

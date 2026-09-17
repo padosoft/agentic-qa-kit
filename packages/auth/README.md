@@ -15,3 +15,13 @@ and durable sessions. Synchronous authentication fails closed when an async
 backend is configured, so callers must use `authenticateAsync`. The adapter
 never logs client secrets or bearer tokens and never grants an implicit admin
 role.
+
+`WebAuthnLifecycle` supplies the server-side challenge/assertion boundary for
+passkeys. Challenges are random, short-lived and single-use; assertions are
+bound to the authenticated user, HTTPS origin, RP ID and registered credential.
+Signature verification is injected so deployments can select a maintained
+WebAuthn implementation, while credential counters detect cloning when the
+authenticator supports them. Counterless authenticators are supported with the
+same one-time challenge protection. The package does not claim to be a browser
+ceremony or a cryptographic provider by itself; production must connect the
+boundary to a standards-compliant verifier and durable stores.

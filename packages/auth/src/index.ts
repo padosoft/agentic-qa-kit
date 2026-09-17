@@ -42,6 +42,17 @@ export {
 } from './oidc-session.js';
 export { PostgresOidcSessionStore } from './postgres-session.js';
 export { PostgresScimTokenStore } from './postgres-scim-token.js';
+export {
+  MemoryWebAuthnChallengeStore,
+  MemoryWebAuthnCredentialStore,
+  WebAuthnLifecycle,
+  type WebAuthnAssertion,
+  type WebAuthnChallenge,
+  type WebAuthnChallengeStore,
+  type WebAuthnCredential,
+  type WebAuthnCredentialStore,
+  type WebAuthnSignatureVerifier,
+} from './webauthn.js';
 export { ScimRateLimiter } from './scim-rate-limit.js';
 export { PostgresScimRateLimiter } from './postgres-scim-rate-limit.js';
 export type { ScimRateLimit, ScimRateLimitOptions } from './scim-rate-limit.js';

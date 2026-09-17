@@ -883,3 +883,8 @@
 
 - Added `CommerceApprovalLedger` with in-memory and atomic PostgreSQL implementations. `CommerceToolPolicy.authorizeAsync()` claims an approval exactly once; when a durable ledger is configured, synchronous authorization fails closed instead of using process-local replay state.
 - Evidence: commerce build/typecheck and **22 tests passed**, including duplicate approval consumption. Live PostgreSQL concurrency, approval issuance/audit and atomic merchant mutation still remain deployment evidence.
+
+# 2026-09-17 — WebAuthn passkey lifecycle boundary
+
+- Added `WebAuthnLifecycle` with HTTPS-origin validation, bounded random one-time challenges, user/origin/RP/credential binding, injected signature verification, monotonic-counter clone detection and explicit counterless-authenticator support. Exported the boundary from `@aqa/auth` and documented the production integration limits in ADR-117.
+- Evidence: auth build/typecheck and **30 tests passed**, including replay, wrong-user/origin/credential, expiry, signature failure, counter rollback and counterless credentials. Durable challenge/credential stores, a maintained cryptographic verifier and a real browser/provider passkey journey remain open.
