@@ -4,6 +4,7 @@ import {
   HttpWebhookTransport,
   MemoryWebhookQueue,
   PostgresWebhookQueue,
+  VaultSecretResolver,
   WebhookDestinationPolicy,
   type WebhookTransport,
   signWebhook,
@@ -162,6 +163,34 @@ describe('outbound webhooks', () => {
     await assert.rejects(
       () => bounded.send({ url: 'https://hooks.example.test/hook', body: '{}', headers: {} }),
       /response exceeds configured limit/,
+    );
+  });
+
+  it('resolves Vault KV-v2 secrets without exposing token or response diagnostics', async () => {
+    let requested = '';
+    let requestHeaders: HeadersInit | undefined;
+    const resolver = new VaultSecretResolver({
+      endpoint: 'https://vault.example.test/',
+      mount: 'secret',
+      token: async () => 'vault-token-only-in-memory',
+      fetcher: async (url, init) => {
+        requested = String(url);
+        requestHeaders = init?.headers;
+        return new Response(JSON.stringify({ data: { data: { value: 'webhook-secret' } } }), {
+          status: 200,
+        });
+      },
+    });
+    assert.equal(await resolver.resolve('integrations/pagerduty'), 'webhook-secret');
+    assert.equal(requested, 'https://vault.example.test/v1/secret/data/integrations/pagerduty');
+    assert.equal(
+      (requestHeaders as Record<string, string>)['x-vault-token'],
+      'vault-token-only-in-memory',
+    );
+    assert.throws(
+      () =>
+        new VaultSecretResolver({ endpoint: 'http://vault.example.test', token: async () => 'x' }),
+      /HTTPS/,
     );
   });
 });

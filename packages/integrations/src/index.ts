@@ -19,3 +19,4 @@ export {
   type IntegrationProvider,
 } from './providers.js';
 export { HttpWebhookTransport, type HttpWebhookTransportOptions } from './http-transport.js';
+export { VaultSecretResolver, type VaultSecretResolverOptions } from './vault-secrets.js';

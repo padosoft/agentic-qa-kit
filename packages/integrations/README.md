@@ -13,6 +13,7 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - mandatory HTTPS destination-origin allowlisting for the durable queue;
 - redacted audit observer hooks for Prometheus/OTel/log adapters.
 - bounded HTTP transport with timeout, no redirects and `Retry-After` parsing.
+- lazy `VaultSecretResolver` support for Vault KV-v2 without persisting tokens.
 
 ## Setup
 
@@ -22,9 +23,10 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
    manager, never from committed configuration.
 4. Run `bun run --filter @aqa/integrations test`.
 
-For production, use `PostgresWebhookQueue` with a secret resolver backed by a
-secret manager. Only `secret_ref` is persisted; the secret itself is resolved
-inside the worker and is never written to the queue. Both implementations
+For production, use `PostgresWebhookQueue` with `VaultSecretResolver` or an
+equivalent audited KMS/secret-manager adapter. Only `secret_ref` is persisted;
+the secret itself is resolved inside the worker and is never written to the queue.
+Both implementations
 require audit metrics, destination allowlisting and an authenticated operator
 workflow for DLQ redrive.
 The transport layer must additionally enforce DNS rebinding and private/link-local

@@ -17,6 +17,11 @@
   value is `null`; cast optional interpolated values (`::text`, etc.) rather
   than relying on the column on the other side of an `OR` to infer them.
 
+- **Secret-manager boundaries should resolve lazily.** Persist only an opaque
+  reference, inject token retrieval at delivery, bound the network call,
+  validate reference paths and return generic provider errors; otherwise
+  rotation and failure handling can leak credentials into queue state or logs.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

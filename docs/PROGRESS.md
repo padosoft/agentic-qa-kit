@@ -32,6 +32,12 @@
   cap is exceeded, covering responses that omit `Content-Length`; a regression
   test proves the rejection path without contacting a provider.
 
+- **Added a concrete secret-manager integration.** `VaultSecretResolver` now
+  resolves Vault KV-v2 values lazily with an injected token provider, HTTPS
+  endpoint enforcement, bounded timeout, safe secret-reference segments and
+  generic provider errors (ADR-148). The queue persists only `secret_ref`; no
+  real credentials or external calls are used in tests.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.
