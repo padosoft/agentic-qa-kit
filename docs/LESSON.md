@@ -530,3 +530,10 @@ PostgreSQL snapshot followed by an insert can oversubscribe under concurrent
 replicas. Keep the `429` behavior and bounded error shape, but do not call the
 distributed guarantee complete until admission is serialized with a transaction
 and durable counters (or an equivalent advisory-lock protocol).
+
+# 2026-09-17 — cost calculation is not a kill switch
+
+Charging after an LLM response cannot prevent the response that crosses a
+budget. Keep reconciliation separate from pre-call admission: unknown pricing,
+invalid token counts, budget exhaustion and operator halt must fail closed before
+the provider boundary, then be wired to durable worker state and audit events.

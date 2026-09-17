@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BudgetTracker } from '../dist/budget.js';
+import { BudgetDispatchBlockedError, BudgetTracker } from '../dist/budget.js';
 
 describe('BudgetTracker', () => {
   it('charges per-call cost based on input + output tokens', () => {
@@ -42,5 +42,38 @@ describe('BudgetTracker', () => {
     assert.equal(s.exhausted, true);
     assert.match(s.pricing_error ?? '', /no pricing configured/);
     assert.equal(t.wouldExhaust({ model: 'unknown-llm', tokens_in: 1, tokens_out: 1 }), true);
+  });
+
+  it('blocks dispatch before a call would cross the budget', () => {
+    const t = new BudgetTracker({ budget_usd: 1 });
+    assert.throws(
+      () =>
+        t.assertCanDispatch({
+          model: 'claude-sonnet-4-6',
+          tokens_in: 100_000,
+          tokens_out: 100_000,
+        }),
+      BudgetDispatchBlockedError,
+    );
+    assert.equal(t.snapshot().calls, 0);
+  });
+
+  it('supports an explicit fail-closed kill switch', () => {
+    const t = new BudgetTracker({ budget_usd: null });
+    const state = t.halt('operator emergency stop');
+    assert.equal(state.halted_reason, 'operator emergency stop');
+    assert.throws(
+      () => t.assertCanDispatch({ model: 'claude-sonnet-4-6', tokens_in: 1, tokens_out: 1 }),
+      /operator emergency stop/,
+    );
+  });
+
+  it('rejects invalid budgets and token counts', () => {
+    assert.throws(() => new BudgetTracker({ budget_usd: -1 }), /budget_usd/);
+    const t = new BudgetTracker({ budget_usd: 10 });
+    assert.throws(
+      () => t.charge({ model: 'claude-sonnet-4-6', tokens_in: -1, tokens_out: 0 }),
+      /token counts/,
+    );
   });
 });

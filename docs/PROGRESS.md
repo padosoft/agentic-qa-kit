@@ -347,3 +347,8 @@
 - Added validated per-organization/project admission limits for concurrent runs and declared scenario units to both the memory queue and the PostgreSQL queue. Idempotent retries return the existing job before quota evaluation; API callers receive a bounded `429 RESOURCE_QUOTA_EXCEEDED` response with no secret or payload echo.
 - PostgreSQL currently evaluates the shared snapshot before insert, so it is safe as a local guard but is not yet a distributed atomic quota guarantee across simultaneous replicas. The remaining production step is a transaction/advisory-lock counter table plus kill-switch/config propagation and operational metrics.
 - Evidence: server typecheck, server suite (108 passed plus one PostgreSQL EventBus platform skip before this adapter-only change), repository lint. Live PostgreSQL quota contention remains CI evidence, not locally verified.
+
+# 2026-09-17 — cost dispatch safety slice
+
+- Hardened `@aqa/cost` with validated non-negative budgets/token counts, a fail-closed `assertCanDispatch()` boundary, and an explicit irreversible-in-instance `halt(reason)` kill switch. Unknown model pricing remains blocked and no provider call is counted when admission rejects it.
+- Evidence: cost package typecheck and 8/8 tests; repository lint. Runtime worker integration, distributed halt persistence, provider reconciliation and auditable `budget_exceeded` events remain open.
