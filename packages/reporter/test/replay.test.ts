@@ -54,6 +54,37 @@ const PW_SCENARIO = {
   ],
 };
 
+const STRUCTURED_PW_SCENARIO = {
+  ...HTTP_SCENARIO,
+  steps: [
+    {
+      id: 'p1',
+      kind: 'playwright' as const,
+      with: {
+        url: '/login',
+        actions: [
+          { type: 'fill', selector: '#email', value: 'qa@example.test' },
+          { type: 'click', selector: 'button[type="submit"]' },
+          { type: 'wait_for', selector: '[data-testid="account"]' },
+        ],
+      },
+      timeout_ms: 30000,
+    },
+  ],
+};
+
+const SQL_SCENARIO = {
+  ...HTTP_SCENARIO,
+  steps: [
+    {
+      id: 'p1',
+      kind: 'sql' as const,
+      with: { query: 'SELECT id FROM orders WHERE customer_id = $1', params: ['customer-1'] },
+      timeout_ms: 30000,
+    },
+  ],
+};
+
 describe('buildReplayArtifacts', () => {
   it('emits repro.sh + repro.curl for HTTP scenarios', () => {
     const out = buildReplayArtifacts({
@@ -82,6 +113,28 @@ describe('buildReplayArtifacts', () => {
     const out = buildReplayArtifacts({ finding: FINDING, scenario: PW_SCENARIO });
     const paths = out.map((a) => a.path);
     assert.ok(paths.includes('replay/repro.playwright.ts'));
+    assert.match(out[0]?.contents ?? '', /external script/);
+  });
+
+  it('emits executable structured Playwright actions', () => {
+    const out = buildReplayArtifacts({
+      finding: FINDING,
+      scenario: STRUCTURED_PW_SCENARIO,
+      base_url: 'https://shop.example.test',
+    });
+    const artifact = out.find((item) => item.kind === 'playwright');
+    assert.match(artifact?.contents ?? '', /page\.goto\("https:\/\/shop\.example\.test\/login"/);
+    assert.match(artifact?.contents ?? '', /page\.fill\("#email", "qa@example\.test"/);
+    assert.doesNotMatch(artifact?.contents ?? '', /test\.skip/);
+  });
+
+  it('emits a read-only parameterized SQL replay', () => {
+    const artifact = buildReplayArtifacts({ finding: FINDING, scenario: SQL_SCENARIO }).find(
+      (item) => item.kind === 'sql',
+    );
+    assert.match(artifact?.contents ?? '', /SET TRANSACTION READ ONLY/);
+    assert.match(artifact?.contents ?? '', /PREPARE aqa_replay/);
+    assert.match(artifact?.contents ?? '', /EXECUTE aqa_replay\('customer-1'\)/);
   });
 
   it('emits no artifacts for an unsupported kind', () => {

@@ -1301,3 +1301,11 @@ The live Finding schema permits evidence such as empty owners/tags or missing
 reproducibility floors. A UI that only survives its rich demo fixture is not a
 live integration: normalize optional collections and reserved evidence states
 at the rendering boundary, then prove the sparse record through the browser.
+
+# 2026-09-17 — replay artifacts must match the driver contract
+
+A file named `repro.playwright.ts` or `repro.sql` is not evidence of replay if
+it only contains comments. Generated artifacts now use the same structured
+browser actions and read-only SQL parameter model as the runner; when a probe
+references an external spec that cannot be safely inlined, the artifact says
+so explicitly and remains skipped rather than claiming deterministic coverage.

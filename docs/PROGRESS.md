@@ -22,6 +22,16 @@
   **6 packs**. ADR-130 records the opt-in boundary. Real merchant/provider
   journeys remain deployment evidence.
 
+- **Replay artifact truthfulness.** Playwright replay files now generate
+  executable code for the runner's structured `url`/`actions` contract, and
+  SQL replay files now contain a read-only transaction with `PREPARE/EXECUTE`
+  and safely rendered parameters. External script-only browser probes are
+  explicitly marked as requiring the original spec instead of being presented
+  as a runnable reproduction. Reporter suite **9/9** passes.
+- Evidence: reporter typecheck, replay tests and Biome pass. Provider-specific
+  browser fixtures and database credentials remain external deployment inputs;
+  ADR-131 records the artifact boundary.
+
 - **Conditional admin edits.** Profile, risk and scenario detail reads now
   emit strong content ETags; their PUT boundaries honor `If-Match` and reject
   stale writes with `412 PRECONDITION_FAILED` before persistence. Profile,
