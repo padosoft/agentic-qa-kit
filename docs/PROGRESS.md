@@ -11,6 +11,7 @@
 
 ## 2026-09-17
 
+- **Helm render gate corrected.** The production-shaped CI render exposed that the runner DNS egress rule still emitted an unrestricted `namespaceSelector: {}` even though the ingress selector was constrained. DNS egress now targets the Kubernetes system namespace label explicitly, so the chart-level assertion matches the intended network boundary.
 - **Finding status audit made atomic.** The API now uses a store-level transition primitive that updates the finding and appends its hash-chained audit event in one transaction. PostgreSQL serializes the complete read/hash/write sequence with a transaction advisory lock; MemoryStore mirrors the same contract. Added concurrency assertions for unique sequence/hash values and a memory regression. Local store: 9/9; server: 100/100. PostgreSQL concurrency branch remains CI-only without `AQA_TEST_POSTGRES_DSN`.
 - **Queue retry budget and DLQ implemented.** Memory and PostgreSQL queues now persist `attempts`, `max_attempts`, `failed`, and capped failure reason; lease expiry after the budget is terminal, explicit worker failures use `POST /api/runner/jobs/:id/fail`, and stale tokens remain fenced. Server suite: 100/100; PostgreSQL live migration behavior is queued for CI evidence.
 - Migrated synchronous `aqa report` Markdown/JSON writes to `FileArtifactStore` sync APIs; report files now receive redaction, atomic replacement and SHA-256 metadata sidecars. The report journey asserts both sidecars; direct-file writers remain only for canonical event/finding JSONL streams.
