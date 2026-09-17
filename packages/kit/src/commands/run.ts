@@ -90,6 +90,8 @@ export interface RunOptions {
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ClosableProbeRunner;
+  /** Host-injected HTTP probe secrets; values never come from pack files. */
+  httpSecrets?: Readonly<Record<string, string>>;
   /** Optional capability declaration forwarded to runner preflight. */
   supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
   /** Optional operator key used to sign the final audit completeness checkpoint. */
@@ -518,9 +520,18 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // executed and audited twice. First-seen wins, so the priority order
   // matches the discovery order above: project > node_modules > bundled.
   const seenPackNames = new Set<string>();
+  const httpSecrets = {
+    ...httpSecretsFromEnvironment(),
+    ...(opts.httpSecrets ?? {}),
+  };
   const probeRunner: ClosableProbeRunner | undefined =
     opts.probeRunner ??
-    (project.sut.base_url ? makeHttpProbeRunner({ baseUrl: project.sut.base_url }) : undefined);
+    (project.sut.base_url
+      ? makeHttpProbeRunner({
+          baseUrl: project.sut.base_url,
+          ...(Object.keys(httpSecrets).length > 0 ? { secrets: httpSecrets } : {}),
+        })
+      : undefined);
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -996,4 +1007,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     ...(warnings.length > 0 ? { warnings } : {}),
     ...(canonicalArtifacts.length > 0 ? { canonicalArtifacts } : {}),
   };
+}
+
+function httpSecretsFromEnvironment(): Record<string, string> {
+  const prefix = 'AQA_HTTP_SECRET_';
+  const output: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith(prefix) || !value) continue;
+    const name = key.slice(prefix.length);
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) output[name] = value;
+  }
+  return output;
 }

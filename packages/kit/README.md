@@ -70,6 +70,16 @@ bunx aqa validate             # schema-validate .aqa/* (CI-safe)
 `aqa init` is **non-destructive**: existing files are left alone unless you pass `--force`. Pair it
 with `--dry-run` to preview the writes.
 
+Authenticated HTTP probes use named references such as `auth: "${OLD_TOKEN}"`.
+Inject values from the host, never from pack files or CLI arguments:
+
+```text
+AQA_HTTP_SECRET_OLD_TOKEN=<provided-by-ci-secret-store>
+```
+
+Embedding hosts may pass `RunOptions.httpSecrets` instead. Missing references
+fail before dispatch and secret values are not persisted in run evidence.
+
 ## Durable artifact backend
 
 Runs use the local filesystem by default. For AWS S3, MinIO or another

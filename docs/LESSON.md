@@ -1,5 +1,11 @@
 # Lessons
 
+- **Fail-closed secret references need a host injection path.** Rejecting
+  missing auth values prevents false greens, but a useful authenticated
+  journey must still cross the real `aqa run` boundary. Keep named references
+  in packs, source values from CI/secret-manager environment or an embedding
+  host, and never serialize the resolved value into evidence.
+
 - **Never ignore a probe field or oracle comparator.** A pack that writes
   `auth`, `jsonpath` or `equals` while the driver/oracle ignores it can pass
   against the wrong request or an empty string. Unknown fields must fail
