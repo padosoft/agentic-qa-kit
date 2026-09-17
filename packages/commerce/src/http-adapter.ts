@@ -2,6 +2,7 @@ import {
   type CancellationResult,
   CancellationSnapshot,
   CartSnapshot,
+  ChargebackSnapshot,
   type CheckoutResult,
   type CommerceAdapter,
   CommerceCapabilities,
@@ -13,6 +14,8 @@ import {
   PaymentSnapshot,
   type RefundResult,
   RefundSnapshot,
+  type SettlementObservation,
+  SettlementSnapshot,
   type ShippingAddress,
   ShippingQuote,
   TaxQuote,
@@ -36,6 +39,7 @@ export interface HttpCommerceAdapterOptions {
     inventory: string;
     refund: string;
     cancellation: string;
+    settlement: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -76,6 +80,7 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       inventory: '/inventory/:sku',
       refund: '/orders/:order_id/refunds',
       cancellation: '/orders/:order_id/cancellation',
+      settlement: '/orders/:order_id/settlement',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -200,6 +205,26 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       payment: PaymentSnapshot.parse(raw.payment),
       order: OrderSnapshot.parse(raw.order),
       ...(raw.refund ? { refund: RefundSnapshot.parse(raw.refund) } : {}),
+    };
+  }
+
+  async observeSettlement(
+    identity: CommerceIdentity,
+    orderId: string,
+  ): Promise<SettlementObservation> {
+    const raw = (await this.request(
+      'GET',
+      pathTemplate(this.paths.settlement, { order_id: orderId }),
+      this.context(identity),
+      identity,
+    )) as Record<string, unknown>;
+    if (!Array.isArray(raw.refunds) || !Array.isArray(raw.chargebacks))
+      throw new Error('commerce settlement response must include refunds and chargebacks arrays');
+    return {
+      payment: PaymentSnapshot.parse(raw.payment),
+      refunds: raw.refunds.map((item) => RefundSnapshot.parse(item)),
+      chargebacks: raw.chargebacks.map((item) => ChargebackSnapshot.parse(item)),
+      settlement: SettlementSnapshot.parse(raw.settlement),
     };
   }
 
