@@ -29,7 +29,7 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs && node scripts/bundle-admin.mjs && node scripts/build-bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json && node scripts/bundle-packs.mjs && node scripts/bundle-admin.mjs",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/verify-cmd.test.ts test/ingest-cmd.test.ts test/risk-discover.test.ts test/pack-new.test.ts test/install-agent-files-cmd.test.ts test/report-cmd.test.ts test/admin-cmd.test.ts test/build-bundle.test.ts test/artifact-backend.test.ts test/worker.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/cli.test.ts test/profiler.test.ts test/run-cmd.test.ts test/verify-cmd.test.ts test/ingest-cmd.test.ts test/risk-discover.test.ts test/risk-coverage.test.ts test/pack-new.test.ts test/install-agent-files-cmd.test.ts test/report-cmd.test.ts test/admin-cmd.test.ts test/build-bundle.test.ts test/artifact-backend.test.ts test/worker.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
@@ -44,6 +44,7 @@
     "@aqa/pack-loader": "workspace:*",
     "@aqa/reporter": "workspace:*",
     "@aqa/runner": "workspace:*",
+    "@aqa/methodology": "workspace:*",
     "@aqa/schemas": "workspace:*",
     "@aqa/server": "workspace:*",
     "@aqa/store": "workspace:*",

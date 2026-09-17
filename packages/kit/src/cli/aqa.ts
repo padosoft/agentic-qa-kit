@@ -8,6 +8,7 @@ import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
+import { runRiskCoverage } from '../commands/risk-coverage.js';
 import { runRiskDiscover } from '../commands/risk-discover.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
@@ -116,6 +117,7 @@ ${bold('Commands')}
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
+  risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -419,9 +421,35 @@ async function main(): Promise<number> {
     }
     case 'risk': {
       const subcommand = args.positionals[0];
-      if (subcommand !== 'discover') {
-        console.error(red('aqa risk: expected `discover`'));
+      if (subcommand !== 'discover' && subcommand !== 'coverage') {
+        console.error(red('aqa risk: expected `discover` or `coverage`'));
         return 1;
+      }
+      if (subcommand === 'coverage') {
+        if (args.flags.has('profile') && !args.values.has('profile')) {
+          console.error(red('aqa risk coverage: --profile requires a value'));
+          return 1;
+        }
+        const result = runRiskCoverage({
+          root: cwd,
+          ...(args.values.has('profile') ? { profile: args.values.get('profile') ?? '' } : {}),
+        });
+        for (const error of result.errors) console.error(red(`  ✗ ${error}`));
+        for (const report of result.reports) {
+          const badge = report.status === 'covered' ? green('✓') : yellow('⚠');
+          console.info(
+            `  ${badge} ${report.risk_id} ${report.status} score=${report.coverage_score.toFixed(4)}`,
+          );
+          for (const alert of report.drift_alerts) console.info(`    ${yellow('·')} ${alert}`);
+        }
+        if (!result.ok) return 1;
+        if (!result.gate_ok) {
+          console.error(
+            red('  ✗ coverage gate not satisfied: every risk must be covered and fresh'),
+          );
+          return 2;
+        }
+        return 0;
       }
       const method = args.values.get('method');
       if (method !== 'stride' && method !== 'owasp' && method !== 'fmea' && method !== 'source') {

@@ -125,6 +125,7 @@
         "@aqa/auth": "workspace:*",
         "@aqa/compliance": "workspace:*",
         "@aqa/ingest": "workspace:*",
+        "@aqa/methodology": "workspace:*",
         "@aqa/observability": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
@@ -223,6 +224,7 @@
       "version": "0.0.1",
       "bin": {
         "aqa-budget-reaper": "./dist/budget-reaper-cli.js",
+        "aqa-runner-reaper": "./dist/runner-reaper-cli.js",
       },
       "dependencies": {
         "@aqa/auth": "workspace:*",

@@ -235,7 +235,7 @@ function defaultPacksRoot(projectRoot: string): string[] {
   return candidates;
 }
 
-function resolvePackDirs(opts: RunOptions): string[] {
+export function resolvePackDirs(opts: RunOptions): string[] {
   if (opts.packsRoot && opts.packsRoot.length > 0) {
     // Sort caller-supplied paths so `--seed` determinism doesn't depend on
     // how the caller assembled the array. Comparing absolute paths gives
@@ -245,7 +245,7 @@ function resolvePackDirs(opts: RunOptions): string[] {
   return defaultPacksRoot(opts.root);
 }
 
-interface ManifestScenarios {
+export interface ManifestScenarios {
   paths: string[];
   /** manifest-listed paths that didn't resolve on disk — treated as coverage gaps. */
   missing: string[];
@@ -274,7 +274,7 @@ function isInside(root: string, abs: string): boolean {
  * malicious/buggy pack.yaml can't trick `aqa run` into reading arbitrary
  * filesystem paths.
  */
-function manifestScenarioFiles(packRoot: string, pack: LoadedPack): ManifestScenarios {
+export function manifestScenarioFiles(packRoot: string, pack: LoadedPack): ManifestScenarios {
   const paths: string[] = [];
   const missing: string[] = [];
   const unsafe: string[] = [];

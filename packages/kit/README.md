@@ -47,6 +47,7 @@ Commands
   init [name]   Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
   doctor        Report kit health (runtime, .aqa, agent docs, validation)
   validate      Validate .aqa/* against @aqa/schemas
+  risk coverage  Show fail-closed risk coverage from persisted run evidence
 
 Common options
   --force       (init) overwrite existing files
