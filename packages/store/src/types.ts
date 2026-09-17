@@ -28,6 +28,21 @@ export interface StoreUserDirectoryEntry {
   last_active_at?: string;
 }
 
+export interface StoreScope {
+  org?: string;
+  project?: string;
+}
+
+/** Stable key namespace for tenant-scoped resources while preserving legacy keys. */
+export function scopedRecordKey(key: string, scope?: StoreScope): string {
+  if (!scope?.org && !scope?.project) return key;
+  return `@scope/${encodeURIComponent(scope.org ?? '')}/${encodeURIComponent(scope.project ?? '')}/${key}`;
+}
+
+export function isScopedRecordKey(key: string): boolean {
+  return key.startsWith('@scope/');
+}
+
 /**
  * Persistence boundary for the AQA stack. The runner persists runs +
  * events + findings (write side); the server uses the read methods to
@@ -90,20 +105,20 @@ export interface StoreProvider {
   }): Promise<Finding.Finding[]>;
 
   // ----- Packs -----
-  listPacks(opts?: { org?: string; project?: string }): Promise<PackManifest.PackManifest[]>;
-  loadPack(slug: string): Promise<PackManifest.PackManifest | null>;
-  installPack(manifest: PackManifest.PackManifest): Promise<void>;
-  uninstallPack(slug: string): Promise<void>;
+  listPacks(opts?: StoreScope): Promise<PackManifest.PackManifest[]>;
+  loadPack(slug: string, scope?: StoreScope): Promise<PackManifest.PackManifest | null>;
+  installPack(manifest: PackManifest.PackManifest, scope?: StoreScope): Promise<void>;
+  uninstallPack(slug: string, scope?: StoreScope): Promise<void>;
 
   // ----- Profiles -----
-  listProfiles(opts?: { org?: string; project?: string }): Promise<Profile.Profile[]>;
-  loadProfile(name: string): Promise<Profile.Profile | null>;
-  saveProfile(profile: Profile.Profile): Promise<void>;
+  listProfiles(opts?: StoreScope): Promise<Profile.Profile[]>;
+  loadProfile(name: string, scope?: StoreScope): Promise<Profile.Profile | null>;
+  saveProfile(profile: Profile.Profile, scope?: StoreScope): Promise<void>;
   // Atomic create: { created: true } on insert, { created: false } if a
   // profile with the same name already exists. Used by POST /api/profiles
   // to avoid a TOCTOU race between loadProfile + saveProfile.
-  createProfile(profile: Profile.Profile): Promise<{ created: boolean }>;
-  deleteProfile(name: string): Promise<void>;
+  createProfile(profile: Profile.Profile, scope?: StoreScope): Promise<{ created: boolean }>;
+  deleteProfile(name: string, scope?: StoreScope): Promise<void>;
 
   // ----- Risk map -----
   listRisks(opts?: {
@@ -111,23 +126,25 @@ export interface StoreProvider {
     project?: string;
     category?: RiskMap.Risk['category'];
   }): Promise<RiskMap.Risk[]>;
-  loadRisk(id: string): Promise<RiskMap.Risk | null>;
-  saveRisk(risk: RiskMap.Risk): Promise<void>;
-  deleteRisk(id: string): Promise<void>;
+  loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null>;
+  saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void>;
+  deleteRisk(id: string, scope?: StoreScope): Promise<void>;
 
   // ----- Scenarios -----
   listScenarios(opts?: {
     pack?: string;
     risk_id?: string;
+    org?: string;
+    project?: string;
   }): Promise<Scenario.Scenario[]>;
-  loadScenario(id: string): Promise<Scenario.Scenario | null>;
-  saveScenario(scenario: Scenario.Scenario): Promise<void>;
+  loadScenario(id: string, scope?: StoreScope): Promise<Scenario.Scenario | null>;
+  saveScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<void>;
   // Atomic create: { created: true } on insert, { created: false } if a
   // scenario with the same id already exists. Mirrors createProfile —
   // used by POST /api/scenarios to avoid a TOCTOU race between
   // loadScenario + saveScenario.
-  createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }>;
-  deleteScenario(id: string): Promise<void>;
+  createScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<{ created: boolean }>;
+  deleteScenario(id: string, scope?: StoreScope): Promise<void>;
 
   // ----- Agents (v1.7 slice 4d) -----
   listAgents(): Promise<Agent.Agent[]>;

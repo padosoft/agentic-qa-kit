@@ -360,7 +360,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const slug = req.params.slug;
         if (!slug) return notFound('pack');
-        const pack = await ctx.store.loadPack(slug);
+        const pack = await ctx.store.loadPack(slug, scope(req));
         if (!pack) return notFound('pack');
         return asResponse({ pack });
       },
@@ -389,7 +389,7 @@ export function makeApi(): ApiHandler[] {
             );
           }
         }
-        const existing = await ctx.store.loadPack(manifest.name);
+        const existing = await ctx.store.loadPack(manifest.name, scope(req));
         if (existing && body.force !== true) {
           return asResponse(
             {
@@ -399,7 +399,7 @@ export function makeApi(): ApiHandler[] {
             409,
           );
         }
-        await ctx.store.installPack(manifest);
+        await ctx.store.installPack(manifest, scope(req));
         return asResponse({ pack: manifest }, 201);
       },
     },
@@ -410,7 +410,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const slug = req.params.slug;
         if (!slug) return notFound('pack');
-        await ctx.store.uninstallPack(slug);
+        await ctx.store.uninstallPack(slug, scope(req));
         return asResponse({ ok: true });
       },
     },
@@ -613,7 +613,7 @@ export function makeApi(): ApiHandler[] {
             );
           }
         }
-        const existing = await ctx.store.loadPack(manifest.name);
+        const existing = await ctx.store.loadPack(manifest.name, scope(req));
         if (existing && body.force !== true) {
           return asResponse(
             {
@@ -624,7 +624,7 @@ export function makeApi(): ApiHandler[] {
           );
         }
         try {
-          await ctx.store.installPack(manifest);
+          await ctx.store.installPack(manifest, scope(req));
         } catch (e) {
           return asResponse(
             {
@@ -670,7 +670,7 @@ export function makeApi(): ApiHandler[] {
         // Atomic check+create at the store layer — two concurrent POSTs
         // for the same name can't both observe "missing" and overwrite
         // each other. saveProfile + a prior loadProfile would race.
-        const { created } = await ctx.store.createProfile(profile);
+        const { created } = await ctx.store.createProfile(profile, scope(req));
         if (!created) {
           return asResponse(
             {
@@ -690,7 +690,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const name = req.params.name;
         if (!name) return notFound('profile');
-        const profile = await ctx.store.loadProfile(name);
+        const profile = await ctx.store.loadProfile(name, scope(req));
         if (!profile) return notFound('profile');
         return asResponse({ profile });
       },
@@ -732,7 +732,7 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveProfile(profile);
+        await ctx.store.saveProfile(profile, scope(req));
         return asResponse({ profile });
       },
     },
@@ -743,7 +743,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const name = req.params.name;
         if (!name) return notFound('profile');
-        await ctx.store.deleteProfile(name);
+        await ctx.store.deleteProfile(name, scope(req));
         return asResponse({ ok: true });
       },
     },
@@ -765,7 +765,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('risk');
-        const risk = await ctx.store.loadRisk(id);
+        const risk = await ctx.store.loadRisk(id, scope(req));
         if (!risk) return notFound('risk');
         return asResponse({ risk });
       },
@@ -796,7 +796,7 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveRisk(risk);
+        await ctx.store.saveRisk(risk, scope(req));
         return asResponse({ risk });
       },
     },
@@ -811,7 +811,7 @@ export function makeApi(): ApiHandler[] {
         // desired end state is "no risk with this id" regardless of
         // whether one was there to begin with. The admin UI treats
         // 200 as success either way.
-        await ctx.store.deleteRisk(id);
+        await ctx.store.deleteRisk(id, scope(req));
         return asResponse({ id, deleted: true });
       },
     },
@@ -825,7 +825,7 @@ export function makeApi(): ApiHandler[] {
         const opts: { pack?: string; risk_id?: string } = {};
         if (req.params.pack) opts.pack = req.params.pack;
         if (req.params.risk_id) opts.risk_id = req.params.risk_id;
-        const scenarios = await ctx.store.listScenarios(opts);
+        const scenarios = await ctx.store.listScenarios({ ...opts, ...scope(req) });
         return asResponse({ scenarios } satisfies { scenarios: Scenario.Scenario[] });
       },
     },
@@ -836,7 +836,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('scenario');
-        const scenario = await ctx.store.loadScenario(id);
+        const scenario = await ctx.store.loadScenario(id, scope(req));
         if (!scenario) return notFound('scenario');
         return asResponse({ scenario });
       },
@@ -858,7 +858,7 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const scenario = parsed.data;
-        const { created } = await ctx.store.createScenario(scenario);
+        const { created } = await ctx.store.createScenario(scenario, scope(req));
         if (!created) {
           return asResponse(
             {
@@ -895,7 +895,7 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveScenario(scenario);
+        await ctx.store.saveScenario(scenario, scope(req));
         return asResponse({ scenario });
       },
     },
@@ -913,7 +913,7 @@ export function makeApi(): ApiHandler[] {
         // returns the older { ok: true } shape — its admin wizard
         // doesn't need correlation since it always navigates back to
         // the profiles list.)
-        await ctx.store.deleteScenario(id);
+        await ctx.store.deleteScenario(id, scope(req));
         return asResponse({ id, deleted: true });
       },
     },

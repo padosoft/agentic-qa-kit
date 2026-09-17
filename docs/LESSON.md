@@ -325,3 +325,11 @@ Reading the last audit event, mutating a finding, and appending the next event a
 # 2026-09-17 — Object Lock is an adapter capability, not an authorization model
 
 An S3-compatible artifact adapter can request governance/compliance retention and verify content digests, but it cannot safely infer tenant identity from an artifact key. The API must derive the prefix from authenticated scope, and operators must enable bucket versioning, Object Lock and KMS policy separately. The adapter therefore accepts an explicit prefix and documents these controls instead of claiming that S3 alone makes artifacts enterprise-compliant.
+
+# 2026-09-17 — tenant filtering is not enough for resource writes
+
+Filtering a list by `org/project` does not prevent a same-name profile, risk or
+scenario from overwriting another tenant during `PUT` or `DELETE`. The storage
+key itself must carry the authenticated scope, while legacy unscoped keys need a
+deliberate compatibility rule. New namespaced records are now isolated in both
+adapters; full migration of legacy global records remains an operational task.

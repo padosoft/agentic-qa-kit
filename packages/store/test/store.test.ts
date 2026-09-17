@@ -107,6 +107,29 @@ describe('MemoryStore', () => {
     assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
   });
 
+  it('keeps newly written configuration resources isolated by tenant scope', async () => {
+    const s = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'shared-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    const alpha = { org: 'acme', project: 'alpha' };
+    const beta = { org: 'acme', project: 'beta' };
+    await s.saveProfile(profile, alpha);
+    await s.saveProfile({ ...profile, tags: ['beta'] }, beta);
+    assert.deepEqual((await s.loadProfile(profile.name, alpha))?.tags, []);
+    assert.deepEqual((await s.loadProfile(profile.name, beta))?.tags, ['beta']);
+    assert.equal((await s.listProfiles(alpha)).length, 1);
+    assert.equal((await s.listProfiles(beta)).length, 1);
+  });
+
   it('close() clears state', async () => {
     const s = new MemoryStore();
     await s.saveRun(RUN);
@@ -230,6 +253,17 @@ describe('PostgresStore', () => {
       );
       assert.equal(creates.filter((result) => result.created).length, 1);
       assert.deepEqual(await reopened.loadProfile(profile.name), profile);
+      await reopened.saveProfile(profile, { org: 'ci-org', project: 'alpha' });
+      await reopened.saveProfile(
+        { ...profile, tags: ['beta'] },
+        { org: 'ci-org', project: 'beta' },
+      );
+      assert.deepEqual(
+        (await reopened.listProfiles({ org: 'ci-org', project: 'beta' })).find(
+          (item) => item.name === profile.name,
+        )?.tags,
+        ['beta'],
+      );
 
       const user = {
         id: 'ci-user',

@@ -17,7 +17,12 @@ import type {
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { findingStatusAudit } from './audit.js';
-import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
+import {
+  type StoreProvider,
+  type StoreScope,
+  type StoreUserDirectoryEntry,
+  scopedRecordKey,
+} from './types.js';
 
 type Kind =
   | 'run'
@@ -80,19 +85,21 @@ export class PostgresStore implements StoreProvider {
   private async wait(): Promise<void> {
     await this.ready;
   }
-  private async one(kind: Kind, key: string): Promise<Row | null> {
+  private async one(kind: Kind, key: string, scope?: StoreScope): Promise<Row | null> {
     await this.wait();
+    const namespaced = scopedRecordKey(key, scope);
     const rows = await this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
-      [kind, key],
+      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND record_key IN ($2, $3) ORDER BY (record_key = $3) DESC',
+      [kind, key, namespaced],
     );
     return rows[0] ?? null;
   }
-  private async many(kind: Kind): Promise<Row[]> {
+  private async many(kind: Kind, scope?: StoreScope): Promise<Row[]> {
     await this.wait();
+    const prefix = scope?.org || scope?.project ? `${scopedRecordKey('', scope)}%` : null;
     return this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 ORDER BY updated_at DESC, record_key',
-      [kind],
+      "SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND ($2::text IS NULL OR record_key NOT LIKE '@scope/%' OR record_key LIKE $2) ORDER BY updated_at DESC, record_key",
+      [kind, prefix],
     );
   }
   private async put(
@@ -101,16 +108,27 @@ export class PostgresStore implements StoreProvider {
     payload: unknown,
     org?: string,
     project?: string,
+    scope?: StoreScope,
   ): Promise<void> {
     await this.wait();
+    const recordKey = scopedRecordKey(key, scope);
     await this.q(
       'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO UPDATE SET org = EXCLUDED.org, project = EXCLUDED.project, payload = EXCLUDED.payload, updated_at = now()',
-      [kind, key, org ?? null, project ?? null, JSON.stringify(payload)],
+      [
+        kind,
+        recordKey,
+        scope?.org ?? org ?? null,
+        scope?.project ?? project ?? null,
+        JSON.stringify(payload),
+      ],
     );
   }
-  private async remove(kind: Kind, key: string): Promise<void> {
+  private async remove(kind: Kind, key: string, scope?: StoreScope): Promise<void> {
     await this.wait();
-    await this.q('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [kind, key]);
+    await this.q('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
+      kind,
+      scopedRecordKey(key, scope),
+    ]);
   }
   private decode<T>(value: unknown): T {
     if (typeof value !== 'string') return value as T;
@@ -262,72 +280,81 @@ export class PostgresStore implements StoreProvider {
     if (opts.status) out = out.filter((finding) => finding.status === opts.status);
     return opts.limit === undefined ? out : out.slice(0, opts.limit);
   }
-  async listPacks(): Promise<PackManifest.PackManifest[]> {
-    return this.values(await this.many('pack'));
+  async listPacks(opts: StoreScope = {}): Promise<PackManifest.PackManifest[]> {
+    return this.values(await this.many('pack', opts));
   }
-  async loadPack(slug: string): Promise<PackManifest.PackManifest | null> {
-    return this.payload(await this.one('pack', slug));
+  async loadPack(slug: string, scope?: StoreScope): Promise<PackManifest.PackManifest | null> {
+    return this.payload(await this.one('pack', slug, scope));
   }
-  async installPack(manifest: PackManifest.PackManifest): Promise<void> {
-    await this.put('pack', manifest.name, manifest);
+  async installPack(manifest: PackManifest.PackManifest, scope?: StoreScope): Promise<void> {
+    await this.put('pack', manifest.name, manifest, undefined, undefined, scope);
   }
-  async uninstallPack(slug: string): Promise<void> {
-    await this.remove('pack', slug);
+  async uninstallPack(slug: string, scope?: StoreScope): Promise<void> {
+    await this.remove('pack', slug, scope);
   }
-  async listProfiles(): Promise<Profile.Profile[]> {
-    return this.values(await this.many('profile'));
+  async listProfiles(opts: StoreScope = {}): Promise<Profile.Profile[]> {
+    return this.values(await this.many('profile', opts));
   }
-  async loadProfile(name: string): Promise<Profile.Profile | null> {
-    return this.payload(await this.one('profile', name));
+  async loadProfile(name: string, scope?: StoreScope): Promise<Profile.Profile | null> {
+    return this.payload(await this.one('profile', name, scope));
   }
-  async saveProfile(profile: Profile.Profile): Promise<void> {
-    await this.put('profile', profile.name, profile);
+  async saveProfile(profile: Profile.Profile, scope?: StoreScope): Promise<void> {
+    await this.put('profile', profile.name, profile, undefined, undefined, scope);
   }
-  async createProfile(profile: Profile.Profile): Promise<{ created: boolean }> {
+  async createProfile(profile: Profile.Profile, scope?: StoreScope): Promise<{ created: boolean }> {
     await this.wait();
+    const key = scopedRecordKey(profile.name, scope);
     const rows = await this.q(
-      "INSERT INTO aqa_store_records (kind, record_key, payload) VALUES ('profile', $1, $2::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key",
-      [profile.name, JSON.stringify(profile)],
+      "INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ('profile', $1, $2, $3, $4::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key",
+      [key, scope?.org ?? null, scope?.project ?? null, JSON.stringify(profile)],
     );
     return { created: rows.length === 1 };
   }
-  async deleteProfile(name: string): Promise<void> {
-    await this.remove('profile', name);
+  async deleteProfile(name: string, scope?: StoreScope): Promise<void> {
+    await this.remove('profile', name, scope);
   }
-  async listRisks(opts: { category?: RiskMap.Risk['category'] } = {}): Promise<RiskMap.Risk[]> {
-    const out = this.values<RiskMap.Risk>(await this.many('risk'));
+  async listRisks(
+    opts: { category?: RiskMap.Risk['category']; org?: string; project?: string } = {},
+  ): Promise<RiskMap.Risk[]> {
+    const out = this.values<RiskMap.Risk>(await this.many('risk', opts));
     return opts.category ? out.filter((risk) => risk.category === opts.category) : out;
   }
-  async loadRisk(id: string): Promise<RiskMap.Risk | null> {
-    return this.payload(await this.one('risk', id));
+  async loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null> {
+    return this.payload(await this.one('risk', id, scope));
   }
-  async saveRisk(risk: RiskMap.Risk): Promise<void> {
-    await this.put('risk', risk.id, risk);
+  async saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void> {
+    await this.put('risk', risk.id, risk, undefined, undefined, scope);
   }
-  async deleteRisk(id: string): Promise<void> {
-    await this.remove('risk', id);
+  async deleteRisk(id: string, scope?: StoreScope): Promise<void> {
+    await this.remove('risk', id, scope);
   }
-  async listScenarios(opts: { risk_id?: string } = {}): Promise<Scenario.Scenario[]> {
-    const out = this.values<Scenario.Scenario>(await this.many('scenario'));
+  async listScenarios(
+    opts: { risk_id?: string; org?: string; project?: string } = {},
+  ): Promise<Scenario.Scenario[]> {
+    const out = this.values<Scenario.Scenario>(await this.many('scenario', opts));
     const riskId = opts.risk_id;
     return riskId ? out.filter((scenario) => scenario.risk_refs.includes(riskId)) : out;
   }
-  async loadScenario(id: string): Promise<Scenario.Scenario | null> {
-    return this.payload(await this.one('scenario', id));
+  async loadScenario(id: string, scope?: StoreScope): Promise<Scenario.Scenario | null> {
+    return this.payload(await this.one('scenario', id, scope));
   }
-  async saveScenario(scenario: Scenario.Scenario): Promise<void> {
-    await this.put('scenario', scenario.id, scenario);
+  async saveScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<void> {
+    await this.put('scenario', scenario.id, scenario, undefined, undefined, scope);
   }
-  async createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }> {
+  async createScenario(
+    scenario: Scenario.Scenario,
+    scope?: StoreScope,
+  ): Promise<{ created: boolean }> {
     await this.wait();
+    const key = scopedRecordKey(scenario.id, scope);
     const rows = await this.q(
-      "INSERT INTO aqa_store_records (kind, record_key, payload) VALUES ('scenario', $1, $2::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key",
-      [scenario.id, JSON.stringify(scenario)],
+      "INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ('scenario', $1, $2, $3, $4::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key",
+      [key, scope?.org ?? null, scope?.project ?? null, JSON.stringify(scenario)],
     );
     return { created: rows.length === 1 };
   }
-  async deleteScenario(id: string): Promise<void> {
-    await this.remove('scenario', id);
+  async deleteScenario(id: string, scope?: StoreScope): Promise<void> {
+    await this.remove('scenario', id, scope);
   }
   async listAgents(): Promise<Agent.Agent[]> {
     return this.values(await this.many('agent'));

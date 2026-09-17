@@ -15,7 +15,13 @@ import type {
   Tenancy,
 } from '@aqa/schemas';
 import { findingStatusAudit } from './audit.js';
-import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
+import {
+  type StoreProvider,
+  type StoreScope,
+  type StoreUserDirectoryEntry,
+  isScopedRecordKey,
+  scopedRecordKey,
+} from './types.js';
 
 /**
  * In-memory StoreProvider — the v0.3 default. Useful for tests, smoke runs,
@@ -41,6 +47,18 @@ export class MemoryStore implements StoreProvider {
   // v1.7 slice 4g — directory snapshot of users known to the admin.
   // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
   private users = new Map<string, StoreUserDirectoryEntry>();
+
+  private visible<T>(map: Map<string, T>, scope?: StoreScope): T[] {
+    if (!scope?.org && !scope?.project) return [...map.values()];
+    const prefix = `${scopedRecordKey('', scope)}`;
+    return [...map.entries()]
+      .filter(([key]) => !isScopedRecordKey(key) || key.startsWith(prefix))
+      .map(([, value]) => value);
+  }
+
+  private key(key: string, scope?: StoreScope): string {
+    return scopedRecordKey(key, scope);
+  }
 
   // ----- Runs -----
   async saveRun(run: Run.Run): Promise<void> {
@@ -174,38 +192,39 @@ export class MemoryStore implements StoreProvider {
   }
 
   // ----- Packs -----
-  async listPacks(): Promise<PackManifest.PackManifest[]> {
-    return [...this.packs.values()];
+  async listPacks(scope?: StoreScope): Promise<PackManifest.PackManifest[]> {
+    return this.visible(this.packs, scope);
   }
-  async loadPack(slug: string): Promise<PackManifest.PackManifest | null> {
-    return this.packs.get(slug) ?? null;
+  async loadPack(slug: string, scope?: StoreScope): Promise<PackManifest.PackManifest | null> {
+    return this.packs.get(this.key(slug, scope)) ?? this.packs.get(slug) ?? null;
   }
-  async installPack(manifest: PackManifest.PackManifest): Promise<void> {
-    this.packs.set(manifest.name, manifest);
+  async installPack(manifest: PackManifest.PackManifest, scope?: StoreScope): Promise<void> {
+    this.packs.set(this.key(manifest.name, scope), manifest);
   }
-  async uninstallPack(slug: string): Promise<void> {
-    this.packs.delete(slug);
+  async uninstallPack(slug: string, scope?: StoreScope): Promise<void> {
+    this.packs.delete(this.key(slug, scope));
   }
 
   // ----- Profiles -----
-  async listProfiles(): Promise<Profile.Profile[]> {
-    return [...this.profiles.values()];
+  async listProfiles(scope?: StoreScope): Promise<Profile.Profile[]> {
+    return this.visible(this.profiles, scope);
   }
-  async loadProfile(name: string): Promise<Profile.Profile | null> {
-    return this.profiles.get(name) ?? null;
+  async loadProfile(name: string, scope?: StoreScope): Promise<Profile.Profile | null> {
+    return this.profiles.get(this.key(name, scope)) ?? this.profiles.get(name) ?? null;
   }
-  async saveProfile(profile: Profile.Profile): Promise<void> {
-    this.profiles.set(profile.name, profile);
+  async saveProfile(profile: Profile.Profile, scope?: StoreScope): Promise<void> {
+    this.profiles.set(this.key(profile.name, scope), profile);
   }
-  async createProfile(profile: Profile.Profile): Promise<{ created: boolean }> {
+  async createProfile(profile: Profile.Profile, scope?: StoreScope): Promise<{ created: boolean }> {
     // `has` + `set` runs synchronously between awaits, so two concurrent
     // callers can't both observe "missing" and overwrite each other.
-    if (this.profiles.has(profile.name)) return { created: false };
-    this.profiles.set(profile.name, profile);
+    const key = this.key(profile.name, scope);
+    if (this.profiles.has(key)) return { created: false };
+    this.profiles.set(key, profile);
     return { created: true };
   }
-  async deleteProfile(name: string): Promise<void> {
-    this.profiles.delete(name);
+  async deleteProfile(name: string, scope?: StoreScope): Promise<void> {
+    this.profiles.delete(this.key(name, scope));
   }
 
   // ----- Risks -----
@@ -216,42 +235,46 @@ export class MemoryStore implements StoreProvider {
       category?: RiskMap.Risk['category'];
     } = {},
   ): Promise<RiskMap.Risk[]> {
-    let out = [...this.risks.values()];
+    let out = this.visible(this.risks, opts);
     if (opts.category) out = out.filter((r) => r.category === opts.category);
     return out;
   }
-  async loadRisk(id: string): Promise<RiskMap.Risk | null> {
-    return this.risks.get(id) ?? null;
+  async loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null> {
+    return this.risks.get(this.key(id, scope)) ?? this.risks.get(id) ?? null;
   }
-  async saveRisk(risk: RiskMap.Risk): Promise<void> {
-    this.risks.set(risk.id, risk);
+  async saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void> {
+    this.risks.set(this.key(risk.id, scope), risk);
   }
-  async deleteRisk(id: string): Promise<void> {
-    this.risks.delete(id);
+  async deleteRisk(id: string, scope?: StoreScope): Promise<void> {
+    this.risks.delete(this.key(id, scope));
   }
 
   // ----- Scenarios -----
   async listScenarios(
-    opts: { pack?: string; risk_id?: string } = {},
+    opts: { pack?: string; risk_id?: string; org?: string; project?: string } = {},
   ): Promise<Scenario.Scenario[]> {
-    let out = [...this.scenarios.values()];
+    let out = this.visible(this.scenarios, opts);
     const riskId = opts.risk_id;
     if (riskId) out = out.filter((s) => s.risk_refs.includes(riskId));
     return out;
   }
-  async loadScenario(id: string): Promise<Scenario.Scenario | null> {
-    return this.scenarios.get(id) ?? null;
+  async loadScenario(id: string, scope?: StoreScope): Promise<Scenario.Scenario | null> {
+    return this.scenarios.get(this.key(id, scope)) ?? this.scenarios.get(id) ?? null;
   }
-  async saveScenario(scenario: Scenario.Scenario): Promise<void> {
-    this.scenarios.set(scenario.id, scenario);
+  async saveScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<void> {
+    this.scenarios.set(this.key(scenario.id, scope), scenario);
   }
-  async createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }> {
-    if (this.scenarios.has(scenario.id)) return { created: false };
-    this.scenarios.set(scenario.id, scenario);
+  async createScenario(
+    scenario: Scenario.Scenario,
+    scope?: StoreScope,
+  ): Promise<{ created: boolean }> {
+    const key = this.key(scenario.id, scope);
+    if (this.scenarios.has(key)) return { created: false };
+    this.scenarios.set(key, scenario);
     return { created: true };
   }
-  async deleteScenario(id: string): Promise<void> {
-    this.scenarios.delete(id);
+  async deleteScenario(id: string, scope?: StoreScope): Promise<void> {
+    this.scenarios.delete(this.key(id, scope));
   }
 
   // ----- Agents (v1.7 slice 4d) -----
