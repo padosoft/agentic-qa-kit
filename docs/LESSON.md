@@ -1086,6 +1086,14 @@ advisory-lock DDL and compare the requested limit with the locked row before
 reserving. Otherwise two replicas can silently use different limits for the
 same project.
 
+# 2026-09-17 — every distributed reservation needs expiry recovery
+
+If a worker dies after admission, a reservation without TTL permanently reduces
+available budget. Store an expiry, reclaim rows with row locking and skip-locked
+concurrency, and make settlement/reaping idempotent. The deployment must run the
+reaper on a schedule and alert on expired reservations; a library method alone
+is not operational evidence.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the

@@ -12,6 +12,9 @@ budget row during admission, rejects when spent plus reserved plus the new
 estimate reaches the limit, and settles each reservation once. Its migration is
 advisory-locked, and an existing key rejects a changed budget configuration
 instead of silently adopting it.
+Reservations have a bounded TTL; `reapExpired()` reclaims them with
+`FOR UPDATE SKIP LOCKED` and marks them settled so a worker crash cannot consume
+the budget forever.
 
 `BudgetedLlmAdapter` uses the ledger optionally in addition to its local
 `BudgetTracker`: reserve before provider dispatch, release on provider failure,
@@ -24,7 +27,7 @@ settle actual usage after success.
 - Provider usage remains authoritative while in-flight estimates provide the
   admission guard.
 - This does not yet provide an admin budget configuration API, pricing catalog
-  replication, stale-reservation expiry/reaper, or external provider invoice
+  replication, scheduled reaper metrics/alerts, or external provider invoice
   reconciliation.
 
 ## Verification

@@ -4,20 +4,32 @@ import type { Sql } from 'postgres';
 import { BudgetDispatchBlockedError } from './budget.js';
 
 export interface BudgetLedger {
-  reserve(key: string, budgetUsd: number | null, estimatedUsd: number): Promise<string>;
+  reserve(
+    key: string,
+    budgetUsd: number | null,
+    estimatedUsd: number,
+    ttlMs?: number,
+  ): Promise<string>;
   settle(reservationId: string, actualUsd: number): Promise<void>;
+  reapExpired(now?: Date): Promise<number>;
   close?(): Promise<void>;
 }
 
 type MemoryBudget = { budgetUsd: number | null; reservedUsd: number; spentUsd: number };
-type MemoryReservation = { key: string; estimatedUsd: number; settled: boolean };
+type MemoryReservation = { key: string; estimatedUsd: number; expiresAt: number; settled: boolean };
 
 export class MemoryBudgetLedger implements BudgetLedger {
   private readonly budgets = new Map<string, MemoryBudget>();
   private readonly reservations = new Map<string, MemoryReservation>();
 
-  async reserve(key: string, budgetUsd: number | null, estimatedUsd: number): Promise<string> {
+  async reserve(
+    key: string,
+    budgetUsd: number | null,
+    estimatedUsd: number,
+    ttlMs = 300_000,
+  ): Promise<string> {
     validateAmount(estimatedUsd);
+    validateTtl(ttlMs);
     const current = this.budgets.get(key) ?? { budgetUsd, reservedUsd: 0, spentUsd: 0 };
     if (current.budgetUsd !== budgetUsd && this.budgets.has(key))
       throw new Error('[cost] budget configuration changed for active ledger key');
@@ -27,7 +39,7 @@ export class MemoryBudgetLedger implements BudgetLedger {
     current.reservedUsd += estimatedUsd;
     this.budgets.set(key, current);
     const id = randomUUID();
-    this.reservations.set(id, { key, estimatedUsd, settled: false });
+    this.reservations.set(id, { key, estimatedUsd, expiresAt: Date.now() + ttlMs, settled: false });
     return id;
   }
 
@@ -40,6 +52,17 @@ export class MemoryBudgetLedger implements BudgetLedger {
     budget.reservedUsd = Math.max(0, budget.reservedUsd - reservation.estimatedUsd);
     budget.spentUsd += actualUsd;
     reservation.settled = true;
+  }
+
+  async reapExpired(now = new Date()): Promise<number> {
+    let count = 0;
+    for (const [id, reservation] of this.reservations) {
+      if (!reservation.settled && reservation.expiresAt <= now.getTime()) {
+        await this.settle(id, 0);
+        count += 1;
+      }
+    }
+    return count;
   }
 }
 
@@ -69,13 +92,22 @@ export class PostgresBudgetLedger implements BudgetLedger {
       await this.q(
         'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
       );
+      await this.q(
+        "ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS expires_at timestamptz NOT NULL DEFAULT (now() + interval '5 minutes')",
+      );
     } finally {
       await this.q("SELECT pg_advisory_unlock(hashtext('aqa_llm_budget_ledger_migration'))");
     }
   }
 
-  async reserve(key: string, budgetUsd: number | null, estimatedUsd: number): Promise<string> {
+  async reserve(
+    key: string,
+    budgetUsd: number | null,
+    estimatedUsd: number,
+    ttlMs = 300_000,
+  ): Promise<string> {
     validateAmount(estimatedUsd);
+    validateTtl(ttlMs);
     await this.ready;
     return this.sql.begin(async (tx) => {
       const query = tx.unsafe as unknown as (q: string, v?: unknown[]) => Promise<unknown>;
@@ -103,10 +135,31 @@ export class PostgresBudgetLedger implements BudgetLedger {
         [key, estimatedUsd],
       );
       await query(
-        'INSERT INTO aqa_llm_budget_reservations (id, budget_key, estimated_usd) VALUES ($1, $2, $3)',
-        [id, key, estimatedUsd],
+        "INSERT INTO aqa_llm_budget_reservations (id, budget_key, estimated_usd, expires_at) VALUES ($1, $2, $3, now() + ($4 * interval '1 millisecond'))",
+        [id, key, estimatedUsd, ttlMs],
       );
       return id;
+    });
+  }
+
+  async reapExpired(now = new Date()): Promise<number> {
+    await this.ready;
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (q: string, v?: unknown[]) => Promise<unknown>;
+      const rows = (await query(
+        'SELECT id, budget_key, estimated_usd::float8 AS estimated_usd FROM aqa_llm_budget_reservations WHERE settled = false AND expires_at <= $1 FOR UPDATE SKIP LOCKED',
+        [now.toISOString()],
+      )) as Array<{ id: string; budget_key: string; estimated_usd: number }>;
+      for (const row of rows) {
+        await query(
+          'UPDATE aqa_llm_budgets SET reserved_usd = GREATEST(0, reserved_usd - $2), updated_at = now() WHERE key = $1',
+          [row.budget_key, row.estimated_usd],
+        );
+        await query('UPDATE aqa_llm_budget_reservations SET settled = true WHERE id = $1', [
+          row.id,
+        ]);
+      }
+      return rows.length;
     });
   }
 
@@ -140,4 +193,9 @@ export class PostgresBudgetLedger implements BudgetLedger {
 function validateAmount(value: number): void {
   if (!Number.isFinite(value) || value < 0)
     throw new Error('[cost] ledger amount must be finite and non-negative');
+}
+
+function validateTtl(value: number): void {
+  if (!Number.isInteger(value) || value < 1)
+    throw new Error('[cost] ledger ttl must be a positive integer');
 }

@@ -823,3 +823,8 @@
 - Added `BudgetLedger` with atomic Memory and PostgreSQL implementations. Reservations are keyed by org/project/run scope, account for in-flight estimated spend, and settle idempotently against actual usage. `BudgetedLlmAdapter` optionally uses the ledger, preventing concurrent workers from dispatching past a shared budget.
 - Evidence: cost build and **9 tests passed**, LLM adapter build and **16 tests passed**, including concurrent shared-ledger admission. PostgreSQL live concurrency/settlement evidence, durable budget configuration APIs, pricing version distribution and reconciliation remain open.
 - Hardening follow-up: PostgreSQL ledger migrations now use an advisory lock and existing keys reject changed budget limits, preventing replica configuration drift.
+
+# 2026-09-17 — orphaned LLM budget reservation reaper
+
+- Added TTLs to budget reservations and `reapExpired()` to Memory/PostgreSQL ledgers. PostgreSQL reclaims expired rows with `FOR UPDATE SKIP LOCKED`, releases the reserved estimate and marks the reservation settled; repeated cleanup is safe.
+- Evidence: cost build/typecheck and **10 tests passed**, including simulated worker crash recovery. Production still needs a scheduled reaper/metric/alert and a live PostgreSQL multi-client recovery journey.

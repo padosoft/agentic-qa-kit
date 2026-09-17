@@ -92,4 +92,12 @@ describe('MemoryBudgetLedger', () => {
     await ledger.settle(second, 0.7);
     await ledger.settle(second, 0.7);
   });
+
+  it('reaps an orphaned reservation after its TTL', async () => {
+    const ledger = new MemoryBudgetLedger();
+    await ledger.reserve('org/reaper', 1, 0.8, 10);
+    assert.equal(await ledger.reapExpired(new Date(Date.now() + 11)), 1);
+    const next = await ledger.reserve('org/reaper', 1, 0.8, 10);
+    assert.ok(next);
+  });
 });
