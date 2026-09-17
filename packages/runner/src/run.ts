@@ -22,6 +22,12 @@ export interface RunScenarioOptions {
   run_id: string;
   /** Inject the probe runner. Omitting it is an explicit failed execution. */
   probeRunner?: ProbeRunner;
+  /**
+   * Optional capability declaration for the configured driver. When present,
+   * unsupported steps fail in a preflight pass before any probe or cleanup can
+   * cause side effects.
+   */
+  supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
   events?: EventChainWriter;
   findings?: FindingsWriter;
   /** Used to seed Finding.id when oracles fail. */
@@ -172,6 +178,52 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       },
     });
   };
+  const unsupportedSteps = opts.supportedProbeKinds
+    ? opts.scenario.steps.filter((probe) => !opts.supportedProbeKinds?.has(probe.kind))
+    : [];
+  const unsupportedCleanup = opts.supportedProbeKinds
+    ? opts.scenario.cleanup.filter((probe) => !opts.supportedProbeKinds?.has(probe.kind))
+    : [];
+  if (unsupportedSteps.length > 0 || unsupportedCleanup.length > 0) {
+    const preflight = (probe: Scenario.Probe) => ({
+      probe_id: probe.id,
+      execution_status: 'failed' as const,
+      error: `probe kind "${probe.kind}" is not supported by the configured driver`,
+    });
+    const preflightResults = unsupportedSteps.map(preflight);
+    const cleanupResults = unsupportedCleanup.map(preflight);
+    for (const [index, probe] of unsupportedSteps.entries()) {
+      const result = preflightResults[index];
+      if (result) recordProbe(probe, result, false);
+    }
+    for (const [index, probe] of unsupportedCleanup.entries()) {
+      const result = cleanupResults[index];
+      if (result) recordProbe(probe, result, true);
+    }
+    const oracleResults = opts.scenario.oracles.map((oracle) => {
+      const result = evaluateOracle(oracle, { probes: preflightResults });
+      opts.events?.append({
+        ts: new Date().toISOString(),
+        run_id: opts.run_id,
+        kind: 'oracle_evaluated',
+        actor: { type: 'orchestrator', id: 'runner' },
+        scenario_id: opts.scenario.id,
+        payload: { oracle_id: oracle.id, passed: result.passed, reason: result.reason },
+      });
+      return result;
+    });
+    const preflightError = preflightResults[0]?.error ?? cleanupResults[0]?.error;
+    const preflightResult: ScenarioRunResult = {
+      scenario_id: opts.scenario.id,
+      execution_status: 'failed',
+      probes: preflightResults,
+      cleanup: cleanupResults,
+      oracles: oracleResults,
+      finding: null,
+    };
+    if (preflightError) preflightResult.execution_error = preflightError;
+    return preflightResult;
+  }
   for (const probe of opts.scenario.steps) {
     const r = await execute(probe);
     probeResults.push(r);

@@ -78,6 +78,28 @@ describe('runScenario', () => {
     assert.equal(result.finding, null);
   });
 
+  it('preflights unsupported probe kinds before executing steps or cleanup', async () => {
+    const calls: string[] = [];
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        steps: SCENARIO.steps.map((probe) => ({ ...probe, kind: 'playwright' as const })),
+        cleanup: [{ ...SCENARIO.steps[0], id: 'cleanup-reset', kind: 'shell' }],
+      },
+      run_id: 'run-capability-gap',
+      probeRunner: async (probe) => {
+        calls.push(probe.id);
+        return { probe_id: probe.id, status: 200 };
+      },
+      supportedProbeKinds: new Set(['http']),
+    });
+    assert.deepEqual(calls, []);
+    assert.equal(result.execution_status, 'failed');
+    assert.match(result.execution_error ?? '', /playwright.*not supported/i);
+    assert.equal(result.cleanup.length, 1, 'unsupported cleanup is recorded but never executed');
+    assert.equal(result.finding, null);
+  });
+
   it('runs every cleanup probe after a failed step and records cleanup failures', async () => {
     const calls: string[] = [];
     const result = await runScenario({

@@ -11,6 +11,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **`FindingsWriter`** — append-only `findings.jsonl` with in-run dedup on `(run_id, scenario_id, risk_id, severity)`.
 - **`evaluateOracle`** + built-in `http_status` / `response_contains` / `response_not_contains` oracles.
 - **`runScenario`** — orchestrates one scenario: run probes, evaluate oracles, emit a Finding when oracles fail.
+- **Capability preflight** — optionally reject unsupported probe kinds before
+  executing steps or cleanup, preserving an explicit execution gap instead of
+  partial side effects or a false finding.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

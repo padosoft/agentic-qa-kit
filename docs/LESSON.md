@@ -1,5 +1,11 @@
 # Lessons
 
+- **Driver absence must be checked before side effects.** In mixed-probe
+  scenarios, discovering an unsupported browser/SQL/shell/LLM step during
+  execution can leave earlier mutations behind. A capability declaration must
+  preflight steps and cleanup, record the missing coverage, and suppress
+  findings until a real observation exists.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

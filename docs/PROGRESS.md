@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Runner capability preflight added.** `runScenario()` can now receive the
+  configured driver's supported probe kinds and fails before executing steps or
+  cleanup when a browser/SQL/shell/LLM/custom capability is absent. The gap is
+  recorded as failed execution evidence and cannot emit a finding; concrete
+  drivers and live journeys remain open.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the
