@@ -105,6 +105,10 @@
       "name": "@aqa/ingest",
       "version": "0.0.1",
     },
+    "packages/integrations": {
+      "name": "@aqa/integrations",
+      "version": "0.0.1",
+    },
     "packages/kit": {
       "name": "@aqa/kit",
       "version": "1.9.0",
@@ -287,6 +291,8 @@
     "@aqa/generator": ["@aqa/generator@workspace:packages/generator"],
 
     "@aqa/ingest": ["@aqa/ingest@workspace:packages/ingest"],
+
+    "@aqa/integrations": ["@aqa/integrations@workspace:packages/integrations"],
 
     "@aqa/kit": ["@aqa/kit@workspace:packages/kit"],
 
