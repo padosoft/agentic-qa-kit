@@ -149,7 +149,7 @@ describe('makeApi', () => {
         risk_refs: ['risk-checkout'],
         invariant_refs: ['inv-total'],
         steps: [{ id: 'checkout', kind: 'http', with: {} }],
-        oracles: [{ id: 'total', kind: 'http_status', with: {} }],
+        oracles: [{ id: 'total', kind: 'http_status', with: { expected: 200 } }],
         preconditions: [],
         cleanup: [],
         tags: [],
@@ -1461,7 +1461,9 @@ probes: []
       invariant_refs: [],
       preconditions: [],
       steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
-      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
+      oracles: [
+        { id: 'oracle-1', kind: 'http_status' as const, with: { expected: 200 }, weight: 1 },
+      ],
       cleanup: [],
       tags: [],
     };
@@ -1522,7 +1524,9 @@ probes: []
       invariant_refs: [],
       preconditions: [],
       steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
-      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
+      oracles: [
+        { id: 'oracle-1', kind: 'http_status' as const, with: { expected: 200 }, weight: 1 },
+      ],
       cleanup: [],
       tags: [],
     };
@@ -1589,7 +1593,9 @@ probes: []
       invariant_refs: [],
       preconditions: [],
       steps: [{ id: 'probe-1', kind: 'http' as const, with: {}, timeout_ms: 30_000 }],
-      oracles: [{ id: 'oracle-1', kind: 'http_status' as const, with: {}, weight: 1 }],
+      oracles: [
+        { id: 'oracle-1', kind: 'http_status' as const, with: { expected: 200 }, weight: 1 },
+      ],
       cleanup: [],
       tags: [],
     };
