@@ -104,6 +104,8 @@ export interface RunResult {
    * `MAX_DETAIL_PER_KIND` entries per source.
    */
   warnings?: string[];
+  /** Artifact-store keys containing byte-preserved canonical run evidence. */
+  canonicalArtifacts?: string[];
 }
 
 /** Cap on how many detail entries per category we surface in events/RunResult. */
@@ -596,6 +598,44 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     finalizationError = `cannot finalize run audit: ${e instanceof Error ? e.message : String(e)}`;
   }
 
+  // Publish the canonical streams only after run_finished has been appended.
+  // putBytes is intentional: putText applies redaction and would change the
+  // bytes (and therefore the hash-chain evidence) even when the local writers
+  // already emitted redacted content. The manifest makes the two immutable
+  // stream references discoverable without pretending the upload is atomic.
+  const canonicalArtifacts: string[] = [];
+  const canonicalArtifactErrors: string[] = [];
+  const canonicalRefs: Record<string, { id: string; sha256: string; bytes: number }> = {};
+  for (const [key, path] of [
+    ['canonical/events.jsonl', eventsPath],
+    ['canonical/findings.jsonl', findingsPath],
+  ] as const) {
+    try {
+      const ref = await artifactStore.putBytes(key, readFileSync(path));
+      canonicalArtifacts.push(ref.key);
+      canonicalRefs[key] = { id: ref.id, sha256: ref.sha256, bytes: ref.bytes };
+    } catch (e) {
+      canonicalArtifactErrors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (canonicalArtifactErrors.length === 0) {
+    try {
+      const manifest = await artifactStore.putJson('canonical/manifest.json', {
+        schema_version: '1',
+        run_id: runId,
+        events_key: 'canonical/events.jsonl',
+        findings_key: 'canonical/findings.jsonl',
+        artifacts: canonicalRefs,
+        published_at: new Date().toISOString(),
+      });
+      canonicalArtifacts.push(manifest.key);
+    } catch (e) {
+      canonicalArtifactErrors.push(
+        `canonical/manifest.json: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   // Build a structured error message when something went wrong. Any of these
   // is a real coverage gap, not a benign skip: a broken pack, a malformed
   // scenario, a manifest-listed file that doesn't exist, an unsafe path
@@ -666,6 +706,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     reasons.push(`${runtimeErrors.length} scenario(s) threw at runtime: ${fmtList(runtimeErrors)}`);
   if (replayErrors.length > 0)
     reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
+  if (canonicalArtifactErrors.length > 0)
+    reasons.push(
+      `${canonicalArtifactErrors.length} canonical artifact(s) failed: ${fmtList(canonicalArtifactErrors)}`,
+    );
   if (scenariosRun === 0) {
     reasons.push(
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
@@ -699,5 +743,6 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     findingsCount,
     ...(reasons.length > 0 ? { error: reasons.join(' | ') } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(canonicalArtifacts.length > 0 ? { canonicalArtifacts } : {}),
   };
 }

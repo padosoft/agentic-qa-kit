@@ -180,6 +180,24 @@ describe('aqa run', () => {
 
     const chain = verifyWriterChain(eventLines);
     assert.equal(chain.ok, true, `audit chain must verify, got: ${chain.reason ?? ''}`);
+
+    // Canonical evidence is registered through the configured artifact store
+    // and must be byte-identical to the local audit streams. A text upload
+    // would be a regression because adapter redaction could change hashes.
+    assert.deepEqual(result.canonicalArtifacts, [
+      'canonical/events.jsonl',
+      'canonical/findings.jsonl',
+      'canonical/manifest.json',
+    ]);
+    assert.equal(
+      readFileSync(join(result.runDir, 'canonical', 'events.jsonl'), 'utf8'),
+      readFileSync(eventsPath, 'utf8'),
+    );
+    assert.equal(
+      readFileSync(join(result.runDir, 'canonical', 'findings.jsonl'), 'utf8'),
+      readFileSync(findingsPath, 'utf8'),
+    );
+    assert.ok(existsSync(join(result.runDir, 'canonical', 'manifest.json.meta.json')));
   });
 
   it('emits exactly one `finding_emitted` event per failing scenario', async () => {

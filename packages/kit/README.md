@@ -87,6 +87,12 @@ as CLI arguments or committed. Optional Object Lock requests use
 `AQA_ARTIFACT_S3_RETENTION_MODE=GOVERNANCE|COMPLIANCE`. Bucket versioning,
 Object Lock enablement, KMS and tenant authorization remain operator controls.
 
+After `run_finished`, the selected store also receives byte-preserved
+`canonical/events.jsonl` and `canonical/findings.jsonl`, plus
+`canonical/manifest.json` with SHA-256 digests and byte counts. A failed
+publication fails the run result; publication is not a distributed transaction
+and partial uploads require operational retry or cleanup.
+
 ## Durable admin state
 
 `aqa admin` uses `MemoryStore` for local development. Set `AQA_STORE_DSN` to a

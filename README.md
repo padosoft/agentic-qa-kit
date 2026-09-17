@@ -152,7 +152,7 @@ Replace the placeholder risk with the one that actually matters for your project
 bunx aqa run --profile smoke
 ```
 
-A fast, non-destructive sweep. Each run is written to `.aqa/runs/<run-id>/` with `events.jsonl`, `findings.jsonl`, and 3-level replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`).
+A fast, non-destructive sweep. Each run is written to `.aqa/runs/<run-id>/` with `events.jsonl`, `findings.jsonl`, and 3-level replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`). When a durable artifact backend is configured, the run also publishes byte-preserved canonical streams under `canonical/` with a digest manifest.
 
 ### 8. Render the report
 

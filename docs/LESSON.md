@@ -400,3 +400,12 @@ the adapter signs the native Converse request and never silently falls back to
 an OpenAI-compatible endpoint. Tests verify the authorization shape without
 calling AWS; IAM policy, credential rotation and private endpoint reachability
 still require deployment evidence.
+
+# 2026-09-17 — canonical evidence must be byte-preserved
+
+Publishing an audit stream through a convenience text method can silently
+re-run redaction and change the bytes after the hash chain was computed. The
+runner therefore sends canonical `events.jsonl` and `findings.jsonl` through
+`putBytes`, then records their digests in a manifest. Artifact publication is
+still not a distributed transaction, so partial remote uploads remain an
+explicit operational recovery concern.
