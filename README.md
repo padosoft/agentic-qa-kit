@@ -70,7 +70,7 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 - 🔒 **Sandbox by design** — container-per-scenario isolation default for security and release-gate profiles. Egress allowlists. Tool-call budgets. Resource limits. Cost kill-switches.
 - 💰 **Cost governance built-in** — per-org / project / profile / scenario budgets in USD and tokens, hard kill-switches, attribution to risk areas. No more "an agent loop burned $400 overnight".
 - 🏠 **BYOK + on-prem LLM** — bring your own Anthropic/OpenAI keys, or use vLLM / Bedrock private / Azure OpenAI VNet / llama.cpp. Air-gap deploy supported.
-- 📋 **OWASP Top 10 Agentic (2026)** built-in security pack. Plus STRIDE / FMEA risk discovery.
+- 📋 **OWASP Top 10 Agentic (2026)** built-in security pack. Plus STRIDE / FMEA and bounded source-aware risk discovery.
 - 🧾 **Hash-chained audit log** + WORM export. SOC2 / ISO 27001 controls shipped, with private-deploy governance.
 - 🔁 **Process-first governance** — every PR follows a documented loop with Copilot Code Review. Lessons captured in `docs/LESSON.md` for permanent improvement.
 

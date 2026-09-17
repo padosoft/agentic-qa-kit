@@ -1,11 +1,11 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { type Dirent, existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { RiskMap } from '@aqa/schemas';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { lastPathSegment, slugify } from '../cli-utils.js';
 import { type WriteResult, writeFileSafe } from '../fs-utils.js';
 
-export type RiskDiscoverMethod = 'stride' | 'owasp' | 'fmea';
+export type RiskDiscoverMethod = 'stride' | 'owasp' | 'fmea' | 'source';
 
 export interface RiskDiscoverOptions {
   root: string;
@@ -225,6 +225,48 @@ const FMEA_BASELINE = [
   },
 ] as const;
 
+const SOURCE_RULES = [
+  {
+    key: 'authentication-boundary',
+    markers: [/jwt|jsonwebtoken|oauth|oidc|saml|webauthn|passport|next-auth|bearer/i],
+    category: 'auth' as const,
+    title: 'Authentication and authorization boundary can be bypassed',
+    statement:
+      'Every authenticated request enforces identity, role and tenant scope at the server boundary.',
+    severity: 'critical' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'interpreter-boundary',
+    markers: [/postgres|mysql|sqlite|prisma|drizzle|sequelize|knex|sql/i],
+    category: 'integrity' as const,
+    title: 'Database or interpreter input can alter application state',
+    statement:
+      'External values are parameterized and read-only boundaries reject unintended mutations.',
+    severity: 'critical' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'outbound-request',
+    markers: [/fetch\s*\(|axios|undici|http:\/\/|https:\/\//i],
+    category: 'integration' as const,
+    title: 'Outbound request crosses an unintended network boundary',
+    statement: 'Outbound requests use explicit origin, redirect, DNS and credential policies.',
+    severity: 'high' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'secret-material',
+    markers: [/\.env|api[_-]?key|secret|credential|vault|kms/i],
+    category: 'confidentiality' as const,
+    title: 'Secret material can leak through code, logs or artifacts',
+    statement:
+      'Secrets remain in an approved manager and are redacted before logs, artifacts or findings persist.',
+    severity: 'high' as const,
+    likelihood: 'possible' as const,
+  },
+] as const;
+
 function projectName(root: string): string {
   const path = join(root, '.aqa', 'project.yaml');
   if (existsSync(path)) {
@@ -247,6 +289,62 @@ function safeScope(scope: string): string {
   return normalized;
 }
 
+function sourceAwareBaseline(root: string, scope: string) {
+  const files = collectSourceFiles(root);
+  const evidence = files.map((file) => ({ file, text: readBounded(join(root, file)) }));
+  return SOURCE_RULES.filter((rule) => {
+    const matches = evidence.some(({ file, text }) =>
+      rule.markers.some((marker) => marker.test(`${file}\n${text}`)),
+    );
+    return matches;
+  }).map((rule) => {
+    const matchedFiles = evidence
+      .filter(({ file, text }) => rule.markers.some((marker) => marker.test(`${file}\n${text}`)))
+      .map(({ file }) => file)
+      .slice(0, 5);
+    return {
+      ...rule,
+      description: `Source-aware signal in scope ${scope}: ${matchedFiles.join(', ')}`,
+      tags: [
+        'source-aware',
+        `scope:${slugify(scope)}`,
+        ...matchedFiles.map((file) => `evidence:${slugify(file)}`),
+      ],
+    };
+  });
+}
+
+function collectSourceFiles(root: string): string[] {
+  const result: string[] = [];
+  const allowed = /\.(c|m)?(js|ts|tsx|jsx|py|go|java|rb|php|cs|rs|json|yaml|yml|toml|env|md)$/i;
+  const visit = (directory: string): void => {
+    if (result.length >= 200) return;
+    let entries: Dirent<string>[];
+    try {
+      entries = readdirSync(directory, { withFileTypes: true, encoding: 'utf8' });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (result.length >= 200) return;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile() && allowed.test(entry.name)) result.push(relative(root, absolute));
+    }
+  };
+  visit(root);
+  return result;
+}
+
+function readBounded(relativePath: string): string {
+  try {
+    return readFileSync(relativePath, 'utf8').slice(0, 200_000);
+  } catch {
+    return '';
+  }
+}
+
 export function runRiskDiscover(opts: RiskDiscoverOptions): RiskDiscoverResult {
   try {
     const scope = safeScope(opts.scope ?? 'repository');
@@ -261,17 +359,26 @@ export function runRiskDiscover(opts: RiskDiscoverOptions): RiskDiscoverResult {
         ? OWASP_BASELINE
         : opts.method === 'fmea'
           ? FMEA_BASELINE
-          : STRIDE_BASELINE;
+          : opts.method === 'source'
+            ? sourceAwareBaseline(opts.root, scope)
+            : STRIDE_BASELINE;
     const risks = baseline.map((item) => ({
       id: `risk-${opts.method}-${item.key}`,
       category: item.category,
       title: item.title,
-      description: `Baseline ${opts.method.toUpperCase()} review for scope: ${scope}`,
+      description:
+        'description' in item && typeof item.description === 'string'
+          ? item.description
+          : `Baseline ${opts.method.toUpperCase()} review for scope: ${scope}`,
       severity: item.severity,
       likelihood: item.likelihood,
       invariants: [{ id: `inv-${opts.method}-${item.key}`, statement: item.statement }],
       owners: [],
-      tags: [`${opts.method}:${item.key}`, `scope:${slugify(scope)}`],
+      tags: [
+        `${opts.method}:${item.key}`,
+        `scope:${slugify(scope)}`,
+        ...('tags' in item && Array.isArray(item.tags) ? item.tags : []),
+      ],
     }));
     const map = RiskMap.RiskMap.parse({
       schema_version: '1',

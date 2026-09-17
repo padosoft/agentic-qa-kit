@@ -1628,3 +1628,11 @@ Allowing scenario YAML to provide `traceparent` lets untrusted test content
 spoof correlation with another run. Derive propagation from the orchestrator's
 trusted context and overwrite scenario headers; treat Collector availability as
 separate operational evidence.
+
+# 2026-09-17 — source-aware discovery must preserve its evidence
+
+Detecting a signal is not enough if the RiskMap builder drops the matching
+description and evidence paths. Keep scanning bounded, avoid reading ignored
+directories, emit stable source-relative tags and carry source metadata into
+the persisted risk object. This remains a reviewable heuristic, never proof
+that all project-specific risks were found.
