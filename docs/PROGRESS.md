@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Formal risk coverage measurement shipped.** `@aqa/methodology` now
+  computes the M2 weighted score (invariant mapping 35%, oracle-backed
+  scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health
+  10%), validates impossible observations and emits `covered`/`partial`/`gap`/
+  `stale` plus drift alerts. This is a pure aggregation boundary ready for
+  store/API wiring; it does not invent missing run evidence.
 - **Commerce webhook assurance expanded.** The adapter now supports optional
   signed-delivery observations and `verifyWebhookJourney()` validates exact
   order linkage, delivered state, signature validity and bounded retries. The

@@ -8,3 +8,5 @@ auditors and architects expect (Task 21).
 - `owaspOf(risk)` — extracts `owasp:aNN` and `owasp-agentic:aNN` from tags.
 - `methodologyCheck(riskMap)` — runs all three; flags risks with no anchor
   (smell — auditors cannot trace them back to a standard catalog).
+- `riskCoverage(observation)` — computes the documented weighted coverage
+  score and returns `covered`, `partial`, `gap` or `stale` plus drift alerts.

@@ -103,3 +103,106 @@ export function methodologyCheck(map: RiskMap.RiskMap): MethodologyReport[] {
     };
   });
 }
+
+export type CoverageStatus = 'covered' | 'partial' | 'gap' | 'stale';
+
+export interface RiskCoverageObservation {
+  risk_id: string;
+  invariants_count: number;
+  invariants_with_scenarios: number;
+  scenarios_count: number;
+  scenarios_with_oracles: number;
+  scenarios_with_deterministic_replay: number;
+  last_run_at?: string;
+  pass_rate_30d: number;
+  flaky_count: number;
+}
+
+export interface RiskCoverageReport extends RiskCoverageObservation {
+  coverage_score: number;
+  status: CoverageStatus;
+  drift_alerts: string[];
+}
+
+function ratio(numerator: number, denominator: number): number {
+  if (denominator === 0) return 0;
+  return Math.max(0, Math.min(1, numerator / denominator));
+}
+
+function validateCoverageObservation(observation: RiskCoverageObservation): void {
+  const counts = [
+    observation.invariants_count,
+    observation.invariants_with_scenarios,
+    observation.scenarios_count,
+    observation.scenarios_with_oracles,
+    observation.scenarios_with_deterministic_replay,
+    observation.flaky_count,
+  ];
+  if (counts.some((value) => !Number.isInteger(value) || value < 0))
+    throw new Error('coverage counts must be non-negative integers');
+  if (
+    observation.invariants_with_scenarios > observation.invariants_count ||
+    observation.scenarios_with_oracles > observation.scenarios_count ||
+    observation.scenarios_with_deterministic_replay > observation.scenarios_count
+  )
+    throw new Error('coverage numerator cannot exceed denominator');
+  if (!Number.isFinite(observation.pass_rate_30d)) throw new Error('pass_rate_30d must be finite');
+}
+
+/**
+ * Compute the documented coverage score for a risk:
+ *
+ *   35% invariant mapping + 25% oracle-backed scenarios
+ *   + 20% deterministic replay + 10% 30-day pass rate
+ *   + 10% flake health (1 when flaky_count is zero).
+ *
+ * Inputs are observations, not guesses. Missing runs are therefore a gap;
+ * callers can persist the result and render it consistently in admin/API.
+ */
+export function riskCoverage(
+  observation: RiskCoverageObservation,
+  now = new Date(),
+): RiskCoverageReport {
+  validateCoverageObservation(observation);
+  const invariantCoverage = ratio(
+    observation.invariants_with_scenarios,
+    observation.invariants_count,
+  );
+  const oracleCoverage = ratio(observation.scenarios_with_oracles, observation.scenarios_count);
+  const replayCoverage = ratio(
+    observation.scenarios_with_deterministic_replay,
+    observation.scenarios_count,
+  );
+  const passRate = Math.max(0, Math.min(1, observation.pass_rate_30d));
+  const flakeHealth = observation.flaky_count === 0 ? 1 : 0;
+  const coverage_score = Number(
+    (
+      invariantCoverage * 0.35 +
+      oracleCoverage * 0.25 +
+      replayCoverage * 0.2 +
+      passRate * 0.1 +
+      flakeHealth * 0.1
+    ).toFixed(4),
+  );
+  const drift_alerts: string[] = [];
+  if (observation.invariants_with_scenarios < observation.invariants_count)
+    drift_alerts.push('one or more invariants have no linked scenario');
+  if (observation.scenarios_with_oracles < observation.scenarios_count)
+    drift_alerts.push('one or more scenarios have no oracle');
+  if (observation.scenarios_with_deterministic_replay < observation.scenarios_count)
+    drift_alerts.push('one or more scenarios lack deterministic replay');
+  if (observation.flaky_count > 0)
+    drift_alerts.push(`${observation.flaky_count} flaky scenario(s) observed`);
+
+  const lastRun = observation.last_run_at ? Date.parse(observation.last_run_at) : Number.NaN;
+  const stale = !Number.isFinite(lastRun) || now.getTime() - lastRun > 30 * 86_400_000;
+  if (stale) drift_alerts.push('last successful coverage run is older than 30 days or missing');
+  const status: CoverageStatus = stale
+    ? 'stale'
+    : coverage_score >= 0.9
+      ? 'covered'
+      : coverage_score > 0
+        ? 'partial'
+        : 'gap';
+  return { ...observation, coverage_score, status, drift_alerts };
+}
