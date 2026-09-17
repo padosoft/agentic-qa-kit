@@ -410,6 +410,14 @@ runner therefore sends canonical `events.jsonl` and `findings.jsonl` through
 still not a distributed transaction, so partial remote uploads remain an
 explicit operational recovery concern.
 
+# 2026-09-17 — observability must not be the audit source of truth
+
+Telemetry exporters can be unavailable, slow or misconfigured. The persisted
+hash-chained event remains authoritative; an observability observer must be
+bounded and fail open after the event is written. Prometheus labels also need
+name validation and a hard series cap because scenario and tenant identifiers
+are untrusted cardinality inputs.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration

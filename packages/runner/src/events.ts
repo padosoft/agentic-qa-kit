@@ -46,6 +46,12 @@ export interface EventDraft {
   payload?: Record<string, unknown>;
 }
 
+export interface EventChainWriterOptions {
+  persist?: boolean;
+  /** Non-blocking hook for traces/metrics/event-bus integrations. */
+  onEvent?: (event: Event.Event) => void;
+}
+
 /**
  * Append-only hash-chained writer for `.aqa/runs/<id>/events.jsonl`.
  *
@@ -59,10 +65,12 @@ export class EventChainWriter {
   private readonly path: string;
   private readonly events: Event.Event[] = [];
   private readonly persist: boolean;
+  private readonly onEvent: ((event: Event.Event) => void) | undefined;
 
-  constructor(path: string, opts: { persist?: boolean } = { persist: true }) {
+  constructor(path: string, opts: EventChainWriterOptions = { persist: true }) {
     this.path = path;
     this.persist = opts.persist ?? true;
+    this.onEvent = opts.onEvent;
     if (this.persist) mkdirSync(dirname(path), { recursive: true });
   }
 
@@ -90,6 +98,15 @@ export class EventChainWriter {
     if (this.persist) appendFileSync(this.path, `${JSON.stringify(event)}\n`, 'utf8');
     this.seq += 1;
     this.prevHash = hash;
+    // Observability must never turn a valid audit append into a failed run.
+    // Exporters are expected to be bounded/non-blocking and can implement
+    // their own error counter if the sink is unavailable.
+    try {
+      this.onEvent?.(event);
+    } catch {
+      // Deliberately fail open for telemetry only; the persisted chain is the
+      // authoritative evidence and has already been written above.
+    }
     return event;
   }
 

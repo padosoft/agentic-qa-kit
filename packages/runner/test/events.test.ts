@@ -6,6 +6,25 @@ import { EventChainWriter } from '../dist/events.js';
 const ZERO_HASH = '0'.repeat(64);
 
 describe('EventChainWriter', () => {
+  it('invokes a non-blocking observer without allowing telemetry failure to break the chain', () => {
+    const observed: string[] = [];
+    const writer = new EventChainWriter('/tmp/_ignore', {
+      persist: false,
+      onEvent: (event) => {
+        observed.push(event.kind);
+        throw new Error('telemetry sink unavailable');
+      },
+    });
+    const event = writer.append({
+      ts: '2026-09-17T00:00:00.000Z',
+      run_id: 'run-observer',
+      kind: 'run_started',
+      actor: { type: 'system', id: 'test' },
+    });
+    assert.equal(event.seq, 0);
+    assert.deepEqual(observed, ['run_started']);
+    assert.equal(writer.snapshot().length, 1);
+  });
   it('first event has prev_hash=null and seq=0', () => {
     const w = new EventChainWriter('/tmp/_ignore', { persist: false });
     const e = w.append({

@@ -5,6 +5,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **`RunLifecycle`** — state machine (pending → running → {succeeded, failed, aborted, budget_exceeded}).
 - **`EventChainWriter`** — append-only `events.jsonl` writer. Each event computes
   `hash = sha256(prev_hash || canonical(event))`, giving the audit log SOC2-style tamper evidence.
+  An optional `onEvent` observer exposes a non-blocking integration point for
+  traces, metrics and event buses; observer failures never invalidate the
+  persisted audit chain.
 - **`FindingsWriter`** — append-only `findings.jsonl` with in-run dedup on `(run_id, scenario_id, risk_id, severity)`.
 - **`evaluateOracle`** + built-in `http_status` / `response_contains` / `response_not_contains` oracles.
 - **`runScenario`** — orchestrates one scenario: run probes, evaluate oracles, emit a Finding when oracles fail.

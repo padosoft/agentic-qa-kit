@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Provider-neutral observability foundation shipped.** New
+  `@aqa/observability` provides W3C traceparent parsing/formatting, injectable
+  spans, bounded Prometheus counters/gauges/histograms, label validation,
+  cardinality limits and redacted structured logs. `EventChainWriter` exposes
+  a non-blocking observer hook whose failures cannot invalidate persisted audit
+  evidence. Tests: observability 5/5, runner 29/29. ADR-026 records the
+  OTel/Prometheus integration boundary and remaining operator responsibilities.
 - **Legacy configuration migration shipped.** Memory/Postgres stores now expose
   an explicit, fail-closed migration primitive for global packs, profiles,
   risks and scenarios. The admin-only

@@ -127,6 +127,7 @@ stable; each new package landed behind a clear seam:
 | Pack loader | `packages/pack-loader/src/index.ts` | `applies_when` evaluator |
 | Adapters | `packages/adapters/src/*.ts` | `render(ctx)` per agent host |
 | Runner | `packages/runner/src/*.ts` | `RunLifecycle`, `EventChainWriter`, oracles |
+| Observability | `packages/observability/src/index.ts` | W3C trace context, bounded Prometheus metrics, redacted structured logs |
 | Reporter | `packages/reporter/src/*.ts` | Markdown + JSON + repro artifacts |
 | Admin | `packages/admin/src/*` | Vite + React 19 + TS strict |
 | Server | `packages/server/src/api.ts` | `makeApi()` returns routing table |

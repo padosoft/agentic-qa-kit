@@ -1,6 +1,6 @@
 export { RunLifecycle, transitionAllowed } from './lifecycle.js';
 export type { RunStateName } from './lifecycle.js';
-export { EventChainWriter } from './events.js';
+export { EventChainWriter, type EventChainWriterOptions } from './events.js';
 export { FindingsWriter } from './findings.js';
 export {
   builtInOracles,
