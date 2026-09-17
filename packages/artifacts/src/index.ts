@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 export interface ArtifactRef {
@@ -79,6 +80,26 @@ export class FileArtifactStore implements ArtifactStore {
     return this.putBytesInternal(key, value, contentType, false);
   }
 
+  /** Synchronous variant for synchronous CLI commands such as `aqa report`. */
+  putTextSync(key: string, value: string, contentType = 'text/plain; charset=utf-8') {
+    return this.putBytesSyncInternal(
+      key,
+      Buffer.from(redactText(value), 'utf8'),
+      contentType,
+      true,
+    );
+  }
+
+  putJsonSync(key: string, value: unknown) {
+    const body = JSON.stringify(redactJson(value));
+    return this.putBytesSyncInternal(
+      key,
+      Buffer.from(`${body}\n`, 'utf8'),
+      'application/json',
+      true,
+    );
+  }
+
   async get(ref: ArtifactRef): Promise<Uint8Array> {
     return readFile(this.pathFor(ref.key));
   }
@@ -130,6 +151,37 @@ export class FileArtifactStore implements ArtifactStore {
       await writeFile(this.metaPath(clean), `${JSON.stringify(ref)}\n`, { encoding: 'utf8' });
     } finally {
       await rm(temp, { force: true });
+    }
+    return ref;
+  }
+
+  private putBytesSyncInternal(
+    key: string,
+    value: Uint8Array,
+    contentType: string,
+    redacted: boolean,
+  ) {
+    const clean = safeKey(key);
+    const target = this.pathFor(clean);
+    const bytes = Buffer.from(value);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const ref: ArtifactRef = {
+      id: `sha256:${sha256}`,
+      key: clean,
+      sha256,
+      bytes: bytes.byteLength,
+      content_type: contentType,
+      redacted,
+      created_at: new Date().toISOString(),
+    };
+    mkdirSync(dirname(target), { recursive: true });
+    const temp = `${target}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temp, bytes, { flag: 'wx' });
+      renameSync(temp, target);
+      writeFileSync(this.metaPath(clean), `${JSON.stringify(ref)}\n`, 'utf8');
+    } finally {
+      rmSync(temp, { force: true });
     }
     return ref;
   }

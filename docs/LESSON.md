@@ -313,3 +313,7 @@ Lease storage alone is not a worker contract. If dequeue exists but ACK is not r
 # 2026-09-17 — retries need a terminal policy
 
 Visibility leases without a maximum-attempt policy create infinite poison-job loops and hide systemic failures. Persist attempts and failure reason, expose an explicit worker failure path, and make both expiry and explicit failure terminal after the configured budget. The DLQ is evidence for operator action, not silent success.
+
+# 2026-09-17 — migrate synchronous producers without weakening their contract
+
+`aqa report` is intentionally synchronous, so migrating it to an async artifact API would have changed the CLI contract. A synchronous adapter method keeps the public behavior while moving the write security boundary; the journey must assert metadata sidecars to prove the old writer was actually removed.

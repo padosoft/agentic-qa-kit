@@ -139,6 +139,8 @@ describe('aqa report — happy path', () => {
     assert.equal(result.findingsCount, 2);
     assert.ok(existsSync(join(runDir, 'report.md')), 'report.md must exist');
     assert.ok(existsSync(join(runDir, 'report.json')), 'report.json must exist');
+    assert.ok(existsSync(join(runDir, 'report.md.meta.json')));
+    assert.ok(existsSync(join(runDir, 'report.json.meta.json')));
 
     const md = readFileSync(join(runDir, 'report.md'), 'utf8');
     assert.match(md, /# AQA report/);

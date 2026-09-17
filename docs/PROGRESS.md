@@ -12,6 +12,7 @@
 ## 2026-09-17
 
 - **Queue retry budget and DLQ implemented.** Memory and PostgreSQL queues now persist `attempts`, `max_attempts`, `failed`, and capped failure reason; lease expiry after the budget is terminal, explicit worker failures use `POST /api/runner/jobs/:id/fail`, and stale tokens remain fenced. Server suite: 100/100; PostgreSQL live migration behavior is queued for CI evidence.
+- Migrated synchronous `aqa report` Markdown/JSON writes to `FileArtifactStore` sync APIs; report files now receive redaction, atomic replacement and SHA-256 metadata sidecars. The report journey asserts both sidecars; direct-file writers remain only for canonical event/finding JSONL streams.
 
 - **CI runtime findings fixed, not suppressed.** Run `35169917083` exposed two real integration issues: concurrent queue clients raced on `CREATE TABLE`, and the first Docker image pull exceeded Bun's default 5-second test timeout. PostgreSQL migration now uses an advisory lock; the OCI test has an explicit 120-second budget. The failed run is retained as negative evidence; a new run is required.
 - **Full acceptance after infrastructure fixes.** Run `35170349159` is green across typecheck/lint, build, Bun + Node 22, PostgreSQL store plus durable queue, real Docker sandbox, CLI smoke, and all 142 Playwright admin tests. This is the authoritative evidence for `e215871`.

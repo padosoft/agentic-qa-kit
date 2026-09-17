@@ -14,8 +14,9 @@
  *    findings, replay artifacts, plus the rendered report).
  */
 
-import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { FileArtifactStore } from '@aqa/artifacts';
 import { renderJson, renderMarkdown } from '@aqa/reporter';
 import { Finding, Run } from '@aqa/schemas';
 
@@ -189,6 +190,7 @@ export function runReport(opts: ReportOptions): ReportResult {
   // by writeFileSync and let an attacker (or a prior run) redirect the
   // writes outside the project. lstat each target before writing.
   try {
+    const artifactStore = new FileArtifactStore(runDir);
     if (format === 'md' || format === 'both') {
       const mdPath = join(runDir, 'report.md');
       if (existsSync(mdPath) && lstatSync(mdPath).isSymbolicLink()) {
@@ -197,7 +199,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${mdPath}`,
         };
       }
-      writeFileSync(mdPath, renderMarkdown({ run, findings }), 'utf8');
+      artifactStore.putTextSync('report.md', renderMarkdown({ run, findings }));
       written.push(mdPath);
     }
     if (format === 'json' || format === 'both') {
@@ -208,11 +210,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${jsonPath}`,
         };
       }
-      writeFileSync(
-        jsonPath,
-        `${JSON.stringify(renderJson({ run, findings }), null, 2)}\n`,
-        'utf8',
-      );
+      artifactStore.putJsonSync('report.json', renderJson({ run, findings }));
       written.push(jsonPath);
     }
   } catch (e) {
