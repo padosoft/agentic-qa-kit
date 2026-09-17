@@ -28,6 +28,6 @@ prevents an accidental retry from silently clearing an emergency stop.
 ## Evidence and limits
 
 The memory contract has a regression for persistence across future admissions;
-package typecheck and tests pass. The PostgreSQL schema and live multi-client
-halt/dispatch journey remain CI/deployment evidence and must be exercised with
-`AQA_TEST_POSTGRES_DSN` before claiming HA operational readiness.
+package typecheck and tests pass. A live multi-client halt/dispatch contract is
+wired into the PostgreSQL CI job and must pass with `AQA_TEST_POSTGRES_DSN`
+before claiming HA operational readiness.

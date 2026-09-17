@@ -18,8 +18,8 @@
   processes; the memory implementation remains an explicit local fallback.
   ADR-157 records the irreversible operator boundary.
 - Evidence: cost typecheck and **14 tests passed**. A live PostgreSQL
-  multi-client halt/admission journey remains required before claiming HA
-  production evidence.
+  multi-client halt/admission journey is now wired into the PostgreSQL CI
+  contract; the hosted run is required before claiming HA production evidence.
 
 - **Fixed PostgreSQL idempotency response decoding.** The live multi-replica
   contract exposed that PostgreSQL's JSONB driver result can arrive as a JSON
