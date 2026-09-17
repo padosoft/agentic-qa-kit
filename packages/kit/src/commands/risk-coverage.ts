@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { verifyEventChain } from '@aqa/compliance';
 import { type RiskCoverageReport, measureRiskCoverage } from '@aqa/methodology';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { verifyPackContentDigest } from '@aqa/pack-scanner';
@@ -201,6 +202,8 @@ function readCoverageRuns(
   for (const entry of readdirSync(root).sort()) {
     const path = join(root, entry, 'events.jsonl');
     if (!existsSync(path) || !statSync(path).isFile()) continue;
+    const events: Event.Event[] = [];
+    let invalidEvent = false;
     for (const line of readFileSync(path, 'utf8').split(/\r?\n/).filter(Boolean)) {
       let parsed: unknown;
       try {
@@ -212,15 +215,27 @@ function readCoverageRuns(
       const event = Event.Event.safeParse(parsed);
       if (!event.success) {
         errors.push(`invalid event in ${path}`);
+        invalidEvent = true;
         continue;
       }
-      if (event.data.kind !== 'scenario_finished' || !event.data.scenario_id) continue;
-      const outcome = event.data.payload.outcome;
+      events.push(event.data);
+    }
+    if (invalidEvent) continue;
+    const chain = verifyEventChain(events);
+    if (!chain.ok) {
+      errors.push(
+        `invalid audit chain in ${path} at event ${chain.bad_index}: ${chain.reason ?? 'unknown error'}`,
+      );
+      continue;
+    }
+    for (const event of events) {
+      if (event.kind !== 'scenario_finished' || !event.scenario_id) continue;
+      const outcome = event.payload.outcome;
       runs.push({
-        scenario_id: event.data.scenario_id,
-        executed_at: event.data.ts,
+        scenario_id: event.scenario_id,
+        executed_at: event.ts,
         passed: outcome === 'pass',
-        ...(event.data.payload.deterministic_replay === true ? { deterministic_replay: true } : {}),
+        ...(event.payload.deterministic_replay === true ? { deterministic_replay: true } : {}),
       });
     }
   }

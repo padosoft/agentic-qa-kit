@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Closed the coverage evidence integrity gap.** `aqa risk coverage` now
+  verifies each persisted `events.jsonl` hash chain before accepting
+  `scenario_finished` observations. Tampered but schema-valid events fail
+  closed with no coverage report; the regression suite is **145 pass / 0 fail
+  / 2 platform skips** for the kit. Independent WORM/checkpoint publication
+  and provider semantics remain separate evidence layers.
+
 - **Closed the local installable-artifact evidence gap.** Added a complete
   `npm pack` journey that prepares the publish manifest, rejects leaked
   `@aqa/*` dependencies, extracts the tarball in isolation, and runs the
