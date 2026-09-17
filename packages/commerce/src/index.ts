@@ -48,10 +48,21 @@ export const PaymentSnapshot = z.object({
   provider: z.string().min(1),
   payment_id: z.string().min(1),
   amount: Money,
+  refunded_amount: Money,
   status: z.enum(['pending', 'authorized', 'captured', 'partially_refunded', 'refunded', 'failed']),
   observed_at: z.string().datetime({ offset: true }),
 });
 export type PaymentSnapshot = z.infer<typeof PaymentSnapshot>;
+
+export const RefundSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  order_id: z.string().min(1),
+  amount: Money,
+  status: z.enum(['pending', 'succeeded', 'failed']),
+  observed_at: z.string().datetime({ offset: true }),
+});
+export type RefundSnapshot = z.infer<typeof RefundSnapshot>;
 
 export const InventorySnapshot = z.object({
   schema_version: z.literal('1'),
@@ -100,6 +111,12 @@ export type CheckoutResult = {
   inventory: InventorySnapshot[];
 };
 
+export type RefundResult = {
+  refund: RefundSnapshot;
+  payment: PaymentSnapshot;
+  order: OrderSnapshot;
+};
+
 /**
  * Deterministic merchant used by contract tests and local journey pilots.
  * It deliberately has no network or real payment side effect. Mutations are
@@ -111,6 +128,11 @@ export class InMemoryCommerceReference {
   private readonly carts = new Map<string, CartSnapshot>();
   private readonly orders = new Map<string, OrderSnapshot>();
   private readonly payments = new Map<string, PaymentSnapshot>();
+  private readonly refunds = new Map<string, RefundSnapshot>();
+  private readonly refundIdempotency = new Map<
+    string,
+    { fingerprint: string; result: RefundResult }
+  >();
   private readonly inventory = new Map<string, InventorySnapshot>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
@@ -236,6 +258,7 @@ export class InMemoryCommerceReference {
       provider: 'reference-sandbox',
       payment_id: this.nextId('payment'),
       amount: subtotal,
+      refunded_amount: zero,
       status: 'captured',
       observed_at: new Date().toISOString(),
     };
@@ -270,6 +293,57 @@ export class InMemoryCommerceReference {
     const payment = this.payments.get(orderId);
     if (!payment) throw new Error('payment not found');
     return payment;
+  }
+
+  refund(
+    identity: CommerceIdentity,
+    orderId: string,
+    amount: Money,
+    idempotencyKey: string,
+  ): RefundResult {
+    const order = this.getOrder(identity, orderId);
+    const payment = this.getPayment(identity, orderId);
+    if (!idempotencyKey.trim()) throw new Error('idempotency key is required');
+    assertSameCurrency(amount, payment.amount, payment.refunded_amount);
+    if (BigInt(amount.amount_minor) <= 0n) throw new Error('refund amount must be positive');
+    const key = `${identity.tenant}:${idempotencyKey}`;
+    const fingerprint = JSON.stringify({ orderId, amount });
+    const previous = this.refundIdempotency.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint)
+        throw new Error('refund idempotency key reused with a different payload');
+      return previous.result;
+    }
+    const alreadyRefunded = BigInt(payment.refunded_amount.amount_minor);
+    const requested = BigInt(amount.amount_minor);
+    const captured = BigInt(payment.amount.amount_minor);
+    if (alreadyRefunded + requested > captured) throw new Error('refund exceeds captured amount');
+    const refundedAmount = this.money(payment.amount.currency, alreadyRefunded + requested);
+    const updatedPayment: PaymentSnapshot = {
+      ...payment,
+      refunded_amount: refundedAmount,
+      status: alreadyRefunded + requested === captured ? 'refunded' : 'partially_refunded',
+      observed_at: new Date().toISOString(),
+    };
+    const updatedOrder = {
+      ...order,
+      revision: order.revision + 1,
+      status: updatedPayment.status === 'refunded' ? 'refunded' : order.status,
+    };
+    const refund: RefundSnapshot = {
+      schema_version: '1',
+      id: this.nextId('refund'),
+      order_id: orderId,
+      amount,
+      status: 'succeeded',
+      observed_at: updatedPayment.observed_at,
+    };
+    this.payments.set(orderId, updatedPayment);
+    this.orders.set(orderId, updatedOrder);
+    this.refunds.set(refund.id, refund);
+    const result = { refund, payment: updatedPayment, order: updatedOrder };
+    this.refundIdempotency.set(key, { fingerprint, result });
+    return result;
   }
 
   getInventory(sku: string): InventorySnapshot {

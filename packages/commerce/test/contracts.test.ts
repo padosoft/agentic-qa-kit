@@ -132,4 +132,32 @@ describe('@aqa/commerce contracts', () => {
       /not found/,
     );
   });
+
+  it('caps refunds, and retries the same refund without a second effect', () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-a',
+      price: { currency: 'EUR', amount_minor: '1000' },
+      on_hand: 1,
+    });
+    const identity = { tenant: 'shop-a', customer_id: 'owner' };
+    const cart = merchant.createCart(identity);
+    merchant.addLine(identity, cart.id, 'sku-a', 1);
+    const order = merchant.checkout(identity, cart.id, 'checkout');
+    const amount = { currency: 'EUR', amount_minor: '400' };
+    const first = merchant.refund(identity, order.order.id, amount, 'refund-1');
+    const retry = merchant.refund(identity, order.order.id, amount, 'refund-1');
+    assert.deepEqual(retry, first);
+    assert.equal(first.payment.refunded_amount.amount_minor, '400');
+    assert.throws(
+      () =>
+        merchant.refund(
+          identity,
+          order.order.id,
+          { currency: 'EUR', amount_minor: '601' },
+          'refund-2',
+        ),
+      /exceeds captured/,
+    );
+  });
 });
