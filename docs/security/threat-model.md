@@ -72,7 +72,7 @@ Boundaries (anywhere a security decision must be enforced):
 |---|---|---|---|---|
 | I-01 | Finding contents leak (e.g. secrets in summary) | High | Pack contract requires probes to redact known secret formats; finding text passes through allowlist. | Partial — allowlist per pack, not centralised. |
 | I-02 | Audit log discloses target endpoints to readers | Medium | Audit reader role gated by `@aqa/auth` `audit:read`. | Mitigated |
-| I-03 | Cross-tenant findings visible | Critical | Tenant-aware data path is roadmap: `@aqa/auth` `User`, `@aqa/server` `makeApi()` handlers, and `@aqa/store` `StoreProvider` do not yet carry a tenant field, so server-side filtering by tenant is not enforced. | **Unmitigated — roadmap.** |
+| I-03 | Cross-tenant findings visible | Critical | Scoped server reads require org/project headers, resolve finding ownership through an `org` + `project`-carrying Run, and filter risks/scenarios/runs server-side. Legacy runs without an org are not visible to scoped reads. | **Mitigated for scoped API paths; legacy migration and authenticated membership policy remain operational controls.** |
 | I-04 | LLM prompt leaks proprietary code via vendor logging | High | On-prem LLM adapters for vLLM/Ollama with explicit endpoint and redaction policy. | Mitigated for self-hosted; vendor-dependent otherwise. |
 
 ### Denial of service

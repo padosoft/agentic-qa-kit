@@ -68,6 +68,7 @@ export interface StoreProvider {
   saveRun(run: Run.Run): Promise<void>;
   loadRun(id: string): Promise<Run.Run | null>;
   listRuns(opts?: {
+    org?: string;
     project?: string;
     profile?: string;
     state?: Run.Run['state'];

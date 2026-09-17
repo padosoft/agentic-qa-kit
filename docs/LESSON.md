@@ -515,3 +515,10 @@ An empty telemetry window is not a healthy SLO. Error-budget evaluation now
 returns `no_data` with warning status, validates impossible counters, rounds
 floating-point budget boundaries, and separates the pure decision from future
 metric/exporter wiring.
+
+# 2026-09-17 — project slug is not a tenant key
+
+Filtering a run/finding by project alone is unsafe when multiple organizations
+can reuse the same slug. Persist the org on Run, filter it in the store and
+check both dimensions at every scoped API read; legacy unscoped records must
+fail closed until explicitly migrated.

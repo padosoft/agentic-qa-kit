@@ -74,6 +74,7 @@ export class MemoryStore implements StoreProvider {
   }
   async listRuns(
     opts: {
+      org?: string;
       project?: string;
       profile?: string;
       state?: Run.Run['state'];
@@ -81,6 +82,7 @@ export class MemoryStore implements StoreProvider {
     } = {},
   ): Promise<Run.Run[]> {
     let out = [...this.runs.values()];
+    if (opts.org) out = out.filter((r) => r.org === opts.org);
     if (opts.project) out = out.filter((r) => r.project === opts.project);
     if (opts.profile) out = out.filter((r) => r.profile === opts.profile);
     if (opts.state) out = out.filter((r) => r.state === opts.state);

@@ -250,7 +250,7 @@ export function makeApi(): ApiHandler[] {
         // x-aqa-project; CLI consumers must do the same.
         const s = requireScope(req);
         if ('status' in s) return s;
-        const runs = await ctx.store.listRuns({ project: s.project, limit: 100 });
+        const runs = await ctx.store.listRuns({ org: s.org, project: s.project, limit: 100 });
         return asResponse({ runs } satisfies { runs: Run.Run[] });
       },
     },
@@ -266,7 +266,7 @@ export function makeApi(): ApiHandler[] {
         const run = await ctx.store.loadRun(id);
         // Match-or-404: a cross-tenant lookup must look identical to a missing
         // record so probing for IDs in other projects gains no information.
-        if (!run || run.project !== s.project) return notFound('run');
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('run');
         return asResponse({ run } satisfies { run: Run.Run });
       },
     },
@@ -345,7 +345,7 @@ export function makeApi(): ApiHandler[] {
         const findings = [];
         for (const finding of candidates) {
           const run = await ctx.store.loadRun(finding.run_id);
-          if (run?.project === s.project) findings.push(finding);
+          if (run?.org === s.org && run.project === s.project) findings.push(finding);
         }
         return asResponse({ findings } satisfies { findings: Finding.Finding[] });
       },
@@ -364,7 +364,7 @@ export function makeApi(): ApiHandler[] {
         // Verify the finding's run lives in the requested project; treat
         // cross-tenant access identically to "not found".
         const run = await ctx.store.loadRun(finding.run_id);
-        if (!run || run.project !== s.project) return notFound('finding');
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('finding');
         return asResponse({ finding });
       },
     },
@@ -382,7 +382,7 @@ export function makeApi(): ApiHandler[] {
         const existing = await ctx.store.loadFinding(id);
         if (!existing) return notFound('finding');
         const run = await ctx.store.loadRun(existing.run_id);
-        if (!run || run.project !== s.project) return notFound('finding');
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('finding');
         const body = req.body as
           | { status?: unknown; reason?: unknown; duplicate_of?: unknown }
           | undefined;
@@ -896,7 +896,7 @@ export function makeApi(): ApiHandler[] {
         if (risks.length === 0)
           return asResponse({ coverage: [], generated_at: new Date().toISOString() });
         const scenarios = await ctx.store.listScenarios({ org: s.org, project: s.project });
-        const runs = await ctx.store.listRuns({ project: s.project, limit: 1_000 });
+        const runs = await ctx.store.listRuns({ org: s.org, project: s.project, limit: 1_000 });
         const observations = [];
         for (const run of runs) {
           const events = await ctx.store.listEvents(run.id);

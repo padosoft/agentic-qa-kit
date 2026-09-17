@@ -38,6 +38,8 @@ export const Run = z
     started_at: IsoDateTime,
     finished_at: IsoDateTime.optional(),
     state: RunState,
+    /** Tenant organization; absent only for explicitly unscoped legacy runs. */
+    org: Slug.optional(),
     project: Slug,
     profile: Slug,
     execution_mode: ExecutionMode,

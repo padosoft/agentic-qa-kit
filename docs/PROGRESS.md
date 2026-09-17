@@ -336,3 +336,8 @@
 
 - Added `evaluateSlo()` to `@aqa/observability`: validates event counts and target, computes allowed bad events, remaining budget, burn rate and explicit `no_data`/`within_budget`/`budget_warning`/`budget_exhausted` reason codes.
 - Evidence: observability typecheck and 7/7 tests; repository lint passed. Runtime metric wiring, OTel Collector export and operational dashboards/alerts remain open.
+
+# 2026-09-17 — run tenant identity hardening
+
+- Added optional `org` to the Run schema and generated JSON Schema, propagated org filtering through Memory/Postgres stores and all scoped run/finding API checks. Scoped reads now fail closed for legacy runs without an org and prevent same-project-slug cross-org leakage.
+- Evidence: schema suite 59/59, store build, server typecheck, server suite 108 (107 passed, 1 PostgreSQL EventBus skip), repository lint. Worker persistence must populate `Run.org` from the authenticated queue scope; unscoped local CLI runs remain intentionally local-only.

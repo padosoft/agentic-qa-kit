@@ -163,9 +163,16 @@ export class PostgresStore implements StoreProvider {
     return this.payload(await this.one('run', id));
   }
   async listRuns(
-    opts: { project?: string; profile?: string; state?: Run.Run['state']; limit?: number } = {},
+    opts: {
+      org?: string;
+      project?: string;
+      profile?: string;
+      state?: Run.Run['state'];
+      limit?: number;
+    } = {},
   ): Promise<Run.Run[]> {
     let out = this.values<Run.Run>(await this.many('run'));
+    if (opts.org) out = out.filter((run) => run.org === opts.org);
     if (opts.project) out = out.filter((run) => run.project === opts.project);
     if (opts.profile) out = out.filter((run) => run.profile === opts.profile);
     if (opts.state) out = out.filter((run) => run.state === opts.state);
