@@ -100,7 +100,11 @@ export function deriveStateFromCompletion(completion: unknown, scenariosRun: num
     'missing_scenarios',
     'unsafe_paths',
     'runtime_errors',
+    'execution_errors',
+    'replay_errors',
+    'canonical_artifact_errors',
   ] as const;
+  if (payload.budget_exceeded === true) return 'budget_exceeded';
   if (
     payload.release_gate_failed === true ||
     errorKeys.some((key) => typeof payload[key] === 'number' && payload[key] > 0)

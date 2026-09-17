@@ -86,6 +86,17 @@ describe('Run completion state derivation', () => {
     );
   });
 
+  it('preserves an explicit budget-exceeded terminal state', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { budget_exceeded: true, scenarios_run: 2 } }, 2),
+      'budget_exceeded',
+    );
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { execution_errors: 1, scenarios_run: 2 } }, 2),
+      'failed',
+    );
+  });
+
   it('treats a clean non-empty completion as succeeded', () => {
     assert.equal(Run.deriveStateFromCompletion({}, 2), 'succeeded');
   });

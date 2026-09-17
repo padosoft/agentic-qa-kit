@@ -737,3 +737,8 @@
 
 - Moved finding status-transition validation to the shared schema/store write boundary. No-op and illegal transitions now fail with `409 INVALID_TRANSITION` at the API, preserve the original finding and append no audit event. Memory and PostgreSQL adapters both validate and parse the resulting finding, so callers cannot bypass the API contract through a direct store call.
 - Evidence: server + store builds, **115 tests passed**, repository diff check passed. A full PostgreSQL transition round-trip remains hosted evidence when the CI DSN is available.
+
+# 2026-09-17 — canonical budget state projection
+
+- Extended the shared run-state derivation so `budget_exceeded: true` is preserved as the terminal `budget_exceeded` state in reports and admin projections, while execution/replay/canonical artifact errors remain fail-closed. This prevents a governed timeout from being flattened into an indistinguishable generic failure.
+- Evidence: schemas build and validator suite **35 passed**; generated schema artifacts remain valid and `git diff --check` passes.

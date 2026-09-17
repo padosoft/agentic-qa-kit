@@ -957,3 +957,10 @@ Validating a finding status only in the HTTP handler leaves direct store
 callers and races able to write impossible states. Keep the transition matrix
 in the shared schema package, re-check it inside each store transaction, parse
 the updated object, and return a conflict without changing data or audit state.
+
+# 2026-09-17 — terminal states must survive every projection
+
+Adding a budget failure only to the orchestrator is incomplete if report and
+admin reconstruct state from the audit event. Persist a reason/state marker
+and teach the shared derivation function about it; otherwise downstream views
+silently collapse governed aborts into generic failures.
