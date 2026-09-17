@@ -21,7 +21,8 @@
 - Evidence: server suite **123/123**, admin typecheck/build, targeted Risk Edit
   browser suite **5/5**, server/kit typechecks and Biome pass; ADR-129 records
   the backward-compatible migration boundary. A visible conflict-resolution
-  flow and unconditional legacy-client migration remain open.
+  flow now reloads the authoritative resource for profile, risk and scenario
+  editors; targeted Risk Edit browser evidence is **6/6**.
 
 - **Admin live Runs/Findings integration.** Runs and Findings now consume the
   tenant-scoped API and show an explicit `live API` marker; fixture fallback is

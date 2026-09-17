@@ -1287,6 +1287,14 @@ and replace it with the response ETag after a successful save. The three
 resource editors (profile, risk, scenario) now follow that lifecycle; the
 targeted Chromium test proves the header crosses the UI boundary.
 
+# 2026-09-17 — a 412 needs an operator recovery path
+
+Returning `PRECONDITION_FAILED` prevents lost updates but is not a complete
+admin journey by itself. The editor must explain that another writer won and
+offer an explicit reload of the authoritative representation and its new ETag;
+otherwise operators are left with a safe but unusable dead end. The profile,
+risk and scenario editors now implement that recovery path.
+
 # 2026-09-17 — live schema-valid evidence may be sparse
 
 The live Finding schema permits evidence such as empty owners/tags or missing

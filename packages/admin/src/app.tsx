@@ -5593,6 +5593,8 @@ function ScenarioYamlWizard({
   // mode: 'edit' | 'clone'
   const [yamlText, setYamlText] = React.useState('');
   const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -5624,6 +5626,7 @@ function ScenarioYamlWizard({
       // Copilot iter 7.
       setDebouncedYaml(seeded);
       setError(null);
+      setConflictDetected(false);
       setSubmitting(false);
       inFlightRef.current = false;
     }
@@ -5655,9 +5658,34 @@ function ScenarioYamlWizard({
     if (submitting) return;
     setYamlText('');
     setError(null);
+    setConflictDetected(false);
     setSubmitting(false);
     inFlightRef.current = false;
     onClose?.();
+  }
+
+  async function reloadLatestScenario() {
+    if (!scenarioId || mode !== 'edit' || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/scenarios/${encodeURIComponent(scenarioId)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.scenario) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      const latest = window.__aqaYamlStringify?.(parsed.scenario);
+      if (typeof latest !== 'string') throw new Error('server returned an invalid scenario');
+      setYamlText(latest);
+      setDebouncedYaml(latest);
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setError(null);
+      toast.push({ kind: 'info', title: 'Latest scenario loaded', body: scenarioId });
+    } catch (e) {
+      setError(`Could not reload the latest scenario: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
   }
 
   // Parse client-side for an early UX hint. Server is the trust
@@ -5790,6 +5818,7 @@ function ScenarioYamlWizard({
         const fullMsg = `${subjectId}: ${msg}`;
         toast.push({ kind: 'error', title: `Save scenario failed`, body: fullMsg });
         setError(msg);
+        if (mode === 'edit' && res.status === 412) setConflictDetected(true);
         return;
       }
       if (mode === 'edit') setResourceEtag(res.headers.get('etag') || resourceEtag);
@@ -5873,6 +5902,11 @@ function ScenarioYamlWizard({
         {error && (
           <Alert kind="error" title="Save failed">
             <span data-testid="scenario-yaml-error">{error}</span>
+            {conflictDetected && (
+              <button className="btn xs ghost" data-testid="scenario-reload-latest" onClick={reloadLatestScenario} disabled={reloading} style={{ marginLeft: 8 }}>
+                {reloading ? 'Reloading…' : 'Reload latest'}
+              </button>
+            )}
           </Alert>
         )}
         {uxError && !error && (
@@ -5979,6 +6013,8 @@ function slugError(s) {
 function EditProfileWizard({ open, profile, onClose, onSaved }) {
   const [form, setForm] = React.useState(() => deriveProfileForm(profile ?? { packs: [], tags: [] }));
   const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -6014,6 +6050,7 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     if (open) {
       setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
       setError(null);
+      setConflictDetected(false);
       setSubmitting(false);
       inFlightRef.current = false;
       let cancelled = false;
@@ -6086,9 +6123,31 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     // submit those stale values. (Copilot review on PR #30 iter 7.)
     setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
     setError(null);
+    setConflictDetected(false);
     setSubmitting(false);
     inFlightRef.current = false;
     onClose?.();
+  }
+
+  async function reloadLatestProfile() {
+    if (!profileName || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.profile) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      setForm(deriveProfileForm(parsed.profile));
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setError(null);
+      toast.push({ kind: 'info', title: 'Latest profile loaded', body: profileName });
+    } catch (e) {
+      setError(`Could not reload the latest profile: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
   }
 
   async function handleSubmit() {
@@ -6157,6 +6216,7 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
         const full = `${submittedName}: ${msg}`;
         toast.push({ kind: 'error', title: 'Save profile failed', body: full });
         if (stillCurrent) setError(msg);
+        if (stillCurrent && res.status === 412) setConflictDetected(true);
         return;
       }
       setResourceEtag(res.headers.get('etag') || resourceEtag);
@@ -6228,7 +6288,12 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       <div className="col gap-12">
         {error && (
           <Alert kind="error" title="Save failed">
-            {error}
+            <span data-testid="profile-edit-error">{error}</span>
+            {conflictDetected && (
+              <button className="btn xs ghost" data-testid="profile-reload-latest" onClick={reloadLatestProfile} disabled={reloading} style={{ marginLeft: 8 }}>
+                {reloading ? 'Reloading…' : 'Reload latest'}
+              </button>
+            )}
           </Alert>
         )}
         <div className="field-row">
@@ -9185,6 +9250,8 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState(null);
   const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const inFlightRef = React.useRef(false);
   // Render-time ref so the stale-submit guard sees the LATEST riskId
   // after an in-flight PUT resolves. Matches EditProfileWizard's
@@ -9220,6 +9287,27 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   // boundary (PUT /api/risks/:id schema-validates the body).
   const titleError = r.title.trim().length < 4 ? 'min 4 chars' : null;
   const canSave = !isNew && titleError === null && !saving;
+
+  async function reloadLatestRisk() {
+    if (!riskId || isNew || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/risks/${encodeURIComponent(riskId)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.risk) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      setR(parsed.risk);
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setSaveError(null);
+      toast.push({ kind: 'info', title: 'Latest risk loaded', body: riskId });
+    } catch (e) {
+      setSaveError(`Could not reload the latest risk: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -9267,6 +9355,7 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
         toast.push({ kind: 'error', title: 'Save risk failed', body: `${submittedId}: ${msg}` });
         if (stillCurrent) setSaveError(msg);
+        if (stillCurrent && res.status === 412) setConflictDetected(true);
         return;
       }
       setResourceEtag(res.headers.get('etag') || resourceEtag);
@@ -9435,6 +9524,11 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
             {saveError && (
               <Alert kind="error" title="Save failed">
                 <span data-testid="risk-edit-error">{saveError}</span>
+                {conflictDetected && (
+                  <button className="btn xs ghost" data-testid="risk-reload-latest" onClick={reloadLatestRisk} disabled={reloading} style={{ marginLeft: 8 }}>
+                    {reloading ? 'Reloading…' : 'Reload latest'}
+                  </button>
+                )}
               </Alert>
             )}
             <div className="row gap-12">

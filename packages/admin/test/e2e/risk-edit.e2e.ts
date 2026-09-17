@@ -172,6 +172,55 @@ test.describe('Risk edit', () => {
     await expect(page.locator('h1').first()).not.toContainText(/Risk map/i);
   });
 
+  test('stale ETag exposes a reload-latest conflict recovery action', async ({ page }) => {
+    let getCount = 0;
+    await page.route('**/api/risks/**', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        getCount += 1;
+        await route.fulfill({
+          status: 200,
+          headers: { etag: getCount === 1 ? '"risk-v1"' : '"risk-v2"' },
+          contentType: 'application/json',
+          body: JSON.stringify({
+            risk: {
+              id: 'risk-live',
+              title: getCount === 1 ? 'Original title' : 'Server changed title',
+              category: 'auth',
+              severity: 'medium',
+              likelihood: 'possible',
+              invariants: [],
+              owners: [],
+              tags: [],
+              description: '',
+            },
+          }),
+        });
+        return;
+      }
+      if (method === 'PUT') {
+        await route.fulfill({
+          status: 412,
+          headers: { etag: '"risk-v2"' },
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'resource changed since it was read',
+            code: 'PRECONDITION_FAILED',
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await openFirstRiskEditor(page);
+    await page.getByTestId('risk-edit-title').fill('Client title');
+    await page.getByTestId('risk-save-btn').click();
+    await expect(page.getByTestId('risk-reload-latest')).toBeVisible();
+    await page.getByTestId('risk-reload-latest').click();
+    await expect(page.getByTestId('risk-edit-title')).toHaveValue('Server changed title');
+    await expect(page.getByTestId('risk-reload-latest')).toHaveCount(0);
+  });
+
   test('Cancel is disabled while Save is in flight', async ({ page }) => {
     let resolvePut!: () => void;
     const putHeld = new Promise<void>((r) => {

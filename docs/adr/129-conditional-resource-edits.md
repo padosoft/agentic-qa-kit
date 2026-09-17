@@ -26,7 +26,9 @@ response ETag.
 
 - API clients can implement safe optimistic concurrency without relying on
   client clocks or in-memory versions.
-- A stale admin edit currently surfaces the API error in the existing inline
-  error path; a dedicated merge/reload conflict-resolution UI is a follow-up.
+- A stale admin edit surfaces an inline conflict and offers an explicit reload
+  of the authoritative resource plus its replacement ETag. The current
+  policy intentionally discards unsaved local edits on reload; field-level
+  merge remains a future workflow for large YAML resources.
 - Cross-process durable store semantics and UI conflict resolution remain
   deployment evidence requirements.
