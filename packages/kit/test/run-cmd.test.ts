@@ -766,7 +766,7 @@ describe('aqa run', () => {
     assert.ok(result.scenariosRun >= 1);
   });
 
-  it('rejects profiles with execution_mode "agent" until that driver lands', async () => {
+  it('fails closed for agent mode when the host does not inject a driver', async () => {
     const { root, packDir } = fixtureProject();
     const profilesPath = join(root, '.aqa', 'profiles.yaml');
     const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
@@ -775,9 +775,28 @@ describe('aqa run', () => {
     if (profiles.profiles.smoke) profiles.profiles.smoke.execution_mode = 'agent';
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
-    assert.equal(result.ok, false, 'agent-mode profile must fail until implemented');
-    assert.match(result.error ?? '', /execution_mode|orchestrator/i);
+    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    assert.equal(result.ok, false, 'agent-mode profile must fail without an injected driver');
+    assert.match(result.error ?? '', /agentRunner|agent mode/i);
+  });
+
+  it('runs agent mode through the explicit host-owned driver boundary', async () => {
+    const { root, packDir } = fixtureProject();
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, { packs: string[]; tags: string[]; execution_mode: string }>;
+    };
+    if (profiles.profiles.smoke) profiles.profiles.smoke.execution_mode = 'agent';
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      agentRunner: fixtureProbeRunner,
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.ok(result.scenariosRun >= 1);
   });
 
   it('release-gate profile fails when the SUT driver is unavailable', async () => {

@@ -35,6 +35,19 @@ const SCENARIO = {
 };
 
 describe('runScenario', () => {
+  it('records agent execution identity on probes and findings', async () => {
+    const events = new EventChainWriter('/tmp/_ignore', { persist: false });
+    const result = await runScenario({
+      scenario: SCENARIO,
+      run_id: 'run-agent',
+      execution_mode: 'agent',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+      events,
+    });
+    assert.equal(result.finding?.execution_mode, 'agent');
+    assert.ok(events.snapshot().every((event) => event.actor.type === 'agent'));
+  });
+
   it('emits a finding when the oracle fails (200 instead of 401)', async () => {
     const events = new EventChainWriter('/tmp/_ignore', { persist: false });
     const findings = new FindingsWriter('/tmp/_ignore', { persist: false });

@@ -16,8 +16,8 @@
  * as failed evidence; they are never represented by a synthetic success.
  * is the honest signal for now. Both smoke and release-gate currently
  * report `ok: true` when scenarios completed without infrastructure
- * errors. The check re-engages automatically once findings reflect
- * actual SUT behavior.
+ * errors. Agent profiles require an explicit host-owned `agentRunner`; this
+ * command never selects a model or provider implicitly.
  *
  * When `.aqa/project.yaml` declares `sut.base_url`, the default probe runner
  * is the origin-scoped HTTP driver from `@aqa/runner`. Browser, shell, SQL and
@@ -90,6 +90,8 @@ export interface RunOptions {
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ClosableProbeRunner;
+  /** Explicit host-owned agent driver. Required for `execution_mode: agent`. */
+  agentRunner?: ClosableProbeRunner;
   /** Host-injected HTTP probe secrets; values never come from pack files. */
   httpSecrets?: Readonly<Record<string, string>>;
   /** Optional capability declaration forwarded to runner preflight. */
@@ -114,10 +116,11 @@ export interface RunResult {
    * initial `run_started` event write). Absent only for the early-exit
    * errors that happen before the directory is created: missing
    * project.yaml, schema-invalid project/profiles, invalid CLI flags,
-   * runs-dir unwritable, agent-mode profile, or a deterministic-seed
+   * runs-dir unwritable, agent-mode profile without an agent driver, or a
+   * deterministic-seed
    * collision. (Note: "release-gate findings" is **not** a failure mode
-   * today; the strict semantics are deferred until a real probe runner
-   * ships — see the file-level docstring.)
+   * today; the strict semantics are deferred until the host supplies a
+   * provider-backed driver — see the file-level docstring.)
    */
   runId?: string;
   /** Same presence semantics as `runId`. */
@@ -391,13 +394,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   }
   const profile = profilesFile.profiles[profileKey];
 
-  // Agent mode isn't implemented yet — the runner is orchestrator-only. A
-  // profile with `execution_mode: agent` would silently fall through to the
-  // orchestrator path and record findings with a mismatched actor, so fail
-  // fast instead. Wire this up once @aqa/runner grows an agent driver.
-  if (profile.execution_mode !== 'orchestrator') {
+  if (profile.execution_mode === 'agent' && !opts.agentRunner && !opts.probeRunner) {
     return makeError(
-      `profile "${profileKey}" requires execution_mode "${profile.execution_mode}" which is not yet implemented — only "orchestrator" is supported`,
+      `profile "${profileKey}" requires an injected agentRunner; refusing to execute agent mode without an explicit host driver`,
     );
   }
 
@@ -525,7 +524,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     ...(opts.httpSecrets ?? {}),
   };
   const probeRunner: ClosableProbeRunner | undefined =
-    opts.probeRunner ??
+    (profile.execution_mode === 'agent'
+      ? (opts.agentRunner ?? opts.probeRunner)
+      : opts.probeRunner) ??
     (project.sut.base_url
       ? makeHttpProbeRunner({
           baseUrl: project.sut.base_url,
@@ -688,6 +689,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         const scenarioResult = await runScenario({
           scenario,
           run_id: runId,
+          execution_mode: profile.execution_mode,
           events,
           findings,
           ...(probeRunner ? { probeRunner } : {}),

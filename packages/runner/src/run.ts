@@ -22,6 +22,8 @@ export type ProbeRunner = (probe: Scenario.Probe, signal?: AbortSignal) => Promi
 export interface RunScenarioOptions {
   scenario: Scenario.Scenario;
   run_id: string;
+  /** Execution identity used for audit events and finding provenance. */
+  execution_mode?: 'orchestrator' | 'agent';
   /** Inject the probe runner. Omitting it is an explicit failed execution. */
   probeRunner?: ProbeRunner;
   /**
@@ -254,6 +256,10 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
 }
 
 export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRunResult> {
+  const actor =
+    opts.execution_mode === 'agent'
+      ? { type: 'agent' as const, id: 'agent-driver' }
+      : { type: 'orchestrator' as const, id: 'runner' };
   const runner = opts.probeRunner ?? MISSING_PROBE_RUNNER;
   const probeResults: ProbeRunResult[] = [];
   const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
@@ -299,7 +305,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       ts: new Date().toISOString(),
       run_id: opts.run_id,
       kind: 'probe_executed',
-      actor: { type: 'orchestrator', id: 'runner' },
+      actor,
       scenario_id: opts.scenario.id,
       payload: {
         probe_id: probe.id,
@@ -338,7 +344,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
         ts: new Date().toISOString(),
         run_id: opts.run_id,
         kind: 'oracle_evaluated',
-        actor: { type: 'orchestrator', id: 'runner' },
+        actor,
         scenario_id: opts.scenario.id,
         payload: { oracle_id: oracle.id, passed: result.passed, reason: result.reason },
       });
@@ -385,7 +391,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       ts: new Date().toISOString(),
       run_id: opts.run_id,
       kind: 'oracle_evaluated',
-      actor: { type: 'orchestrator', id: 'runner' },
+      actor,
       scenario_id: opts.scenario.id,
       payload: { oracle_id: oracle.id, passed: r.passed, reason: r.reason },
     });
@@ -424,7 +430,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       summary: failed.map((f) => `[${f.oracle_id}] ${f.reason}`).join('; '),
       severity: opts.risk?.severity ?? 'high',
       status: 'draft',
-      execution_mode: 'orchestrator',
+      execution_mode: opts.execution_mode ?? 'orchestrator',
       discovered_at: new Date().toISOString(),
       confidence: agreement,
       confidence_components: { oracle_agreement: agreement },
@@ -437,7 +443,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       ts: new Date().toISOString(),
       run_id: opts.run_id,
       kind: 'finding_emitted',
-      actor: { type: 'orchestrator', id: 'runner' },
+      actor,
       scenario_id: opts.scenario.id,
       finding_id: finding.id,
       payload: { severity: finding.severity },
