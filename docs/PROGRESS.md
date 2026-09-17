@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Added pre-execution scenario contract validation.** `Scenario` now rejects
+  unsupported HTTP probe fields, malformed named auth references, non-string
+  headers, non-numeric HTTP status expectations, and incomplete JSONPath
+  response comparators, including cleanup probes. Evidence: schemas typecheck
+  and targeted validator/AJV suite **69 pass / 0 fail**. ADR-187 records the
+  boundary; full repository gates and hosted CI are still required before merge.
+
 - **Connected authenticated HTTP probes to the real `aqa run` boundary.**
   `RunOptions.httpSecrets` and the explicit `AQA_HTTP_SECRET_<NAME>` host
   mapping now feed named auth references without exposing values to packs,

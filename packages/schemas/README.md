@@ -99,6 +99,13 @@ Each namespaced export bundles the Zod validator(s) for that domain. To work wit
 
 A `status: 'verified'` finding **must** have a deterministic floor at the declared `verification_floor`. The validator enforces this.
 
+`Scenario` also validates executable cross-field contracts before a runner is
+called. HTTP probes reject ignored fields and malformed secret references;
+`http_status` requires a numeric expected status; and `response_contains`
+requires either a string value or a complete `jsonpath` + `equals` comparator.
+These checks are runtime Zod invariants and are intentionally kept alongside
+the source validator rather than inferred from the generated JSON Schema.
+
 ## Hash-chained audit (Event)
 
 `Event` requires `seq`, `prev_hash` and `hash` (SHA-256 hex). The runner appends events to `events.jsonl` with each `hash = sha256(prev_hash || canonical(payload))`, giving the audit log the same WORM properties an SOC2 auditor expects.
