@@ -1613,3 +1613,11 @@ queue must retain model/version and hashes of the invariant, exact prompt and
 raw response without persisting sensitive text. Also test the minimal valid
 model response: a fallback that omits required scenario identity fields can
 silently turn every generation into an empty queue.
+
+# 2026-09-17 — a restore claim needs measurable evidence
+
+An inventory proves what was backed up, not that it can be restored. A drill
+record must bind source and restored manifest digests, enforce time ordering,
+compare observed RPO/RTO to approved objectives, and require tenant isolation,
+audit-chain, queue-fencing and redaction checks. The validator still cannot
+turn a fabricated record into proof of a real cluster restore.
