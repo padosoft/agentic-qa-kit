@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
+import { measureRiskCoverage } from '@aqa/methodology';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
 import { scanPack, verifyManifestDigest, verifySignature } from '@aqa/pack-scanner';
@@ -882,6 +883,54 @@ export function makeApi(): ApiHandler[] {
         // 200 as success either way.
         await ctx.store.deleteRisk(id, scope(req));
         return asResponse({ id, deleted: true });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/risk-coverage',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const risks = await ctx.store.listRisks({ org: s.org, project: s.project });
+        if (risks.length === 0)
+          return asResponse({ coverage: [], generated_at: new Date().toISOString() });
+        const scenarios = await ctx.store.listScenarios({ org: s.org, project: s.project });
+        const runs = await ctx.store.listRuns({ project: s.project, limit: 1_000 });
+        const observations = [];
+        for (const run of runs) {
+          const events = await ctx.store.listEvents(run.id);
+          const byScenario = new Map<string, typeof events>();
+          for (const event of events) {
+            if (event.kind !== 'oracle_evaluated' || !event.scenario_id) continue;
+            const bucket = byScenario.get(event.scenario_id) ?? [];
+            bucket.push(event);
+            byScenario.set(event.scenario_id, bucket);
+          }
+          for (const [scenarioId, oracleEvents] of byScenario) {
+            const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
+            if (!scenario || oracleEvents.length < scenario.oracles.length) continue;
+            const passed = oracleEvents.every((event) => event.payload.passed === true);
+            const replay = events.some(
+              (event) =>
+                event.kind === 'replay_finished' &&
+                event.scenario_id === scenarioId &&
+                event.payload.deterministic === true,
+            );
+            observations.push({
+              scenario_id: scenarioId,
+              executed_at: run.finished_at ?? run.started_at,
+              passed,
+              deterministic_replay: replay,
+            });
+          }
+        }
+        const coverage = measureRiskCoverage({
+          risk_map: { schema_version: '1', project: s.project, risks },
+          scenarios,
+          runs: observations,
+        });
+        return asResponse({ coverage, generated_at: new Date().toISOString() });
       },
     },
 

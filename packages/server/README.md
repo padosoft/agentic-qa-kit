@@ -32,3 +32,9 @@ The protected `POST /api/admin/migrate-legacy-configuration` endpoint performs
 the explicit legacy configuration migration using `x-aqa-org` and/or
 `x-aqa-project` scope headers. It requires `admin:everything` and never
 silently falls back to global records.
+
+`GET /api/risk-coverage` requires both tenant scope headers and
+`risk-map:read`. It derives coverage from tenant-scoped risks, scenarios and
+complete persisted `oracle_evaluated` event groups through
+`@aqa/methodology`; incomplete scenario evidence is omitted rather than
+reported as a pass.

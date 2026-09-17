@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@aqa/auth": "workspace:*",
+    "@aqa/methodology": "workspace:*",
     "@aqa/pack-author": "workspace:*",
     "@aqa/pack-scanner": "workspace:*",
     "@aqa/schemas": "workspace:*",

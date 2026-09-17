@@ -74,6 +74,86 @@ describe('makeApi', () => {
     assert.deepEqual((scoped?.body as { runs: unknown[] }).runs, []);
   });
 
+  it('GET /api/risk-coverage aggregates tenant-scoped scenario events', async () => {
+    const c = ctx();
+    await c.store.saveRisk(
+      {
+        id: 'risk-checkout',
+        category: 'business_logic',
+        title: 'Checkout integrity',
+        severity: 'high',
+        likelihood: 'likely',
+        invariants: [{ id: 'inv-total', statement: 'total matches line items' }],
+        owners: [],
+        tags: [],
+      },
+      { org: 'padosoft', project: 'demo' },
+    );
+    await c.store.saveScenario(
+      {
+        schema_version: '1',
+        id: 'checkout-total',
+        title: 'Checkout total remains correct',
+        risk_refs: ['risk-checkout'],
+        invariant_refs: ['inv-total'],
+        steps: [{ id: 'checkout', kind: 'http', with: {} }],
+        oracles: [{ id: 'total', kind: 'http_status', with: {} }],
+        preconditions: [],
+        cleanup: [],
+        tags: [],
+      },
+      { org: 'padosoft', project: 'demo' },
+    );
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-coverage-demo',
+      started_at: '2026-09-16T10:00:00Z',
+      finished_at: '2026-09-16T10:01:00Z',
+      state: 'succeeded',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
+      totals: {
+        scenarios: 1,
+        findings: 0,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-coverage-demo',
+    });
+    await c.store.appendEvent({
+      schema_version: '1',
+      seq: 0,
+      prev_hash: null,
+      hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      ts: '2026-09-16T10:01:00Z',
+      run_id: 'run-coverage-demo',
+      kind: 'oracle_evaluated',
+      actor: { type: 'orchestrator', id: 'test' },
+      scenario_id: 'checkout-total',
+      payload: { oracle_id: 'total', passed: true },
+    });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/risk-coverage');
+    const missing = await route?.handle({ headers: {}, params: {} }, c);
+    assert.equal(missing?.status, 400);
+    const response = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(response?.status, 200);
+    const coverage = (
+      response?.body as { coverage: Array<{ risk_id: string; pass_rate_30d: number }> }
+    ).coverage;
+    assert.equal(coverage.length, 1);
+    assert.equal(coverage[0]?.risk_id, 'risk-checkout');
+    assert.equal(coverage[0]?.pass_rate_30d, 1);
+  });
+
   it('POST /api/admin/migrate-legacy-configuration requires an explicit destination scope', async () => {
     const c = ctx();
     const profile = {

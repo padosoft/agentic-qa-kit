@@ -326,3 +326,8 @@
 - Added `aqa risk discover --method stride [--scope <path>]`, producing six schema-validated STRIDE baseline risks with one explicit invariant each, mapped to AQA risk categories and tagged with scope. Existing maps are preserved unless `--force` is explicit; symlink targets and traversal scopes fail closed.
 - This is a deterministic baseline, not autonomous source-code truth. FMEA, OWASP import, attack trees, AST/LLM-assisted discovery, and human approval/versioning remain open extensions.
 - Evidence: kit typecheck; kit suite 120 tests (118 passed, 2 platform skips); repository lint and diff check passed.
+
+# 2026-09-17 — tenant risk coverage API slice
+
+- Added `GET /api/risk-coverage`, requiring org/project scope and `risk-map:read`. It loads tenant-scoped risks and scenarios plus persisted run oracle events, ignores incomplete scenario observations, and delegates scoring to `@aqa/methodology`.
+- Complete API evidence: server suite 108 tests (107 passed, 1 live PostgreSQL EventBus skip); server typecheck and repository lint passed. Admin UI projection and durable event retention/aggregation remain open.

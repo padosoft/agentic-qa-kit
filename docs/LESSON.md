@@ -502,3 +502,9 @@ agent understood a repository. The first CLI method is a fixed STRIDE catalog
 with explicit invariants, schema validation, scope tags and safe overwrite
 semantics; source-aware and LLM-assisted discovery must remain opt-in and
 auditable.
+
+# 2026-09-17 — API coverage must use the same scoring boundary
+
+The server must not reimplement risk scoring. It normalizes tenant-scoped
+store records and complete oracle event groups into `measureRiskCoverage()`;
+partial event groups are excluded, and missing replay evidence remains a gap.
