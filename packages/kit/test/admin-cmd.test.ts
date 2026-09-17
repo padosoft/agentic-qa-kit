@@ -219,6 +219,30 @@ describe('aqa admin — boot + smoke', () => {
     }
   });
 
+  it('passes dedicated runner authorization to dequeue and ACK routes', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      runnerAuthorize: async (headers) => headers.authorization === 'Bearer runner-test',
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const denied = await fetchText(`${boot.url}/api/runner/jobs/next`);
+      assert.equal(denied.status, 401);
+      const allowed = await fetchText(`${boot.url}/api/runner/jobs/next`, {
+        headers: { authorization: 'Bearer runner-test' },
+      });
+      assert.equal(allowed.status, 204);
+    } finally {
+      await boot.close();
+    }
+  });
+
   it('enforces server-side tenant membership after role authorization', async () => {
     const root = makeTempRoot();
     const adminDistDir = makeFakeAdminDist();

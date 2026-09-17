@@ -185,3 +185,4 @@
 - Added `POST /api/runner/jobs/:id/ack`; workers must present the current fencing `lease_token`, and stale/unknown tokens return `409` without completing the job.
 - Added optional `runnerAuthorize` enforcement to both dequeue and ACK routes, preserving local test compatibility while allowing production deployments to require a dedicated runner credential rather than a user session.
 - Evidence: server suite 98/98 passed, server typecheck and Biome passed. PostgreSQL lease fencing remains covered by the existing live CI integration.
+- Exposed the same `runnerAuthorize` callback through `runAdmin`, with a complete admin HTTP test proving unauthorized dequeue is `401` and the configured runner credential reaches the route.

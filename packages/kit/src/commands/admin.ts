@@ -41,6 +41,8 @@ export interface AdminOptions {
   oidcSecureCookie?: boolean;
   /** Enforce server-side org/project membership after authentication. */
   authorizeScope?: ApiContext['authorizeScope'];
+  /** Verify dedicated runner credentials for dequeue/ACK routes. */
+  runnerAuthorize?: ApiContext['runnerAuthorize'];
   /** Use a durable PostgreSQL runner queue instead of the local memory queue. */
   queueDsn?: string;
   /** Inject a queue implementation (useful for host applications/tests). */
@@ -161,6 +163,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         // 'admin' role short-circuits permission checks in @aqa/auth.
         roles: ['admin' as const],
       })),
+    ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     projectRoot: opts.root,
   };
