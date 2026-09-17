@@ -16,9 +16,10 @@ operators.
   Cloud-provider submodules (AWS RDS, GCP Cloud SQL) + IRSA / Workload
   Identity land in a later release; the namespace + variable scaffold is
   stable.
-- `../scripts/air-gap-install.sh` — `bundle` + `verify` subcommands. The
-  `install` subcommand + cosign verification of the bundle land in a
-  later release.
+- `../scripts/air-gap-install.sh` — `bundle`, `verify` and `install`
+  subcommands. `install` verifies path safety and SHA-256, optionally verifies
+  a Cosign blob signature, loads OCI image tarballs with Docker/Podman and
+  performs `helm upgrade --install`.
 
 ## Operator requirements
 

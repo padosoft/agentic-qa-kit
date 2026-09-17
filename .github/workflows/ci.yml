@@ -229,6 +229,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Validate air-gap installer syntax
+        run: bash -n scripts/air-gap-install.sh
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:

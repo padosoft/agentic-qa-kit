@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Air-gap deployment path completed.** The installer now has a real
+  `install` flow: archive path/link safety checks, SHA-256 verification,
+  optional required Cosign blob verification, Docker/Podman image loading and
+  explicit Helm upgrade/install options. Terraform can optionally own a pinned
+  Helm release while remaining cloud-provider neutral. CI runs `bash -n`; a
+  live air-gap cluster remains deployment evidence, not a local claim.
+  ADR-027 records the contract.
 - **Provider-neutral observability foundation shipped.** New
   `@aqa/observability` provides W3C traceparent parsing/formatting, injectable
   spans, bounded Prometheus counters/gauges/histograms, label validation,

@@ -418,6 +418,14 @@ bounded and fail open after the event is written. Prometheus labels also need
 name validation and a hard series cap because scenario and tenant identifiers
 are untrusted cardinality inputs.
 
+# 2026-09-17 — air-gap installers need executable trust boundaries
+
+Bundling files is not installation evidence. An offline installer must reject
+unsafe archive paths and links before extraction, verify the complete manifest
+before loading images, make signature enforcement explicit, and pass chart
+ownership/context/namespace as operator inputs. The actual OCI runtime,
+cluster and Cosign key remain required for a live deployment proof.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration
