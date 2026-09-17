@@ -594,6 +594,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       try {
+        const realPackRoot = realpathSync(packDir);
+        const realRiskPath = realpathSync(riskPath);
+        if (!isInside(realPackRoot, realRiskPath)) {
+          packErrors.push(`${packDir}: risk file symlink escapes pack root: ${relativeRiskPath}`);
+          continue;
+        }
         const parsedRiskMap = RiskMap.RiskMap.parse(readYaml<unknown>(riskPath));
         for (const risk of parsedRiskMap.risks) riskCatalog.set(risk.id, risk);
       } catch (e) {
