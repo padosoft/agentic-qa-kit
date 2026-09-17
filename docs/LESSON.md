@@ -1048,3 +1048,11 @@ The shell driver can translate `AbortSignal` into `child.kill()` and report an
 execution error, but a spawned process may create descendants. Production
 sandboxing must still enforce process-group/container cleanup and resource caps;
 driver cancellation alone is not evidence of complete process-tree isolation.
+
+# 2026-09-17 — durable queues must fail closed on runner identity
+
+Making runner authentication optional is acceptable for a local memory queue but
+unsafe once jobs are shared through PostgreSQL. Require an explicit verifier or
+a deployment token before boot, use a constant-time comparison boundary, and
+keep the token out of diagnostics. A static token is only a bootstrap fallback;
+enterprise deployments still need mTLS or short-lived identity with rotation.

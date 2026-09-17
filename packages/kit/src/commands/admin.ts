@@ -20,6 +20,7 @@
  * (report.ts owns the Markdown rendering; this file owns the boot).
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
@@ -106,6 +107,16 @@ export type AdminBootResult = ({ ok: true } & AdminHandle) | AdminErr;
 const DEFAULT_PORT = 5173;
 const DEFAULT_HOST = '127.0.0.1';
 
+function bearerTokenAuthorizer(expected: string): NonNullable<ApiContext['runnerAuthorize']> {
+  const expectedDigest = createHash('sha256').update(expected).digest();
+  return async (headers) => {
+    const value = headers.authorization ?? headers.Authorization ?? '';
+    if (!value.startsWith('Bearer ')) return false;
+    const actualDigest = createHash('sha256').update(value.slice(7)).digest();
+    return timingSafeEqual(actualDigest, expectedDigest);
+  };
+}
+
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -190,6 +201,15 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   }
   const queueDsn = opts.queueDsn ?? process.env.AQA_QUEUE_DSN;
   const queue = opts.queue ?? (queueDsn ? new PostgresRunnerQueue(queueDsn) : new RunnerQueue());
+  const runnerToken = process.env.AQA_RUNNER_TOKEN?.trim();
+  if (queueDsn && !opts.runnerAuthorize && !runnerToken) {
+    await store.close();
+    await (queue as { close?: () => Promise<void> }).close?.();
+    return {
+      ok: false,
+      error: 'admin: durable runner queue requires runnerAuthorize or AQA_RUNNER_TOKEN',
+    };
+  }
   if (opts.eventBus && opts.eventBusDsn) {
     await store.close();
     const closableQueue = queue as { close?: () => Promise<void> };
@@ -220,7 +240,11 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         // 'admin' role short-circuits permission checks in @aqa/auth.
         roles: ['admin' as const],
       })),
-    ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
+    ...(opts.runnerAuthorize
+      ? { runnerAuthorize: opts.runnerAuthorize }
+      : runnerToken
+        ? { runnerAuthorize: bearerTokenAuthorizer(runnerToken) }
+        : {}),
     ...(opts.scimAuthorize
       ? { scimAuthorize: opts.scimAuthorize }
       : scimTokenManager

@@ -797,3 +797,8 @@
 
 - Added `makeKitWorker`, the official composition of `RunnerWorker` and the canonical kit handler. The integration journey now enqueues a real job, dequeues it through the worker, executes a local HTTP probe through `runRun`, writes the real `.aqa/runs` artifacts, and ACKs the queue job.
 - Evidence: kit build/bundle, typecheck, targeted journey tests **3/3 passed**, and `git diff --check` passed. This is in-process MemoryQueue evidence; a separate-process PostgreSQL/remote-artifact/runner-auth journey is still required for production sign-off.
+
+# 2026-09-17 — durable queue runner authentication fail-closed
+
+- `runAdmin` now refuses to boot with `AQA_QUEUE_DSN` unless a dedicated `runnerAuthorize` callback or `AQA_RUNNER_TOKEN` is configured. The environment-token fallback accepts only `Bearer <token>` and compares SHA-256 digests with `timingSafeEqual`; the raw token is never logged or persisted.
+- Evidence: kit build/bundle, typecheck, **14 admin tests passed**, and `git diff --check` passed. OIDC/mTLS/short-lived runner identity and rotation remain the production-grade credential path; the static token is a bounded bootstrap fallback.
