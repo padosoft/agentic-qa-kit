@@ -103,6 +103,19 @@ export const SubscriptionSnapshot = z.object({
 });
 export type SubscriptionSnapshot = z.infer<typeof SubscriptionSnapshot>;
 
+export const DunningAttemptSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  subscription_id: z.string().min(1),
+  attempt_number: z.number().int().positive(),
+  status: z.enum(['failed', 'succeeded']),
+  amount: Money,
+  provider_reference: z.string().min(1).optional(),
+  attempted_at: z.string().datetime({ offset: true }),
+  next_attempt_at: z.string().datetime({ offset: true }).optional(),
+});
+export type DunningAttemptSnapshot = z.infer<typeof DunningAttemptSnapshot>;
+
 export const ChargebackSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -213,6 +226,7 @@ export const CommerceCapabilities = z.object({
   fulfillment_observer: z.boolean().default(false),
   returns: z.boolean().default(false),
   subscription_observer: z.boolean().default(false),
+  dunning_observer: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -358,6 +372,34 @@ export function assertSubscriptionIntegrity(subscription: SubscriptionSnapshot):
   assertMoneyNonNegative(item.amount, 'subscription amount');
   if (item.status === 'cancelled' && !item.cancel_at_period_end)
     throw new Error('cancelled subscription must be marked cancel_at_period_end');
+}
+
+export function assertDunningIntegrity(
+  subscription: SubscriptionSnapshot,
+  attempts: readonly DunningAttemptSnapshot[],
+): void {
+  const subscriptionItem = SubscriptionSnapshot.parse(subscription);
+  const seen = new Set<number>();
+  let expected = 1;
+  for (const [index, attempt] of attempts.entries()) {
+    const item = DunningAttemptSnapshot.parse(attempt);
+    if (item.subscription_id !== subscriptionItem.id)
+      throw new Error('dunning attempt does not belong to subscription');
+    if (seen.has(item.attempt_number))
+      throw new Error('dunning attempts contain a duplicate attempt number');
+    seen.add(item.attempt_number);
+    if (item.attempt_number !== expected)
+      throw new Error('dunning attempts must be contiguous and ordered');
+    expected += 1;
+    if (item.amount.currency !== subscriptionItem.amount.currency)
+      throw new Error('dunning attempt currency mismatch');
+    if (item.amount.amount_minor !== subscriptionItem.amount.amount_minor)
+      throw new Error('dunning attempt amount does not match subscription');
+    if (item.status === 'failed' && !item.next_attempt_at && index < attempts.length - 1)
+      throw new Error('intermediate failed dunning attempt requires next_attempt_at');
+  }
+  if (subscriptionItem.status === 'past_due' && attempts.length === 0)
+    throw new Error('past_due subscription requires dunning attempts');
 }
 
 export function assertChargebackIntegrity(
@@ -589,11 +631,17 @@ export interface CommerceAdapter {
   ): Promise<ShippingQuote>;
   observeWebhooks?(orderId: string): Promise<readonly WebhookObservation[]>;
   observeLoyalty?(identity: CommerceIdentity): Promise<LoyaltyObservation>;
+  observeDunning?(identity: CommerceIdentity, subscriptionId: string): Promise<DunningObservation>;
 }
 
 export type LoyaltyObservation = {
   account: LoyaltyAccountSnapshot;
   transactions: readonly LoyaltyTransactionSnapshot[];
+};
+
+export type DunningObservation = {
+  subscription: SubscriptionSnapshot;
+  attempts: readonly DunningAttemptSnapshot[];
 };
 
 export type CommerceJourneyEvidence = {
@@ -645,6 +693,14 @@ export type LoyaltyJourneyOptions = CheckoutJourneyOptions & {
   expectedPoints?: number;
 };
 
+export type DunningJourneyOptions = {
+  context: CommerceContext;
+  identity: CommerceIdentity;
+  subscriptionId: string;
+  expectedStatus?: SubscriptionSnapshot['status'];
+  minimumAttempts?: number;
+};
+
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
   refund: RefundJourneyOptions;
@@ -656,6 +712,7 @@ export type CommerceJourneySuiteOptions = {
   postPurchase?: PostPurchaseJourneyOptions;
   subscription?: SubscriptionJourneyOptions;
   loyalty?: LoyaltyJourneyOptions;
+  dunning?: DunningJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -1320,6 +1377,64 @@ export async function verifyLoyaltyJourney(
   }
 }
 
+/** Verifies a provider-observed failed-renewal/dunning sequence. */
+export async function verifyDunningJourney(
+  adapter: CommerceAdapter,
+  opts: DunningJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.dunning_observer || !adapter.observeDunning) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks dunning observation capability',
+        },
+        evidence,
+      };
+    }
+    if (!opts.subscriptionId.trim()) throw new Error('subscription id is required');
+    const observed = await adapter.observeDunning(opts.identity, opts.subscriptionId);
+    const subscription = SubscriptionSnapshot.parse(observed.subscription);
+    const attempts = observed.attempts.map((item) => DunningAttemptSnapshot.parse(item));
+    if (
+      subscription.tenant !== opts.identity.tenant ||
+      subscription.customer_id !== opts.identity.customer_id
+    )
+      throw new Error('dunning observation crosses tenant or customer boundary');
+    assertDunningIntegrity(subscription, attempts);
+    const minimumAttempts = opts.minimumAttempts ?? 1;
+    if (!Number.isSafeInteger(minimumAttempts) || minimumAttempts < 1)
+      throw new Error('minimum dunning attempts must be a positive safe integer');
+    if (attempts.length < minimumAttempts)
+      throw new Error('dunning observation has fewer attempts than required');
+    if (opts.expectedStatus && subscription.status !== opts.expectedStatus)
+      throw new Error('subscription status does not match dunning expectation');
+    if (!attempts.some((item) => item.status === 'failed'))
+      throw new Error('dunning observation contains no failed renewal attempt');
+    evidence.push({
+      step: 'dunning.observed',
+      ok: true,
+      detail: `subscription=${subscription.id}; attempts=${attempts.length}; status=${subscription.status}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'dunning journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1345,6 +1460,7 @@ export async function verifyCommerceJourneySuite(
   if (opts.subscription)
     journeys.subscription = await verifySubscriptionJourney(adapter, opts.subscription);
   if (opts.loyalty) journeys.loyalty = await verifyLoyaltyJourney(adapter, opts.loyalty);
+  if (opts.dunning) journeys.dunning = await verifyDunningJourney(adapter, opts.dunning);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1440,6 +1556,7 @@ export class InMemoryCommerceReference {
   >();
   private readonly loyaltyAccounts = new Map<string, LoyaltyAccountSnapshot>();
   private readonly loyaltyTransactions = new Map<string, LoyaltyTransactionSnapshot[]>();
+  private readonly dunning = new Map<string, DunningObservation>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
 
@@ -1893,6 +2010,24 @@ export class InMemoryCommerceReference {
     return subscription;
   }
 
+  /** Seed an explicit provider-like retry sequence for dunning contract tests. */
+  seedDunning(
+    subscription: SubscriptionSnapshot,
+    attempts: readonly DunningAttemptSnapshot[],
+  ): void {
+    const item = SubscriptionSnapshot.parse(subscription);
+    const parsedAttempts = attempts.map((attempt) => DunningAttemptSnapshot.parse(attempt));
+    assertDunningIntegrity(item, parsedAttempts);
+    this.dunning.set(item.id, { subscription: item, attempts: parsedAttempts });
+  }
+
+  observeDunning(identity: CommerceIdentity, subscriptionId: string): DunningObservation {
+    const subscription = this.getSubscription(identity, subscriptionId);
+    const observed = this.dunning.get(subscription.id);
+    if (!observed) throw new Error('dunning observation not found');
+    return observed;
+  }
+
   /** Exposes the reference merchant through the same async contract as real providers. */
   asAdapter(): CommerceAdapter {
     return {
@@ -1910,6 +2045,7 @@ export class InMemoryCommerceReference {
         tax_quote: true,
         shipping_quote: true,
         loyalty_observer: true,
+        dunning_observer: true,
       }),
       createCart: async (identity) => this.createCart(identity),
       addLine: async (identity, cartId, sku, quantity) =>
@@ -1933,6 +2069,8 @@ export class InMemoryCommerceReference {
         this.quoteShipping(identity, cartId, destination),
       observeWebhooks: async (orderId) => this.observeWebhooks(orderId),
       observeLoyalty: async (identity) => this.observeLoyalty(identity),
+      observeDunning: async (identity, subscriptionId) =>
+        this.observeDunning(identity, subscriptionId),
     };
   }
 

@@ -49,6 +49,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   period/amount invariants, tenant ownership and authoritative re-observation.
 - `verifyLoyaltyJourney()` validates checkout-linked earning, tenant/customer
   ownership, complete ledger reconciliation and an optional points expectation.
+- `verifyDunningJourney()` validates provider-observed failed renewal attempts,
+  contiguous retry history, subscription ownership, amount/currency linkage and
+  expected past-due state.
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.

@@ -29,6 +29,7 @@ import {
   assertTenderAllocation,
   verifyCheckoutJourney,
   verifyCommerceJourneySuite,
+  verifyDunningJourney,
   verifyLoyaltyJourney,
   verifyRefundJourney,
   verifyShippingJourney,
@@ -557,6 +558,106 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(result.account.balance_points, 10);
     assert.equal(result.transactions.length, 1);
     assert.equal(requestedUrl, 'https://shop.test/customers/customer-a/loyalty');
+  });
+
+  it('verifies an explicit failed-renewal dunning sequence', async () => {
+    const merchant = new InMemoryCommerceReference();
+    const identity = { tenant: 'shop-dunning', customer_id: 'customer-dunning' };
+    const created = merchant.createSubscription(
+      identity,
+      'pro-monthly',
+      { currency: 'EUR', amount_minor: '1999' },
+      'month',
+      'subscription-dunning',
+    );
+    const pastDue = { ...created, status: 'past_due' as const };
+    merchant.seedDunning(pastDue, [
+      {
+        schema_version: '1',
+        id: 'dunning-1',
+        subscription_id: created.id,
+        attempt_number: 1,
+        status: 'failed',
+        amount: created.amount,
+        provider_reference: 'provider-attempt-1',
+        attempted_at: '2026-09-17T10:00:00Z',
+        next_attempt_at: '2026-09-18T10:00:00Z',
+      },
+      {
+        schema_version: '1',
+        id: 'dunning-2',
+        subscription_id: created.id,
+        attempt_number: 2,
+        status: 'failed',
+        amount: created.amount,
+        provider_reference: 'provider-attempt-2',
+        attempted_at: '2026-09-18T10:00:00Z',
+      },
+    ]);
+    const result = await verifyDunningJourney(merchant.asAdapter(), {
+      context: {
+        schema_version: '1',
+        merchant: 'reference',
+        environment: 'sandbox',
+        tenant: identity.tenant,
+        run_id: 'run-dunning',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity,
+      subscriptionId: created.id,
+      expectedStatus: 'past_due',
+      minimumAttempts: 2,
+    });
+    assert.equal(result.outcome.status, 'pass', result.outcome.reason);
+    assert.match(result.evidence[0]?.detail ?? '', /attempts=2/);
+  });
+
+  it('reads dunning observations through the HTTP adapter boundary', async () => {
+    let requestedUrl = '';
+    const subscription = {
+      schema_version: '1',
+      id: 'sub-http',
+      tenant: 'shop-a',
+      customer_id: 'customer-a',
+      plan: 'pro',
+      status: 'past_due',
+      interval: 'month',
+      amount: { currency: 'EUR', amount_minor: '1999' },
+      current_period_start: '2026-09-01T00:00:00Z',
+      current_period_end: '2026-10-01T00:00:00Z',
+      cancel_at_period_end: false,
+    };
+    const adapter = new HttpCommerceAdapter({
+      baseUrl: 'https://shop.test',
+      fetch: async (input) => {
+        requestedUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            subscription,
+            attempts: [
+              {
+                schema_version: '1',
+                id: 'dunning-http-1',
+                subscription_id: 'sub-http',
+                attempt_number: 1,
+                status: 'failed',
+                amount: subscription.amount,
+                attempted_at: '2026-09-17T10:00:00Z',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      },
+    });
+    const result = await adapter.observeDunning(
+      { tenant: 'shop-a', customer_id: 'customer-a' },
+      'sub-http',
+    );
+    assert.equal(result.subscription.status, 'past_due');
+    assert.equal(result.attempts[0]?.attempt_number, 1);
+    assert.equal(requestedUrl, 'https://shop.test/subscriptions/sub-http/dunning');
   });
 
   it('executes an isolated checkout exactly once and preserves minor-unit totals', () => {

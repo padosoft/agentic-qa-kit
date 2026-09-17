@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added the executable subscription dunning journey.** Versioned dunning
+  attempts now expose contiguous retry history, amount/currency linkage and
+  scheduling metadata. `verifyDunningJourney()` requires a provider-observed
+  failed renewal, validates subscription ownership and minimum attempts, and
+  the HTTP/reference adapters implement the observation boundary. Commerce
+  contracts are **34 pass / 0 fail** with explicit PostgreSQL skips. ADR-183
+  records that inducing a failure and proving provider collection still needs
+  a billing sandbox/staging integration.
+
 - **Added the executable ecommerce loyalty journey.** `verifyLoyaltyJourney()`
   now performs checkout, requires a checkout-linked earn event, validates
   tenant/customer ownership and reconciles the complete observed ledger.
