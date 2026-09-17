@@ -1190,3 +1190,10 @@ after a trusted boundary has established who the worker is and how long its
 credential is valid. Keep JWT verification narrow (fixed algorithm, issuer,
 audience, lifetime and explicit scopes), reject partial environment wiring, and
 preserve static tokens only as visibly non-production bootstrap compatibility.
+
+# 2026-09-17 — timeout is not a negative commerce result
+
+After a payment or order request times out, the side effect may already exist.
+Never map every exception to “not committed” and blindly retry. Keep the
+approval claim, classify the result as unknown, and reconcile against the
+authoritative merchant/provider state before another mutation.

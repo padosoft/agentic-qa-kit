@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import {
+  CommerceMutationGate,
   CommerceToolPolicy,
   HttpCommerceAdapter,
   InMemoryCommerceApprovalLedger,
@@ -140,6 +141,53 @@ describe('@aqa/commerce contracts', () => {
       allowed: false,
       reason: 'durable_approval_requires_async_authorize',
     });
+  });
+
+  it('never converts an ambiguous merchant mutation into a successful commit', async () => {
+    const policy = new CommerceToolPolicy({
+      read_tools: ['catalog.search'],
+      now: () => new Date('2026-09-17T10:00:00Z'),
+    });
+    const gate = new CommerceMutationGate(policy);
+    const call = {
+      schema_version: '1' as const,
+      id: 'call-gate',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      tool: 'checkout.submit',
+      operation: 'financial' as const,
+      target: { tenant: 'tenant-a', customer_id: 'customer-a' },
+      cart_revision: 3,
+      total: { currency: 'EUR', amount_minor: '2500' },
+      requested_at: new Date('2026-09-17T10:00:00Z').toISOString(),
+    };
+    const approval = {
+      schema_version: '1' as const,
+      approval_id: 'approval-gate',
+      call_id: 'call-gate',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      cart_revision: 3,
+      total: { currency: 'EUR', amount_minor: '2500' },
+      approved_by: 'operator@example.test',
+      source: 'human' as const,
+      expires_at: '2026-09-17T10:05:00Z',
+    };
+    assert.deepEqual(
+      await gate.execute(call, approval, async () => ({ status: 'unknown', reason: 'timeout' })),
+      {
+        status: 'unknown',
+        authorization: { allowed: true, reason: 'human_approval_allowed' },
+        reason: 'timeout',
+      },
+    );
+    assert.deepEqual(
+      await gate.execute(call, approval, async () => ({ status: 'committed', value: 'order-1' })),
+      {
+        status: 'denied',
+        authorization: { allowed: false, reason: 'approval_already_consumed' },
+      },
+    );
   });
 
   it('HttpCommerceAdapter performs bounded, tenant-scoped checkout calls', async () => {

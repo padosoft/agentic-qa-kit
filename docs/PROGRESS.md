@@ -897,3 +897,8 @@
 
 - Added `RunnerJwtAuthorizer` with an RS256-only trust boundary, exact issuer/audience, required expiry, optional bounded not-before, runner subject and strict `org/project` or explicit `org/*` scopes. `aqa admin` now wires the verifier from `AQA_RUNNER_JWT_PUBLIC_KEY`, `AQA_RUNNER_JWT_ISSUER` and `AQA_RUNNER_JWT_AUDIENCE`, rejecting partial configuration; static `AQA_RUNNER_TOKEN` remains an explicit bootstrap fallback.
 - Evidence: auth build/typecheck and **33 tests passed**, kit typecheck and its **136 passed / 2 platform skips** suite passed, including partial JWT environment rejection. Live IdP token issuance/rotation, mTLS and multi-process server-to-worker JWT journey remain deployment evidence.
+
+# 2026-09-17 — commerce ambiguous mutation boundary
+
+- Added `CommerceMutationGate` for agentic commerce writes. It composes durable approval authorization with a provider executor and preserves the distinction between `committed`, `not_committed` and `unknown`; thrown/ambiguous provider outcomes never become a successful mutation or a safe retry. The executor contract requires merchant-side atomic revision/total/idempotency checks and reconciliation.
+- Evidence: commerce build/typecheck and **23 tests passed**, including the ambiguous timeout path and approval replay denial. Real payment/merchant transaction atomicity, provider idempotency retention and fault-injected sandbox journeys remain deployment evidence.

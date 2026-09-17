@@ -38,6 +38,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `InMemoryCommerceApprovalLedger` and `PostgresCommerceApprovalLedger` provide
   atomic approval consumption; production uses `authorizeAsync()` when a
   durable ledger is configured.
+- `CommerceMutationGate` is the mandatory orchestration boundary for writes:
+  it distinguishes `committed`, `not_committed` and `unknown` outcomes. A
+  transport ambiguity never becomes a success and the claimed approval must be
+  reconciled before retrying.
 
 ## Setup
 
@@ -85,7 +89,8 @@ Use it as a test merchant, not as a production payment implementation. Real
 merchant/payment adapters must provide authoritative observations; an unavailable
 observer is `unsupported`, never an empty success.
 
-Agentic tools must apply `CommerceToolPolicy` at the mutation gateway and bind
-the returned decision atomically to the merchant write. The policy is not a
-replacement for durable approval storage, provider reconciliation or a real
-authorization service.
+Agentic tools must apply `CommerceMutationGate` at the mutation gateway. The
+executor must re-check cart revision and total inside the merchant transaction
+and return `unknown` when the provider outcome cannot be established. The
+policy is not a replacement for durable approval storage, provider
+reconciliation or a real authorization service.
