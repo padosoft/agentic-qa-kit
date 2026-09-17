@@ -85,6 +85,8 @@ export interface RunOptions {
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ProbeRunner;
+  /** Optional capability declaration forwarded to runner preflight. */
+  supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
   /** Optional operator key used to sign the final audit completeness checkpoint. */
   auditCheckpointSigner?: AuditCheckpointSigner;
   /** Independent store for the final checkpoint; failure blocks the run. */
@@ -579,6 +581,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           events,
           findings,
           ...(probeRunner ? { probeRunner } : {}),
+          ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
           findingIdSeed: scenariosRun,
         });
         if (scenarioResult.execution_status === 'failed') {

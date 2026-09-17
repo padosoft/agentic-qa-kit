@@ -17,6 +17,10 @@
   recorded as failed execution evidence and cannot emit a finding; concrete
   drivers and live journeys remain open.
 
+- The kit orchestration boundary now forwards `supportedProbeKinds` to every
+  scenario, so integrations cannot accidentally configure preflight on the
+  runner and then lose it at `aqa run`.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the
