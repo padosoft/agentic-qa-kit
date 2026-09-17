@@ -7,7 +7,9 @@ import {
   Money,
   assertNoOversell,
   assertOrderIntegrity,
+  assertPromotionRedeemable,
   assertSameCurrency,
+  assertTenderAllocation,
   verifyCheckoutJourney,
   verifyRefundJourney,
   verifyShippingJourney,
@@ -29,6 +31,48 @@ describe('@aqa/commerce contracts', () => {
           { currency: 'USD', amount_minor: '1' },
         ),
       /cross-currency/,
+    );
+  });
+
+  it('reconciles card, gift-card and store-credit tender exactly', () => {
+    assertTenderAllocation({ currency: 'EUR', amount_minor: '1500' }, [
+      { tender_id: 'card-1', kind: 'card', amount: { currency: 'EUR', amount_minor: '1000' } },
+      { tender_id: 'gift-1', kind: 'gift_card', amount: { currency: 'EUR', amount_minor: '500' } },
+    ]);
+    assert.throws(
+      () =>
+        assertTenderAllocation({ currency: 'EUR', amount_minor: '1500' }, [
+          { tender_id: 'card-1', kind: 'card', amount: { currency: 'EUR', amount_minor: '1499' } },
+        ]),
+      /does not reconcile/,
+    );
+    assert.throws(
+      () =>
+        assertTenderAllocation({ currency: 'EUR', amount_minor: '1500' }, [
+          { tender_id: 'same', kind: 'card', amount: { currency: 'EUR', amount_minor: '500' } },
+          {
+            tender_id: 'same',
+            kind: 'store_credit',
+            amount: { currency: 'EUR', amount_minor: '1000' },
+          },
+        ]),
+      /duplicate/,
+    );
+  });
+
+  it('checks promotion expiry and redemption limit at commit time', () => {
+    const valid = {
+      code: 'ONEUSE',
+      currency: 'EUR',
+      discount: { currency: 'EUR', amount_minor: '100' },
+      max_redemptions: 1,
+      redemptions: 0,
+    };
+    assert.doesNotThrow(() => assertPromotionRedeemable(valid));
+    assert.throws(() => assertPromotionRedeemable({ ...valid, redemptions: 1 }), /limit/);
+    assert.throws(
+      () => assertPromotionRedeemable({ ...valid, expires_at: '2020-01-01T00:00:00.000Z' }),
+      /expired/,
     );
   });
 

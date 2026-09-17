@@ -397,3 +397,8 @@
 
 - Added `/scim/v2/Users` and `/scim/v2/Users/:id` GET/POST/PUT/PATCH/DELETE routes. Every route requires an injected dedicated bearer verifier and `x-aqa-org`; DELETE deactivates rather than destructively erases the directory record. The journey preserves SCIM `userName`, roles, active state and tenant isolation.
 - Complete HTTP evidence: server suite 111 tests (110 passed, one PostgreSQL EventBus skip), including unauthorized access, create, patch, list, cross-org denial and soft-delete; store build/typecheck and repository lint pass. SCIM token rotation/audit events, RFC filter pagination, SAML and live PostgreSQL SCIM round-trip remain open.
+
+# 2026-09-17 — ecommerce tender and promotion integrity slice
+
+- Added provider-neutral commerce contracts for exact split-tender reconciliation across card, gift-card and store-credit instruments, including currency and duplicate-tender guards. Added commit-time promotion validation for currency, expiry and redemption limits.
+- Evidence: `@aqa/commerce` typecheck and 15/15 tests; repository lint and `git diff --check` pass. Durable atomic redemption, provider settlement, gift-card locking, tax treatment and financial reconciliation remain open.

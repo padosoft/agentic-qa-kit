@@ -599,3 +599,11 @@ Directory deprovisioning is security-sensitive and often retried. Treat DELETE
 as an idempotent deactivation until a reviewed retention/deletion contract exists;
 preserve the resource ID and auditability, and require a dedicated bearer verifier
 separate from interactive user authentication.
+
+# 2026-09-17 — tender and promotion checks have different consistency boundaries
+
+Split tender validation is an exact accounting invariant: compare minor units with
+`BigInt`, reject duplicate instruments and require one currency. Promotion validity
+must be checked again at order commit, because cart pricing is stale by definition;
+the production provider still needs an atomic redemption counter and an auditable
+financial event.

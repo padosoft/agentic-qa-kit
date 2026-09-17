@@ -157,6 +157,54 @@ export const ShippingQuote = z.object({
 });
 export type ShippingQuote = z.infer<typeof ShippingQuote>;
 
+export const TenderAllocation = z.object({
+  tender_id: z.string().min(1),
+  kind: z.enum(['card', 'gift_card', 'store_credit']),
+  amount: Money,
+});
+export type TenderAllocation = z.infer<typeof TenderAllocation>;
+
+export const PromotionSnapshot = z.object({
+  code: z.string().min(1),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  discount: Money,
+  max_redemptions: z.number().int().positive(),
+  redemptions: z.number().int().nonnegative(),
+  expires_at: z.string().datetime({ offset: true }).optional(),
+});
+export type PromotionSnapshot = z.infer<typeof PromotionSnapshot>;
+
+/** Tender is money allocation, not an order discount. It must reconcile exactly. */
+export function assertTenderAllocation(
+  total: Money,
+  allocations: readonly TenderAllocation[],
+): void {
+  const parsedTotal = Money.parse(total);
+  if (allocations.length === 0) throw new Error('tender allocation is empty');
+  const seen = new Set<string>();
+  let sum = 0n;
+  for (const allocation of allocations) {
+    const item = TenderAllocation.parse(allocation);
+    if (item.amount.currency !== parsedTotal.currency)
+      throw new Error('tender allocation currency mismatch');
+    if (seen.has(item.tender_id)) throw new Error(`duplicate tender allocation: ${item.tender_id}`);
+    seen.add(item.tender_id);
+    sum += BigInt(item.amount.amount_minor);
+  }
+  if (sum !== BigInt(parsedTotal.amount_minor))
+    throw new Error('tender allocation does not reconcile to total');
+}
+
+/** Validate promotion state at commit time, not only when the cart was quoted. */
+export function assertPromotionRedeemable(promotion: PromotionSnapshot, now = new Date()): void {
+  const item = PromotionSnapshot.parse(promotion);
+  if (item.discount.currency !== item.currency) throw new Error('promotion currency mismatch');
+  if (item.redemptions >= item.max_redemptions)
+    throw new Error('promotion redemption limit reached');
+  if (item.expires_at && Date.parse(item.expires_at) <= now.getTime())
+    throw new Error('promotion is expired');
+}
+
 /**
  * Provider-neutral contract for a commerce system under test. Implementations
  * may call HTTP, a browser, or a read-only database observer, but they must
