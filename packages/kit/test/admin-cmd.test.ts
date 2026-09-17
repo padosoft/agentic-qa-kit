@@ -146,6 +146,38 @@ describe('aqa admin — boot + smoke', () => {
     }
   });
 
+  it('enforces server-side tenant membership after role authorization', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      authenticate: async () => ({
+        id: 'u',
+        email: 'u@example.test',
+        display_name: 'U',
+        roles: ['admin'],
+      }),
+      authorizeScope: async (_user, requested) => requested.org === 'allowed-org',
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const denied = await fetchText(`${boot.url}/api/orgs`, {
+        headers: { 'x-aqa-org': 'blocked-org' },
+      });
+      assert.equal(denied.status, 403);
+      const allowed = await fetchText(`${boot.url}/api/orgs`, {
+        headers: { 'x-aqa-org': 'allowed-org' },
+      });
+      assert.notEqual(allowed.status, 403);
+    } finally {
+      await boot.close();
+    }
+  });
+
   it('refuses a non-loopback bind without explicit authentication', async () => {
     const result = await runAdmin({
       root: makeTempRoot(),

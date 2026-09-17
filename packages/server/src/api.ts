@@ -36,6 +36,8 @@ export interface ApiContext {
   queue: RunnerQueue;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
+  /** Authorize the authenticated user for the requested org/project scope. */
+  authorizeScope?: (user: User, scope: { org: string; project?: string }) => Promise<boolean>;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER

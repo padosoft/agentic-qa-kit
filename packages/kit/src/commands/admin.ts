@@ -35,6 +35,8 @@ export interface AdminOptions {
   host?: string;
   /** Override the local development identity with a real verifier in production. */
   authenticate?: ApiContext['authenticate'];
+  /** Enforce server-side org/project membership after authentication. */
+  authorizeScope?: ApiContext['authorizeScope'];
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -142,6 +144,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         // 'admin' role short-circuits permission checks in @aqa/auth.
         roles: ['admin' as const],
       })),
+    ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     projectRoot: opts.root,
   };
 
@@ -391,7 +394,10 @@ async function handleRequest(
 ): Promise<void> {
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type,x-aqa-org,x-aqa-project');
+  res.setHeader(
+    'access-control-allow-headers',
+    'authorization,content-type,cookie,x-aqa-org,x-aqa-project',
+  );
 
   const method = (req.method ?? 'GET').toUpperCase();
   if (method === 'OPTIONS') {
@@ -471,6 +477,19 @@ async function delegateToApi(args: {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ error: `forbidden: requires ${matched.route.requires}` }));
       return;
+    }
+    const org = headers['x-aqa-org'] ?? headers['X-Aqa-Org'];
+    const project = headers['x-aqa-project'] ?? headers['X-Aqa-Project'];
+    if (hctx.ctx.authorizeScope && typeof org === 'string') {
+      const requestedScope = project ? { org, project } : { org };
+      if (!(await hctx.ctx.authorizeScope(user, requestedScope))) {
+        res.statusCode = 403;
+        res.setHeader('content-type', 'application/json');
+        res.end(
+          JSON.stringify({ error: 'forbidden: user is not a member of the requested scope' }),
+        );
+        return;
+      }
     }
   }
   const params: Record<string, string> = {
