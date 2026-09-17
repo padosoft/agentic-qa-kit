@@ -299,10 +299,19 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
     if (preflightError) preflightResult.execution_error = preflightError;
     return preflightResult;
   }
+  let cancelled = false;
   for (const probe of opts.scenario.steps) {
+    if (opts.signal?.aborted) {
+      cancelled = true;
+      break;
+    }
     const r = await execute(probe);
     probeResults.push(r);
     recordProbe(probe, r, false);
+    if (opts.signal?.aborted) {
+      cancelled = true;
+      break;
+    }
   }
   const cleanupResults: ProbeRunResult[] = [];
   for (const probe of opts.scenario.cleanup) {
@@ -327,7 +336,9 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   const executionFailures = [...probeResults, ...cleanupResults].filter(
     (probe) => probe.execution_status === 'failed' || Boolean(probe.error),
   );
-  const executionError = executionFailures[0]?.error;
+  const executionError = cancelled
+    ? 'scenario cancelled before all steps completed'
+    : executionFailures[0]?.error;
   let finding: Finding.Finding | null = null;
   if (failed.length > 0 && executionFailures.length === 0) {
     const year = new Date().getUTCFullYear();
@@ -371,8 +382,14 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   }
   return {
     scenario_id: opts.scenario.id,
-    outcome: executionFailures.length > 0 ? 'error' : failed.length > 0 ? 'fail' : 'pass',
-    execution_status: executionFailures.length > 0 ? 'failed' : 'completed',
+    outcome: cancelled
+      ? 'blocked'
+      : executionFailures.length > 0
+        ? 'error'
+        : failed.length > 0
+          ? 'fail'
+          : 'pass',
+    execution_status: cancelled || executionFailures.length > 0 ? 'failed' : 'completed',
     ...(executionError ? { execution_error: executionError } : {}),
     probes: probeResults,
     cleanup: cleanupResults,

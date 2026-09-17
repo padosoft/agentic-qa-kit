@@ -160,6 +160,36 @@ describe('runScenario', () => {
     assert.match(result.cleanup[1]?.error ?? '', /cleanup service unavailable/);
   });
 
+  it('fails closed on cancellation, skips remaining steps and still runs cleanup', async () => {
+    const controller = new AbortController();
+    const calls: string[] = [];
+    const templateStep = SCENARIO.steps[0];
+    assert.ok(templateStep);
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        steps: [
+          { ...templateStep, id: 'first' },
+          { ...templateStep, id: 'never-run' },
+        ],
+        cleanup: [{ ...templateStep, id: 'cleanup-reset' }],
+        oracles: [],
+      },
+      run_id: 'run-cancelled',
+      signal: controller.signal,
+      probeRunner: async (probe) => {
+        calls.push(probe.id);
+        if (probe.id === 'first') controller.abort();
+        return { probe_id: probe.id, status: 204 };
+      },
+    });
+    assert.deepEqual(calls, ['first', 'cleanup-reset']);
+    assert.equal(result.outcome, 'blocked');
+    assert.equal(result.execution_status, 'failed');
+    assert.match(result.execution_error ?? '', /cancelled/);
+    assert.equal(result.cleanup.length, 1);
+  });
+
   it('dedups identical findings within the same run', async () => {
     const findings = new FindingsWriter('/tmp/_ignore', { persist: false });
     await runScenario({

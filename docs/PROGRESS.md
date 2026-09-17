@@ -62,6 +62,12 @@
   bytes. A regression test proves mixed public/private DNS answers are denied;
   non-Node runtimes must use an equivalent egress proxy policy.
 
+- **Closed a cancellation false-green path.** `runScenario()` now stops
+  remaining steps when its signal is aborted, always executes declared cleanup,
+  and returns `blocked` with failed execution instead of passing an empty-oracle
+  scenario. A regression proves the remaining step is skipped and cleanup is
+  still attempted.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.

@@ -34,6 +34,11 @@
   and connect directly to the pinned IP with original TLS SNI/Host; otherwise
   delegate the same invariant to a connection-aware egress proxy.
 
+- **Cancellation is an execution outcome, never a pass.** Check the signal
+  between steps, stop new mutations, run compensating cleanup, and emit a
+  blocked/failed result even when no oracle exists. Otherwise an operator stop
+  can be reconstructed as a successful scenario.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must
