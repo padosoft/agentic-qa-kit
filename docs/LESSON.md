@@ -1668,3 +1668,9 @@ An air-gap artifact is not coherent merely because its tarball hash verifies:
 the chart and loaded image tags must describe the same release. Derive image
 references from the chart application version and fail closed when the source
 of truth is missing; registry and cluster evidence remain separate.
+# 2026-09-17 — coverage needs an operator gate, not only a library
+
+A correct coverage calculator is ineffective if no CLI or report invokes it.
+Wire declarations and persisted execution evidence together, distinguish
+invalid evidence from incomplete evidence, and return a non-zero gate for
+stale/gap coverage. “No findings” alone is never a passing proof.

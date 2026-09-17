@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Connected risk coverage to the operator CLI.** Added `aqa risk coverage`
+  to load RiskMap/pack scenarios and schema-validated `scenario_finished` run
+  events, then report covered/partial/gap/stale status. Invalid evidence fails
+  with exit 1; valid incomplete coverage fails with exit 2, so zero findings
+  cannot create a false green. Event-chain verification and real provider/
+  cluster semantics remain separate gates.
+
 - **Aligned air-gap image tags with the Helm release.** The bundle script now
   derives server/runner image tags from `deploy/helm/Chart.yaml` `appVersion`
   and fails closed when that value is absent, removing the previous `0.6.0`
