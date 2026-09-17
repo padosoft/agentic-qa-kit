@@ -154,5 +154,14 @@ describe('outbound webhooks', () => {
         }),
       /timeout_ms/,
     );
+    const bounded = new HttpWebhookTransport({
+      destinationPolicy: new WebhookDestinationPolicy(['https://hooks.example.test']),
+      max_response_bytes: 1_000,
+      fetcher: async () => new Response('x'.repeat(1_001), { status: 200 }),
+    });
+    await assert.rejects(
+      () => bounded.send({ url: 'https://hooks.example.test/hook', body: '{}', headers: {} }),
+      /response exceeds configured limit/,
+    );
   });
 });

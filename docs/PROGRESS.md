@@ -27,6 +27,11 @@
   and conditional/idempotent browser mutations; the route handlers alone had
   not exposed the adapter bug.
 
+- **Bounded webhook response reads before allocation.** `HttpWebhookTransport`
+  now consumes response streams incrementally and cancels as soon as the byte
+  cap is exceeded, covering responses that omit `Content-Length`; a regression
+  test proves the rejection path without contacting a provider.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.

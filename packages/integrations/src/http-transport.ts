@@ -45,9 +45,7 @@ export class HttpWebhookTransport implements WebhookTransport {
       const contentLength = Number(response.headers.get('content-length') ?? 0);
       if (contentLength > this.maxResponseBytes)
         throw new Error('webhook response exceeds configured limit');
-      const responseBody = await response.text();
-      if (new TextEncoder().encode(responseBody).byteLength > this.maxResponseBytes)
-        throw new Error('webhook response exceeds configured limit');
+      await readBoundedResponseBody(response, this.maxResponseBytes);
       const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
       return {
         status: response.status,
@@ -56,6 +54,25 @@ export class HttpWebhookTransport implements WebhookTransport {
     } finally {
       clearTimeout(timer);
     }
+  }
+}
+
+async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<void> {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  let total = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) return;
+      total += chunk.value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('webhook response exceeds configured limit');
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 }
 
