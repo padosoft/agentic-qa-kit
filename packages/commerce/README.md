@@ -14,6 +14,8 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - Versioned fulfillment and return/RMA snapshots with anti-over-quantity invariants.
 - Versioned subscription and chargeback snapshots with period and payment-linkage invariants.
 - Reconciled loyalty account and transaction snapshots with duplicate/event-sign invariants.
+- Cancellation snapshots distinguish requested/accepted/rejected and require
+  compensating refund evidence for paid orders.
 - Explicit `pass`, `fail`, `blocked`, `unsupported`, and `inconclusive` outcomes.
 - `HttpCommerceAdapter` for live provider-neutral HTTP merchants, with origin
   allowlisting, bounded responses, tenant context and typed snapshot parsing.

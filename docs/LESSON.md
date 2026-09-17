@@ -1437,3 +1437,9 @@ Neither can be inferred safely from an order status of `paid`.
 
 Reconcile points from immutable, idempotent transactions. A mutable balance
 alone cannot expose duplicate earn/redeem events or prevent negative value.
+
+# 2026-09-17 — cancellation must carry its financial consequence
+
+An accepted cancellation is not proof of money reversal. Preserve requested,
+accepted and rejected states, require decision timing, and link accepted paid
+order cancellations to a compensating refund or provider void.

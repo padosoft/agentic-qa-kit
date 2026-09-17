@@ -1208,6 +1208,16 @@
 - Remaining: real billing/dispute/loyalty providers, cancellation workflows and
   complete ecommerce journey coverage.
 
+# 2026-09-17 — ecommerce cancellation contract
+
+- Added `CancellationSnapshot` with explicit decision states, decision timing,
+  exact order linkage and compensating `refund_id` evidence for paid orders.
+- Evidence: `@aqa/commerce` suite **27 passed / 0 failed**, typecheck, lint and
+  diff checks pass locally. Provider void/refund reconciliation remains
+  adapter evidence.
+- Remaining: provider-backed billing, disputes, loyalty, fulfillment and full
+  external ecommerce journeys.
+
 # 2026-09-17 — redacted webhook observability
 
 - Added an optional `PostgresWebhookQueue` observer for attempt/outcome

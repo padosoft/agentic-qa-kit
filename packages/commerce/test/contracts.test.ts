@@ -14,6 +14,7 @@ import {
   Money,
   PostgresWebhookEffectLedger,
   applyWebhookEffectOnce,
+  assertCancellationIntegrity,
   assertChargebackIntegrity,
   assertFulfillmentIntegrity,
   assertLoyaltyLedgerIntegrity,
@@ -843,6 +844,39 @@ describe('@aqa/commerce contracts', () => {
           { ...transactions[0], kind: 'redeem' as const, points: 10 },
         ]),
       /must reduce/,
+    );
+  });
+
+  it('requires compensating refund evidence when cancelling a paid order', () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'cancel-sku',
+      price: { currency: 'EUR', amount_minor: '500' },
+      on_hand: 1,
+    });
+    const identity = { tenant: 'shop-a', customer_id: 'customer-a' };
+    const cart = merchant.createCart(identity);
+    merchant.addLine(identity, cart.id, 'cancel-sku', 1);
+    const result = merchant.checkout(identity, cart.id, 'cancel-key');
+    const base = {
+      schema_version: '1' as const,
+      id: 'cancel-1',
+      order_id: result.order.id,
+      reason: 'customer request',
+      requested_at: '2026-09-17T10:00:00Z',
+      decided_at: '2026-09-17T10:01:00Z',
+    };
+    assert.throws(
+      () =>
+        assertCancellationIntegrity(result.order, result.payment, { ...base, status: 'accepted' }),
+      /refund_id/,
+    );
+    assert.doesNotThrow(() =>
+      assertCancellationIntegrity(result.order, result.payment, {
+        ...base,
+        status: 'accepted',
+        refund_id: 'refund-1',
+      }),
     );
   });
 });

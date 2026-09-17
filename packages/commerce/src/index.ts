@@ -116,6 +116,18 @@ export const ChargebackSnapshot = z.object({
 });
 export type ChargebackSnapshot = z.infer<typeof ChargebackSnapshot>;
 
+export const CancellationSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  order_id: z.string().min(1),
+  status: z.enum(['requested', 'accepted', 'rejected']),
+  reason: z.string().min(1),
+  refund_id: z.string().min(1).optional(),
+  requested_at: z.string().datetime({ offset: true }),
+  decided_at: z.string().datetime({ offset: true }).optional(),
+});
+export type CancellationSnapshot = z.infer<typeof CancellationSnapshot>;
+
 export const LoyaltyTransactionSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -342,6 +354,19 @@ export function assertChargebackIntegrity(
     throw new Error('chargeback exceeds captured payment');
   if (item.status === 'opened' && !item.evidence_due_at)
     throw new Error('opened chargeback requires evidence_due_at');
+}
+
+export function assertCancellationIntegrity(
+  order: OrderSnapshot,
+  payment: PaymentSnapshot,
+  cancellation: CancellationSnapshot,
+): void {
+  const item = CancellationSnapshot.parse(cancellation);
+  if (item.order_id !== order.id) throw new Error('cancellation does not belong to order');
+  if (item.status !== 'requested' && !item.decided_at)
+    throw new Error('decided cancellation requires decided_at');
+  if (item.status === 'accepted' && payment.status !== 'failed' && !item.refund_id)
+    throw new Error('accepted cancellation of a paid order requires refund_id');
 }
 
 export function assertLoyaltyLedgerIntegrity(
