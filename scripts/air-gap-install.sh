@@ -27,6 +27,13 @@ IMAGES=(
 
 log() { printf '[air-gap-install] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
+CLEANUP_STAGE=''
+cleanup_stage() {
+  if [[ -n "${CLEANUP_STAGE}" ]]; then
+    rm -rf -- "${CLEANUP_STAGE}"
+    CLEANUP_STAGE=''
+  fi
+}
 
 safe_extract() {
   local bundle="$1" stage="$2"
@@ -34,7 +41,7 @@ safe_extract() {
   while IFS= read -r entry; do
     entry="${entry#./}"
     case "${entry}" in
-      ''|/*|../*|*/../*|*/..) die "unsafe path in bundle: ${entry}" ;;
+      /*|../*|*/../*|*/..) die "unsafe path in bundle: ${entry}" ;;
     esac
   done <"${stage}/.tar-list"
   while IFS= read -r entry; do
@@ -48,7 +55,8 @@ safe_extract() {
 cmd_bundle() {
   local stage
   stage="$(mktemp -d)"
-  trap 'rm -rf "${stage}"' EXIT
+  CLEANUP_STAGE="${stage}"
+  trap cleanup_stage EXIT
 
   log "staging chart into ${stage}/helm"
   mkdir -p "${stage}/helm"
@@ -68,13 +76,15 @@ cmd_bundle() {
   fi
 
   log "writing manifest"
-  ( cd "${stage}" && find . -type f -print0 \
+  ( cd "${stage}" && find . -type f ! -path './MANIFEST.sha256' -print0 \
       | xargs -0 sha256sum > MANIFEST.sha256 ) || true
 
   mkdir -p "$(dirname "${BUNDLE_OUT}")"
   log "writing ${BUNDLE_OUT}"
   tar -czf "${BUNDLE_OUT}" -C "${stage}" .
   log "done — bundle at ${BUNDLE_OUT}"
+  cleanup_stage
+  trap - EXIT
 }
 
 cmd_verify() {
@@ -85,7 +95,8 @@ cmd_verify() {
   fi
   local stage
   stage="$(mktemp -d)"
-  trap 'rm -rf "${stage}"' EXIT
+  CLEANUP_STAGE="${stage}"
+  trap cleanup_stage EXIT
 
   log "extracting ${bundle} to verify"
   safe_extract "${bundle}" "${stage}"
@@ -97,6 +108,8 @@ cmd_verify() {
 
   log "checking sha256 manifest"
   ( cd "${stage}" && sha256sum -c MANIFEST.sha256 --quiet ) && log "OK"
+  cleanup_stage
+  trap - EXIT
 }
 
 cmd_install() {
@@ -118,7 +131,8 @@ cmd_install() {
   [[ -f "${bundle}" ]] || die "bundle not found at ${bundle}"
   local stage
   stage="$(mktemp -d)"
-  trap 'rm -rf "${stage}"' EXIT
+  CLEANUP_STAGE="${stage}"
+  trap cleanup_stage EXIT
   safe_extract "${bundle}" "${stage}"
   [[ -f "${stage}/MANIFEST.sha256" ]] || die 'MANIFEST.sha256 missing'
   ( cd "${stage}" && sha256sum -c MANIFEST.sha256 --quiet ) || die 'bundle digest verification failed'
@@ -159,6 +173,8 @@ cmd_install() {
   fi
   log "installing ${release} into namespace ${namespace}"
   helm "${helm_args[@]}"
+  cleanup_stage
+  trap - EXIT
 }
 
 main() {
