@@ -10,6 +10,7 @@ const names = [
   'AQA_ARTIFACT_S3_RETENTION_MODE',
   'AQA_ARTIFACT_S3_ENDPOINT',
   'AQA_ARTIFACT_S3_FORCE_PATH_STYLE',
+  'AQA_ARTIFACT_S3_REQUIRE_RETENTION',
 ] as const;
 const saved = new Map<string, string | undefined>();
 
@@ -39,5 +40,11 @@ describe('run artifact backend', () => {
     assert.equal(createRunArtifactStore('/tmp/run', 'run-1') instanceof S3ArtifactStore, true);
     setEnv('AQA_ARTIFACT_S3_RETAIN_UNTIL', 'not-a-date');
     assert.throws(() => createRunArtifactStore('/tmp/run', 'run-1'), /ISO timestamp/);
+  });
+
+  it('fails closed when production retention is required but not configured', () => {
+    setEnv('AQA_ARTIFACT_S3_BUCKET', 'aqa-artifacts');
+    setEnv('AQA_ARTIFACT_S3_REQUIRE_RETENTION', 'true');
+    assert.throws(() => createRunArtifactStore('/tmp/run', 'run-1'), /requires/);
   });
 });

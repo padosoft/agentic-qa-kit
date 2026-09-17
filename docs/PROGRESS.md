@@ -44,6 +44,13 @@
   stored in a WORM/Object-Lock domain; that external retention boundary remains
   open.
 
+- **S3 WORM configuration can now fail closed.** `aqa run` rejects
+  `AQA_ARTIFACT_S3_REQUIRE_RETENTION=true` unless an ISO retain-until timestamp
+  and `GOVERNANCE`/`COMPLIANCE` mode are both configured. This prevents a
+  production-shaped deployment from silently using mutable S3 artifacts; the
+  bucket’s actual versioning/Object Lock/KMS state still requires infrastructure
+  evidence.
+
 - **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
   bounded, fail-closed verifier with constant-time code comparison, Base32
   decoding, configurable period/digits/skew window and RFC vector coverage.

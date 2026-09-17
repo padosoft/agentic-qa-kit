@@ -13,6 +13,7 @@ export function createRunArtifactStore(root: string, runId: string): ArtifactSto
   const basePrefix = process.env.AQA_ARTIFACT_S3_PREFIX?.trim() ?? '';
   const prefix = [basePrefix, runId].filter(Boolean).join('/');
   const retentionUntilRaw = process.env.AQA_ARTIFACT_S3_RETAIN_UNTIL?.trim();
+  const requireRetention = process.env.AQA_ARTIFACT_S3_REQUIRE_RETENTION === 'true';
   const retentionMode = process.env.AQA_ARTIFACT_S3_RETENTION_MODE?.trim() as
     | S3ArtifactStoreOptions['retentionMode']
     | undefined;
@@ -22,6 +23,11 @@ export function createRunArtifactStore(root: string, runId: string): ArtifactSto
   }
   if (retentionMode && retentionMode !== 'GOVERNANCE' && retentionMode !== 'COMPLIANCE') {
     throw new Error('AQA_ARTIFACT_S3_RETENTION_MODE must be GOVERNANCE or COMPLIANCE');
+  }
+  if (requireRetention && (!retentionUntil || !retentionMode)) {
+    throw new Error(
+      'AQA_ARTIFACT_S3_REQUIRE_RETENTION=true requires AQA_ARTIFACT_S3_RETAIN_UNTIL and AQA_ARTIFACT_S3_RETENTION_MODE',
+    );
   }
   const clientConfig = {
     region: process.env.AWS_REGION ?? 'us-east-1',

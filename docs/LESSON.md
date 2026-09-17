@@ -31,6 +31,12 @@
   the run-local evidence internally discoverable while leaving WORM retention
   as a separate trust boundary.
 
+- **WORM must be an explicit deployment mode.** An S3-compatible adapter that
+  merely supports Object Lock is not enough: operators can omit retention and
+  still get a successful run. Add a fail-closed requirement switch while
+  keeping actual bucket versioning, KMS and Object Lock verification as an
+  infrastructure gate.
+
 - **Signing configuration must fail closed before a run starts.** If an
   operator supplies only a key ID or only private key material, silently
   producing an unsigned checkpoint creates misleading evidence. Treat the two
