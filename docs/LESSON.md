@@ -365,3 +365,8 @@ capability preflight and an executable journey that compares before/after
 inventory, validates arithmetic invariants, and retries the same idempotency
 key. Missing observers are `unsupported`; malformed or inconsistent snapshots
 are `error`; neither is a successful checkout.
+
+Refunds are a separate journey, not a checkout assertion. A partial refund
+must be strictly below the captured amount, preserve currency and order
+identity, and return byte-equivalent state on an idempotent retry. The adapter
+contract now proves that boundary independently.

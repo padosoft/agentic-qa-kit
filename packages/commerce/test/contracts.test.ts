@@ -9,6 +9,7 @@ import {
   assertOrderIntegrity,
   assertSameCurrency,
   verifyCheckoutJourney,
+  verifyRefundJourney,
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
@@ -216,5 +217,34 @@ describe('@aqa/commerce contracts', () => {
         }),
       /line total mismatch/,
     );
+  });
+
+  it('proves a partial refund is exactly-once under retry', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'refund-sku',
+      price: { currency: 'EUR', amount_minor: '1000' },
+      on_hand: 1,
+    });
+    const result = await verifyRefundJourney(merchant.asAdapter(), {
+      context: {
+        schema_version: '1',
+        merchant: 'reference',
+        environment: 'sandbox',
+        tenant: 'shop-a',
+        run_id: 'run-refund',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity: { tenant: 'shop-a', customer_id: 'refund-customer' },
+      sku: 'refund-sku',
+      quantity: 1,
+      idempotencyKey: 'refund-checkout',
+      refundAmount: { currency: 'EUR', amount_minor: '400' },
+      refundIdempotencyKey: 'refund-key',
+    });
+    assert.equal(result.outcome.status, 'pass');
+    assert.equal(result.outcome.evidence_complete, true);
+    assert.equal(result.evidence.length, 2);
   });
 });

@@ -152,6 +152,11 @@ export type CheckoutJourneyOptions = {
   idempotencyKey: string;
 };
 
+export type RefundJourneyOptions = CheckoutJourneyOptions & {
+  refundAmount: Money;
+  refundIdempotencyKey: string;
+};
+
 /**
  * Runs the minimum safe checkout journey against any adapter. A provider is
  * never marked as passing when it cannot expose the required observations or
@@ -208,6 +213,83 @@ export async function verifyCheckoutJourney(
     record('postconditions', true, `order=${order.status}; payment=${payment.status}`);
     return {
       outcome: { status: 'pass', evidence_complete: true, reason: 'checkout journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
+/** Verifies that a partial refund is bounded and exactly-once under retry. */
+export async function verifyRefundJourney(
+  adapter: CommerceAdapter,
+  opts: RefundJourneyOptions,
+): Promise<{ outcome: JourneyOutcome; evidence: readonly CommerceJourneyEvidence[] }> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  const record = (step: string, ok: boolean, detail: string) => {
+    evidence.push({ step, ok, detail });
+  };
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.checkout || !capabilities.refunds || !capabilities.idempotency) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout, refunds, or idempotency',
+        },
+        evidence,
+      };
+    }
+    assertMoneyNonNegative(opts.refundAmount, 'refund amount');
+    if (BigInt(opts.refundAmount.amount_minor) <= 0n) {
+      throw new Error('refund amount must be positive');
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    assertSameCurrency(opts.refundAmount, checkout.payment.amount);
+    if (BigInt(opts.refundAmount.amount_minor) >= BigInt(checkout.payment.amount.amount_minor)) {
+      throw new Error('refund journey requires a partial refund amount');
+    }
+    record('checkout.captured', true, `order=${checkout.order.id}`);
+    const first = validateRefundResult(
+      await adapter.refund(
+        opts.identity,
+        checkout.order.id,
+        opts.refundAmount,
+        opts.refundIdempotencyKey,
+      ),
+    );
+    const retry = validateRefundResult(
+      await adapter.refund(
+        opts.identity,
+        checkout.order.id,
+        opts.refundAmount,
+        opts.refundIdempotencyKey,
+      ),
+    );
+    if (JSON.stringify(first) !== JSON.stringify(retry)) {
+      throw new Error('idempotent refund retry returned a different result');
+    }
+    const expectedRefunded = BigInt(opts.refundAmount.amount_minor);
+    if (BigInt(first.payment.refunded_amount.amount_minor) !== expectedRefunded) {
+      throw new Error('partial refund amount was not persisted exactly once');
+    }
+    record('refund.idempotent_retry', true, `refund=${first.refund.id}`);
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'refund journey passed' },
       evidence,
     };
   } catch (error) {
@@ -598,6 +680,20 @@ function validateCheckoutResult(result: CheckoutResult): CheckoutResult {
     throw new Error('checkout payment does not belong to order');
   }
   return { order, payment, inventory };
+}
+
+function validateRefundResult(result: RefundResult): RefundResult {
+  const refund = RefundSnapshot.parse(result.refund);
+  const payment = PaymentSnapshot.parse(result.payment);
+  const order = OrderSnapshot.parse(result.order);
+  assertOrderIntegrity(order);
+  assertPaymentIntegrity(payment);
+  assertSameCurrency(refund.amount, payment.amount, payment.refunded_amount);
+  if (refund.order_id !== order.id || payment.order_id !== order.id) {
+    throw new Error('refund does not belong to the returned order');
+  }
+  if (refund.status !== 'succeeded') throw new Error('refund was not successful');
+  return { refund, payment, order };
 }
 
 export function assertNoOversell(snapshot: InventorySnapshot): void {
