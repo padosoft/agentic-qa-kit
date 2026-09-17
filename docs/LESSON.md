@@ -1211,3 +1211,10 @@ Replica-safe passkeys need more than a shared table: challenge consumption must
 be a single destructive claim, and counter advancement must use a conditional
 write whose affected-row count decides the result. A read-then-write sequence
 allows two replicas to accept the same authenticator counter.
+
+# 2026-09-17 — wildcard CORS is a dangerous control-plane default
+
+An admin API should not emit `Access-Control-Allow-Origin: *` while its
+authentication model may use cookies or credentials. Default to same-origin,
+allow exact configured origins, vary caches by Origin, and reject disallowed
+state-changing cross-origin requests before route handling.

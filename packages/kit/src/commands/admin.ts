@@ -47,6 +47,8 @@ export interface AdminOptions {
   oidc?: OidcSessionManager;
   /** Whether OIDC cookies should carry Secure. Defaults to true off loopback. */
   oidcSecureCookie?: boolean;
+  /** Explicit cross-origin allowlist; empty by default because the SPA is same-origin. */
+  corsOrigins?: readonly string[];
   /** Enforce server-side org/project membership after authentication. */
   authorizeScope?: ApiContext['authorizeScope'];
   /** Verify dedicated runner credentials for dequeue/ACK routes. */
@@ -150,6 +152,19 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   }
   if (opts.authenticate && opts.oidc) {
     return { ok: false, error: 'admin: pass authenticate or oidc, not both' };
+  }
+  let corsOrigins: ReadonlySet<string>;
+  try {
+    corsOrigins = new Set(
+      (opts.corsOrigins ?? []).map((origin) => {
+        const parsed = new URL(origin);
+        if (parsed.pathname !== '/' || parsed.search || parsed.hash)
+          throw new Error('origin must not contain a path, query or hash');
+        return parsed.origin;
+      }),
+    );
+  } catch {
+    return { ok: false, error: 'admin: corsOrigins must contain valid origins only' };
   }
   if (
     (opts.scimAuthorize && (opts.scimTokenManager || opts.scimTokenDsn)) ||
@@ -296,6 +311,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       indexHtmlPath,
       ...(opts.oidc ? { oidc: opts.oidc } : {}),
       ...(opts.oidc ? { oidcSecureCookie: opts.oidcSecureCookie ?? !loopbackHosts.has(host) } : {}),
+      corsOrigins,
     }).catch((err: unknown) => {
       try {
         res.statusCode = 500;
@@ -543,6 +559,7 @@ interface HandleCtx {
   indexHtmlPath: string;
   oidc?: OidcSessionManager;
   oidcSecureCookie?: boolean;
+  corsOrigins: ReadonlySet<string>;
 }
 
 async function handleRequest(
@@ -550,16 +567,33 @@ async function handleRequest(
   res: ServerResponse,
   hctx: HandleCtx,
 ): Promise<void> {
-  res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader(
-    'access-control-allow-headers',
-    'authorization,content-type,cookie,x-aqa-org,x-aqa-project',
-  );
+  const requestOrigin = req.headers.origin;
+  const allowedOrigin =
+    requestOrigin && hctx.corsOrigins.has(requestOrigin) ? requestOrigin : undefined;
+  if (allowedOrigin) {
+    res.setHeader('access-control-allow-origin', allowedOrigin);
+    res.setHeader('access-control-allow-credentials', 'true');
+    res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader(
+      'access-control-allow-headers',
+      'authorization,content-type,cookie,x-aqa-org,x-aqa-project',
+    );
+    res.setHeader('vary', 'Origin');
+  }
 
   const method = (req.method ?? 'GET').toUpperCase();
   if (method === 'OPTIONS') {
+    if (requestOrigin && !allowedOrigin) {
+      res.statusCode = 403;
+      res.end();
+      return;
+    }
     res.statusCode = 204;
+    res.end();
+    return;
+  }
+  if (requestOrigin && !allowedOrigin && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    res.statusCode = 403;
     res.end();
     return;
   }

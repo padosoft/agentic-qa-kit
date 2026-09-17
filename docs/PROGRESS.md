@@ -916,3 +916,8 @@
 
 - Added multi-replica WebAuthn persistence: advisory-locked migrations, atomic one-time challenge consumption, user-bound credential reads and conditional monotonic-counter updates. Credential registration is explicit and does not persist private keys.
 - Evidence: auth build/typecheck and **34 tests passed**, including a concurrent two-client counter contract (skipped without `AQA_TEST_POSTGRES_DSN`). The hosted PostgreSQL run must execute this new contract; real browser/provider ceremony and verifier integration remain open.
+
+# 2026-09-17 — admin CORS and cross-origin mutation hardening
+
+- Removed the wildcard CORS default from `aqa admin`. Cross-origin access is now opt-in through an explicit origin allowlist; allowed origins receive exact credentialed CORS headers, while disallowed preflights and state-changing requests return `403` before routing.
+- Evidence: kit build and **137 tests passed / 2 platform skips**, including a real HTTP allowlist/preflight/mutation contract. CSRF token strategy, production reverse-proxy headers and live browser deployment remain separate controls.

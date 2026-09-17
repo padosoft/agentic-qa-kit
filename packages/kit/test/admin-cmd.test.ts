@@ -420,4 +420,39 @@ describe('aqa admin — boot + smoke', () => {
       }
     }
   });
+
+  it('uses an explicit CORS allowlist and blocks cross-origin mutations', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      corsOrigins: ['https://console.example.test/'],
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const denied = await fetch(`${boot.url}/api/orgs`, {
+        method: 'POST',
+        headers: { Origin: 'https://evil.example.test' },
+      });
+      assert.equal(denied.status, 403);
+      assert.equal(denied.headers.get('access-control-allow-origin'), null);
+
+      const preflight = await fetch(`${boot.url}/api/orgs`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://console.example.test' },
+      });
+      assert.equal(preflight.status, 204);
+      assert.equal(
+        preflight.headers.get('access-control-allow-origin'),
+        'https://console.example.test',
+      );
+      assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+    } finally {
+      await boot.close();
+    }
+  });
 });
