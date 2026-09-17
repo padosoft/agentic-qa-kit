@@ -16,7 +16,7 @@ export interface ScenarioRunResult {
   finding: Finding.Finding | null;
 }
 
-export type ProbeRunner = (probe: Scenario.Probe) => Promise<ProbeRunResult>;
+export type ProbeRunner = (probe: Scenario.Probe, signal?: AbortSignal) => Promise<ProbeRunResult>;
 
 export interface RunScenarioOptions {
   scenario: Scenario.Scenario;
@@ -35,6 +35,8 @@ export interface RunScenarioOptions {
   findingIdSeed?: number;
   /** Resolved risk declaration used to derive finding severity and risk_id. */
   risk?: RiskMap.Risk;
+  /** Cooperative cancellation signal owned by the worker/orchestrator. */
+  signal?: AbortSignal;
 }
 
 const MISSING_PROBE_RUNNER: ProbeRunner = async (p) => ({
@@ -86,7 +88,7 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
   }
   const allowedOrigins = normalizeAllowedOrigins(opts.allowed_origins ?? [baseUrl.origin]);
   const maxResponseBytes = opts.max_response_bytes ?? 1_048_576;
-  return async (probe) => {
+  return async (probe, externalSignal) => {
     if (probe.kind !== 'http') {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
     }
@@ -124,6 +126,11 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
       return { probe_id: probe.id, error: 'max_response_bytes must be a positive integer' };
     }
     const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    if (externalSignal?.aborted) {
+      return { probe_id: probe.id, error: 'HTTP probe cancelled before dispatch' };
+    }
+    externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
     const timeout = setTimeout(() => controller.abort(), probe.timeout_ms);
     try {
       const res = await fetch(url, {
@@ -209,6 +216,7 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
       };
     } finally {
       clearTimeout(timeout);
+      externalSignal?.removeEventListener('abort', abortFromCaller);
     }
   };
 }
@@ -218,7 +226,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   const probeResults: ProbeRunResult[] = [];
   const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
     try {
-      const result = await runner(probe);
+      const result = await runner(probe, opts.signal);
       return { ...result, execution_status: result.error ? 'failed' : 'completed' };
     } catch (error) {
       return {

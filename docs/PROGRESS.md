@@ -767,3 +767,8 @@
 
 - Added `cancelled` as a terminal queue state in Memory and PostgreSQL adapters. `POST /api/runs/:id/cancel` requires tenant scope, records a bounded reason, clears the lease token and publishes `run.cancelled`; late worker ACKs are fenced and cross-tenant cancellation is indistinguishable from not-found.
 - Evidence: server build, **112 tests passed** across API and queue suites. This is cooperative cancellation state: a worker already executing must observe the cancelled job and abort its driver; no false claim of process interruption is made.
+
+# 2026-09-17 — cooperative probe cancellation contract
+
+- Extended the runner driver contract with an optional `AbortSignal`. `runScenario` forwards the worker/orchestrator signal to the selected probe runner, and the HTTP driver propagates it to `fetch` while removing its listener on completion. An aborted request is an execution failure, therefore it cannot produce a security finding.
+- Evidence: runner build, runner typecheck, **19 tests passed**, and `git diff --check` passed. Shell, SQL, PostgreSQL and Playwright drivers still need signal-aware cancellation; there is still no executable server worker that observes queue cancellation and interrupts an in-flight job.

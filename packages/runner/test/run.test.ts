@@ -507,4 +507,30 @@ describe('runScenario', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('makeHttpProbeRunner propagates cooperative cancellation to fetch', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted by worker')));
+      })) as typeof fetch;
+    try {
+      const controller = new AbortController();
+      const runner = makeHttpProbeRunner({ baseUrl: 'https://shop.example' });
+      const pending = runner(
+        {
+          id: 'cancelled-http',
+          kind: 'http',
+          with: { method: 'GET', url: '/slow' },
+          timeout_ms: 5_000,
+        },
+        controller.signal,
+      );
+      controller.abort();
+      const result = await pending;
+      assert.match(result.error ?? '', /aborted|cancel/i);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

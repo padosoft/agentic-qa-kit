@@ -1000,3 +1000,12 @@ Marking a force-killed job `done` hides an operator abort and lets reporting
 claim success. Persist `cancelled`, clear the lease/fencing token, scope the
 mutation to the tenant and reject late ACKs; worker-side cooperative abort is
 a separate step and must not be implied by the queue mutation.
+
+# 2026-09-17 — queue cancellation needs a driver boundary
+
+A durable `cancelled` row does not stop work already executing. The worker must
+carry an `AbortSignal` through `runScenario` into each driver, and a driver must
+translate it into the provider's cancellation primitive. The HTTP implementation
+now aborts `fetch` and returns an execution failure, which prevents findings from
+being emitted. Until the worker runtime and the remaining drivers consume the
+signal, cancellation is only partially implemented.
