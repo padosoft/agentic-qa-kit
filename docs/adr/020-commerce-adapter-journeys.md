@@ -33,7 +33,8 @@ contract evidence only; production provider adapters remain separate work.
 
 Real provider integrations can reuse the same safety assertions while keeping
 their transport implementation private. A journey can prove business effects
-instead of merely matching response shapes. Tax, shipping, promotion,
-webhooks, fulfillment and durable reconciliation still require additional
-capabilities and journeys; this ADR does not claim those features exist.
-
+instead of merely matching response shapes. Optional tax-quote and
+shipping-rate journeys now validate currency-safe non-negative amounts, unique
+rate identifiers and positive delivery estimates, returning `unsupported`
+when observations are unavailable. Promotion, webhooks, fulfillment and
+durable reconciliation still require additional capabilities and journeys.

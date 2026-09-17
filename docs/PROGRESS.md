@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Commerce tax/shipping assurance expanded.** `@aqa/commerce` now defines
+  versioned address, tax quote and shipping rate contracts plus
+  `verifyTaxJourney()` / `verifyShippingJourney()`. The reference merchant
+  exposes deterministic zero-tax/standard-shipping observations; validators
+  reject currency mismatches, negative amounts and duplicate rates. Real tax,
+  carrier and fulfillment integrations remain provider-specific and are not
+  claimed by the reference implementation.
 - **LLM registry truthfulness corrected.** The registry no longer contains a
   stale “live adapter not implemented” scaffold after native OpenAI-compatible,
   Anthropic, Google, Cohere and Bedrock adapters shipped; invalid runtime

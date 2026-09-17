@@ -89,6 +89,8 @@ export const CommerceCapabilities = z.object({
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
+  tax_quote: z.boolean().default(false),
+  shipping_quote: z.boolean().default(false),
 });
 export type CommerceCapabilities = z.infer<typeof CommerceCapabilities>;
 
@@ -107,6 +109,40 @@ export type CommerceIdentity = {
   tenant: string;
   customer_id: string;
 };
+
+export const ShippingAddress = z.object({
+  country_code: z.string().regex(/^[A-Z]{2}$/),
+  postal_code: z.string().min(1),
+  city: z.string().min(1),
+  region: z.string().optional(),
+});
+export type ShippingAddress = z.infer<typeof ShippingAddress>;
+
+export const TaxQuote = z.object({
+  schema_version: z.literal('1'),
+  provider: z.string().min(1),
+  jurisdiction: z.string().min(1),
+  amount: Money,
+  observed_at: z.string().datetime({ offset: true }),
+});
+export type TaxQuote = z.infer<typeof TaxQuote>;
+
+export const ShippingRate = z.object({
+  id: z.string().min(1),
+  carrier: z.string().min(1),
+  service: z.string().min(1),
+  amount: Money,
+  estimated_days: z.number().int().positive(),
+});
+export type ShippingRate = z.infer<typeof ShippingRate>;
+
+export const ShippingQuote = z.object({
+  schema_version: z.literal('1'),
+  destination: ShippingAddress,
+  rates: z.array(ShippingRate).min(1),
+  observed_at: z.string().datetime({ offset: true }),
+});
+export type ShippingQuote = z.infer<typeof ShippingQuote>;
 
 /**
  * Provider-neutral contract for a commerce system under test. Implementations
@@ -136,6 +172,12 @@ export interface CommerceAdapter {
     amount: Money,
     idempotencyKey: string,
   ): Promise<RefundResult>;
+  quoteTax?(identity: CommerceIdentity, cartId: string): Promise<TaxQuote>;
+  quoteShipping?(
+    identity: CommerceIdentity,
+    cartId: string,
+    destination: ShippingAddress,
+  ): Promise<ShippingQuote>;
 }
 
 export type CommerceJourneyEvidence = {
@@ -156,6 +198,106 @@ export type RefundJourneyOptions = CheckoutJourneyOptions & {
   refundAmount: Money;
   refundIdempotencyKey: string;
 };
+
+export type TaxJourneyOptions = CheckoutJourneyOptions;
+export type ShippingJourneyOptions = CheckoutJourneyOptions & {
+  destination: ShippingAddress;
+};
+
+/** Verifies a tax quote is observable, non-negative and currency-consistent. */
+export async function verifyTaxJourney(
+  adapter: CommerceAdapter,
+  opts: TaxJourneyOptions,
+): Promise<{ outcome: JourneyOutcome; evidence: readonly CommerceJourneyEvidence[] }> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.tax_quote || !adapter.quoteTax) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks tax quote observation',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updated = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const quote = TaxQuote.parse(await adapter.quoteTax(opts.identity, updated.id));
+    assertMoneyNonNegative(quote.amount, 'tax quote');
+    const currency = updated.lines[0]?.unit_price.currency;
+    if (currency && quote.amount.currency !== currency)
+      throw new Error('tax quote currency mismatch');
+    evidence.push({ step: 'tax.quote', ok: true, detail: `amount=${quote.amount.amount_minor}` });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'tax quote passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
+/** Verifies shipping rates are complete, unique, bounded and currency-safe. */
+export async function verifyShippingJourney(
+  adapter: CommerceAdapter,
+  opts: ShippingJourneyOptions,
+): Promise<{ outcome: JourneyOutcome; evidence: readonly CommerceJourneyEvidence[] }> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.shipping_quote || !adapter.quoteShipping) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks shipping quote observation',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updated = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const quote = ShippingQuote.parse(
+      await adapter.quoteShipping(opts.identity, updated.id, opts.destination),
+    );
+    const ids = new Set<string>();
+    for (const rate of quote.rates) {
+      if (ids.has(rate.id)) throw new Error(`duplicate shipping rate: ${rate.id}`);
+      ids.add(rate.id);
+      assertMoneyNonNegative(rate.amount, `shipping rate ${rate.id}`);
+    }
+    const currency = updated.lines[0]?.unit_price.currency;
+    if (currency && quote.rates.some((rate) => rate.amount.currency !== currency))
+      throw new Error('shipping quote currency mismatch');
+    evidence.push({ step: 'shipping.quote', ok: true, detail: `rates=${quote.rates.length}` });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'shipping quote passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
 
 /**
  * Runs the minimum safe checkout journey against any adapter. A provider is
@@ -566,6 +708,8 @@ export class InMemoryCommerceReference {
         inventory_observer: true,
         webhook_observer: false,
         idempotency: true,
+        tax_quote: true,
+        shipping_quote: true,
       }),
       createCart: async (identity) => this.createCart(identity),
       addLine: async (identity, cartId, sku, quantity) =>
@@ -575,6 +719,45 @@ export class InMemoryCommerceReference {
       getPayment: async (identity, orderId) => this.getPayment(identity, orderId),
       getInventory: async (sku) => this.getInventory(sku),
       refund: async (identity, orderId, amount, key) => this.refund(identity, orderId, amount, key),
+      quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
+      quoteShipping: async (identity, cartId, destination) =>
+        this.quoteShipping(identity, cartId, destination),
+    };
+  }
+
+  quoteTax(identity: CommerceIdentity, cartId: string): TaxQuote {
+    const cart = this.authorizeCart(identity, cartId);
+    const currency = assertSameCurrency(...cart.lines.map((line) => line.unit_price));
+    return {
+      schema_version: '1',
+      provider: 'reference-sandbox',
+      jurisdiction: 'reference-zero-tax',
+      amount: { currency, amount_minor: '0' },
+      observed_at: new Date().toISOString(),
+    };
+  }
+
+  quoteShipping(
+    identity: CommerceIdentity,
+    cartId: string,
+    destination: ShippingAddress,
+  ): ShippingQuote {
+    const cart = this.authorizeCart(identity, cartId);
+    const currency = assertSameCurrency(...cart.lines.map((line) => line.unit_price));
+    ShippingAddress.parse(destination);
+    return {
+      schema_version: '1',
+      destination,
+      rates: [
+        {
+          id: 'standard',
+          carrier: 'reference-carrier',
+          service: 'standard',
+          amount: { currency, amount_minor: '0' },
+          estimated_days: 3,
+        },
+      ],
+      observed_at: new Date().toISOString(),
     };
   }
 

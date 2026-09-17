@@ -16,6 +16,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - Provider-neutral `CommerceAdapter` contract for HTTP, browser and observer-backed merchants.
 - `verifyCheckoutJourney()` checks capability preflight, exact inventory effects,
   snapshot integrity and idempotent checkout retries with structured evidence.
+- `verifyTaxJourney()` and `verifyShippingJourney()` validate observable,
+  currency-safe tax quotes and unique bounded shipping rates, returning
+  `unsupported` when a real provider cannot expose the required evidence.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
 

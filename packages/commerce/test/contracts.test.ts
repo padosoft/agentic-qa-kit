@@ -10,6 +10,8 @@ import {
   assertSameCurrency,
   verifyCheckoutJourney,
   verifyRefundJourney,
+  verifyShippingJourney,
+  verifyTaxJourney,
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
@@ -52,6 +54,39 @@ describe('@aqa/commerce contracts', () => {
       }).status,
       'unsupported',
     );
+  });
+
+  it('verifies tax and shipping quote journeys with provider-neutral evidence', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-quote',
+      price: { currency: 'EUR', amount_minor: '1299' },
+      on_hand: 3,
+    });
+    const common = {
+      context: {
+        schema_version: '1' as const,
+        merchant: 'reference',
+        environment: 'sandbox' as const,
+        tenant: 'shop-a',
+        run_id: 'run-quotes',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity: { tenant: 'shop-a', customer_id: 'customer-a' },
+      sku: 'sku-quote',
+      quantity: 1,
+      idempotencyKey: 'quote-checkout',
+    };
+    const tax = await verifyTaxJourney(merchant.asAdapter(), common);
+    assert.equal(tax.outcome.status, 'pass');
+    assert.equal(tax.outcome.evidence_complete, true);
+    const shipping = await verifyShippingJourney(merchant.asAdapter(), {
+      ...common,
+      destination: { country_code: 'IT', postal_code: '00100', city: 'Rome' },
+    });
+    assert.equal(shipping.outcome.status, 'pass');
+    assert.match(shipping.evidence[0]?.detail ?? '', /rates=1/);
   });
 
   it('executes an isolated checkout exactly once and preserves minor-unit totals', () => {
