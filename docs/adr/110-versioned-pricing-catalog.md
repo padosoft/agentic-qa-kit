@@ -7,8 +7,9 @@
 
 Introduce `PricingCatalog` with schema version, catalog version, effective UTC
 timestamp, model input/output rates and deterministic SHA-256 identity. Parsing
-sorts model keys, validates non-negative finite rates and rejects a supplied
-digest mismatch. `BudgetTracker` accepts either the legacy pricing map or a
+sorts model keys, validates non-negative finite rates, bounded identifiers and
+canonical ISO UTC effective timestamps, and rejects a supplied digest mismatch.
+`BudgetTracker` accepts either the legacy pricing map or a
 catalog (never both), and includes the catalog version/hash in `BudgetState`.
 
 ## Consequences

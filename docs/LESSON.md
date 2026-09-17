@@ -1136,3 +1136,9 @@ contract first, derive tenant scope from authenticated headers and keep roots,
 credentials and execution controls operator-owned. This prevents a future
 worker from accidentally turning a harmless API extension into arbitrary path
 or runtime control.
+
+# 2026-09-17 — financial timestamps need a canonical timezone
+
+A pricing effective date without an explicit UTC instant is not reproducible
+across deployments. Validate and hash one canonical timestamp form; otherwise
+two operators can attach different temporal meanings to the same catalog.

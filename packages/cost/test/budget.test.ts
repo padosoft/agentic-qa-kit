@@ -91,6 +91,10 @@ describe('BudgetTracker', () => {
     assert.equal(tracker.snapshot().pricing_version, '2026-q3');
     assert.equal(tracker.snapshot().pricing_sha256, catalog.sha256);
     assert.throws(() => parsePricingCatalog({ ...catalog, sha256: 'bad' }), /sha256 mismatch/);
+    assert.throws(
+      () => parsePricingCatalog({ ...catalog, effective_at: '2026-07-01' }),
+      /ISO UTC timestamp/,
+    );
   });
 });
 

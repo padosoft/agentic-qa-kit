@@ -853,3 +853,8 @@
 
 - Added the shared `RunRequest` schema and applied it before queue insertion. The public API now accepts only the supported `profile` and bounded deterministic `seed`; tenant org/project are server-derived and arbitrary fields such as filesystem roots are rejected before durable queue persistence.
 - Evidence: schemas/server build, server **123 tests passed**, including an explicit rejection of an unsafe `root` field. The worker still resolves the project root from operator configuration, never from the request payload.
+
+# 2026-09-17 — pricing timestamp hardening
+
+- Tightened pricing catalog validation to require bounded catalog versions, non-empty model names and canonical ISO UTC timestamps (`Z`), preventing timezone/date-only ambiguity in cost evidence.
+- Evidence: cost build/typecheck and **12 tests passed**, including rejection of a date-only effective timestamp.

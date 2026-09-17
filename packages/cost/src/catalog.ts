@@ -14,14 +14,23 @@ export function parsePricingCatalog(input: unknown): PricingCatalog {
   if (!input || typeof input !== 'object')
     throw new Error('[cost] pricing catalog must be an object');
   const raw = input as Record<string, unknown>;
-  if (raw.schema_version !== '1' || typeof raw.version !== 'string' || !raw.version.trim())
+  if (
+    raw.schema_version !== '1' ||
+    typeof raw.version !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(raw.version)
+  )
     throw new Error('[cost] pricing catalog schema_version/version are required');
-  if (typeof raw.effective_at !== 'string' || Number.isNaN(Date.parse(raw.effective_at)))
-    throw new Error('[cost] pricing catalog effective_at must be an ISO date');
+  if (
+    typeof raw.effective_at !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(raw.effective_at) ||
+    Number.isNaN(Date.parse(raw.effective_at))
+  )
+    throw new Error('[cost] pricing catalog effective_at must be an ISO UTC timestamp');
   if (!raw.models || typeof raw.models !== 'object' || Array.isArray(raw.models))
     throw new Error('[cost] pricing catalog models must be an object');
   const models: Record<string, ModelPricing> = {};
   for (const [model, value] of Object.entries(raw.models as Record<string, unknown>)) {
+    if (!model.trim()) throw new Error('[cost] pricing catalog model name is required');
     if (!value || typeof value !== 'object') throw new Error(`[cost] invalid pricing for ${model}`);
     const price = value as Record<string, unknown>;
     if (
