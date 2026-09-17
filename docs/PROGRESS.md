@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added durable immutable trajectory artifacts.** `AgentTrajectoryStore`
+  validates before write, bounds UTF-8 size, writes through a temporary file
+  and rename, refuses replacement under the same run/scenario identity, and
+  rechecks digest plus trajectory invariants on read. Evidence: runner
+  trajectory suite **9 tests pass / 0 fail** (including tamper, traversal and
+  size cases); remote WORM/Object-Lock, backup/restore and S3 deployment
+  evidence remain open. ADR-194 records the storage boundary.
+
 - **Added semantic agent evaluation and calibration primitives.**
   `evaluateAgentTrials()` now requires bounded multi-judge/multi-trial
   evidence, distinct models when configured, and returns `inconclusive` below

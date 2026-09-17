@@ -1,4 +1,13 @@
 import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { join } from 'node:path';
 import type { Event } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 
@@ -24,6 +33,108 @@ function canonicalise(value: unknown): string {
 
 function sha256(value: unknown): string {
   return createHash('sha256').update(canonicalise(value), 'utf8').digest('hex');
+}
+
+export function agentTrajectoryDigest(snapshot: AgentTrajectorySnapshot): string {
+  return sha256(snapshot);
+}
+
+export interface AgentTrajectoryArtifact {
+  path: string;
+  digest: string;
+}
+
+export interface AgentTrajectoryStoreOptions {
+  root: string;
+  max_bytes?: number;
+}
+
+interface StoredTrajectoryEnvelope {
+  schema_version: '1';
+  snapshot: AgentTrajectorySnapshot;
+  snapshot_sha256: string;
+}
+
+function safeSegment(value: string, field: string): string {
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(value) || value.length > 256)
+    throw new Error(`${field} must be a safe lowercase path segment`);
+  return value;
+}
+
+/** Local durable sink; the same envelope can be placed on WORM/S3 storage. */
+export class AgentTrajectoryStore {
+  private readonly root: string;
+  private readonly maxBytes: number;
+
+  constructor(options: AgentTrajectoryStoreOptions) {
+    if (!options.root.trim()) throw new Error('trajectory store root is required');
+    this.root = options.root;
+    this.maxBytes = options.max_bytes ?? 1_048_576;
+    if (!Number.isSafeInteger(this.maxBytes) || this.maxBytes < 1)
+      throw new Error('trajectory store max_bytes must be a positive safe integer');
+  }
+
+  save(snapshot: AgentTrajectorySnapshot): AgentTrajectoryArtifact {
+    if (!verifyAgentTrajectory(snapshot).ok) throw new Error('cannot persist invalid trajectory');
+    const run = safeSegment(snapshot.run_id, 'run_id');
+    const scenario = safeSegment(snapshot.scenario_id, 'scenario_id');
+    const digest = agentTrajectoryDigest(snapshot);
+    const envelope: StoredTrajectoryEnvelope = {
+      schema_version: '1',
+      snapshot,
+      snapshot_sha256: digest,
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(envelope), 'utf8');
+    if (bytes > this.maxBytes) throw new Error('trajectory artifact exceeds byte budget');
+    const directory = join(this.root, run);
+    const path = join(directory, `${scenario}.trajectory.json`);
+    mkdirSync(directory, { recursive: true });
+    if (existsSync(path)) {
+      const existing = this.read(path);
+      if (existing.digest !== digest)
+        throw new Error('trajectory artifact is immutable and already exists');
+      return { path, digest };
+    }
+    const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(envelope), { encoding: 'utf8', flag: 'wx' });
+      if (existsSync(path)) throw new Error('trajectory artifact is immutable and already exists');
+      renameSync(temporary, path);
+    } finally {
+      if (existsSync(temporary)) unlinkSync(temporary);
+    }
+    return { path, digest };
+  }
+
+  load(runId: string, scenarioId: string): AgentTrajectorySnapshot {
+    const path = join(
+      this.root,
+      safeSegment(runId, 'run_id'),
+      `${safeSegment(scenarioId, 'scenario_id')}.trajectory.json`,
+    );
+    return this.read(path).snapshot;
+  }
+
+  private read(path: string): { snapshot: AgentTrajectorySnapshot; digest: string } {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      throw new Error('trajectory artifact cannot be read');
+    }
+    if (!parsed || typeof parsed !== 'object') throw new Error('trajectory artifact is malformed');
+    const envelope = parsed as Partial<StoredTrajectoryEnvelope>;
+    if (
+      envelope.schema_version !== '1' ||
+      !envelope.snapshot ||
+      typeof envelope.snapshot_sha256 !== 'string'
+    )
+      throw new Error('trajectory artifact envelope is invalid');
+    const digest = agentTrajectoryDigest(envelope.snapshot);
+    if (digest !== envelope.snapshot_sha256 || !verifyAgentTrajectory(envelope.snapshot).ok)
+      throw new Error('trajectory artifact integrity verification failed');
+    return { snapshot: envelope.snapshot, digest };
+  }
 }
 
 export interface AgentModelIdentity {

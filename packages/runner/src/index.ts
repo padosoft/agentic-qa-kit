@@ -35,10 +35,14 @@ export {
   type AgentToolGuardOptions,
 } from './agent.js';
 export {
+  AgentTrajectoryStore,
   AgentTrajectoryRecorder,
+  agentTrajectoryDigest,
   type AgentModelIdentity,
   type AgentTokenUsage,
   type AgentTrajectoryRecorderOptions,
+  type AgentTrajectoryArtifact,
+  type AgentTrajectoryStoreOptions,
   type AgentTrajectorySnapshot,
   type AgentTrajectoryStep,
   type AgentTrajectoryVerifyResult,
