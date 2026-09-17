@@ -1100,3 +1100,13 @@
   explicitly generic; this is a measured contract gap, not a false claim of
   complete SDK-generation readiness. Server tests **125 passed**, typecheck,
   lint and diff checks passed locally.
+
+# 2026-09-17 — SSE reconnect projection recovery
+
+- Added reconnect lifecycle handling to the admin `EventSource`: a recovered
+  connection dispatches `aqa:live-reconnected`, and Runs/Findings refetch their
+  tenant-scoped authoritative API projections. Received events dispatch the
+  low-latency `aqa:live-event` refresh signal as well.
+- Evidence: admin typecheck/build passed, ecosystem Playwright **3/3 passed**,
+  repository lint and diff checks passed. Server-side durable cursors/replay and
+  reverse-proxy fault-injection remain the next eventing evidence gap.

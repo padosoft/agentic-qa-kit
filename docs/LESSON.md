@@ -1368,3 +1368,11 @@ shape in OpenAPI creates a new drift source. Reference the versioned schemas
 package and model only the transport envelope locally. Keep genuinely generic
 endpoints visible as generic until their domain response is promoted, rather
 than publishing a plausible but unvalidated contract.
+
+# 2026-09-17 — reconnect must converge from authoritative state
+
+EventSource retry restores a socket, not the events lost while it was down.
+Have the browser refetch the durable projection on the reconnect edge, while
+still using individual events for low-latency refreshes. This gives correctness
+now and leaves room for a future cursor/replay optimization without coupling
+the UI to delivery guarantees the transport does not provide.

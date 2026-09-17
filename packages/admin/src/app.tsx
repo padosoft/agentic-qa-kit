@@ -4143,13 +4143,22 @@ function useLiveEventStream() {
     lastType: '',
     lastId: '',
   });
+  const statusRef = React.useRef(state.status);
 
   React.useEffect(() => {
     if (!configured || typeof EventSource === 'undefined') return undefined;
     const streamUrl = `${apiUrl('/api/events/stream')}?org=padosoft&project=gescat`;
     const source = new EventSource(streamUrl, { withCredentials: true });
-    const onOpen = () => setState((prev) => ({ ...prev, status: 'connected' }));
-    const onError = () => setState((prev) => ({ ...prev, status: 'reconnecting' }));
+    const onOpen = () => {
+      const recovered = statusRef.current === 'reconnecting';
+      statusRef.current = 'connected';
+      setState((prev) => ({ ...prev, status: 'connected' }));
+      if (recovered) window.dispatchEvent(new CustomEvent('aqa:live-reconnected'));
+    };
+    const onError = () => {
+      statusRef.current = 'reconnecting';
+      setState((prev) => ({ ...prev, status: 'reconnecting' }));
+    };
     const onEvent = (event) => {
       let payload = null;
       try {
@@ -4159,6 +4168,7 @@ function useLiveEventStream() {
       }
       const type = typeof payload?.type === 'string' ? payload.type : event.type;
       const id = typeof payload?.id === 'string' ? payload.id : event.lastEventId;
+      statusRef.current = 'connected';
       setState((prev) => ({
         ...prev,
         status: 'connected',
@@ -7503,7 +7513,7 @@ function PageRuns({ onNavigate, onOpenRun }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const load = async () => {
       try {
         const res = await fetch(apiUrl('/api/runs'), {
           headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
@@ -7514,9 +7524,14 @@ function PageRuns({ onNavigate, onOpenRun }) {
       } catch {
         /* Keep the explicit local preview when the server is unavailable. */
       }
-    })();
+    };
+    void load();
+    window.addEventListener('aqa:live-event', load);
+    window.addEventListener('aqa:live-reconnected', load);
     return () => {
       cancelled = true;
+      window.removeEventListener('aqa:live-event', load);
+      window.removeEventListener('aqa:live-reconnected', load);
     };
   }, []);
 
@@ -8299,7 +8314,7 @@ function PageFindings({ onNavigate, onOpenFinding }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const load = async () => {
       try {
         const res = await fetch(apiUrl('/api/findings'), {
           headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
@@ -8312,9 +8327,14 @@ function PageFindings({ onNavigate, onOpenFinding }) {
       } catch {
         /* Keep the explicit local preview when the server is unavailable. */
       }
-    })();
+    };
+    void load();
+    window.addEventListener('aqa:live-event', load);
+    window.addEventListener('aqa:live-reconnected', load);
     return () => {
       cancelled = true;
+      window.removeEventListener('aqa:live-event', load);
+      window.removeEventListener('aqa:live-reconnected', load);
     };
   }, []);
 
