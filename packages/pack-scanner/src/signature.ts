@@ -6,6 +6,35 @@ export interface SignatureCheck {
   reason: string;
 }
 
+function canonicalStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalStringify(object[key])}`)
+    .join(',')}}`;
+}
+
+/** Digest used by the parsed JSON API, where the original YAML bytes are gone. */
+export function manifestDigest(manifest: PackManifest.PackManifest): string {
+  const { signing: _signing, ...unsigned } = manifest;
+  return createHash('sha256').update(canonicalStringify(unsigned)).digest('hex');
+}
+
+export function verifyManifestDigest(manifest: PackManifest.PackManifest): SignatureCheck {
+  if (!manifest.signing?.sha256)
+    return { ok: false, reason: 'manifest does not declare signing.sha256' };
+  const digest = manifestDigest(manifest);
+  if (digest !== manifest.signing.sha256) {
+    return {
+      ok: false,
+      reason: `digest mismatch: computed ${digest.slice(0, 12)}…, declared ${manifest.signing.sha256.slice(0, 12)}…`,
+    };
+  }
+  return { ok: true, reason: 'canonical manifest digest matches declared signing.sha256' };
+}
+
 /**
  * v0.3 signature check: hash the canonicalised manifest minus `signing.*`
  * and compare against `signing.sha256`. The cosign / sigstore bundle

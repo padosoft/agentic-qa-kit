@@ -144,3 +144,10 @@
 - **v1.2 admin wired.** `@aqa/admin` migrated from inline-style placeholder shell to a real SPA: Tailwind 4 + TanStack Router + TanStack Query + Zustand + lucide-react. 12 screens shipped end-to-end: Dashboard (KPIs), Runs (table), Findings (clustered via content-hash signature, async via Web Crypto), Risk map (grouped by category), Profiles, Packs (with signature badge), Scenarios (pack→scenario tree), Agents (per-agent instruction-file detection), Replay (per-finding repro.sh / repro.curl preview + verify button), Audit log (paste events.jsonl → re-walk the sha256 chain in-browser; "Load good chain" / "Load tampered chain" demo buttons), Cost (bar by profile), Settings (theme toggle).
 - **Browser-side hash-chain verifier.** `node:crypto` is not Vite-safe, so the admin re-implements `verifyEventChain` + `signatureOf` on top of `crypto.subtle.digest`. The CLI version in `@aqa/compliance` remains the SOC2 source of truth; the in-browser copy is a UX affordance only. Documented in `docs/LESSON.md`.
 - Build: 376 KB JS (116 KB gzip), Tailwind CSS 9.94 KB (2.92 KB gzip). 165 tests still pass.
+# 2026-09-17 — pack installation safety parity
+
+- Closed the legacy `POST /api/packs` supply-chain bypass: JSON manifests now pass schema validation and the same critical/high scanner gate as YAML imports.
+- Added duplicate protection (`409 EEXIST`) with explicit `force=true` replacement semantics; malformed, unsigned shell, and invalid signed JSON manifests are rejected before persistence.
+- Added canonical parsed-JSON digest verification to `@aqa/pack-scanner`; this is integrity verification only and does not establish Sigstore publisher trust.
+- Evidence: `bun run --filter @aqa/pack-scanner test` (8 passed), `bun run --filter @aqa/server test` (96 passed), `bun run --filter @aqa/server typecheck` (passed).
+- Next: implement durable artifact storage and redaction-aware artifact lifecycle; remaining enterprise gaps include WORM audit transactionality, OIDC/Vault/S3/Sigstore trust roots, live LLM adapters, and ecommerce journey packs.

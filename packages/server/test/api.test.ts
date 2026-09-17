@@ -480,6 +480,60 @@ probes: []
     });
   });
 
+  describe('POST /api/packs JSON safety boundary', () => {
+    const manifest = {
+      schema_version: '1' as const,
+      name: 'json-pack',
+      version: '0.1.0',
+      description: 'JSON pack',
+      author: 'Test',
+      license: 'Apache-2.0',
+      applies_when: { sut_type: ['api'] },
+      templates: [],
+      scenarios: [],
+      risks: [],
+      oracles: [],
+      probes: [],
+    };
+
+    it('validates, scans, and rejects duplicate installs unless forced', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      assert.equal(
+        (await route.handle({ headers: {}, params: {}, body: manifest }, c)).status,
+        201,
+      );
+      const duplicate = await route.handle({ headers: {}, params: {}, body: manifest }, c);
+      assert.equal(duplicate.status, 409);
+      assert.equal((duplicate.body as { code: string }).code, 'EEXIST');
+      assert.equal(
+        (await route.handle({ headers: {}, params: {}, body: { ...manifest, force: true } }, c))
+          .status,
+        201,
+      );
+    });
+
+    it('rejects malformed and unsigned shell manifests before persistence', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      const malformed = await route.handle({ headers: {}, params: {}, body: { name: 'bad' } }, c);
+      assert.equal(malformed.status, 400);
+      const shell = await route.handle(
+        {
+          headers: {},
+          params: {},
+          body: { ...manifest, name: 'shell-json', probes: ['probes/shell.yaml'] },
+        },
+        c,
+      );
+      assert.equal(shell.status, 400);
+      assert.equal((shell.body as { code: string }).code, 'EPACKSCAN');
+      assert.equal(await c.store.loadPack('shell-json'), null);
+    });
+  });
+
   // ============ v1.7 slice 4c.2 — PUT /api/profiles/:name validation ============
 
   describe('PUT /api/profiles/:name', () => {

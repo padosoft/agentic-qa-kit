@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { scanPack, verifySignature } from '../dist/index.js';
+import { manifestDigest, scanPack, verifyManifestDigest, verifySignature } from '../dist/index.js';
 
 const BASE = {
   schema_version: '1' as const,
@@ -58,5 +58,14 @@ describe('verifySignature', () => {
     const r = verifySignature(BASE, 'whatever');
     assert.equal(r.ok, false);
     assert.match(r.reason, /does not declare/);
+  });
+});
+
+describe('verifyManifestDigest', () => {
+  it('verifies the parsed JSON representation without signing recursion', () => {
+    const digest = manifestDigest(BASE);
+    const signed = { ...BASE, signing: { sha256: digest } };
+    assert.equal(verifyManifestDigest(signed).ok, true);
+    assert.equal(verifyManifestDigest({ ...signed, description: 'tampered' }).ok, false);
   });
 });

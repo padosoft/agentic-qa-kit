@@ -3,7 +3,7 @@ import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
-import { scanPack, verifySignature } from '@aqa/pack-scanner';
+import { scanPack, verifyManifestDigest, verifySignature } from '@aqa/pack-scanner';
 import {
   Finding as FindingSchema,
   PackManifest as PackManifestSchema,
@@ -101,6 +101,42 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
     default:
       return 400;
   }
+}
+
+function validatePackForInstall(
+  input: unknown,
+): { ok: true; manifest: PackManifest.PackManifest } | { ok: false; response: ApiResponse } {
+  const validated = PackManifestSchema.PackManifest.safeParse(input);
+  if (!validated.success) {
+    return {
+      ok: false,
+      response: asResponse(
+        {
+          error: `manifest failed schema validation: ${formatZodError(validated.error)}`,
+          code: 'EINVAL',
+        },
+        400,
+      ),
+    };
+  }
+  const manifest = validated.data;
+  const blockingIssues = scanPack(manifest).issues.filter(
+    (issue) => issue.severity === 'critical' || issue.severity === 'high',
+  );
+  if (blockingIssues.length > 0) {
+    return {
+      ok: false,
+      response: asResponse(
+        {
+          error: 'pack rejected by supply-chain scanner',
+          code: 'EPACKSCAN',
+          issues: blockingIssues,
+        },
+        400,
+      ),
+    };
+  }
+  return { ok: true, manifest };
 }
 
 /**
@@ -382,18 +418,35 @@ export function makeApi(): ApiHandler[] {
       path: '/api/packs',
       requires: 'packs:install',
       async handle(req, ctx) {
-        // NOTE: this v1.4 endpoint accepts a pre-parsed JSON manifest
-        // and currently does NOT validate against the schema or
-        // detect duplicates — `MemoryStore.installPack` silently
-        // overwrites. The newer `POST /api/packs/import` (slice 4b)
-        // adds full validation + conflict detection on a YAML body.
-        // Consolidating both onto a shared helper (validate-then-
-        // install, with `force` semantics) is tracked as a v1.7.x
-        // follow-up; doing it here would change long-standing
-        // behavior callers may depend on, so it's intentionally
-        // out of scope for this slice. Until then, callers wanting
-        // safety guarantees should prefer `/api/packs/import`.
-        const manifest = req.body as PackManifest.PackManifest;
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        if (body.force !== undefined && typeof body.force !== 'boolean') {
+          return asResponse(
+            { error: 'force must be a boolean when provided', code: 'EINVAL' },
+            400,
+          );
+        }
+        const checked = validatePackForInstall(body.manifest ?? req.body);
+        if (!checked.ok) return checked.response;
+        const manifest = checked.manifest;
+        if (manifest.signing) {
+          const signature = verifyManifestDigest(manifest);
+          if (!signature.ok) {
+            return asResponse(
+              { error: `pack signature invalid: ${signature.reason}`, code: 'ESIGNATURE' },
+              400,
+            );
+          }
+        }
+        const existing = await ctx.store.loadPack(manifest.name);
+        if (existing && body.force !== true) {
+          return asResponse(
+            {
+              error: `pack "${manifest.name}" already exists; pass force=true to overwrite`,
+              code: 'EEXIST',
+            },
+            409,
+          );
+        }
         await ctx.store.installPack(manifest);
         return asResponse({ pack: manifest }, 201);
       },
