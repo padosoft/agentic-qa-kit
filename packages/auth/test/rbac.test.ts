@@ -190,6 +190,31 @@ describe('SCIM bearer token lifecycle', () => {
     assert.equal(await manager.verifyBearer('org-a', `Basic ${issued.id}.${issued.token}`), false);
     assert.equal(await manager.verifyBearer('org-a', 'Bearer malformed'), false);
   });
+
+  it('uses an atomic store rotation when the durable contract is available', async () => {
+    const records = new Map<string, import('../dist/index.js').ScimTokenRecord>();
+    const actions: string[] = [];
+    const manager = new ScimTokenManager(
+      {
+        get: async (id) => records.get(id) ?? null,
+        put: async (record) => void records.set(record.id, record),
+        rotate: async (tenant, tokenId, replacement) => {
+          const current = records.get(tokenId);
+          if (!current || current.tenant !== tenant || current.revoked_at) return false;
+          records.set(tokenId, { ...current, revoked_at: '2026-01-01T00:00:00.000Z' });
+          records.set(replacement.id, replacement);
+          return true;
+        },
+      },
+      (event) => void actions.push(event.action),
+    );
+
+    const first = await manager.issue('org-a');
+    const next = await manager.rotate('org-a', first.id);
+    assert.equal(await manager.verify('org-a', first.id, first.token), false);
+    assert.equal(await manager.verify('org-a', next.id, next.token), true);
+    assert.deepEqual(actions, ['issued', 'rotated', 'rejected']);
+  });
 });
 
 describe('SAML login boundary', () => {

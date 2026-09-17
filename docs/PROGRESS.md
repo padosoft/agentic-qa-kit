@@ -20,6 +20,12 @@
   still required, and this does not yet prove image-level or published-pack
   provenance.
 
+- **Durable SCIM rotation made atomic.** `ScimTokenStore` now has an optional
+  atomic rotation contract; the PostgreSQL store serializes revoke-and-issue in
+  one transaction and the manager uses it when available. Lightweight stores
+  retain the documented fallback. Existing auth tests and typecheck remain the
+  next local gate; two durable store instances must still prove the path in CI.
+
 - **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
   bounded, fail-closed verifier with constant-time code comparison, Base32
   decoding, configurable period/digits/skew window and RFC vector coverage.

@@ -12,6 +12,8 @@ export interface ScimTokenRecord {
 export interface ScimTokenStore {
   get(id: string): Promise<ScimTokenRecord | null>;
   put(record: ScimTokenRecord): Promise<void>;
+  /** Atomically revoke the old token and persist its replacement when supported. */
+  rotate?(tenant: string, tokenId: string, replacement: ScimTokenRecord): Promise<boolean>;
 }
 
 export interface ScimTokenAuditEvent {
@@ -40,18 +42,7 @@ export class ScimTokenManager {
   ) {}
 
   async issue(tenant: string, ttlMs = 86_400_000): Promise<IssuedScimToken> {
-    if (!tenant.trim()) throw new Error('[auth/scim-token] tenant is required');
-    if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0)
-      throw new Error('[auth/scim-token] ttl must be positive');
-    const at = this.now();
-    const token = randomBytes(32).toString('base64url');
-    const record: ScimTokenRecord = {
-      id: `scim-token-${randomUUID()}`,
-      tenant: tenant.trim(),
-      token_hash: digest(token),
-      created_at: at.toISOString(),
-      expires_at: new Date(at.getTime() + ttlMs).toISOString(),
-    };
+    const { record, token } = this.newRecord(tenant, ttlMs);
     await this.store.put(record);
     await this.emit({
       action: 'issued',
@@ -94,11 +85,44 @@ export class ScimTokenManager {
   }
 
   async rotate(tenant: string, tokenId: string, ttlMs = 86_400_000): Promise<IssuedScimToken> {
+    const next = this.newRecord(tenant, ttlMs);
+    if (this.store.rotate) {
+      if (!(await this.store.rotate(tenant.trim(), tokenId, next.record)))
+        throw new Error('[auth/scim-token] token cannot be rotated');
+      await this.emit({
+        action: 'rotated',
+        token_id: next.record.id,
+        tenant: next.record.tenant,
+        at: this.now().toISOString(),
+      });
+      return {
+        id: next.record.id,
+        tenant: next.record.tenant,
+        token: next.token,
+        expires_at: next.record.expires_at,
+      };
+    }
     const revoked = await this.revoke(tenant, tokenId);
     if (!revoked) throw new Error('[auth/scim-token] token cannot be rotated');
-    const next = await this.issue(tenant, ttlMs);
-    await this.emit({ action: 'rotated', token_id: next.id, tenant, at: this.now().toISOString() });
-    return next;
+    await this.store.put(next.record);
+    await this.emit({
+      action: 'issued',
+      token_id: next.record.id,
+      tenant: next.record.tenant,
+      at: next.record.created_at,
+    });
+    await this.emit({
+      action: 'rotated',
+      token_id: next.record.id,
+      tenant: next.record.tenant,
+      at: this.now().toISOString(),
+    });
+    return {
+      id: next.record.id,
+      tenant: next.record.tenant,
+      token: next.token,
+      expires_at: next.record.expires_at,
+    };
   }
 
   private async reject(
@@ -113,6 +137,24 @@ export class ScimTokenManager {
 
   private async emit(event: ScimTokenAuditEvent): Promise<void> {
     await this.audit?.(event);
+  }
+
+  private newRecord(tenant: string, ttlMs: number): { record: ScimTokenRecord; token: string } {
+    if (!tenant.trim()) throw new Error('[auth/scim-token] tenant is required');
+    if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0)
+      throw new Error('[auth/scim-token] ttl must be positive');
+    const at = this.now();
+    const token = randomBytes(32).toString('base64url');
+    return {
+      token,
+      record: {
+        id: `scim-token-${randomUUID()}`,
+        tenant: tenant.trim(),
+        token_hash: digest(token),
+        created_at: at.toISOString(),
+        expires_at: new Date(at.getTime() + ttlMs).toISOString(),
+      },
+    };
   }
 }
 

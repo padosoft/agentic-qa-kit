@@ -76,6 +76,30 @@ export class PostgresScimTokenStore implements ScimTokenStore {
     );
   }
 
+  async rotate(tenant: string, tokenId: string, replacement: ScimTokenRecord): Promise<boolean> {
+    await this.ready;
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_scim_tokens'))");
+      const revoked = (await query(
+        'UPDATE aqa_scim_tokens SET revoked_at = now() WHERE id = $1 AND tenant = $2 AND revoked_at IS NULL AND expires_at > now() RETURNING id',
+        [tokenId, tenant],
+      )) as Array<{ id: string }>;
+      if (revoked.length === 0) return false;
+      await query(
+        'INSERT INTO aqa_scim_tokens (id, tenant, token_hash, created_at, expires_at, revoked_at) VALUES ($1, $2, $3, $4::timestamptz, $5::timestamptz, NULL)',
+        [
+          replacement.id,
+          replacement.tenant,
+          replacement.token_hash,
+          replacement.created_at,
+          replacement.expires_at,
+        ],
+      );
+      return true;
+    });
+  }
+
   async close(): Promise<void> {
     await this.sql.end({ timeout: 5 });
   }
