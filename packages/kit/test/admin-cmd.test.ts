@@ -393,4 +393,31 @@ describe('aqa admin — boot + smoke', () => {
       await boot.close();
     }
   });
+
+  it('rejects partial runner JWT environment configuration', async () => {
+    const names = [
+      'AQA_RUNNER_JWT_PUBLIC_KEY',
+      'AQA_RUNNER_JWT_ISSUER',
+      'AQA_RUNNER_JWT_AUDIENCE',
+    ] as const;
+    const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    try {
+      Reflect.deleteProperty(process.env, 'AQA_RUNNER_JWT_PUBLIC_KEY');
+      process.env.AQA_RUNNER_JWT_ISSUER = 'https://issuer.example.test';
+      Reflect.deleteProperty(process.env, 'AQA_RUNNER_JWT_AUDIENCE');
+      const result = await runAdmin({
+        root: makeTempRoot(),
+        port: 0,
+        adminDistDir: makeFakeAdminDist(),
+      });
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.match(result.error, /must be configured together/);
+    } finally {
+      for (const name of names) {
+        const value = previous[name];
+        if (value === undefined) Reflect.deleteProperty(process.env, name);
+        else process.env[name] = value;
+      }
+    }
+  });
 });
