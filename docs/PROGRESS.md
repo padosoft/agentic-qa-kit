@@ -873,3 +873,8 @@
 
 - Rejected malformed `org/` scope entries; only `org/project` and explicit `org/*` are accepted, preventing an incomplete deployment value from becoming an unintended organization-wide permission.
 - Evidence: kit build/typecheck and worker configuration tests **3/3 passed**.
+
+# 2026-09-17 — ecommerce agent tool authorization contract
+
+- Added `CommerceToolPolicy` for EC-10: read tools require an allowlist and same-tenant/customer target; write/financial tools require a single-use human approval bound to call ID, tenant, customer, cart revision, exact minor-unit total/currency and expiry. Prompt text or agent output cannot self-approve a mutation.
+- Evidence: commerce build/typecheck and **21 tests passed**, including cross-tenant denial, missing approval, stale/expired approval and replay rejection. Durable approval storage, provider atomicity and a live merchant tool gateway remain required integration evidence.

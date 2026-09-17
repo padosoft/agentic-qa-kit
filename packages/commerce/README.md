@@ -32,6 +32,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   reuse of one logical effect key by a different event.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
+- `CommerceToolPolicy` for agentic commerce: read tools are explicitly
+  allowlisted; writes/financial actions require a single-use human approval
+  bound to tenant, customer, cart revision, exact currency/amount and expiry.
 
 ## Setup
 
@@ -78,3 +81,8 @@ const journey = await verifyCheckoutJourney(merchant.asAdapter(), {
 Use it as a test merchant, not as a production payment implementation. Real
 merchant/payment adapters must provide authoritative observations; an unavailable
 observer is `unsupported`, never an empty success.
+
+Agentic tools must apply `CommerceToolPolicy` at the mutation gateway and bind
+the returned decision atomically to the merchant write. The policy is not a
+replacement for durable approval storage, provider reconciliation or a real
+authorization service.

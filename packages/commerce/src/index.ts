@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
 export {
+  CommerceToolCall,
+  CommerceToolPolicy,
+  HumanCommerceApproval,
+  type CommerceAuthorization,
+  type CommerceToolPolicyOptions,
+} from './agent-security.js';
+
+export {
   verifyStripeWebhookSignature,
   type StripeWebhookVerification,
   type StripeWebhookVerificationOptions,

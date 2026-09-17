@@ -1162,3 +1162,9 @@ YAML creates a process that may never consume work.
 Configuration parsers should never infer a wildcard from a missing segment.
 Require `org/project` or the visibly intentional `org/*`; malformed values
 must fail before a worker connects to the durable queue.
+
+# 2026-09-17 — agent commerce approval is a TOCTOU contract
+
+An agent saying “approved” is not an authorization event. Bind human approval
+to the exact tool call, customer, cart revision and total, consume it once, and
+re-check those values atomically at the merchant mutation boundary.

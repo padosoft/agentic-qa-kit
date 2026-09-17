@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import {
+  CommerceToolPolicy,
   HttpCommerceAdapter,
   InMemoryCommerceReference,
   InMemoryWebhookEffectLedger,
@@ -25,6 +26,77 @@ import {
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
+  it('allows only same-customer reads and requires a bound human approval for spending', () => {
+    let now = new Date('2026-09-17T10:00:00Z');
+    const policy = new CommerceToolPolicy({
+      read_tools: ['catalog.search'],
+      now: () => now,
+    });
+    const read = {
+      schema_version: '1' as const,
+      id: 'call-read',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      tool: 'catalog.search',
+      operation: 'read' as const,
+      target: { tenant: 'tenant-a', customer_id: 'customer-a' },
+      requested_at: now.toISOString(),
+    };
+    assert.deepEqual(policy.authorize(read), { allowed: true, reason: 'read_allowed' });
+    assert.equal(
+      policy.authorize({
+        ...read,
+        id: 'cross',
+        target: { tenant: 'tenant-b', customer_id: 'customer-a' },
+      }).allowed,
+      false,
+    );
+    const spend = {
+      schema_version: '1' as const,
+      id: 'call-buy',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      tool: 'checkout.submit',
+      operation: 'financial' as const,
+      target: { tenant: 'tenant-a', customer_id: 'customer-a' },
+      cart_revision: 7,
+      total: { currency: 'EUR', amount_minor: '1999' },
+      requested_at: now.toISOString(),
+    };
+    assert.deepEqual(policy.authorize(spend), {
+      allowed: false,
+      reason: 'human_approval_required',
+    });
+    const approval = {
+      schema_version: '1' as const,
+      approval_id: 'approval-1',
+      call_id: 'call-buy',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      cart_revision: 7,
+      total: { currency: 'EUR', amount_minor: '1999' },
+      approved_by: 'operator@example.test',
+      source: 'human' as const,
+      expires_at: '2026-09-17T10:05:00Z',
+    };
+    assert.deepEqual(policy.authorize(spend, approval), {
+      allowed: true,
+      reason: 'human_approval_allowed',
+    });
+    assert.deepEqual(policy.authorize(spend, approval), {
+      allowed: false,
+      reason: 'approval_already_consumed',
+    });
+    now = new Date('2026-09-17T10:06:00Z');
+    assert.deepEqual(
+      policy.authorize(
+        { ...spend, id: 'call-buy-2' },
+        { ...approval, approval_id: 'approval-2', call_id: 'call-buy-2' },
+      ),
+      { allowed: false, reason: 'approval_expired' },
+    );
+  });
+
   it('HttpCommerceAdapter performs bounded, tenant-scoped checkout calls', async () => {
     const calls: Array<{ url: string; headers: Headers; body: unknown }> = [];
     const cart = {
