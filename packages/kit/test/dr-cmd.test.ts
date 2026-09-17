@@ -64,6 +64,17 @@ describe('aqa dr command boundary', () => {
     assert.equal(result.signature, 'not_present');
   });
 
+  it('rejects an unsigned inventory that uses signed-envelope keys', () => {
+    const result = runDrInventory({
+      inventoryFile: tempFile('inventory-with-envelope-key.json', {
+        ...inventory,
+        signature: 'unsigned-metadata',
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /requires --public-key/);
+  });
+
   it('verifies a signed backup inventory only with a trusted public key', () => {
     const { privateKey, publicKey } = generateKeyPairSync('ed25519');
     const signed = signBackupInventory(inventory, {

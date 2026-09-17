@@ -20,6 +20,12 @@
   redaction-safe error formatter. Targeted compliance/kit tests are green;
   full repository gates are the next proof before pushing the PR update.
 
+- **Closed the DR envelope ambiguity found in the second review pass.** The
+  inventory parser now reserves top-level `inventory`/`signature` keys so an
+  unsigned document cannot be confused with a signed envelope; compliance and
+  CLI regression tests cover the boundary. The refreshed hosted run is still
+  required before merge.
+
 - **Added DR evidence CLI gates.** `aqa dr inventory` now validates and hashes a
   machine-readable backup inventory, verifies signed inventory envelopes only
   with an explicit Ed25519 public key, and `aqa dr restore` validates a restore

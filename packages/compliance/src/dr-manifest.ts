@@ -44,6 +44,8 @@ const IMAGE_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
 /** Parse and validate the redacted, machine-readable recovery inventory. */
 export function parseBackupInventory(input: unknown): BackupInventory {
+  if (isRecord(input) && ('inventory' in input || 'signature' in input))
+    throw new Error('backup inventory envelope keys are reserved');
   if (!isRecord(input) || input.schema_version !== '1')
     throw new Error('backup inventory schema_version must be 1');
   const database = record(input.database, 'database');

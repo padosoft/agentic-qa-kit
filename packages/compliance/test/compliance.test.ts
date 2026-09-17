@@ -121,6 +121,10 @@ describe('backup inventory contract', () => {
       () => parseBackupInventory({ ...inventory, objectives: { rpo_minutes: 0, rto_minutes: 60 } }),
       /positive integer/,
     );
+    assert.throws(
+      () => parseBackupInventory({ ...inventory, signature: 'unsigned-metadata' }),
+      /envelope keys are reserved/,
+    );
   });
 
   it('signs and verifies the canonical inventory with an explicit trust root', () => {

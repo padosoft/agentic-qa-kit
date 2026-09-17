@@ -8,6 +8,13 @@ reject disagreement; CLI tests must exercise the bundled artifact and missing
 required flag values, while user-facing errors should use the central
 redaction-safe formatter.
 
+# 2026-09-18 — Signed envelopes need an unambiguous boundary
+
+When a permissive evidence parser ignores unknown fields, wrapper-shaped keys
+can silently change the interpretation of an unsigned document. Reserve the
+envelope keys in the inner schema (or use an explicit discriminator) and test
+both the parser and the shipped CLI boundary.
+
 # 2026-09-18 — DR evidence needs a CLI gate
 
 A validated library contract is easy to bypass operationally if the runbook has
