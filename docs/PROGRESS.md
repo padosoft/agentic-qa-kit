@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Budget kill-switch API merged to `main`.** PR #62 was squash-merged as
+  `b81cdbc` after the complete GitHub CI matrix passed: 10/10 jobs green,
+  including Node 22, PostgreSQL 16, OCI sandbox, CLI smoke and Playwright
+  admin UI. Copilot review was intentionally waived per user instruction.
+  The next evidence gap is a controlled deployed-operator exercise against a
+  real durable budget store.
+
 - **Exposed the durable budget kill-switch through the admin API.** Added
   tenant-derived `GET/POST /api/cost/halt` routes, an admin-only `cost:edit`
   permission, fail-closed `503` behavior when the durable controller is absent,
