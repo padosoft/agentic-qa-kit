@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — DR evidence needs a CLI gate
+
+A validated library contract is easy to bypass operationally if the runbook has
+no executable command. Expose backup-inventory and restore-drill verification
+through the same shipped CLI, require an explicit trust root for signed
+inventories, and keep infrastructure PITR/KMS/WORM evidence separate from JSON
+consistency checks.
+
 # 2026-09-18 — unsafe injected clients must be explicit
 
 A custom PostgreSQL client that lacks a transaction primitive cannot provide

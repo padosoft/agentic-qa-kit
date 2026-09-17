@@ -13,6 +13,17 @@
 
 ## 2026-09-18
 
+- **Added DR evidence CLI gates.** `aqa dr inventory` now validates and hashes a
+  machine-readable backup inventory, verifies signed inventory envelopes only
+  with an explicit Ed25519 public key, and `aqa dr restore` validates a restore
+  drill against the inventory's backup identity, artifact manifest digest,
+  RPO/RTO objectives and required security checks. The DR runbook now points to
+  these gates. Evidence: `@aqa/kit` suite **151 pass / 0 fail / 2 platform
+  skips**, repository typecheck/lint/build, installed CJS `aqa dr` smoke and
+  workspace tests **711 pass / 0 fail** pass locally. Hosted CI is still
+  required before merge; real PostgreSQL PITR, object-store restore, KMS and
+  WORM controls remain deployment evidence.
+
 - **Closed the PostgreSQL trajectory migration race in code.** Hosted CI showed
   that two trajectory-store instances could concurrently create the same
   PostgreSQL relation, despite `IF NOT EXISTS`, producing a `pg_type` duplicate

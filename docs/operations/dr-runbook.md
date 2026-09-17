@@ -23,6 +23,9 @@ The default design target is RPO ≤ 15 minutes with WAL/PITR and RTO ≤ 60 min
 2. Enable versioning, retention lock and cross-account replication for the artifact store. Preserve the content digest and metadata for every run artifact.
 3. Back up deployment configuration as redacted, versioned manifests. Secret values are restored from the secret manager, never from Git or a backup Markdown file.
 4. Record a backup inventory containing timestamp, database LSN/PITR target, artifact snapshot identifier, schema version, application image digest and operator/run ID.
+   Validate the redacted JSON inventory with `aqa dr inventory <inventory.json>`. If the
+   inventory is signed, pass `--public-key <ed25519-public.pem>` from the approved
+   trust root; unsigned or untrusted signatures are not production evidence.
 5. Alert on missed backups, failed WAL archiving, retention-lock drift and replication lag. A green application health endpoint is not backup evidence.
 
 ## Restore procedure
@@ -38,6 +41,12 @@ The default design target is RPO ≤ 15 minutes with WAL/PITR and RTO ≤ 60 min
 ## Quarterly restore drill
 
 Run the procedure against a disposable environment with synthetic tenant data and canary secrets. Capture start/end timestamps, chosen PITR, image/schema versions, restore errors, object-digest results, tenant-denial results and queue behavior. The drill fails if data is silently skipped, a canary secret appears in output, a cross-tenant read succeeds, an old lease can ACK, or the measured RTO/RPO misses the approved objective.
+
+After the drill, validate the machine-readable evidence with
+`aqa dr restore <inventory.json> <restore-evidence.json>`. This gate proves the
+record is internally consistent with the inventory and approved objectives; it
+does not prove that the cloud provider, WAL archiver, KMS, bucket retention or
+cluster restore actually ran unless those systems produced the evidence fields.
 
 ## Current repository boundary
 
