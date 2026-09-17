@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Fixed PostgreSQL idempotency response decoding.** The live multi-replica
+  contract exposed that PostgreSQL's JSONB driver result can arrive as a JSON
+  string, so a coalesced retry returned serialized body/headers instead of the
+  same `ApiResponse` shape as the original request. The durable adapter now
+  decodes JSONB values before returning cached responses.
+- Evidence: server typecheck and suite **131 passed / 0 failed** locally; CI
+  run `35229505062` had all other gates green and isolated the PostgreSQL
+  failure to this contract. A new hosted run is required for closure.
+
 - **Fixed a real PostgreSQL bootstrap race.** Concurrent `PostgresEventBus`
   replicas could both pass `CREATE TABLE IF NOT EXISTS` but collide while
   PostgreSQL created the implicit identity sequence, failing CI with

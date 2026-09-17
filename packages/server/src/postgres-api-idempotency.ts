@@ -183,11 +183,17 @@ export class PostgresApiIdempotencyStore implements ApiIdempotencyStore {
 }
 
 function decodeResponse(row: StoredResponse): ApiResponse {
+  const headers = decodeJsonValue<Record<string, string> | null>(row.response_headers);
   return {
     status: row.response_status ?? 500,
-    body: row.response_body,
-    ...(row.response_headers ? { headers: row.response_headers } : {}),
+    body: decodeJsonValue(row.response_body),
+    ...(headers ? { headers } : {}),
   };
+}
+
+function decodeJsonValue<T>(value: unknown): T {
+  if (typeof value !== 'string') return value as T;
+  return JSON.parse(value) as T;
 }
 
 function conflictResponse(): ApiResponse {

@@ -27,3 +27,8 @@ The hosted PostgreSQL contract previously failed with a duplicate relation
 type during concurrent test startup. Local verification without
 `AQA_TEST_POSTGRES_DSN` cannot prove this database race is fixed; the next
 hosted CI run must pass the same parallel contract.
+
+The same hosted contract also exposed a cross-runtime JSONB representation
+gap: cached bodies and nullable headers could be returned as serialized strings
+by the PostgreSQL driver. The adapter now decodes those values before exposing
+the shared `ApiResponse` contract.

@@ -1537,3 +1537,11 @@ around the complete bootstrap sequence. With pooled clients, use
 transaction client: a session lock plus separate pooled calls can acquire and
 release on different sessions and therefore is not a valid cross-replica
 boundary. A local serial test cannot prove this property.
+
+# 2026-09-17 — JSONB drivers may return serialized values
+
+PostgreSQL JSONB persistence is not automatically equivalent to the in-memory
+object contract across drivers and runtimes. A cached idempotency response can
+come back as a JSON string, including the literal string `"null"` for nullable
+headers. Decode at the durable adapter boundary and test the live response
+shape, not only the database row or the original handler result.
