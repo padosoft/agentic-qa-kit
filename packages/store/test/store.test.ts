@@ -130,6 +130,25 @@ describe('MemoryStore', () => {
     assert.equal((await s.listProfiles(beta)).length, 1);
   });
 
+  it('never falls back from a tenant-scoped read to a legacy global record', async () => {
+    const s = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: ['global'],
+    };
+    await s.saveProfile(profile);
+    assert.deepEqual(await s.loadProfile(profile.name), profile);
+    assert.equal(await s.loadProfile(profile.name, { org: 'acme', project: 'alpha' }), null);
+    assert.deepEqual(await s.listProfiles({ org: 'acme', project: 'alpha' }), []);
+  });
+
   it('close() clears state', async () => {
     const s = new MemoryStore();
     await s.saveRun(RUN);

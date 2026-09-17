@@ -54,8 +54,8 @@ export function isScopedRecordKey(key: string): boolean {
  *
  * Multi-tenant note: methods that take an `org` / `project` filter MUST
  * apply it server-side. Passing `undefined` means "ignore that filter";
- * absent fields on stored objects (legacy) are treated as matching any
- * tenant scope.
+ * scoped reads never fall back to legacy unscoped records. Legacy records
+ * remain visible only to an explicitly unscoped administrative migration.
  */
 export interface StoreProvider {
   // ----- Runs -----

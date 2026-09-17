@@ -96,16 +96,23 @@ export class PostgresStore implements StoreProvider {
     await this.wait();
     const namespaced = scopedRecordKey(key, scope);
     const rows = await this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND record_key IN ($2, $3) ORDER BY (record_key = $3) DESC',
-      [kind, key, namespaced],
+      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
+      [kind, namespaced],
     );
     return rows[0] ?? null;
   }
   private async many(kind: Kind, scope?: StoreScope): Promise<Row[]> {
     await this.wait();
-    const prefix = scope?.org || scope?.project ? `${scopedRecordKey('', scope)}%` : null;
+    const prefix =
+      scope?.org && scope.project
+        ? `${scopedRecordKey('', scope)}%`
+        : scope?.org
+          ? `@scope/${encodeURIComponent(scope.org)}/%`
+          : scope?.project
+            ? `@scope//${encodeURIComponent(scope.project)}/%`
+            : null;
     return this.q<Row>(
-      "SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND ($2::text IS NULL OR record_key NOT LIKE '@scope/%' OR record_key LIKE $2) ORDER BY updated_at DESC, record_key",
+      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND ($2::text IS NULL OR record_key LIKE $2) ORDER BY updated_at DESC, record_key',
       [kind, prefix],
     );
   }

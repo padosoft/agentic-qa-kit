@@ -50,9 +50,14 @@ export class MemoryStore implements StoreProvider {
 
   private visible<T>(map: Map<string, T>, scope?: StoreScope): T[] {
     if (!scope?.org && !scope?.project) return [...map.values()];
-    const prefix = `${scopedRecordKey('', scope)}`;
+    const prefix =
+      scope.org && scope.project
+        ? scopedRecordKey('', scope)
+        : scope.org
+          ? `@scope/${encodeURIComponent(scope.org)}/`
+          : `@scope//${encodeURIComponent(scope.project ?? '')}/`;
     return [...map.entries()]
-      .filter(([key]) => !isScopedRecordKey(key) || key.startsWith(prefix))
+      .filter(([key]) => isScopedRecordKey(key) && key.startsWith(prefix))
       .map(([, value]) => value);
   }
 
@@ -196,7 +201,7 @@ export class MemoryStore implements StoreProvider {
     return this.visible(this.packs, scope);
   }
   async loadPack(slug: string, scope?: StoreScope): Promise<PackManifest.PackManifest | null> {
-    return this.packs.get(this.key(slug, scope)) ?? this.packs.get(slug) ?? null;
+    return this.packs.get(this.key(slug, scope)) ?? null;
   }
   async installPack(manifest: PackManifest.PackManifest, scope?: StoreScope): Promise<void> {
     this.packs.set(this.key(manifest.name, scope), manifest);
@@ -210,7 +215,7 @@ export class MemoryStore implements StoreProvider {
     return this.visible(this.profiles, scope);
   }
   async loadProfile(name: string, scope?: StoreScope): Promise<Profile.Profile | null> {
-    return this.profiles.get(this.key(name, scope)) ?? this.profiles.get(name) ?? null;
+    return this.profiles.get(this.key(name, scope)) ?? null;
   }
   async saveProfile(profile: Profile.Profile, scope?: StoreScope): Promise<void> {
     this.profiles.set(this.key(profile.name, scope), profile);
@@ -240,7 +245,7 @@ export class MemoryStore implements StoreProvider {
     return out;
   }
   async loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null> {
-    return this.risks.get(this.key(id, scope)) ?? this.risks.get(id) ?? null;
+    return this.risks.get(this.key(id, scope)) ?? null;
   }
   async saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void> {
     this.risks.set(this.key(risk.id, scope), risk);
@@ -259,7 +264,7 @@ export class MemoryStore implements StoreProvider {
     return out;
   }
   async loadScenario(id: string, scope?: StoreScope): Promise<Scenario.Scenario | null> {
-    return this.scenarios.get(this.key(id, scope)) ?? this.scenarios.get(id) ?? null;
+    return this.scenarios.get(this.key(id, scope)) ?? null;
   }
   async saveScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<void> {
     this.scenarios.set(this.key(scenario.id, scope), scenario);

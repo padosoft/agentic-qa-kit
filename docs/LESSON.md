@@ -371,6 +371,13 @@ must be strictly below the captured amount, preserve currency and order
 identity, and return byte-equivalent state on an idempotent retry. The adapter
 contract now proves that boundary independently.
 
+# 2026-09-17 — legacy compatibility must not outrank tenant isolation
+
+Fallback reads are convenient during migrations but unsafe at an API boundary:
+a missing namespace can look like a valid record and cross a tenant boundary.
+Scoped stores must return only namespaced records. Legacy data should be
+handled by an explicit migration/import path, never by a transparent fallback.
+
 # 2026-09-17 — a durable queue without a durable store is still volatile
 
 Selecting PostgreSQL for worker leases while the admin keeps runs and
