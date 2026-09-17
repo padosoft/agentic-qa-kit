@@ -386,9 +386,10 @@ describe('aqa run', () => {
       .filter(Boolean);
     assert.equal(findingsLines.length, 0);
     const finished = events.find((e) => e.kind === 'run_finished') as {
-      payload?: { replay_artifacts?: number };
+      payload?: { replay_artifacts?: number; run_state?: string };
     };
     assert.equal(finished.payload?.replay_artifacts, 0);
+    assert.equal(finished.payload?.run_state, 'failed');
   });
 
   it('exports audit event spans to a configured OTLP endpoint and drains before return', async () => {

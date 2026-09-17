@@ -53,7 +53,7 @@ import {
   makeHttpProbeRunner,
   runScenario,
 } from '@aqa/runner';
-import { type Event, Profile, Project, RiskMap, Scenario } from '@aqa/schemas';
+import { type Event, Profile, Project, RiskMap, Run, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
 
@@ -756,6 +756,34 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // so a write failure at finalization still returns a structured result
   // (with the finalization error appended) rather than throwing past the
   // structured RunResult.
+  const completionPayload = {
+    scenarios_run: scenariosRun,
+    scenario_outcomes: scenarioOutcomes,
+    findings: findings.snapshot().length,
+    pack_errors: packErrors.length,
+    scenario_errors: scenarioErrors.length,
+    missing_scenarios: missingScenarios.length,
+    unsafe_paths: unsafeScenarioPaths.length,
+    runtime_errors: runtimeErrors.length,
+    execution_errors: executionErrors.length,
+    budget_exceeded: budgetExceeded,
+    budget_minutes: profile.budget_minutes ?? null,
+    replay_artifacts: replayArtifacts.length,
+    replay_errors: replayErrors.length,
+    release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
+    pack_error_samples: cap(packErrors),
+    scenario_error_samples: cap(scenarioErrors),
+    missing_scenario_samples: cap(missingScenarios),
+    unsafe_path_samples: cap(unsafeScenarioPaths),
+    runtime_error_samples: cap(runtimeErrors),
+    execution_error_samples: cap(executionErrors),
+    replay_artifact_samples: cap(replayArtifacts),
+    replay_error_samples: cap(replayErrors),
+  };
+  const completionState = Run.deriveStateFromCompletion(
+    { payload: completionPayload },
+    scenariosRun,
+  );
   let finalizationError: string | undefined;
   try {
     events.append({
@@ -763,33 +791,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       run_id: runId,
       kind: 'run_finished',
       actor: { type: 'orchestrator', id: 'aqa-cli' },
-      payload: {
-        scenarios_run: scenariosRun,
-        scenario_outcomes: scenarioOutcomes,
-        findings: findings.snapshot().length,
-        pack_errors: packErrors.length,
-        scenario_errors: scenarioErrors.length,
-        missing_scenarios: missingScenarios.length,
-        unsafe_paths: unsafeScenarioPaths.length,
-        runtime_errors: runtimeErrors.length,
-        execution_errors: executionErrors.length,
-        budget_exceeded: budgetExceeded,
-        budget_minutes: profile.budget_minutes ?? null,
-        replay_artifacts: replayArtifacts.length,
-        replay_errors: replayErrors.length,
-        release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
-        // Capped detail samples — let auditors diagnose the run from the
-        // audit trail alone, without having to re-execute it. Bounded so
-        // a runaway pack tree can't blow up the JSONL line size.
-        pack_error_samples: cap(packErrors),
-        scenario_error_samples: cap(scenarioErrors),
-        missing_scenario_samples: cap(missingScenarios),
-        unsafe_path_samples: cap(unsafeScenarioPaths),
-        runtime_error_samples: cap(runtimeErrors),
-        execution_error_samples: cap(executionErrors),
-        replay_artifact_samples: cap(replayArtifacts),
-        replay_error_samples: cap(replayErrors),
-      },
+      payload: { ...completionPayload, run_state: completionState },
     });
   } catch (e) {
     finalizationError = `cannot finalize run audit: ${e instanceof Error ? e.message : String(e)}`;

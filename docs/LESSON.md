@@ -44,6 +44,11 @@
   an uncooperative custom driver. Hard process termination requires the
   sandbox/OCI boundary and an independent integration test.
 
+- **Persist outcome before projecting it.** A report or UI that re-derives run
+  state from partial counters can disagree with the orchestrator policy. Store
+  the terminal state in the hash-chained completion event, use it for new
+  projections, and retain a clearly scoped fallback only for legacy events.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

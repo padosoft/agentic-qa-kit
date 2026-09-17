@@ -94,6 +94,15 @@ export function deriveStateFromCompletion(completion: unknown, scenariosRun: num
     candidate.payload && typeof candidate.payload === 'object'
       ? (candidate.payload as Record<string, unknown>)
       : candidate;
+  const explicitState = payload.run_state;
+  if (
+    explicitState === 'succeeded' ||
+    explicitState === 'failed' ||
+    explicitState === 'aborted' ||
+    explicitState === 'budget_exceeded'
+  ) {
+    return explicitState;
+  }
   const errorKeys = [
     'pack_errors',
     'scenario_errors',

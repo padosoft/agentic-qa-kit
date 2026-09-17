@@ -102,6 +102,13 @@ describe('Run completion state derivation', () => {
   it('treats a clean non-empty completion as succeeded', () => {
     assert.equal(Run.deriveStateFromCompletion({}, 2), 'succeeded');
   });
+
+  it('trusts the hash-protected explicit terminal state for new completions', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { run_state: 'aborted', scenarios_run: 2 } }, 2),
+      'aborted',
+    );
+  });
 });
 
 describe('valid fixtures', () => {

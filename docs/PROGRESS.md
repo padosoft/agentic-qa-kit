@@ -68,6 +68,13 @@
   scenario. A regression proves the remaining step is skipped and cleanup is
   still attempted.
 
+- **Persisted a canonical run terminal state.** `run_finished.payload.run_state`
+  now records the hash-protected terminal state at finalization. The shared
+  schema derivation prefers this explicit state for new events and retains the
+  counter-based fallback for legacy runs, so report/admin/other consumers share
+  one authoritative state instead of independently guessing it. A CLI negative
+  journey asserts a missing driver persists `run_state=failed` (ADR-151).
+
 - **Bounded cooperative probe execution.** Every probe now receives a derived
   abort signal with its declared `timeout_ms`; the runner converts a timeout or
   caller cancellation into an execution failure even if a cooperative driver
