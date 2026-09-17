@@ -258,7 +258,7 @@ jobs:
           test -s /tmp/aqa-production.yaml
           grep -q 'PersistentVolumeClaim' /tmp/aqa-production.yaml
           test "$(grep -c 'name: AQA_STORE_DSN' /tmp/aqa-production.yaml)" -eq 1
-          test "$(grep -c 'name: AQA_QUEUE_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_QUEUE_DSN' /tmp/aqa-production.yaml)" -eq 2
           test "$(grep -c 'name: AQA_OIDC_SESSION_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_TOKEN_DSN' /tmp/aqa-production.yaml)" -eq 1
