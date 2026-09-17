@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseJunit, parseK6Summary, parseSast } from '../dist/index.js';
+import { parseJunit, parseK6Summary, parseLocustSummary, parseSast } from '../dist/index.js';
 
 describe('JUnit ingestion', () => {
   it('normalizes pass, failure, error and skipped cases', () => {
@@ -83,6 +83,36 @@ describe('k6 ingestion', () => {
     assert.throws(
       () => parseK6Summary({ metrics: { checks: { values: { rate: '0.9' } } } }),
       /numeric metrics/,
+    );
+  });
+});
+
+describe('Locust ingestion', () => {
+  it('normalizes request statistics, p95 and failures', () => {
+    const report = parseLocustSummary({
+      stats: [
+        {
+          method: 'GET',
+          name: '/checkout',
+          num_requests: 100,
+          num_failures: 3,
+          response_time_percentiles: { '0.95': 245.5 },
+        },
+      ],
+      errors: ['one worker disconnected'],
+    });
+    assert.equal(report.framework, 'locust');
+    assert.equal(report.records[0]?.name, 'GET /checkout');
+    assert.equal(report.records[0]?.duration_ms, 245.5);
+    assert.equal(report.records[0]?.status, 'failed');
+    assert.deepEqual(report.warnings, ['one worker disconnected']);
+  });
+
+  it('fails closed on malformed Locust stats', () => {
+    assert.throws(() => parseLocustSummary({ stats: [] }), /no stats/);
+    assert.throws(
+      () => parseLocustSummary({ stats: [{ name: '/health', num_requests: -1, num_failures: 0 }] }),
+      /num_requests/,
     );
   });
 });

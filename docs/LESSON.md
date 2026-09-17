@@ -640,6 +640,13 @@ test to a process exit code. If thresholds are absent, keep the metric visible
 without inventing a pass criterion; execution, threshold policy and functional
 oracles must remain separate.
 
+# 2026-09-17 — load-tool adapters should share outcome semantics
+
+k6 and Locust expose different summary shapes, but AQA should normalize both to
+the same fingerprinted records while preserving tool-specific measurements and
+warnings. Do not hide worker loss or failure counts behind a single process
+status, and do not invent SLO thresholds during ingestion.
+
 # 2026-09-17 — SAML support needs a crypto adapter boundary
 
 Do not implement XML signature verification with ad-hoc regexes. Let a maintained

@@ -10,10 +10,10 @@ Performance tools already execute outside AQA. Treating a load-test command’s 
 
 ## Decision
 
-`@aqa/ingest` accepts the bounded k6 JSON summary shape and normalizes numeric metrics into the existing fingerprinted `IngestReport`. `http_req_duration` preserves `p(95)` as `duration_ms`; non-zero `http_req_failed` and check rates below one become failed records. Malformed or entirely non-numeric summaries fail closed.
+`@aqa/ingest` accepts bounded k6 and Locust JSON summary shapes and normalizes numeric metrics into the existing fingerprinted `IngestReport`. k6 `http_req_duration` preserves `p(95)` as `duration_ms`; non-zero `http_req_failed` and check rates below one become failed records. Locust request stats preserve p95 and mark non-zero failures explicitly. Malformed or empty summaries fail closed.
 
-The adapter does not run k6, infer thresholds that were not present in the summary, or treat a load-test result as proof of functional correctness. Threshold policy and Locust mapping remain separate integrations.
+The adapters do not run load tools, infer thresholds that were not present in the summary, or treat a load-test result as proof of functional correctness. Threshold policy remains a separate integration.
 
 ## Evidence
 
-Ingest typecheck, 6/6 tests, repository lint and diff check pass.
+Ingest typecheck, 8/8 tests, repository lint and diff check pass.

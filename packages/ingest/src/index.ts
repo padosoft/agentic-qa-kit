@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 
-export type IngestFramework = 'junit' | 'sast' | 'k6';
+export type IngestFramework = 'junit' | 'sast' | 'k6' | 'locust';
 export type IngestStatus = 'passed' | 'failed' | 'error' | 'skipped';
 
 export interface IngestRecord {
@@ -252,4 +252,68 @@ export function parseK6Summary(value: unknown, source = 'k6-summary.json'): Inge
     records,
     warnings: [],
   };
+}
+
+/** Normalize the JSON statistics export produced by Locust's web UI/API. */
+export function parseLocustSummary(value: unknown, source = 'locust-summary.json'): IngestReport {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('Locust summary must be an object');
+  const root = value as Record<string, unknown>;
+  if (!Array.isArray(root.stats)) throw new Error('Locust summary must contain a stats array');
+  const records: IngestRecord[] = [];
+  for (const [index, raw] of root.stats.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      throw new Error(`Locust stat ${index} must be an object`);
+    const stat = raw as Record<string, unknown>;
+    const name = recordValue(stat.name, 'name');
+    const method = typeof stat.method === 'string' ? stat.method : '';
+    const failures = numericValue(stat.num_failures, 'num_failures', index);
+    const requests = numericValue(stat.num_requests, 'num_requests', index);
+    const percentiles =
+      stat.response_time_percentiles &&
+      typeof stat.response_time_percentiles === 'object' &&
+      !Array.isArray(stat.response_time_percentiles)
+        ? (stat.response_time_percentiles as Record<string, unknown>)
+        : {};
+    const p95 = firstNumeric(percentiles, ['0.95', '95', '0.950']);
+    const status: IngestStatus = failures > 0 ? 'failed' : 'passed';
+    const externalId = `${method ? `${method} ` : ''}${name}`;
+    const detail = `requests=${requests}, failures=${failures}${p95 === undefined ? '' : `, p95=${p95}`}`;
+    records.push({
+      id: `locust-${records.length + 1}`,
+      framework: 'locust',
+      external_id: externalId,
+      name: externalId,
+      status,
+      ...(p95 === undefined ? {} : { duration_ms: Number(p95.toFixed(3)) }),
+      message: detail,
+      fingerprint: fingerprint(['locust', externalId, detail, status]),
+    });
+  }
+  if (records.length === 0) throw new Error('Locust summary contains no stats');
+  const warnings = Array.isArray(root.errors)
+    ? root.errors.filter((error): error is string => typeof error === 'string').slice(0, 100)
+    : [];
+  return {
+    schema_version: '1',
+    framework: 'locust',
+    source,
+    ingested_at: new Date().toISOString(),
+    records,
+    warnings,
+  };
+}
+
+function numericValue(value: unknown, field: string, index: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    throw new Error(`Locust stat ${index} ${field} must be a non-negative number`);
+  return value;
+}
+
+function firstNumeric(values: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = values[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  }
+  return undefined;
 }

@@ -433,6 +433,11 @@
 - Added bounded ingestion for k6 JSON summaries. p95 latency is preserved as duration evidence; request-error and check rates become explicit failed records, with stable fingerprints and fail-closed malformed-input handling.
 - Evidence: ingest typecheck and 6/6 tests; repository Biome check and diff check pass. Threshold-policy evaluation, Locust ingestion and live performance execution remain open.
 
+# 2026-09-17 — Locust performance summary ingestion
+
+- Extended the performance ingestion boundary with Locust JSON statistics: request method/name, p95 latency, request/failure counts, stable fingerprints and bounded worker-error warnings. Non-negative numeric validation fails closed.
+- Evidence: ingest typecheck and 8/8 tests; repository Biome check and diff check pass. Threshold-policy evaluation and live performance execution remain open.
+
 # 2026-09-17 — SAML assertion validation boundary
 
 - Added a provider-neutral SAML login boundary. An injected maintained XML signature/parser adapter feeds exact issuer/audience, required identity, time-window, atomic replay-claim and least-privilege role validation; no hand-written XML crypto is shipped.
