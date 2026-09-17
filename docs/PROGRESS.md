@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Hardened enterprise pack supply-chain enforcement.** The scanner now has an
+  explicit `requireSignature` policy; the admin/server import boundary enables
+  it by default, rejects unsigned manifests before persistence, and preserves
+  an explicit opt-out only for local/dev callers. Scanner, API and admin tests
+  cover the policy. Next: continue the operational evidence layer (real trust
+  root rotation, KMS/WORM/PITR and external security validation).
+
 - **Closed the custom pack-resource gap.** `aqa run` now loads and validates
   every manifest-listed declarative probe/oracle definition before execution,
   rejects missing/duplicate/escaping/symlinked resources, and expands explicit

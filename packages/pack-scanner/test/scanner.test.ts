@@ -42,6 +42,16 @@ describe('scanPack', () => {
     assert.equal(r.ok, false);
   });
 
+  it('enforces signatures when the enterprise policy is enabled', () => {
+    const r = scanPack(BASE, { requireSignature: true });
+    assert.ok(r.issues.some((i) => i.rule === 'unsigned-pack'));
+    assert.equal(r.ok, false);
+    const signed = { ...BASE, signing: { sha256: manifestDigest(BASE) } };
+    assert.ok(
+      !scanPack(signed, { requireSignature: true }).issues.some((i) => i.rule === 'unsigned-pack'),
+    );
+  });
+
   it('flags always-on + shell as high-severity', () => {
     const r = scanPack({ ...BASE, probes: ['probes/shell.yaml'], applies_when: {} });
     assert.ok(r.issues.some((i) => i.rule === 'always-on-shell-pack'));
