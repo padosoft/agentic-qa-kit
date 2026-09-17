@@ -578,6 +578,25 @@ export type ShippingJourneyOptions = CheckoutJourneyOptions & {
   destination: ShippingAddress;
 };
 
+export type CommerceJourneySuiteOptions = {
+  checkout: CheckoutJourneyOptions;
+  refund: RefundJourneyOptions;
+  tax?: TaxJourneyOptions;
+  shipping?: ShippingJourneyOptions;
+  webhook?: CheckoutJourneyOptions;
+};
+
+export type CommerceJourneyResult = {
+  outcome: JourneyOutcome;
+  evidence: readonly CommerceJourneyEvidence[];
+};
+
+export type CommerceJourneySuiteResult = {
+  outcome: JourneyOutcome;
+  journeys: Readonly<Record<string, CommerceJourneyResult>>;
+  evidence: readonly CommerceJourneyEvidence[];
+};
+
 /** Verifies a signed, delivered webhook is linked to the exact checkout order. */
 export async function verifyWebhookJourney(
   adapter: CommerceAdapter,
@@ -875,6 +894,51 @@ export async function verifyRefundJourney(
       evidence,
     };
   }
+}
+
+/**
+ * Runs the provider-neutral commerce assurance suite as one explicit gate.
+ * Required checkout and refund journeys are always executed; optional tax,
+ * shipping and webhook journeys are included only when requested. Unsupported
+ * capabilities remain visible and cannot be converted into a passing suite.
+ */
+export async function verifyCommerceJourneySuite(
+  adapter: CommerceAdapter,
+  opts: CommerceJourneySuiteOptions,
+): Promise<CommerceJourneySuiteResult> {
+  const journeys: Record<string, CommerceJourneyResult> = {};
+  journeys.checkout = await verifyCheckoutJourney(adapter, opts.checkout);
+  journeys.refund = await verifyRefundJourney(adapter, opts.refund);
+  if (opts.tax) journeys.tax = await verifyTaxJourney(adapter, opts.tax);
+  if (opts.shipping) journeys.shipping = await verifyShippingJourney(adapter, opts.shipping);
+  if (opts.webhook) journeys.webhook = await verifyWebhookJourney(adapter, opts.webhook);
+
+  const evidence = Object.entries(journeys).flatMap(([name, result]) =>
+    result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
+  );
+  const outcomes = Object.values(journeys).map((result) => result.outcome);
+  const failed = outcomes.find(
+    (outcome) => outcome.status === 'error' || outcome.status === 'fail',
+  );
+  const unsupported = outcomes.find((outcome) => outcome.status === 'unsupported');
+  const status = failed ? failed.status : unsupported ? 'unsupported' : 'pass';
+  const evidenceComplete = outcomes.every(
+    (outcome) => outcome.status === 'pass' && outcome.evidence_complete,
+  );
+  const reason = failed
+    ? `commerce journey failed: ${failed.reason}`
+    : unsupported
+      ? `commerce journey unsupported: ${unsupported.reason}`
+      : 'commerce journey suite passed';
+  return {
+    outcome: {
+      status,
+      evidence_complete: evidenceComplete,
+      reason,
+    },
+    journeys,
+    evidence,
+  };
 }
 
 export type ReferenceProduct = {

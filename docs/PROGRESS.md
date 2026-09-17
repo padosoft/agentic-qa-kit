@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added the provider-neutral commerce journey suite gate.**
+  `verifyCommerceJourneySuite()` now executes required checkout/refund flows
+  and optional tax/shipping/webhook flows, prefixes their evidence, and keeps
+  `unsupported` distinct from `pass`. The reference contract now proves the
+  aggregate gate with **30 commerce tests passed / 0 failed**. Real payment,
+  tax, shipping, fulfillment and dispute providers remain external journey
+  evidence.
+
 - **Closed the coverage evidence integrity gap.** `aqa risk coverage` now
   verifies each persisted `events.jsonl` hash chain before accepting
   `scenario_finished` observations. Tampered but schema-valid events fail
