@@ -1,0 +1,68 @@
+{{- if .Values.runner.reaper.enabled }}
+{{- if and (not .Values.postgres.subchart.enabled) (not .Values.postgres.urlSecretRef) (not .Values.postgres.url) (not .Values.runner.reaper.queueDsnSecretRef) }}
+{{- fail "runner.reaper.enabled requires postgres.subchart.enabled, postgres.url, postgres.urlSecretRef or runner.reaper.queueDsnSecretRef" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-runner-reaper
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner-reaper
+spec:
+  schedule: {{ .Values.runner.reaper.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "aqa.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: runner-reaper
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: runner-reaper
+              {{- if and .Values.server.image.requireDigest (not .Values.server.image.digest) }}
+              {{- fail "server.image.digest is required when server.image.requireDigest is true" }}
+              {{- end }}
+              image: "{{ .Values.server.image.repository }}{{ if .Values.server.image.digest }}@{{ .Values.server.image.digest }}{{ else }}:{{ .Values.server.image.tag }}{{ end }}"
+              imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+              command:
+                {{- toYaml .Values.runner.reaper.command | nindent 16 }}
+              env:
+                - name: AQA_RUNNER_QUEUE_DSN
+                  {{- if .Values.runner.reaper.queueDsnSecretRef }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.runner.reaper.queueDsnSecretRef }}
+                      key: {{ .Values.runner.reaper.queueDsnSecretKey }}
+                  {{- else if .Values.postgres.subchart.enabled }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Release.Name }}-postgres
+                      key: {{ .Values.runner.reaper.queueDsnSecretKey }}
+                  {{- else if .Values.postgres.urlSecretRef }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.urlSecretRef }}
+                      key: {{ .Values.runner.reaper.queueDsnSecretKey }}
+                  {{- else }}
+                  value: {{ .Values.postgres.url | quote }}
+                  {{- end }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                {{- toYaml .Values.server.resources | nindent 16 }}
+{{- end }}

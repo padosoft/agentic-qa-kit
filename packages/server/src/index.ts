@@ -23,6 +23,7 @@ export {
   type EnqueuedJob,
   type RunnerJob,
   type RunnerQueueLike,
+  type QueueReapResult,
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
 export { PostgresApiIdempotencyStore } from './postgres-api-idempotency.js';
@@ -33,6 +34,7 @@ export {
   type WorkerRunResult,
 } from './worker.js';
 export { runBudgetReaper } from './budget-reaper-cli.js';
+export { runRunnerReaper } from './runner-reaper-cli.js';
 export {
   MemoryEventBus,
   PostgresEventBus,

@@ -6,7 +6,10 @@
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "aqa-budget-reaper": "./dist/budget-reaper-cli.js" },
+  "bin": {
+    "aqa-budget-reaper": "./dist/budget-reaper-cli.js",
+    "aqa-runner-reaper": "./dist/runner-reaper-cli.js"
+  },
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "files": ["dist", "README.md"],
   "scripts": {

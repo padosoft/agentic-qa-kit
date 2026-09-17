@@ -35,6 +35,11 @@ export interface EnqueuedJob extends RunnerJob {
   lease_token?: string | undefined;
 }
 
+export interface QueueReapResult {
+  requeued: number;
+  failed: number;
+}
+
 export interface RunnerQueueLike {
   enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
   dequeue(
@@ -46,6 +51,8 @@ export interface RunnerQueueLike {
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
   ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
   fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
+  /** Reclaim expired leases without requiring a worker dequeue. */
+  reapExpired(now?: Date): QueueReapResult | Promise<QueueReapResult>;
   cancel(
     id: string,
     reason: string,
@@ -228,6 +235,26 @@ export class RunnerQueue {
     job.leased_until = undefined;
     job.lease_token = undefined;
     return true;
+  }
+
+  reapExpired(now = new Date()): QueueReapResult {
+    let requeued = 0;
+    let failed = 0;
+    for (const job of this.jobs) {
+      if (job.status !== 'in_flight' || !job.leased_until || new Date(job.leased_until) >= now)
+        continue;
+      job.leased_until = undefined;
+      job.lease_token = undefined;
+      if (job.attempts >= job.max_attempts) {
+        job.status = 'failed';
+        job.failure_reason = 'lease expired after maximum attempts';
+        failed += 1;
+      } else {
+        job.status = 'queued';
+        requeued += 1;
+      }
+    }
+    return { requeued, failed };
   }
 
   cancel(id: string, reason: string, scope?: { org: string; project: string }): boolean {

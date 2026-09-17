@@ -70,6 +70,27 @@ describe('RunnerQueue', () => {
     assert.equal(next?.status, 'in_flight');
   });
 
+  it('explicitly reaps expired leases while no worker is dequeuing', () => {
+    const q = new RunnerQueue({ lease_ms: 100, max_attempts: 2 });
+    q.enqueue({ ...JOB, id: 'reap-failed' });
+    q.dequeue(new Date('2026-05-17T10:00:00Z'));
+    assert.deepEqual(q.reapExpired(new Date('2026-05-17T10:00:00.200Z')), {
+      requeued: 1,
+      failed: 0,
+    });
+    q.dequeue(new Date('2026-05-17T10:00:00.200Z'));
+    assert.deepEqual(q.reapExpired(new Date('2026-05-17T10:00:00.400Z')), {
+      requeued: 0,
+      failed: 1,
+    });
+    q.enqueue({ ...JOB, id: 'reap-queued' });
+    q.dequeue(new Date('2026-05-17T10:00:00.400Z'));
+    const result = q.reapExpired(new Date('2026-05-17T10:00:00.600Z'));
+    assert.deepEqual(result, { requeued: 1, failed: 0 });
+    assert.equal(q.snapshot().find((job) => job.id === 'reap-queued')?.status, 'queued');
+    assert.equal(q.snapshot().find((job) => job.id === 'reap-failed')?.status, 'failed');
+  });
+
   it('ack returns false for unknown / not-in-flight ids', () => {
     const q = new RunnerQueue();
     assert.equal(q.ack('missing'), false);

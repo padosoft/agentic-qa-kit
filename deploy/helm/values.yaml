@@ -41,6 +41,13 @@ runner:
     queueDsnSecretRef: ""
     queueDsnSecretKey: url
     command: ["aqa", "worker"]
+  reaper:
+    # Reclaims expired worker leases even while the worker fleet is stopped.
+    enabled: false
+    schedule: "*/1 * * * *"
+    queueDsnSecretRef: ""
+    queueDsnSecretKey: url
+    command: ["aqa-runner-reaper"]
   image:
     repository: ghcr.io/padosoft/agentic-qa-kit-runner
     tag: "1.1.0"

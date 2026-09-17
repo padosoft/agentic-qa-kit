@@ -8,6 +8,29 @@ import {
 } from '../dist/index.js';
 
 describe('PostgresRunnerQueue', () => {
+  it('reaps expired leases atomically when the worker fleet is unavailable', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const queue = new PostgresRunnerQueue(dsn, { lease_ms: 100, max_attempts: 1 });
+    const id = `queue-reap-${randomUUID()}`;
+    try {
+      await queue.enqueue({
+        id,
+        payload: { project: 'reap' },
+        enqueued_at: new Date().toISOString(),
+      });
+      await queue.dequeue(new Date('2026-05-17T10:00:00Z'));
+      const result = await queue.reapExpired(new Date('2026-05-17T10:00:00.200Z'));
+      assert.deepEqual(result, { requeued: 0, failed: 1 });
+      assert.equal((await queue.get(id))?.status, 'failed');
+    } finally {
+      await queue.close();
+    }
+  });
+
   it('survives reconnect and fences stale acknowledgements', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {

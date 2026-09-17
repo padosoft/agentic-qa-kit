@@ -265,6 +265,7 @@ jobs:
             --set postgres.urlSecretRef=aqa-db \
             --set runner.worker.enabled=true \
             --set-string 'runner.worker.scopes[0]=padosoft/*' \
+            --set runner.reaper.enabled=true \
             --set cost.reaper.enabled=true \
             --set cost.reaper.ledgerDsnSecretRef=aqa-db \
             > /tmp/aqa-production.yaml
@@ -280,6 +281,8 @@ jobs:
           test "$(grep -c 'name: AQA_SCIM_RATE_LIMIT_DSN' /tmp/aqa-production.yaml)" -eq 1
           grep -q 'kind: CronJob' /tmp/aqa-production.yaml
           grep -q 'name: AQA_BUDGET_LEDGER_DSN' /tmp/aqa-production.yaml
+          grep -q 'name: AQA_RUNNER_QUEUE_DSN' /tmp/aqa-production.yaml
+          grep -q 'name: aqa-runner-reaper' /tmp/aqa-production.yaml
           grep -q 'name: AQA_RUNNER_SCOPES' /tmp/aqa-production.yaml
           grep -q 'command:' /tmp/aqa-production.yaml
           ! grep -q 'namespaceSelector: {}' /tmp/aqa-production.yaml

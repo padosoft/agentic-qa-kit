@@ -46,3 +46,8 @@ reported as a pass.
 The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick
 using `AQA_BUDGET_LEDGER_DSN`. It is intended for a Kubernetes CronJob or
 systemd timer; it prints only a bounded count and fails when the DSN is absent.
+
+The `aqa-runner-reaper` binary performs one PostgreSQL queue lease cleanup tick
+using `AQA_RUNNER_QUEUE_DSN`. It requeues expired jobs below their retry limit
+and terminally fails jobs at the limit. It is safe to run concurrently and is
+intended for a CronJob/systemd timer; it never prints the DSN or job payload.

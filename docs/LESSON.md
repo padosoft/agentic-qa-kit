@@ -1492,3 +1492,11 @@ alone cannot expose duplicate earn/redeem events or prevent negative value.
 An accepted cancellation is not proof of money reversal. Preserve requested,
 accepted and rejected states, require decision timing, and link accepted paid
 order cancellations to a compensating refund or provider void.
+
+# 2026-09-17 — worker recovery must not depend on worker availability
+
+Visibility leases are useful only while a worker is polling. A fleet-wide
+outage can leave expired jobs stuck in `in_flight` until a new worker happens to
+dequeue. Keep an explicit, atomic queue reaper as a separately schedulable
+control, and treat requeue as a possible retry: it cannot undo an external
+provider effect. Handlers therefore need idempotency/effect-ledger evidence.

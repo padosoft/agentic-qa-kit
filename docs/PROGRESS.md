@@ -1306,3 +1306,16 @@
   `AQA_TEST_POSTGRES_DSN` contract in CI.
 - Remaining: wire host metrics/log adapters, enforce transport DNS/private-IP
   protections and prove real provider journeys.
+
+# 2026-09-17 — durable runner lease reaper
+
+- Added `RunnerQueueLike.reapExpired()` to reclaim orphaned PostgreSQL leases
+  independently of worker availability. Expired jobs below the retry limit are
+  requeued; jobs at the limit become terminally failed; both paths clear the
+  fencing token and return bounded counts only.
+- Added `aqa-runner-reaper` plus an optional Helm CronJob with Secret-backed DSN,
+  `Forbid` concurrency, non-root and read-only filesystem settings. ADR-152
+  records the retry/idempotency boundary: queue recovery cannot compensate an
+  already-executed external side effect.
+- Evidence pending: local server typecheck/tests and Helm rendering; the live
+  PostgreSQL crash/retry journey requires `AQA_TEST_POSTGRES_DSN`.

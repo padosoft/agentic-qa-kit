@@ -5,6 +5,7 @@ import {
   type EnqueuedJob,
   IdempotencyConflictError,
   type QueueQuota,
+  type QueueReapResult,
   type RunnerJob,
   type RunnerQueueLike,
   type RunnerScope,
@@ -307,6 +308,18 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
       [id, leaseToken, reason.slice(0, 1000)],
     );
     return rows.length === 1;
+  }
+
+  async reapExpired(now = new Date()): Promise<QueueReapResult> {
+    await this.wait();
+    const rows = await this.q<{ status: EnqueuedJob['status'] }>(
+      "UPDATE aqa_runner_jobs SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'queued' END, leased_until = NULL, lease_token = NULL, failure_reason = CASE WHEN attempts >= max_attempts THEN 'lease expired after maximum attempts' ELSE NULL END, updated_at = now() WHERE status = 'in_flight' AND leased_until < $1 RETURNING status",
+      [now.toISOString()],
+    );
+    return {
+      requeued: rows.filter((row) => row.status === 'queued').length,
+      failed: rows.filter((row) => row.status === 'failed').length,
+    };
   }
 
   async cancel(
