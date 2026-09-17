@@ -794,3 +794,6 @@ approved a pack. The detached Ed25519 path signs the canonical unsigned digest,
 looks up the key through an explicit allowlist, and is enforced at import. A
 keyless Sigstore/cosign implementation still needs certificate identity and
 trust-root policy; it must not be implied by a local public-key verifier.
+# 2026-09-17 — MFA verification is not an enrollment lifecycle
+
+TOTP verification alone does not establish a usable MFA product. Enrollment must confirm possession before activation, recovery codes must be stored as non-reversible hashes and consumed atomically, and the secret protector must be an explicit KMS/Vault boundary. A memory store or test protector is evidence for contract behavior only, never production persistence.

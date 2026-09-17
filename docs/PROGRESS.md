@@ -570,3 +570,7 @@
 # 2026-09-17 — post-identity regression gate
 
 - Workspace typecheck, full Bun suite and lint completed after durable SCIM/SAML, OTLP and performance changes: **509 passed, 6 PostgreSQL-dependent skips, 0 failures across 51 files**. `git diff --check` also passes. The six skips are now explicitly named: OIDC session, SCIM token, SAML replay, EventBus, queue idempotency and quota concurrency.
+# 2026-09-17 — MFA enrollment and recovery lifecycle boundary
+
+- Added `MfaLifecycle` with generated TOTP enrollment material, `otpauth` URI, confirmation before activation, protected-secret injection, and one-time recovery-code consumption. Raw TOTP secrets and recovery codes are never persisted by the lifecycle; production must provide a KMS/Vault-backed protector and durable store.
+- Evidence: auth typecheck, lifecycle tests 2/2, repository lint and diff-check pass. PostgreSQL credential persistence, provider-backed secret protection, rate limiting/audit integration and WebAuthn remain open deployment work.
