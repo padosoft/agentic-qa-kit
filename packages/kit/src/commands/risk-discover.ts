@@ -291,7 +291,10 @@ function safeScope(scope: string): string {
 
 function sourceAwareBaseline(root: string, scope: string) {
   const files = collectSourceFiles(root);
-  const evidence = files.map((file) => ({ file, text: readBounded(join(root, file)) }));
+  const reachable = reachableSourceFiles(root, files);
+  const evidence = files
+    .filter((file) => reachable.has(normalizePath(file)))
+    .map((file) => ({ file, text: readBounded(join(root, file)) }));
   return SOURCE_RULES.filter((rule) => {
     const matches = evidence.some(({ file, text }) =>
       rule.markers.some((marker) => marker.test(`${file}\n${text}`)),
@@ -307,11 +310,91 @@ function sourceAwareBaseline(root: string, scope: string) {
       description: `Source-aware signal in scope ${scope}: ${matchedFiles.join(', ')}`,
       tags: [
         'source-aware',
+        'reachability:bounded-import-graph',
         `scope:${slugify(scope)}`,
         ...matchedFiles.map((file) => `evidence:${slugify(file)}`),
       ],
     };
   });
+}
+
+const CODE_FILE = /\.(c|m)?(js|ts|tsx|jsx)$/i;
+const IMPORT_SPECIFIER =
+  /(?:import\s+(?:[^'";]+?\s+from\s+)?|export\s+[^'";]+?\s+from\s+|require\s*\(\s*)['"]([^'"]+)['"]/g;
+
+/**
+ * Return files reachable through bounded relative JS/TS imports.
+ *
+ * This intentionally does not evaluate code or resolve package exports. It is
+ * an evidence filter for the source heuristic, not a substitute for a real
+ * compiler/module graph. Manifests remain visible because dependency
+ * declarations are themselves a relevant boundary.
+ */
+function reachableSourceFiles(root: string, files: ReadonlyArray<string>): Set<string> {
+  const known = new Set(files.map(normalizePath));
+  const codeFiles = files.filter((file) => CODE_FILE.test(file));
+  const imported = new Set<string>();
+  const edges = new Map<string, string[]>();
+
+  for (const file of codeFiles) {
+    const text = readBounded(join(root, file));
+    const targets: string[] = [];
+    for (const match of text.matchAll(IMPORT_SPECIFIER)) {
+      const specifier = match[1];
+      if (!specifier?.startsWith('.')) continue;
+      const target = resolveRelativeModule(file, specifier, known);
+      if (target) {
+        targets.push(target);
+        imported.add(target);
+      }
+    }
+    edges.set(normalizePath(file), targets);
+  }
+
+  const roots = codeFiles.filter((file) => !imported.has(normalizePath(file)));
+  const conventionalEntries = roots.filter((file) =>
+    /(?:^|\/)(?:index|main|app|server|cli|start|bootstrap)\.(?:c|m)?(?:js|ts|tsx|jsx)$/i.test(
+      normalizePath(file),
+    ),
+  );
+  const entries = conventionalEntries.length > 0 ? conventionalEntries : roots;
+  const queue = entries.length > 0 ? entries.map(normalizePath) : codeFiles.map(normalizePath);
+  const reachable = new Set<string>(
+    files.filter((file) => !CODE_FILE.test(file)).map(normalizePath),
+  );
+  while (queue.length > 0 && reachable.size <= 200) {
+    const current = queue.shift();
+    if (!current || reachable.has(current)) continue;
+    reachable.add(current);
+    for (const target of edges.get(current) ?? []) {
+      if (!reachable.has(target)) queue.push(target);
+    }
+  }
+  return reachable;
+}
+
+function resolveRelativeModule(
+  importer: string,
+  specifier: string,
+  known: ReadonlySet<string>,
+): string | null {
+  const base = normalizePath(join(importer, '..', specifier));
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.js`,
+    `${base}.jsx`,
+    `${base}/index.ts`,
+    `${base}/index.tsx`,
+    `${base}/index.js`,
+    `${base}/index.jsx`,
+  ];
+  return candidates.find((candidate) => known.has(normalizePath(candidate))) ?? null;
+}
+
+function normalizePath(value: string): string {
+  return value.replaceAll('\\', '/').replace(/^\.\//, '');
 }
 
 function collectSourceFiles(root: string): string[] {
@@ -380,6 +463,9 @@ export function runRiskDiscover(opts: RiskDiscoverOptions): RiskDiscoverResult {
         ...('tags' in item && Array.isArray(item.tags) ? item.tags : []),
       ],
     }));
+    if (risks.length === 0) {
+      return { ok: true, path: target, risk_count: 0, method: opts.method };
+    }
     const map = RiskMap.RiskMap.parse({
       schema_version: '1',
       project: projectName(opts.root),

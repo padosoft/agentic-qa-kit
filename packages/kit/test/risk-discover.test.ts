@@ -88,6 +88,21 @@ describe('risk discovery', () => {
     assert.ok(map.risks.every((risk) => risk.tags.includes('source-aware')));
     assert.ok(map.risks.every((risk) => risk.description.includes('Source-aware signal')));
     assert.ok(map.risks.some((risk) => risk.tags.some((tag) => tag.startsWith('evidence:'))));
+    assert.ok(map.risks.every((risk) => risk.tags.includes('reachability:bounded-import-graph')));
+  });
+
+  it('does not promote signals found only in an unreachable source file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-risk-reachability-'));
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, 'src', 'app.ts'), 'export const health = true;\n');
+    writeFileSync(
+      join(root, 'src', 'dead.ts'),
+      'import jwt from "jsonwebtoken"; export const unused = jwt;\n',
+    );
+    const result = runRiskDiscover({ root, method: 'source', scope: 'src' });
+    assert.equal(result.ok, true);
+    assert.equal(result.risk_count, 0);
+    assert.equal(existsSync(join(root, '.aqa', 'risk-map.yaml')), false);
   });
 
   it('rejects traversal and symlink targets', () => {

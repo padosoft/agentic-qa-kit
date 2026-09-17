@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added bounded source reachability to risk discovery.** The source method
+  now filters JS/TS signals through a non-executing relative-import graph,
+  preserves dependency manifests, and emits explicit
+  `reachability:bounded-import-graph` evidence. An unreachable-marker
+  regression test prevents dead source files from becoming risks. Aliases,
+  dynamic imports, generated code and non-JS/TS graphs remain intentionally
+  outside this heuristic's proof boundary.
+
 - **Added human-gated AI risk hypotheses.** `@aqa/generator` now exposes
   `proposeRisks` and a separate `RiskReviewQueue`: model candidates are
   DLP-redacted, schema-validated, provenance-hashed and kept pending until a
