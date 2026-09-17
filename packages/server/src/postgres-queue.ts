@@ -34,12 +34,18 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   }
 
   private async migrate(): Promise<void> {
-    await this.q(
-      "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CHECK (status IN ('queued', 'in_flight', 'done')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())",
-    );
-    await this.q(
-      'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_ready_idx ON aqa_runner_jobs (status, enqueued_at, leased_until)',
-    );
+    const lockKey = "hashtext('aqa_runner_jobs_migration')";
+    await this.q(`SELECT pg_advisory_lock(${lockKey})`);
+    try {
+      await this.q(
+        "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CHECK (status IN ('queued', 'in_flight', 'done')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())",
+      );
+      await this.q(
+        'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_ready_idx ON aqa_runner_jobs (status, enqueued_at, leased_until)',
+      );
+    } finally {
+      await this.q(`SELECT pg_advisory_unlock(${lockKey})`);
+    }
   }
 
   private async wait(): Promise<void> {
