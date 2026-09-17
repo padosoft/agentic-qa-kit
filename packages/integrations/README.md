@@ -10,8 +10,9 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - explicit dead-letter queue state after five attempts;
 - injectable transport, so tests never call a real vendor;
 - PostgreSQL queue with atomic `SKIP LOCKED` claims and operator redrive;
-- mandatory HTTPS destination-origin allowlisting for the durable queue.
+- mandatory HTTPS destination-origin allowlisting for the durable queue;
 - redacted audit observer hooks for Prometheus/OTel/log adapters.
+- bounded HTTP transport with timeout, no redirects and `Retry-After` parsing.
 
 ## Setup
 
@@ -32,3 +33,7 @@ IP protections at connection time.
 The optional observer receives only delivery metadata (`attempt`/`outcome`,
 tenant, integration, stable ID, attempt number and HTTP status). It never
 receives the URL, payload, secret or secret reference.
+
+`HttpWebhookTransport` is safe against redirect-based destination changes and
+limits response handling. DNS rebinding and private/link-local IP rejection
+still require a connection-aware transport/runtime policy.

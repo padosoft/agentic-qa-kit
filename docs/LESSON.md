@@ -1414,3 +1414,9 @@ the queue and secret resolver own delivery authentication, retry and audit.
 Webhook observability should expose stable IDs, tenant/integration, attempt,
 status and bounded outcome only. Payloads, URLs and secret references are not
 metrics labels or audit fields; observer failures must never block delivery.
+
+# 2026-09-17 — redirect safety is not DNS safety
+
+Revalidate the allowlist at send time and disable redirects, but do not claim
+SSRF protection from a portable `fetch` wrapper alone. Private-IP rejection and
+DNS pinning belong in a connection-aware egress proxy or runtime connector.

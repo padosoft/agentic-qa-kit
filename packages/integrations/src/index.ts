@@ -18,3 +18,4 @@ export {
   type IntegrationNotification,
   type IntegrationProvider,
 } from './providers.js';
+export { HttpWebhookTransport, type HttpWebhookTransportOptions } from './http-transport.js';

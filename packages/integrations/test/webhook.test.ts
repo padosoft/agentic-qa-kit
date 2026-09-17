@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  HttpWebhookTransport,
   MemoryWebhookQueue,
   PostgresWebhookQueue,
   WebhookDestinationPolicy,
@@ -125,6 +126,33 @@ describe('outbound webhooks', () => {
     assert.throws(
       () => renderIntegrationPayload('slack', { ...notification, title: '' }),
       /required/,
+    );
+  });
+
+  it('uses a bounded, no-redirect HTTP transport and parses retry-after', async () => {
+    const calls: RequestInit[] = [];
+    const transport = new HttpWebhookTransport({
+      destinationPolicy: new WebhookDestinationPolicy(['https://hooks.example.test']),
+      fetcher: async (_url, init) => {
+        calls.push(init);
+        return new Response('queued', { status: 429, headers: { 'retry-after': '2' } });
+      },
+    });
+    assert.deepEqual(
+      await transport.send({ url: 'https://hooks.example.test/hook', body: '{}', headers: {} }),
+      {
+        status: 429,
+        retry_after_ms: 2_000,
+      },
+    );
+    assert.equal(calls[0]?.redirect, 'error');
+    assert.throws(
+      () =>
+        new HttpWebhookTransport({
+          destinationPolicy: new WebhookDestinationPolicy(['https://hooks.example.test']),
+          timeout_ms: 0,
+        }),
+      /timeout_ms/,
     );
   });
 });

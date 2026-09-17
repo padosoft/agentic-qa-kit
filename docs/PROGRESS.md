@@ -1164,6 +1164,17 @@
 - Remaining: secret-manager implementation, audit/metrics observer, transport
   DNS/private-IP enforcement and real provider journeys.
 
+# 2026-09-17 — bounded webhook HTTP transport
+
+- Added `HttpWebhookTransport`: send-time HTTPS allowlist validation, no
+  redirects, bounded timeout, bounded response handling and `Retry-After`
+  parsing. It is injectable and never contacts a vendor in unit tests.
+- Evidence: integrations suite **6 pass**, package typecheck/lint and diff
+  checks pass locally. DNS rebinding/private-IP protection remains explicitly
+  delegated to a connection-aware egress proxy/runtime.
+- Remaining: wire host metrics/log adapters, secret manager and production
+  egress policy, then prove real provider journeys.
+
 # 2026-09-17 — redacted webhook observability
 
 - Added an optional `PostgresWebhookQueue` observer for attempt/outcome
