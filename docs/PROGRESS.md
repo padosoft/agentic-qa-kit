@@ -303,3 +303,9 @@
 - Added `aqa verify <finding-id>` as the first executable fix→verify loop: it locates a persisted finding, resolves the owning scenario from project or installed packs, requires a real `--base-url` or an injected probe runner, replays with bounded attempts, and writes a unique verification evidence artifact beside the run.
 - Deterministic replay returns exit code 0; completed but flaky replay returns exit code 2; missing finding/scenario or missing network boundary fails closed. The command deliberately does not auto-close findings or imply CI/PR/deployment verification.
 - Evidence: `bun run --filter @aqa/runner build`; `bun run --filter @aqa/kit typecheck`; `bun run --filter @aqa/kit test` (113 passed, 2 platform skips); and `git diff --check` all pass. Remaining slice: publish the command and connect verification evidence to durable finding status/audit events.
+
+# 2026-09-17 — risk coverage aggregation slice
+
+- Added `measureRiskCoverage()` to derive the documented coverage score from a validated risk map, scenario risk/invariant links, oracle declarations, and timestamped run observations. It counts recent pass rate, deterministic replay, flaky scenario history, and stale evidence without treating missing artifacts as success.
+- The aggregation is persistence-agnostic so CLI, API, and warehouse adapters can share one deterministic boundary. It currently consumes supplied observations; store/API ingestion and an admin coverage endpoint remain open.
+- Evidence: `bun run --filter @aqa/methodology typecheck`; `bun run --filter @aqa/methodology test` (9/9); `bun run lint`.

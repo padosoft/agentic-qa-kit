@@ -124,6 +124,77 @@ export interface RiskCoverageReport extends RiskCoverageObservation {
   drift_alerts: string[];
 }
 
+export interface CoverageRunObservation {
+  scenario_id: string;
+  executed_at: string;
+  passed: boolean;
+  deterministic_replay?: boolean;
+}
+
+export interface RiskCoverageInput {
+  risk_map: RiskMap.RiskMap;
+  scenarios: ReadonlyArray<{
+    id: string;
+    risk_refs: ReadonlyArray<string>;
+    invariant_refs: ReadonlyArray<string>;
+    oracles: ReadonlyArray<unknown>;
+  }>;
+  runs: ReadonlyArray<CoverageRunObservation>;
+  now?: Date;
+}
+
+/** Derive coverage observations from declarations and run evidence. */
+export function measureRiskCoverage(input: RiskCoverageInput): RiskCoverageReport[] {
+  const now = input.now ?? new Date();
+  const cutoff = now.getTime() - 30 * 86_400_000;
+  return input.risk_map.risks.map((risk) => {
+    const scenarios = input.scenarios.filter((scenario) => scenario.risk_refs.includes(risk.id));
+    const linkedInvariants = new Set(scenarios.flatMap((scenario) => scenario.invariant_refs));
+    const runs = input.runs.filter(
+      (run) =>
+        scenarios.some((scenario) => scenario.id === run.scenario_id) &&
+        Number.isFinite(Date.parse(run.executed_at)),
+    );
+    const recentRuns = runs.filter((run) => Date.parse(run.executed_at) >= cutoff);
+    const byScenario = new Map<string, CoverageRunObservation[]>();
+    for (const run of runs) {
+      const history = byScenario.get(run.scenario_id) ?? [];
+      history.push(run);
+      byScenario.set(run.scenario_id, history);
+    }
+    let flakyCount = 0;
+    let deterministicReplayCount = 0;
+    let lastRunAt: string | undefined;
+    for (const history of byScenario.values()) {
+      if (history.some((run) => run.passed) && history.some((run) => !run.passed)) flakyCount += 1;
+      if (history.some((run) => run.deterministic_replay === true)) deterministicReplayCount += 1;
+      for (const run of history) {
+        if (lastRunAt === undefined || Date.parse(run.executed_at) > Date.parse(lastRunAt))
+          lastRunAt = run.executed_at;
+      }
+    }
+    return riskCoverage(
+      {
+        risk_id: risk.id,
+        invariants_count: risk.invariants.length,
+        invariants_with_scenarios: risk.invariants.filter((invariant) =>
+          linkedInvariants.has(invariant.id),
+        ).length,
+        scenarios_count: scenarios.length,
+        scenarios_with_oracles: scenarios.filter((scenario) => scenario.oracles.length > 0).length,
+        scenarios_with_deterministic_replay: deterministicReplayCount,
+        ...(lastRunAt ? { last_run_at: lastRunAt } : {}),
+        pass_rate_30d:
+          recentRuns.length === 0
+            ? 0
+            : recentRuns.filter((run) => run.passed).length / recentRuns.length,
+        flaky_count: flakyCount,
+      },
+      now,
+    );
+  });
+}
+
 function ratio(numerator: number, denominator: number): number {
   if (denominator === 0) return 0;
   return Math.max(0, Math.min(1, numerator / denominator));

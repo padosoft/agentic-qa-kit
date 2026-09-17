@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fmeaScore, methodologyCheck, owaspOf, riskCoverage, strideOf } from '../dist/index.js';
+import {
+  fmeaScore,
+  measureRiskCoverage,
+  methodologyCheck,
+  owaspOf,
+  riskCoverage,
+  strideOf,
+} from '../dist/index.js';
 
 const RISK_AUTH = {
   id: 'r-auth-x',
@@ -107,5 +114,86 @@ describe('riskCoverage', () => {
       () => riskCoverage({ ...complete, scenarios_with_oracles: 11 }),
       /numerator cannot exceed denominator/i,
     );
+  });
+
+  it('derives coverage from risk links and run evidence', () => {
+    const now = new Date('2026-09-17T12:00:00.000Z');
+    const [report] = measureRiskCoverage({
+      now,
+      risk_map: {
+        schema_version: '1',
+        project: 'shop',
+        risks: [
+          {
+            id: 'risk-checkout',
+            category: 'business_logic',
+            title: 'Checkout integrity',
+            severity: 'high',
+            likelihood: 'likely',
+            invariants: [
+              { id: 'inv-stock', statement: 'stock never goes below zero' },
+              { id: 'inv-price', statement: 'total matches line items' },
+            ],
+            owners: [],
+            tags: [],
+          },
+        ],
+      },
+      scenarios: [
+        {
+          id: 'checkout-stock',
+          risk_refs: ['risk-checkout'],
+          invariant_refs: ['inv-stock'],
+          oracles: [{}],
+        },
+      ],
+      runs: [
+        {
+          scenario_id: 'checkout-stock',
+          executed_at: '2026-09-16T12:00:00.000Z',
+          passed: true,
+          deterministic_replay: true,
+        },
+        {
+          scenario_id: 'checkout-stock',
+          executed_at: '2026-09-15T12:00:00.000Z',
+          passed: false,
+          deterministic_replay: false,
+        },
+      ],
+    });
+    assert.equal(report?.invariants_with_scenarios, 1);
+    assert.equal(report?.scenarios_count, 1);
+    assert.equal(report?.scenarios_with_deterministic_replay, 1);
+    assert.equal(report?.pass_rate_30d, 0.5);
+    assert.equal(report?.flaky_count, 1);
+    assert.equal(report?.status, 'partial');
+    assert.match(report?.drift_alerts.join('\n') ?? '', /invariants/);
+  });
+
+  it('does not count invalid timestamps as run evidence', () => {
+    const [report] = measureRiskCoverage({
+      now: new Date('2026-09-17T12:00:00.000Z'),
+      risk_map: {
+        schema_version: '1',
+        project: 'shop',
+        risks: [
+          {
+            id: 'risk-api',
+            category: 'integration',
+            title: 'API availability',
+            severity: 'medium',
+            likelihood: 'possible',
+            invariants: [],
+            owners: [],
+            tags: [],
+          },
+        ],
+      },
+      scenarios: [],
+      runs: [{ scenario_id: 'missing', executed_at: 'not-a-date', passed: true }],
+    });
+    assert.equal(report?.pass_rate_30d, 0);
+    assert.equal(report?.status, 'stale');
   });
 });

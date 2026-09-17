@@ -10,3 +10,5 @@ auditors and architects expect (Task 21).
   (smell — auditors cannot trace them back to a standard catalog).
 - `riskCoverage(observation)` — computes the documented weighted coverage
   score and returns `covered`, `partial`, `gap` or `stale` plus drift alerts.
+- `measureRiskCoverage(input)` — derives observations from a risk map,
+  scenario links and bounded run history; missing artifacts remain gaps.
