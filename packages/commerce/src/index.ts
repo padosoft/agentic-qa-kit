@@ -208,6 +208,37 @@ export const PromotionSnapshot = z.object({
 });
 export type PromotionSnapshot = z.infer<typeof PromotionSnapshot>;
 
+export const FulfillmentLine = z.object({
+  sku: z.string().min(1),
+  quantity: z.number().int().positive(),
+});
+export type FulfillmentLine = z.infer<typeof FulfillmentLine>;
+
+export const FulfillmentSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  order_id: z.string().min(1),
+  lines: z.array(FulfillmentLine).min(1),
+  status: z.enum(['processing', 'shipped', 'delivered', 'cancelled']),
+  carrier: z.string().min(1).optional(),
+  tracking_number: z.string().min(1).optional(),
+  shipped_at: z.string().datetime({ offset: true }).optional(),
+  delivered_at: z.string().datetime({ offset: true }).optional(),
+});
+export type FulfillmentSnapshot = z.infer<typeof FulfillmentSnapshot>;
+
+export const ReturnRequestSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  order_id: z.string().min(1),
+  lines: z.array(FulfillmentLine).min(1),
+  amount: Money,
+  reason: z.string().min(1),
+  status: z.enum(['requested', 'approved', 'received', 'refunded', 'rejected']),
+  created_at: z.string().datetime({ offset: true }),
+});
+export type ReturnRequestSnapshot = z.infer<typeof ReturnRequestSnapshot>;
+
 /** Tender is money allocation, not an order discount. It must reconcile exactly. */
 export function assertTenderAllocation(
   total: Money,
@@ -237,6 +268,49 @@ export function assertPromotionRedeemable(promotion: PromotionSnapshot, now = ne
     throw new Error('promotion redemption limit reached');
   if (item.expires_at && Date.parse(item.expires_at) <= now.getTime())
     throw new Error('promotion is expired');
+}
+
+/** A fulfillment or RMA line can never exceed the original order quantity. */
+export function assertOrderLineQuantitiesWithinOrder(
+  order: OrderSnapshot,
+  lines: readonly FulfillmentLine[],
+  label = 'lines',
+): void {
+  const orderQuantities = new Map(order.lines.map((line) => [line.sku, line.quantity]));
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const item = FulfillmentLine.parse(line);
+    if (seen.has(item.sku)) throw new Error(`${label} contains duplicate sku: ${item.sku}`);
+    seen.add(item.sku);
+    if ((orderQuantities.get(item.sku) ?? 0) < item.quantity)
+      throw new Error(`${label} exceeds order quantity: ${item.sku}`);
+  }
+}
+
+export function assertFulfillmentIntegrity(
+  order: OrderSnapshot,
+  fulfillment: FulfillmentSnapshot,
+): void {
+  const item = FulfillmentSnapshot.parse(fulfillment);
+  if (item.order_id !== order.id) throw new Error('fulfillment does not belong to order');
+  assertOrderLineQuantitiesWithinOrder(order, item.lines, 'fulfillment lines');
+  if (item.status === 'shipped' || item.status === 'delivered') {
+    if (!item.carrier || !item.tracking_number || !item.shipped_at)
+      throw new Error('shipped fulfillment requires carrier, tracking and shipped_at');
+  }
+  if (item.status === 'delivered' && !item.delivered_at)
+    throw new Error('delivered fulfillment requires delivered_at');
+}
+
+export function assertReturnRequestIntegrity(
+  order: OrderSnapshot,
+  request: ReturnRequestSnapshot,
+): void {
+  const item = ReturnRequestSnapshot.parse(request);
+  if (item.order_id !== order.id) throw new Error('return request does not belong to order');
+  assertOrderLineQuantitiesWithinOrder(order, item.lines, 'return lines');
+  assertSameCurrency(item.amount, order.total);
+  if (BigInt(item.amount.amount_minor) <= 0n) throw new Error('return amount must be positive');
 }
 
 /**

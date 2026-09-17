@@ -14,9 +14,11 @@ import {
   Money,
   PostgresWebhookEffectLedger,
   applyWebhookEffectOnce,
+  assertFulfillmentIntegrity,
   assertNoOversell,
   assertOrderIntegrity,
   assertPromotionRedeemable,
+  assertReturnRequestIntegrity,
   assertSameCurrency,
   assertTenderAllocation,
   verifyCheckoutJourney,
@@ -675,5 +677,62 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(result.outcome.status, 'pass');
     assert.equal(result.outcome.evidence_complete, true);
     assert.equal(result.evidence.length, 2);
+  });
+
+  it('enforces fulfillment and return quantities against the original order', () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'rma-sku',
+      price: { currency: 'EUR', amount_minor: '1200' },
+      on_hand: 2,
+    });
+    const identity = { tenant: 'shop-a', customer_id: 'rma-customer' };
+    const cart = merchant.createCart(identity);
+    merchant.addLine(identity, cart.id, 'rma-sku', 2);
+    const { order } = merchant.checkout(identity, cart.id, 'rma-checkout');
+    const delivered = {
+      schema_version: '1' as const,
+      id: 'fulfillment-1',
+      order_id: order.id,
+      lines: [{ sku: 'rma-sku', quantity: 1 }],
+      status: 'delivered' as const,
+      carrier: 'carrier',
+      tracking_number: 'track-1',
+      shipped_at: '2026-09-17T10:00:00Z',
+      delivered_at: '2026-09-17T12:00:00Z',
+    };
+    assertFulfillmentIntegrity(order, delivered);
+    assert.throws(
+      () =>
+        assertFulfillmentIntegrity(order, {
+          ...delivered,
+          lines: [{ sku: 'rma-sku', quantity: 3 }],
+        }),
+      /exceeds order quantity/,
+    );
+    assertReturnRequestIntegrity(order, {
+      schema_version: '1',
+      id: 'return-1',
+      order_id: order.id,
+      lines: [{ sku: 'rma-sku', quantity: 1 }],
+      amount: { currency: 'EUR', amount_minor: '1200' },
+      reason: 'damaged',
+      status: 'requested',
+      created_at: '2026-09-17T13:00:00Z',
+    });
+    assert.throws(
+      () =>
+        assertReturnRequestIntegrity(order, {
+          schema_version: '1',
+          id: 'return-2',
+          order_id: order.id,
+          lines: [{ sku: 'rma-sku', quantity: 1 }],
+          amount: { currency: 'USD', amount_minor: '1200' },
+          reason: 'wrong currency',
+          status: 'requested',
+          created_at: '2026-09-17T13:00:00Z',
+        }),
+      /currency/,
+    );
   });
 });

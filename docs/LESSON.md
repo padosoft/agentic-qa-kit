@@ -1420,3 +1420,9 @@ metrics labels or audit fields; observer failures must never block delivery.
 Revalidate the allowlist at send time and disable redirects, but do not claim
 SSRF protection from a portable `fetch` wrapper alone. Private-IP rejection and
 DNS pinning belong in a connection-aware egress proxy or runtime connector.
+
+# 2026-09-17 — order lifecycle needs separate fulfillment evidence
+
+Payment success is not shipment success. Keep fulfillment and RMA snapshots
+separate from order/payment state, enforce quantities against the original
+order, and require tracking/timestamps before claiming shipped or delivered.

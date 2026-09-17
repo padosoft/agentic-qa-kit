@@ -1175,6 +1175,18 @@
 - Remaining: wire host metrics/log adapters, secret manager and production
   egress policy, then prove real provider journeys.
 
+# 2026-09-17 — ecommerce fulfillment and RMA contracts
+
+- Closed the documented ADR-020 ecommerce gap by adding versioned
+  `FulfillmentSnapshot` and `ReturnRequestSnapshot` contracts plus shared
+  invariants for order quantity, duplicate SKU, currency, tracking and
+  shipped/delivered evidence.
+- Evidence: `@aqa/commerce` suite **24 passed / 0 failed**, typecheck, lint and
+  diff checks pass locally. This proves the domain contract only; real WMS,
+  carrier, RMA approval and settlement journeys remain adapter evidence.
+- Next ecommerce gaps: subscriptions, cancellations/chargebacks, loyalty and
+  provider-backed fulfillment journeys, if required by the target merchant.
+
 # 2026-09-17 — redacted webhook observability
 
 - Added an optional `PostgresWebhookQueue` observer for attempt/outcome
