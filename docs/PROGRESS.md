@@ -158,3 +158,4 @@
 - Added canary tests for bearer/JWT/AWS/PAN/email redaction, JSON key redaction, binary byte preservation, deletion and traversal resistance; added ADR-013.
 - Evidence: `bun run --filter @aqa/artifacts test` (3 passed), typecheck and build passed.
 - Honest gap: existing runner/reporter/server paths still write directly to `.aqa/runs`; wiring them to this contract plus S3/MinIO/WORM/tenant authorization is the next acceptance slice.
+- Wired `aqa run` replay generation through `FileArtifactStore`; the real run journey now produces replay files plus content metadata sidecars through the redaction-aware boundary. The event/finding writers and `aqa report` remain direct-file paths and are intentionally the next migration surface.

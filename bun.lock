@@ -43,6 +43,10 @@
         "@aqa/schemas": "workspace:*",
       },
     },
+    "packages/artifacts": {
+      "name": "@aqa/artifacts",
+      "version": "0.0.1",
+    },
     "packages/auth": {
       "name": "@aqa/auth",
       "version": "0.0.1",
@@ -97,6 +101,7 @@
       },
       "dependencies": {
         "@aqa/adapters": "workspace:*",
+        "@aqa/artifacts": "workspace:*",
         "@aqa/auth": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
@@ -224,6 +229,8 @@
     "@aqa/admin": ["@aqa/admin@workspace:packages/admin"],
 
     "@aqa/admin-core": ["@aqa/admin-core@workspace:packages/admin-core"],
+
+    "@aqa/artifacts": ["@aqa/artifacts@workspace:packages/artifacts"],
 
     "@aqa/auth": ["@aqa/auth@workspace:packages/auth"],
 

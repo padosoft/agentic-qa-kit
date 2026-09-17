@@ -215,6 +215,10 @@ describe('aqa run', () => {
     );
     assert.ok(existsSync(join(result.runDir, 'replay', 'repro.sh')));
     assert.ok(existsSync(join(result.runDir, 'replay', 'repro.curl')));
+    assert.ok(
+      existsSync(join(result.runDir, 'replay', 'repro.sh.meta.json')),
+      'replay must be registered through the artifact store',
+    );
     const finished = events.find((e) => e.kind === 'run_finished') as {
       payload?: { replay_artifacts?: number };
     };

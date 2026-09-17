@@ -36,6 +36,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FileArtifactStore } from '@aqa/artifacts';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
@@ -536,6 +537,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   const replayArtifacts: string[] = [];
   const replayErrors: string[] = [];
+  const artifactStore = new FileArtifactStore(runDir);
   for (const finding of findings.snapshot()) {
     const scenario = executedScenarios.find((candidate) => candidate.id === finding.scenario_id);
     if (!scenario) {
@@ -548,9 +550,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         scenario,
         ...(project.sut.base_url ? { base_url: project.sut.base_url } : {}),
       })) {
-        const artifactPath = join(runDir, artifact.path);
-        mkdirSync(dirname(artifactPath), { recursive: true });
-        writeFileSync(artifactPath, artifact.contents, { encoding: 'utf8', mode: 0o755 });
+        await artifactStore.putText(artifact.path, artifact.contents, 'text/plain; charset=utf-8');
         replayArtifacts.push(artifact.path);
       }
     } catch (e) {

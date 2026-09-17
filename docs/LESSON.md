@@ -291,3 +291,5 @@ The YAML import route had schema/scanner/conflict controls while the older JSON 
 # 2026-09-17 — artifact integrity starts at the writer boundary
 
 An artifact hash is meaningful only after redaction and normalization, otherwise the digest attests to bytes that must not be stored. Keep text/JSON redaction explicit, make binary writes opt-in, reject traversal before filesystem resolution, and use atomic replacement. The initial store contract is useful only once run finalization and API download paths stop bypassing it.
+
+The first useful integration target is replay generation because it has a bounded producer and an existing complete-journey test. Keep the sidecar metadata assertion in that journey; otherwise a passing replay file can hide that the old direct writer is still active.

@@ -33,6 +33,7 @@
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
+    "@aqa/artifacts": "workspace:*",
     "@aqa/adapters": "workspace:*",
     "@aqa/auth": "workspace:*",
     "@aqa/pack-author": "workspace:*",
