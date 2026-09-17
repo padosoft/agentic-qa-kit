@@ -29,11 +29,14 @@ import type {
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
+import type { EventBus } from './event-bus.js';
 import type { RunnerQueueLike } from './runner-queue.js';
 
 export interface ApiContext {
   store: StoreProvider;
   queue: RunnerQueueLike;
+  /** Optional low-latency fan-out; authoritative state remains in store/queue. */
+  eventBus?: EventBus;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
   /** Optional runner credential verifier for runner-only endpoints. */
@@ -191,6 +194,28 @@ function hex(n: number): string {
   return s;
 }
 
+async function publishApiEvent(
+  ctx: ApiContext,
+  req: ApiRequest,
+  type: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  if (!ctx.eventBus) return;
+  const tenant = scope(req);
+  try {
+    await ctx.eventBus.publish({
+      id: cryptoUuid(),
+      type,
+      occurred_at: new Date().toISOString(),
+      ...(tenant.org ? { org: tenant.org } : {}),
+      ...(tenant.project ? { project: tenant.project } : {}),
+      data,
+    });
+  } catch {
+    // State is authoritative; consumers reconcile after a notification gap.
+  }
+}
+
 /**
  * Routing table for the AQA server. Framework-agnostic — the Hono / Bun
  * wrapper picks each entry and registers it. Every handler:
@@ -246,6 +271,7 @@ export function makeApi(): ApiHandler[] {
           payload: req.body as Record<string, unknown>,
           enqueued_at: new Date().toISOString(),
         });
+        await publishApiEvent(ctx, req, 'run.requested', { job_id: job.id });
         return asResponse({ job }, 202);
       },
     },
@@ -339,6 +365,10 @@ export function makeApi(): ApiHandler[] {
           body.reason,
         );
         if (!transitioned) return notFound('finding');
+        await publishApiEvent(ctx, req, 'finding.status_changed', {
+          finding_id: transitioned.finding.id,
+          status: transitioned.finding.status,
+        });
         return asResponse({ finding: transitioned.finding });
       },
     },

@@ -26,7 +26,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OidcSessionManager, allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
-import type { ApiContext, ApiHandler } from '@aqa/server';
+import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
 
 export interface AdminOptions {
@@ -47,6 +47,10 @@ export interface AdminOptions {
   queueDsn?: string;
   /** Inject a queue implementation (useful for host applications/tests). */
   queue?: ApiContext['queue'];
+  /** Use PostgreSQL LISTEN/NOTIFY fan-out for live admin integrations. */
+  eventBusDsn?: string;
+  /** Inject an event bus (useful for host applications/tests). */
+  eventBus?: EventBus;
   /** Use a durable PostgreSQL control-plane store instead of MemoryStore. */
   storeDsn?: string;
   /** Inject a store implementation (useful for host applications/tests). */
@@ -139,7 +143,9 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   // earlier iteration was resolved by extracting `runPackNew` into
   // `@aqa/pack-author`; the dynamic import is now an optimisation, not
   // a workaround.)
-  const { makeApi, PostgresRunnerQueue, RunnerQueue } = await import('@aqa/server');
+  const { makeApi, PostgresEventBus, PostgresRunnerQueue, RunnerQueue } = await import(
+    '@aqa/server'
+  );
   const { MemoryStore, PostgresStore } = await import('@aqa/store');
 
   if (opts.store && opts.storeDsn) {
@@ -157,6 +163,14 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   }
   const queueDsn = opts.queueDsn ?? process.env.AQA_QUEUE_DSN;
   const queue = opts.queue ?? (queueDsn ? new PostgresRunnerQueue(queueDsn) : new RunnerQueue());
+  if (opts.eventBus && opts.eventBusDsn) {
+    await store.close();
+    const closableQueue = queue as { close?: () => Promise<void> };
+    await closableQueue.close?.();
+    return { ok: false, error: 'admin: pass eventBus or eventBusDsn, not both' };
+  }
+  const eventBusDsn = opts.eventBusDsn ?? process.env.AQA_EVENT_BUS_DSN;
+  const eventBus = opts.eventBus ?? (eventBusDsn ? new PostgresEventBus(eventBusDsn) : undefined);
   const api = makeApi();
   const ctx = {
     store,
@@ -173,6 +187,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       })),
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
+    ...(eventBus ? { eventBus } : {}),
     projectRoot: opts.root,
   };
 
@@ -239,6 +254,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       const closable = queue as { close?: () => Promise<void> };
       await closable.close?.();
       await store.close();
+      await eventBus?.close();
       await opts.oidc?.close();
     },
   };

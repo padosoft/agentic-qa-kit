@@ -13,11 +13,14 @@ const FAKE_USER = {
   roles: ['admin' as const],
 };
 
-function ctx(opts: { projectRoot?: string } = {}) {
+function ctx(
+  opts: { projectRoot?: string; eventBus?: { publish: (event: unknown) => Promise<void> } } = {},
+) {
   return {
     store: new MemoryStore(),
     queue: new RunnerQueue(),
     authenticate: async () => FAKE_USER,
+    ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -115,11 +118,16 @@ describe('makeApi', () => {
   });
 
   it('POST /api/runs enqueues a job', async () => {
-    const c = ctx();
+    const events: unknown[] = [];
+    const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
     const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
-    const res = await route?.handle({ headers: {}, params: {}, body: { profile: 'smoke' } }, c);
+    const res = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
     assert.equal(res?.status, 202);
     assert.equal(c.queue.size(), 1);
+    assert.equal((events[0] as { type: string }).type, 'run.requested');
   });
 
   it('GET /api/runner/jobs/next pops from the queue', async () => {

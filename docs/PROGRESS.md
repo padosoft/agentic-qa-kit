@@ -11,6 +11,11 @@
 
 ## 2026-09-17
 
+- **EventBus integrated into API/admin lifecycle.** `ApiContext` can now emit
+  store-first `run.requested` and `finding.status_changed` notifications, and
+  `aqa admin` can inject or construct `PostgresEventBus` from
+  `AQA_EVENT_BUS_DSN`, closing it during shutdown. Notification failures remain
+  fail-open by design; API tests prove the request event is emitted.
 - **Helm production DSN wiring corrected.** The chart now maps an external or
   in-cluster PostgreSQL URL to the actual store, queue, shared OIDC-session and
   EventBus environment variables. CI renders a secret-ref production shape and
