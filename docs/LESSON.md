@@ -31,6 +31,12 @@
   the run-local evidence internally discoverable while leaving WORM retention
   as a separate trust boundary.
 
+- **Signing configuration must fail closed before a run starts.** If an
+  operator supplies only a key ID or only private key material, silently
+  producing an unsigned checkpoint creates misleading evidence. Treat the two
+  environment variables as an atomic configuration pair and never print the
+  private value.
+
 ## 2026-09-17 — evidence-based enterprise review
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.

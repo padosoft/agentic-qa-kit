@@ -268,6 +268,22 @@ async function main(): Promise<number> {
       if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
       if (args.values.has('otlp-endpoint'))
         runOpts.otlpEndpoint = args.values.get('otlp-endpoint') ?? '';
+      const checkpointKeyId = process.env.AQA_AUDIT_CHECKPOINT_KEY_ID?.trim();
+      const checkpointPrivateKey = process.env.AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM;
+      if (checkpointKeyId || checkpointPrivateKey) {
+        if (!checkpointKeyId || !checkpointPrivateKey) {
+          console.error(
+            red(
+              'aqa run: AQA_AUDIT_CHECKPOINT_KEY_ID and AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM must be provided together',
+            ),
+          );
+          return 1;
+        }
+        runOpts.auditCheckpointSigner = {
+          key_id: checkpointKeyId,
+          private_key_pem: checkpointPrivateKey,
+        };
+      }
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));

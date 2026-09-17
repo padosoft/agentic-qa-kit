@@ -39,8 +39,10 @@
   event count, head hash and canonical event digest; optional Ed25519 signing
   adds operator-controlled authenticity. Compliance tests: **10/10**. This is
   `aqa run` now emits `canonical/checkpoint.json` and references it from the
-  canonical manifest. It is not yet stored in a WORM/Object-Lock domain; that
-  external retention boundary remains open.
+  canonical manifest. The CLI can sign it through paired checkpoint-key
+  environment variables and rejects partial configuration. It is not yet
+  stored in a WORM/Object-Lock domain; that external retention boundary remains
+  open.
 
 - **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
   bounded, fail-closed verifier with constant-time code comparison, Base32
