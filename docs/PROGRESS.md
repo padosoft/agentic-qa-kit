@@ -447,3 +447,8 @@
 
 - Added a combined stdout/stderr byte cap to `ContainerSandbox`, propagated through the executor, with child termination and explicit fail-closed result when exceeded. This closes an unbounded-memory path not covered by call count or timeout limits.
 - Evidence: sandbox typecheck and 11/11 tests; repository Biome check and diff check pass. Real OCI fault/output stress and VM-level hostile-tenant isolation remain deployment evidence.
+
+# 2026-09-17 — Helm image digest policy
+
+- Added optional OCI digest rendering and fail-closed `requireDigest` switches for server and runner images. Operator docs now state that production must pin digests and retain SBOM/provenance evidence; tag defaults remain development-only.
+- Evidence: chart/value/template diff validated by repository lint and diff check. Live `helm template`/upgrade against a cluster remains an infrastructure gate.

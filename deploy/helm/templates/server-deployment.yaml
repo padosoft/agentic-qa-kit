@@ -23,7 +23,10 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: server
-          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          {{- if and .Values.server.image.requireDigest (not .Values.server.image.digest) }}
+          {{- fail "server.image.digest is required when server.image.requireDigest is true" }}
+          {{- end }}
+          image: "{{ .Values.server.image.repository }}{{ if .Values.server.image.digest }}@{{ .Values.server.image.digest }}{{ else }}:{{ .Values.server.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
           env:
             - name: AQA_AUDIT_LOG_PATH

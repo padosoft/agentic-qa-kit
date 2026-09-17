@@ -607,6 +607,12 @@ prints indefinitely. Enforce a combined output cap in the real child-process
 path, kill on breach and return an explicit failure; a test-only truncation is
 not a resource guard.
 
+# 2026-09-17 — mutable container tags are not deployment identity
+
+Charts should render immutable `repository@digest` references and fail before
+deployment when production policy requires a digest. Keeping a tag fallback for
+development is useful, but it must be an explicit non-production choice.
+
 # 2026-09-17 — SCIM pagination must happen after tenant filtering
 
 Compute `totalResults` from the already tenant-scoped and filter-matched set,

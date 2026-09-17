@@ -28,7 +28,10 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: runner
-          image: "{{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}"
+          {{- if and .Values.runner.image.requireDigest (not .Values.runner.image.digest) }}
+          {{- fail "runner.image.digest is required when runner.image.requireDigest is true" }}
+          {{- end }}
+          image: "{{ .Values.runner.image.repository }}{{ if .Values.runner.image.digest }}@{{ .Values.runner.image.digest }}{{ else }}:{{ .Values.runner.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false

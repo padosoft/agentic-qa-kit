@@ -33,6 +33,10 @@ operators.
   controlled `postgres.url`. The chart maps the same database endpoint to the
   control-plane store, runner queue, shared OIDC sessions and EventBus; the
   application still owns migrations and least-privilege database roles.
+- Pin server and runner images by digest in production and set both
+  `server.image.requireDigest=true` and `runner.image.requireDigest=true`.
+  The chart fails during render when a required digest is missing; mutable tags
+  remain available only for development/PoC values.
 - The chart uses TCP probes because the current server package exposes the
   framework-agnostic route table rather than a standalone health HTTP server;
   replace them with an authenticated-free application health endpoint when the
