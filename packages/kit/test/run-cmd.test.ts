@@ -219,6 +219,48 @@ describe('aqa run', () => {
     }
   });
 
+  it('passes host-injected HTTP secrets through the real run boundary', async () => {
+    const { root, packDir } = fixtureProject();
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      SMOKE_SCENARIO.replace(
+        'with: { method: "GET", url: "/healthz" }',
+        'with: { method: "GET", url: "/me", auth: "${OLD_TOKEN}" }',
+      ),
+      'utf8',
+    );
+    let authenticated = false;
+    const target = createServer((req, res) => {
+      authenticated = req.headers.authorization === 'Bearer secret-value';
+      res.writeHead(authenticated ? 200 : 401, { 'content-type': 'text/plain' });
+      res.end(authenticated ? 'ok' : 'unauthorized');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const address = target.address();
+    assert.ok(address && typeof address === 'object');
+    const projectPath = join(root, '.aqa', 'project.yaml');
+    const project = yamlParse(readFileSync(projectPath, 'utf8')) as Record<string, unknown>;
+    project.sut = {
+      ...(project.sut as Record<string, unknown>),
+      base_url: `http://127.0.0.1:${address.port}`,
+    };
+    writeFileSync(projectPath, yamlStringify(project));
+    try {
+      const result = await runRun({
+        root,
+        profile: 'smoke',
+        packsRoot: [packDir],
+        httpSecrets: { OLD_TOKEN: 'secret-value' },
+      });
+      assert.equal(result.ok, true, `authenticated run must succeed: ${JSON.stringify(result)}`);
+      assert.equal(authenticated, true);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        target.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
     const { root, packDir } = fixtureProject();
     const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });

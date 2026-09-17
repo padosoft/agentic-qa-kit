@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Connected authenticated HTTP probes to the real `aqa run` boundary.**
+  `RunOptions.httpSecrets` and the explicit `AQA_HTTP_SECRET_<NAME>` host
+  mapping now feed named auth references without exposing values to packs,
+  events or findings. A complete local journey (`aqa run` → HTTP server →
+  Authorization header → audit artifacts) passes; kit run-cmd contracts are
+  **32 pass / 0 fail**. ADR-186 records secret-manager/CI ownership and keeps
+  provider-specific token rotation as separate live evidence.
+
 - **Closed two runner false-green paths.** HTTP probes now reject unknown
   fields and resolve `auth: "${NAME}"` only from host-injected secrets;
   missing secrets are execution errors, never anonymous requests. The
