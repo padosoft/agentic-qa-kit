@@ -209,6 +209,7 @@ export const CommerceCapabilities = z.object({
   checkout: z.boolean(),
   refunds: z.boolean(),
   cancellation: z.boolean().default(false),
+  settlement_observer: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -552,6 +553,7 @@ export interface CommerceAdapter {
     reason: string,
     idempotencyKey: string,
   ): Promise<CancellationResult>;
+  observeSettlement?(identity: CommerceIdentity, orderId: string): Promise<SettlementObservation>;
   quoteTax?(identity: CommerceIdentity, cartId: string): Promise<TaxQuote>;
   quoteShipping?(
     identity: CommerceIdentity,
@@ -588,6 +590,7 @@ export type CancellationJourneyOptions = CheckoutJourneyOptions & {
   cancellationReason: string;
   cancellationIdempotencyKey: string;
 };
+export type SettlementJourneyOptions = CheckoutJourneyOptions;
 
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
@@ -596,6 +599,7 @@ export type CommerceJourneySuiteOptions = {
   shipping?: ShippingJourneyOptions;
   webhook?: CheckoutJourneyOptions;
   cancellation?: CancellationJourneyOptions;
+  settlement?: SettlementJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -982,6 +986,63 @@ export async function verifyCancellationJourney(
   }
 }
 
+/** Verifies provider settlement totals against captured payment effects. */
+export async function verifySettlementJourney(
+  adapter: CommerceAdapter,
+  opts: SettlementJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.checkout || !capabilities.settlement_observer || !adapter.observeSettlement) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout or settlement observation capability',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    const observed = await adapter.observeSettlement(opts.identity, checkout.order.id);
+    const payment = PaymentSnapshot.parse(observed.payment);
+    const refunds = observed.refunds.map((refund) => RefundSnapshot.parse(refund));
+    const chargebacks = observed.chargebacks.map((chargeback) =>
+      ChargebackSnapshot.parse(chargeback),
+    );
+    const settlement = SettlementSnapshot.parse(observed.settlement);
+    if (payment.payment_id !== checkout.payment.payment_id) {
+      throw new Error('settlement payment does not match checkout payment');
+    }
+    assertSettlementIntegrity(payment, refunds, chargebacks, settlement);
+    evidence.push({
+      step: 'settlement.reconciled',
+      ok: true,
+      detail: `order=${settlement.order_id}; net=${settlement.net.amount_minor}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'settlement journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1000,6 +1061,8 @@ export async function verifyCommerceJourneySuite(
   if (opts.webhook) journeys.webhook = await verifyWebhookJourney(adapter, opts.webhook);
   if (opts.cancellation)
     journeys.cancellation = await verifyCancellationJourney(adapter, opts.cancellation);
+  if (opts.settlement)
+    journeys.settlement = await verifySettlementJourney(adapter, opts.settlement);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1052,6 +1115,13 @@ export type CancellationResult = {
   payment: PaymentSnapshot;
   order: OrderSnapshot;
   refund?: RefundSnapshot;
+};
+
+export type SettlementObservation = {
+  payment: PaymentSnapshot;
+  refunds: readonly RefundSnapshot[];
+  chargebacks: readonly ChargebackSnapshot[];
+  settlement: SettlementSnapshot;
 };
 
 /**
@@ -1347,6 +1417,38 @@ export class InMemoryCommerceReference {
     return stock;
   }
 
+  observeSettlement(identity: CommerceIdentity, orderId: string): SettlementObservation {
+    const order = this.getOrder(identity, orderId);
+    const payment = this.getPayment(identity, orderId);
+    const refunds = [...this.refunds.values()].filter((refund) => refund.order_id === order.id);
+    const zero = this.money(payment.amount.currency, 0n);
+    const refunded = this.money(
+      payment.amount.currency,
+      refunds.reduce((sum, refund) => sum + BigInt(refund.amount.amount_minor), 0n),
+    );
+    const captured = payment.amount;
+    const net = this.money(
+      payment.amount.currency,
+      BigInt(captured.amount_minor) - BigInt(refunded.amount_minor),
+    );
+    return {
+      payment,
+      refunds,
+      chargebacks: [],
+      settlement: {
+        schema_version: '1',
+        provider: 'reference-sandbox',
+        order_id: order.id,
+        payment_id: payment.payment_id,
+        captured,
+        refunded,
+        chargeback: zero,
+        net,
+        observed_at: new Date().toISOString(),
+      },
+    };
+  }
+
   /** Exposes the reference merchant through the same async contract as real providers. */
   asAdapter(): CommerceAdapter {
     return {
@@ -1354,6 +1456,7 @@ export class InMemoryCommerceReference {
         checkout: true,
         refunds: true,
         cancellation: true,
+        settlement_observer: true,
         inventory_observer: true,
         webhook_observer: true,
         idempotency: true,
@@ -1369,6 +1472,7 @@ export class InMemoryCommerceReference {
       getInventory: async (sku) => this.getInventory(sku),
       refund: async (identity, orderId, amount, key) => this.refund(identity, orderId, amount, key),
       cancel: async (identity, orderId, reason, key) => this.cancel(identity, orderId, reason, key),
+      observeSettlement: async (identity, orderId) => this.observeSettlement(identity, orderId),
       quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),

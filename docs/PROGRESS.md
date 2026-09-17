@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Added executable settlement reconciliation.** Commerce adapters can expose
+  `settlement_observer`; `verifySettlementJourney()` now binds checkout
+  payment identity to parsed refunds/chargebacks and applies the net-total
+  invariant. The aggregate suite can include the check; the reference contract
+  remains **30 pass / 0 fail** locally. Acquirer/provider payout and live
+  accounting evidence remain external.
+
 - **Added the paid-order cancellation journey.** Commerce adapters can now
   expose an optional cancellation mutation; `verifyCancellationJourney()`
   checks customer-scoped checkout, idempotent retry, accepted decision and

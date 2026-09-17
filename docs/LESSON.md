@@ -1,5 +1,10 @@
 # Lessons
 
+- **Payment success is not settlement proof.** A commerce QA gate must compare
+  the authoritative payment with all successful refunds, lost chargebacks and
+  provider net totals; a missing settlement observer is `unsupported`, never a
+  green result.
+
 - **Paid cancellation is a compensating transaction.** A cancellation status
   without linked refund/void evidence is not a safe ecommerce result. Model
   the provider capability explicitly, retry it with the same idempotency key,
