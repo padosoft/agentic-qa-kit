@@ -45,24 +45,21 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(effects, 1);
   });
 
-  it(
-    'claims webhook effects atomically across PostgreSQL ledger instances',
-    async () => {
-      const dsn = process.env.AQA_TEST_POSTGRES_DSN;
-      if (!dsn) {
-        console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
-        return;
-      }
-      const key = `commerce-effect-${Date.now()}`;
-      const first = new PostgresWebhookEffectLedger(dsn);
-      const second = new PostgresWebhookEffectLedger(dsn);
-      assert.equal(await first.claim(key, 'evt-1'), 'claimed');
-      assert.equal(await second.claim(key, 'evt-1'), 'duplicate');
-      assert.equal(await second.claim(key, 'evt-2'), 'conflict');
-      await first.close();
-      await second.close();
-    },
-  );
+  it('claims webhook effects atomically across PostgreSQL ledger instances', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const key = `commerce-effect-${Date.now()}`;
+    const first = new PostgresWebhookEffectLedger(dsn);
+    const second = new PostgresWebhookEffectLedger(dsn);
+    assert.equal(await first.claim(key, 'evt-1'), 'claimed');
+    assert.equal(await second.claim(key, 'evt-1'), 'duplicate');
+    assert.equal(await second.claim(key, 'evt-2'), 'conflict');
+    await first.close();
+    await second.close();
+  });
 
   it('verifies Stripe-style raw-body signatures and rejects replay windows', () => {
     const secret = 'whsec_test_only';

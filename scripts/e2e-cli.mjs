@@ -186,8 +186,12 @@ function runAsync(args, cwd, timeout) {
       timedOut = true;
       child.kill('SIGTERM');
     }, timeout);
-    child.stdout.on('data', (chunk) => (stdout += chunk));
-    child.stderr.on('data', (chunk) => (stderr += chunk));
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
     child.once('error', (error) => {
       clearTimeout(timer);
       resolveRun({ status: null, signal: null, stdout, stderr: `${stderr}${error.message}` });
