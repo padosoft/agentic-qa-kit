@@ -110,11 +110,15 @@ export class PostgresStore implements StoreProvider {
     await this.wait();
     await this.q('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [kind, key]);
   }
+  private decode<T>(value: unknown): T {
+    if (typeof value !== 'string') return value as T;
+    return JSON.parse(value) as T;
+  }
   private payload<T>(row: Row | null): T | null {
-    return row ? (row.payload as T) : null;
+    return row ? this.decode<T>(row.payload) : null;
   }
   private values<T>(rows: Row[]): T[] {
-    return rows.map((row) => row.payload as T);
+    return rows.map((row) => this.decode<T>(row.payload));
   }
 
   async saveRun(run: Run.Run): Promise<void> {
@@ -156,7 +160,7 @@ export class PostgresStore implements StoreProvider {
       'SELECT payload FROM aqa_store_events WHERE run_id = $1 ORDER BY seq',
       [runId],
     );
-    return rows.map((row) => row.payload);
+    return rows.map((row) => this.decode<Event.Event>(row.payload));
   }
   async listAuditEvents(opts: {
     org?: string;
@@ -180,7 +184,9 @@ export class PostgresStore implements StoreProvider {
       text += ` LIMIT $${values.length}`;
     }
     const rows = await this.q<{ payload: Event.Event }>(text, values);
-    return rows.map((row) => row.payload).filter((event) => !opts.kind || event.kind === opts.kind);
+    return rows
+      .map((row) => this.decode<Event.Event>(row.payload))
+      .filter((event) => !opts.kind || event.kind === opts.kind);
   }
 
   async appendFinding(finding: Finding.Finding): Promise<void> {
