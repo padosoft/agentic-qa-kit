@@ -24,7 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allows } from '@aqa/auth';
+import { OidcSessionManager, allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -35,6 +35,10 @@ export interface AdminOptions {
   host?: string;
   /** Override the local development identity with a real verifier in production. */
   authenticate?: ApiContext['authenticate'];
+  /** OIDC session manager for the built-in login/callback/logout routes. */
+  oidc?: OidcSessionManager;
+  /** Whether OIDC cookies should carry Secure. Defaults to true off loopback. */
+  oidcSecureCookie?: boolean;
   /** Enforce server-side org/project membership after authentication. */
   authorizeScope?: ApiContext['authorizeScope'];
   /** Use a durable PostgreSQL runner queue instead of the local memory queue. */
@@ -98,11 +102,14 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     return { ok: false, error: `admin: --port must be an integer 0..65535, got ${port}` };
   }
   const loopbackHosts = new Set(['127.0.0.1', '::1', 'localhost']);
-  if (!loopbackHosts.has(host) && !opts.authenticate) {
+  if (!loopbackHosts.has(host) && !opts.authenticate && !opts.oidc) {
     return {
       ok: false,
       error: 'admin: non-loopback bind requires an explicit authenticate callback (OIDC/JWT)',
     };
+  }
+  if (opts.authenticate && opts.oidc) {
+    return { ok: false, error: 'admin: pass authenticate or oidc, not both' };
   }
 
   const adminDistDir = opts.adminDistDir ?? defaultAdminDistDir();
@@ -146,6 +153,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     queue,
     authenticate:
       opts.authenticate ??
+      (opts.oidc ? async (headers) => opts.oidc?.authenticate(headers) ?? null : undefined) ??
       (async () => ({
         id: 'usr-local',
         email: 'local@aqa.test',
@@ -158,7 +166,14 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   };
 
   const server = createServer((req, res) => {
-    handleRequest(req, res, { api, ctx, adminDistDir, indexHtmlPath }).catch((err: unknown) => {
+    handleRequest(req, res, {
+      api,
+      ctx,
+      adminDistDir,
+      indexHtmlPath,
+      ...(opts.oidc ? { oidc: opts.oidc } : {}),
+      ...(opts.oidc ? { oidcSecureCookie: opts.oidcSecureCookie ?? !loopbackHosts.has(host) } : {}),
+    }).catch((err: unknown) => {
       try {
         res.statusCode = 500;
         res.setHeader('content-type', 'application/json');
@@ -398,6 +413,8 @@ interface HandleCtx {
   ctx: ApiContext;
   adminDistDir: string;
   indexHtmlPath: string;
+  oidc?: OidcSessionManager;
+  oidcSecureCookie?: boolean;
 }
 
 async function handleRequest(
@@ -428,6 +445,49 @@ async function handleRequest(
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (hctx.oidc && method === 'GET' && url.pathname === '/auth/login') {
+    const login = await hctx.oidc.begin();
+    res.statusCode = 302;
+    res.setHeader('location', login.authorization_url);
+    res.setHeader('cache-control', 'no-store');
+    res.end();
+    return;
+  }
+  if (hctx.oidc && method === 'GET' && url.pathname === '/auth/callback') {
+    try {
+      const completed = await hctx.oidc.complete(
+        url.searchParams.get('state') ?? '',
+        url.searchParams.get('code') ?? '',
+      );
+      res.statusCode = 302;
+      res.setHeader('location', '/');
+      res.setHeader(
+        'set-cookie',
+        OidcSessionManager.sessionCookie(completed.token, hctx.oidcSecureCookie),
+      );
+      res.setHeader('cache-control', 'no-store');
+      res.end();
+    } catch (error) {
+      res.statusCode = 400;
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({ error: error instanceof Error ? error.message : 'OIDC callback failed' }),
+      );
+    }
+    return;
+  }
+  if (hctx.oidc && method === 'POST' && url.pathname === '/auth/logout') {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      headers[key] = Array.isArray(value) ? value.join(',') : String(value ?? '');
+    }
+    hctx.oidc.revoke(headers);
+    res.statusCode = 204;
+    res.setHeader('set-cookie', OidcSessionManager.clearCookie(hctx.oidcSecureCookie));
+    res.end();
     return;
   }
 

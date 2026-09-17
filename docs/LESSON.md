@@ -297,3 +297,7 @@ The first useful integration target is replay generation because it has a bounde
 # 2026-09-17 — live LLM must remain bounded and redacted
 
 An HTTP LLM adapter is not production-grade merely because it parses a 200 response. The minimum safe contract includes abortable timeout, maximum generation bound, injectable transport for deterministic tests, redacted prompts/errors/responses, and a model provenance hash. Provider-specific auth and trust behavior still need separate adapters rather than pretending one wire protocol covers all vendors.
+
+# 2026-09-17 — OIDC local and production cookie policies differ
+
+An HttpOnly OIDC cookie that is always `Secure` cannot complete the login journey on the bundled local HTTP server; one that is never `Secure` is unsafe for production. Make the policy explicit, default it from loopback versus non-loopback deployment, and test both the authentication journey and post-logout denial.

@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { type OidcAdapter, OidcSessionManager } from '@aqa/auth';
 import { runAdmin } from '../dist/commands/admin.js';
 
 function makeTempRoot(): string {
@@ -48,6 +49,62 @@ async function fetchText(
 }
 
 describe('aqa admin — boot + smoke', () => {
+  it('runs OIDC login, callback, authenticated API request, and logout', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const adapter = {
+      authorizeUrl: async (state: string) => `https://idp.test/authorize?state=${state}`,
+      exchangeCode: async () => ({
+        user: {
+          id: 'oidc-u',
+          email: 'oidc@example.test',
+          display_name: 'OIDC User',
+          roles: ['viewer' as const],
+        },
+        issued_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    } as unknown as OidcAdapter;
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      oidc: new OidcSessionManager(adapter),
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const login = await fetch(`${boot.url}/auth/login`, { redirect: 'manual' });
+      assert.equal(login.status, 302);
+      const location = login.headers.get('location') ?? '';
+      const state = new URL(location).searchParams.get('state');
+      assert.ok(state);
+      const callback = await fetch(`${boot.url}/auth/callback?state=${state}&code=one-time`, {
+        redirect: 'manual',
+      });
+      assert.equal(callback.status, 302);
+      const cookie = callback.headers.get('set-cookie');
+      assert.match(cookie ?? '', /HttpOnly/);
+      assert.doesNotMatch(
+        cookie ?? '',
+        /Secure/,
+        'loopback HTTP must not set an unusable Secure cookie',
+      );
+      const api = await fetch(`${boot.url}/api/runs`, { headers: { cookie: cookie ?? '' } });
+      assert.equal(api.status, 400, 'viewer must authenticate but still needs tenant scope');
+      const logout = await fetch(`${boot.url}/auth/logout`, {
+        method: 'POST',
+        headers: { cookie: cookie ?? '' },
+      });
+      assert.equal(logout.status, 204);
+      const denied = await fetch(`${boot.url}/api/runs`, { headers: { cookie: cookie ?? '' } });
+      assert.equal(denied.status, 401);
+    } finally {
+      await boot.close();
+    }
+  });
+
   it('boots, serves index.html on /, and returns 200 on /api/healthz', async () => {
     const root = makeTempRoot();
     const adminDistDir = makeFakeAdminDist();

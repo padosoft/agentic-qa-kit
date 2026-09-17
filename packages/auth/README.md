@@ -8,7 +8,7 @@ User/Role/Permission shapes and a provider-neutral OIDC Authorization Code + PKC
 - `OidcAdapter` performs discovery, Authorization Code + PKCE exchange, UserInfo
   retrieval and strict AQA role mapping. Missing claims, endpoints or secrets fail closed.
 
-The application remains responsible for generating/storing the CSRF `state`,
-binding it to the browser session, and generating a S256 PKCE verifier/challenge.
-The adapter never logs client secrets or bearer tokens and never grants an
-implicit admin role.
+`OidcSessionManager` supplies a process-local login state/PKCE binding and
+HttpOnly session-cookie boundary for the bundled admin. Use a durable/shared
+session backend when running multiple replicas. The adapter never logs client
+secrets or bearer tokens and never grants an implicit admin role.

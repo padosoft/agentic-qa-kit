@@ -165,3 +165,10 @@
 - Replaced the live-provider gap for OpenAI-compatible `openai`, `ollama` and `vllm` with a real HTTP adapter: injectable fetch for deterministic tests, timeout cancellation, bounded output tokens, model-version hash, usage extraction, redacted request/response/error content and BYOK endpoint/key options.
 - Anthropic/Google/Cohere/Bedrock remain explicit scaffolds until provider-specific contracts, auth, regional routing and replay/fixture tests are implemented; this is not a claim of complete multi-vendor production readiness.
 - Evidence: `bun run --filter @aqa/llm-adapters test` (8 passed), typecheck and Biome passed.
+
+# 2026-09-17 — OIDC admin session journey
+
+- Added `OidcSessionManager` with one-time state, S256 PKCE binding, short-lived sessions, HttpOnly cookie handling and explicit revoke; added `aqa admin` `/auth/login`, `/auth/callback` and `POST /auth/logout` routes.
+- OIDC mode is fail-closed and cannot silently use the local admin identity. Loopback cookie security is configurable so HTTP development does not emit an unusable `Secure` cookie; non-loopback defaults to `Secure`.
+- Complete journey evidence: admin test performs login redirect, callback, authenticated API request, logout and post-logout denial. Auth tests: 8 passed; kit tests: 107 passed, 2 platform skips; kit typecheck and Biome passed.
+- Remaining enterprise gap: the session map is process-local; multi-replica production still needs a shared encrypted session store and reverse-proxy TLS contract.
