@@ -28,6 +28,7 @@ import {
   assertSubscriptionIntegrity,
   assertTenderAllocation,
   verifyCheckoutJourney,
+  verifyCommerceJourneySuite,
   verifyRefundJourney,
   verifyShippingJourney,
   verifyStripeWebhookSignature,
@@ -659,6 +660,46 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(result.outcome.status, 'pass');
     assert.equal(result.outcome.evidence_complete, true);
     assert.equal(result.evidence.length, 4);
+  });
+
+  it('aggregates checkout and refund into one fail-closed commerce gate', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'suite-sku',
+      price: { currency: 'EUR', amount_minor: '1299' },
+      on_hand: 2,
+    });
+    const context = {
+      schema_version: '1' as const,
+      merchant: 'reference',
+      environment: 'sandbox' as const,
+      tenant: 'shop-a',
+      run_id: 'run-suite',
+      policy_revision: 'policy-1',
+      capabilities: {},
+    };
+    const result = await verifyCommerceJourneySuite(merchant.asAdapter(), {
+      checkout: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-customer' },
+        sku: 'suite-sku',
+        quantity: 1,
+        idempotencyKey: 'suite-checkout',
+      },
+      refund: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-refund-customer' },
+        sku: 'suite-sku',
+        quantity: 1,
+        idempotencyKey: 'suite-refund-checkout',
+        refundAmount: { currency: 'EUR', amount_minor: '400' },
+        refundIdempotencyKey: 'suite-refund',
+      },
+    });
+    assert.equal(result.outcome.status, 'pass');
+    assert.equal(result.outcome.evidence_complete, true);
+    assert.equal(Object.keys(result.journeys).length, 2);
+    assert.ok(result.evidence.every((item) => item.step.includes('.')));
   });
 
   it('rejects a provider result whose line total is mathematically false', () => {

@@ -1,5 +1,11 @@
 # Lessons
 
+- **A list of journey functions is not an execution gate.** Commerce callers
+  need one explicit suite boundary that preserves per-journey evidence and
+  makes unsupported capabilities visible. Aggregate only requested journeys,
+  fail on any error, and allow green only when every requested journey has
+  complete evidence.
+
 - **Coverage evidence must pass the same integrity gate as reports.** A
   schema-valid `scenario_finished` event can be forged by editing a field.
   Verify each run's hash chain before turning events into coverage
