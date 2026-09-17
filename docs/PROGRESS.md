@@ -896,4 +896,4 @@
 # 2026-09-17 — scoped runner JWT authentication
 
 - Added `RunnerJwtAuthorizer` with an RS256-only trust boundary, exact issuer/audience, required expiry, optional bounded not-before, runner subject and strict `org/project` or explicit `org/*` scopes. `aqa admin` now wires the verifier from `AQA_RUNNER_JWT_PUBLIC_KEY`, `AQA_RUNNER_JWT_ISSUER` and `AQA_RUNNER_JWT_AUDIENCE`, rejecting partial configuration; static `AQA_RUNNER_TOKEN` remains an explicit bootstrap fallback.
-- Evidence: auth build/typecheck and **33 tests passed**, kit typecheck and its **135 passed / 2 platform skips** suite passed. Live IdP token issuance/rotation, mTLS and multi-process server-to-worker JWT journey remain deployment evidence.
+- Evidence: auth build/typecheck and **33 tests passed**, kit typecheck and its **136 passed / 2 platform skips** suite passed, including partial JWT environment rejection. Live IdP token issuance/rotation, mTLS and multi-process server-to-worker JWT journey remain deployment evidence.
