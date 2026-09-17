@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Promotion redemption slice merged to `main`.** PR #61 was squash-merged as
+  `4feefb7` after the full CI matrix passed, including the PostgreSQL 16
+  two-client redemption race and Playwright/CLI acceptance jobs. This closes
+  the implementation slice; real merchant promotion settlement and financial
+  reconciliation remain provider/deployment evidence.
+
 - **Added atomic ecommerce promotion redemption.** `PromotionRedemptionLedger`
   now models `claimed`, `duplicate`, `conflict` and `exhausted` outcomes. The
   PostgreSQL implementation serializes each promotion code, enforces the hard
