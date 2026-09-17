@@ -1359,3 +1359,14 @@
 - Evidence: server suite **131 passed / 0 failed**, server typecheck/Biome and
   generated JSON Schema pass locally. PostgreSQL ordering remains a hosted
   contract when `AQA_TEST_POSTGRES_DSN` is available.
+
+# 2026-09-17 — PostgreSQL idempotency bootstrap race
+
+- Hosted CI exposed a real multi-client migration race: two
+  `PostgresApiIdempotencyStore` instances could concurrently create the table
+  type despite `IF NOT EXISTS`, yielding a duplicate `pg_type` failure.
+  Serialized table/index bootstrap now uses a PostgreSQL advisory lock with a
+  guaranteed unlock. ADR-156 records the production-relevant fix.
+- Evidence: failure reproduced from CI logs; local typecheck/tests remain green.
+  The next hosted PostgreSQL run is required before marking the regression
+  closed.

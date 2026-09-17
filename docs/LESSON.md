@@ -1527,3 +1527,10 @@ A bounded priority field improves urgent-run latency but does not prove tenant
 fairness or prevent starvation. Preserve FIFO ties, persist the value, and keep
 fairness/load-test policy as a separate explicit contract rather than claiming
 that a sort order is a scheduler.
+
+# 2026-09-17 — IF NOT EXISTS is not a migration lock
+
+Concurrent PostgreSQL boots can still race inside relation/type creation even
+when DDL says `IF NOT EXISTS`. Shared adapters need a database advisory lock
+around the complete bootstrap sequence, released in `finally`; a local serial
+test cannot prove this cross-replica property.

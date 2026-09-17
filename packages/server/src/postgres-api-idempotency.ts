@@ -142,24 +142,30 @@ export class PostgresApiIdempotencyStore implements ApiIdempotencyStore {
   }
 
   private async migrate(): Promise<void> {
-    await this.q(
-      `CREATE TABLE IF NOT EXISTS aqa_api_idempotency (
-        scope text NOT NULL,
-        idempotency_key text NOT NULL,
-        fingerprint text NOT NULL,
-        state text NOT NULL CHECK (state IN ('pending', 'completed')),
-        response_status integer,
-        response_body jsonb,
-        response_headers jsonb,
-        expires_at timestamptz NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now(),
-        PRIMARY KEY (scope, idempotency_key)
-      )`,
-    );
-    await this.q(
-      'CREATE INDEX IF NOT EXISTS aqa_api_idempotency_expiry_idx ON aqa_api_idempotency (expires_at)',
-    );
+    const lockKey = "hashtext('aqa_api_idempotency_migration')";
+    await this.q(`SELECT pg_advisory_lock(${lockKey})`);
+    try {
+      await this.q(
+        `CREATE TABLE IF NOT EXISTS aqa_api_idempotency (
+          scope text NOT NULL,
+          idempotency_key text NOT NULL,
+          fingerprint text NOT NULL,
+          state text NOT NULL CHECK (state IN ('pending', 'completed')),
+          response_status integer,
+          response_body jsonb,
+          response_headers jsonb,
+          expires_at timestamptz NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (scope, idempotency_key)
+        )`,
+      );
+      await this.q(
+        'CREATE INDEX IF NOT EXISTS aqa_api_idempotency_expiry_idx ON aqa_api_idempotency (expires_at)',
+      );
+    } finally {
+      await this.q(`SELECT pg_advisory_unlock(${lockKey})`);
+    }
   }
 
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
