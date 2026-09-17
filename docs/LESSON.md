@@ -1326,3 +1326,12 @@ depending on lock order, the second operation can correctly fail because the
 first changed the state. Durable tests must assert atomicity plus explicit
 conflict handling, not assume scheduler order or require both incompatible
 writes to commit.
+
+# 2026-09-17 — generate API contracts from the route source
+
+An independently maintained OpenAPI file will drift as soon as a route,
+permission or path parameter changes. Generating the first contract from the
+same concrete route table catches omission and method/path drift immediately.
+Keep the transport generator separate from domain schemas: generic JSON
+placeholders are useful for discovery, but they must not be mistaken for a
+complete versioned payload contract or SDK-generation proof.

@@ -1032,3 +1032,18 @@
 
 - Corrected the PostgreSQL store contract to model concurrent finding decisions as serialized optimistic conflicts: one or both transitions may commit according to lock order, while an invalid terminal-state transition is an explicit rejected operation rather than an unhandled test failure.
 - Evidence: local workspace regression remains green; the hosted PostgreSQL contract had exposed this order-dependent assertion and the fix is queued for CI revalidation.
+
+# 2026-09-17 — route-derived OpenAPI contract
+
+- Added `GET /openapi.json`, generated from the concrete server route table so
+  methods, paths, operation IDs, bearer security and permission metadata cannot
+  silently drift from the running API. Added server route-count coverage and a
+  real admin HTTP assertion for the published document.
+- Evidence: server tests **124 passed**, kit tests **140 total / 138 passed / 2
+  expected platform skips**, repository typecheck, Biome lint and diff checks
+  passed locally. Generic transport schemas remain intentionally provisional;
+  domain payloads must be connected to the versioned schemas package before
+  declaring SDK-generation readiness.
+- Next: add a production-safe tenant-scoped SSE stream backed by the existing
+  event bus, with heartbeat, unsubscribe, bounded event payloads and browser
+  journey evidence.

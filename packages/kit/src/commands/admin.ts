@@ -35,6 +35,7 @@ import {
 } from '@aqa/auth';
 import { safeErrorMessage } from '@aqa/observability';
 import { Event, Finding, Run } from '@aqa/schemas';
+import { buildOpenApiDocument } from '@aqa/server';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
 
@@ -608,6 +609,16 @@ async function handleRequest(
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // The contract contains route metadata only (no tenant data or secrets),
+  // so clients and auditors can discover it without an authenticated session.
+  if (method === 'GET' && url.pathname === '/openapi.json') {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/vnd.oai.openapi+json');
+    res.setHeader('cache-control', 'no-store');
+    res.end(JSON.stringify(buildOpenApiDocument(hctx.api)));
     return;
   }
 

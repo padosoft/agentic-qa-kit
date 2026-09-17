@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
-import { type QueueQuota, RunnerQueue, makeApi } from '../dist/index.js';
+import { type QueueQuota, RunnerQueue, buildOpenApiDocument, makeApi } from '../dist/index.js';
 
 const FAKE_USER = {
   id: '1',
@@ -70,6 +70,17 @@ after(() => {
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
 
 describe('makeApi', () => {
+  it('publishes an OpenAPI operation for every concrete route with permission metadata', () => {
+    const routes = makeApi();
+    const document = buildOpenApiDocument(routes);
+    const operations = Object.values(document.paths).flatMap((path) => Object.values(path));
+    assert.equal(document.openapi, '3.1.0');
+    assert.equal(operations.length, routes.length);
+    assert.ok(operations.every((operation) => typeof operation.operationId === 'string'));
+    assert.ok(operations.some((operation) => operation['x-aqa-permission'] === 'runs:read'));
+    assert.ok(document.paths['/api/runs/{id}']?.get);
+  });
+
   it('exposes the v1.4 route surface (>= 28 routes)', () => {
     const api = makeApi();
     assert.ok(api.length >= 28, `expected >= 28 routes, got ${api.length}`);

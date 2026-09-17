@@ -33,3 +33,4 @@ export {
   type EventBus,
   type EventHandler,
 } from './event-bus.js';
+export { buildOpenApiDocument, type OpenApiDocument } from './openapi.js';

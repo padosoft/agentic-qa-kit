@@ -131,6 +131,16 @@ describe('aqa admin — boot + smoke', () => {
       const health = JSON.parse(healthRes.text) as { ok: boolean };
       assert.equal(health.ok, true);
 
+      const openApiRes = await fetchText(`${boot.url}/openapi.json`);
+      assert.equal(openApiRes.status, 200);
+      assert.match(openApiRes.contentType, /application\/vnd\.oai\.openapi\+json/);
+      const openApi = JSON.parse(openApiRes.text) as {
+        openapi: string;
+        paths: Record<string, unknown>;
+      };
+      assert.equal(openApi.openapi, '3.1.0');
+      assert.ok(openApi.paths['/api/runs/{id}']);
+
       const usersRes = await fetchText(`${boot.url}/api/users`);
       assert.equal(usersRes.status, 200);
       const users = JSON.parse(usersRes.text) as {
