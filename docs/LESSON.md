@@ -933,3 +933,12 @@ Signing only `pack.yaml` leaves scenarios, probes and templates mutable after in
 # 2026-09-17 — Sigstore requires policy, not just bundle parsing
 
 A serialized Sigstore bundle is not a trust decision by itself. Verification must bind the payload, certificate identity, OIDC issuer and transparency-log evidence; malformed or policy-less bundles must fail closed. Pin a maintained verifier version and track its security advisories rather than reimplementing Fulcio/Rekor crypto.
+
+# 2026-09-17 — optional browser drivers must not poison the CLI bundle
+
+An optional Playwright capability can break every non-browser installation if
+its package is statically imported by the CLI dependency graph. Keep the
+browser package as a runtime dependency and load it only when the browser
+driver is selected; retain an injected factory for unit tests and controlled
+hosting. This fixes packaging, but it does not replace live Chromium and
+browser-sandbox evidence.

@@ -360,7 +360,7 @@ describe('runScenario', () => {
       'wait:#confirmation',
     ]);
     await runner.close();
-    assert.equal(calls.at(-1), 'context-close');
+    assert.deepEqual(calls.slice(-2), ['context-close', 'browser-close']);
   });
 
   it('makePostgresSqlProbeRunner requires an explicit DSN and bounds timeout policy', async () => {

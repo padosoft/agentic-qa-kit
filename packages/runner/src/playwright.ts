@@ -1,5 +1,4 @@
 import type { Scenario } from '@aqa/schemas';
-import { type Browser, chromium } from 'playwright';
 import type { ProbeRunner } from './run.js';
 
 interface BrowserPage {
@@ -20,8 +19,13 @@ interface BrowserContext {
   close(): Promise<void>;
 }
 
+interface BrowserLike {
+  newContext(options: { baseURL: string }): Promise<BrowserContext>;
+  close(): Promise<void>;
+}
+
 interface BrowserFactory {
-  launch(options: { headless: boolean }): Promise<Browser>;
+  launch(options: { headless: boolean }): Promise<BrowserLike>;
 }
 
 export interface PlaywrightProbeRunnerOptions {
@@ -59,6 +63,16 @@ function resolveAllowedUrl(
   return url.toString();
 }
 
+async function loadDefaultBrowserFactory(): Promise<BrowserFactory> {
+  // Keep Playwright out of the CLI bundle. The host installs it only when a
+  // browser journey is enabled at runtime.
+  const load = new Function('moduleName', 'return import(moduleName)') as (
+    moduleName: string,
+  ) => Promise<{ chromium: BrowserFactory }>;
+  const module = await load('playwright');
+  return module.chromium;
+}
+
 /** Run structured browser actions through a persistent, origin-scoped page. */
 export function makePlaywrightProbeRunner(
   opts: PlaywrightProbeRunnerOptions,
@@ -69,13 +83,15 @@ export function makePlaywrightProbeRunner(
   if (!Number.isInteger(maxTextBytes) || maxTextBytes < 1) {
     throw new Error('playwright maxTextBytes must be a positive integer');
   }
-  const factory = opts.browserFactory ?? (chromium as unknown as BrowserFactory);
+  const factoryPromise = opts.browserFactory
+    ? Promise.resolve(opts.browserFactory)
+    : loadDefaultBrowserFactory();
   let contextPromise: Promise<BrowserContext> | undefined;
-  let browser: Browser | undefined;
+  let browser: BrowserLike | undefined;
   const context = async (): Promise<BrowserContext> => {
     if (!contextPromise) {
-      contextPromise = factory
-        .launch({ headless: opts.headless ?? true })
+      contextPromise = factoryPromise
+        .then((factory) => factory.launch({ headless: opts.headless ?? true }))
         .then(async (launched) => {
           browser = launched;
           return launched.newContext({ baseURL: baseUrl }) as Promise<BrowserContext>;
@@ -141,7 +157,7 @@ export function makePlaywrightProbeRunner(
   runner.close = async () => {
     const currentContext = contextPromise;
     if (currentContext) await (await currentContext).close();
-    else await browser?.close();
+    await browser?.close();
     browser = undefined;
     contextPromise = undefined;
   };

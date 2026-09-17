@@ -722,3 +722,8 @@
 
 - Added real Sigstore bundle verification through the maintained `sigstore` JavaScript client, with explicit certificate identity, OIDC issuer and transparency-log threshold policy. Server pack imports now reject declared bundles when no operator policy is configured and fail closed on malformed or unverifiable bundles.
 - Evidence: scanner/server targeted tests 112/112, pack-scanner/server builds, workspace lint/typecheck pass. No live Fulcio/Rekor bundle was claimed in local evidence; CI must provide a real signed bundle journey before marking keyless production trust complete.
+
+# 2026-09-17 — optional Playwright dependency bundle regression
+
+- Hosted CI exposed a real packaging regression: the static Playwright import made the CLI bundle resolve optional browser internals (`chromium-bidi`) even for HTTP-only runs. The driver now loads Playwright dynamically only when a browser journey is instantiated; injected browser factories remain available for deterministic tests.
+- Evidence: runner build/typecheck, runner tests **38/38**, kit build (including CLI bundle) and kit typecheck pass locally; `git diff --check` passes. Live Chromium installation and a hosted browser journey remain open deployment evidence.
