@@ -169,6 +169,17 @@ describe('PostgresStore', () => {
       );
       assert.equal(creates.filter((result) => result.created).length, 1);
       assert.deepEqual(await reopened.loadProfile(profile.name), profile);
+
+      const user = {
+        id: 'ci-user',
+        email: 'ci-user@example.com',
+        display_name: 'CI User',
+        roles: ['admin'] as const,
+        status: 'active' as const,
+        last_active_at: '2026-05-17T10:00:00Z',
+      };
+      await reopened.upsertUser(user);
+      assert.deepEqual(await reopened.listUsers(), [user]);
     } finally {
       await reopened.close();
     }

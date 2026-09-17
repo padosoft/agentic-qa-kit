@@ -167,6 +167,8 @@ export interface StoreProvider {
   // invite/role-change flows; for now `listUsers` is all the page
   // needs.
   listUsers(): Promise<StoreUserDirectoryEntry[]>;
+  /** Persist the latest IdP directory snapshot for an authenticated user. */
+  upsertUser(user: StoreUserDirectoryEntry): Promise<void>;
 
   // ----- SSO config (slice 4h) -----
   // Backing config for the Admin SSO page. The secret is intentionally

@@ -72,6 +72,22 @@ describe('aqa admin — boot + smoke', () => {
       assert.equal(healthRes.status, 200);
       const health = JSON.parse(healthRes.text) as { ok: boolean };
       assert.equal(health.ok, true);
+
+      const usersRes = await fetchText(`${boot.url}/api/users`);
+      assert.equal(usersRes.status, 200);
+      const users = JSON.parse(usersRes.text) as {
+        users: Array<{ id: string; email: string; status?: string }>;
+      };
+      assert.deepEqual(users.users, [
+        {
+          id: 'usr-local',
+          email: 'local@aqa.test',
+          display_name: 'Local',
+          roles: ['admin'],
+          status: 'active',
+          last_active_at: users.users[0]?.last_active_at,
+        },
+      ]);
     } finally {
       await boot.close();
     }

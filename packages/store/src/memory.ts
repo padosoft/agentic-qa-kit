@@ -39,7 +39,7 @@ export class MemoryStore implements StoreProvider {
   private ssoConfig: SsoConfig.SsoConfig | null = null;
   // v1.7 slice 4g — directory snapshot of users known to the admin.
   // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
-  private users: StoreUserDirectoryEntry[] = [];
+  private users = new Map<string, StoreUserDirectoryEntry>();
 
   // ----- Runs -----
   async saveRun(run: Run.Run): Promise<void> {
@@ -260,12 +260,15 @@ export class MemoryStore implements StoreProvider {
     this.agents.set(a.id, a);
   }
   __test_seedUser(u: StoreUserDirectoryEntry): void {
-    this.users.push(u);
+    this.users.set(u.id, u);
   }
 
   // ----- Users (v1.7 slice 4g) -----
   async listUsers(): Promise<StoreUserDirectoryEntry[]> {
-    return [...this.users];
+    return [...this.users.values()];
+  }
+  async upsertUser(user: StoreUserDirectoryEntry): Promise<void> {
+    this.users.set(user.id, user);
   }
 
   // ----- SSO config (v1.7 slice 4h) -----
@@ -407,7 +410,7 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.agents.clear();
-    this.users = [];
+    this.users.clear();
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();
