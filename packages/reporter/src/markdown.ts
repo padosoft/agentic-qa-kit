@@ -1,8 +1,10 @@
 import type { Finding, Run } from '@aqa/schemas';
+import type { ScenarioOutcomeSummary } from './json.js';
 
 export interface MarkdownReportInput {
   run: Run.Run;
   findings: readonly Finding.Finding[];
+  scenarioOutcomes?: readonly ScenarioOutcomeSummary[];
 }
 
 const SEVERITY_RANK: Record<Finding.Finding['severity'], number> = {
@@ -40,6 +42,14 @@ export function renderMarkdown(input: MarkdownReportInput): string {
     )} (in=${run.totals.llm_tokens_in}, out=${run.totals.llm_tokens_out})`,
   );
   lines.push('');
+  if (input.scenarioOutcomes && input.scenarioOutcomes.length > 0) {
+    lines.push('## Scenario outcomes');
+    lines.push('');
+    for (const scenario of input.scenarioOutcomes) {
+      lines.push(`- \`${scenario.scenario_id}\` — **${scenario.outcome.toUpperCase()}**`);
+    }
+    lines.push('');
+  }
   lines.push(`## Findings — ${summary}`);
   lines.push('');
   if (sorted.length === 0) {

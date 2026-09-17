@@ -191,6 +191,10 @@ describe('aqa run', () => {
 
     const chain = verifyWriterChain(eventLines);
     assert.equal(chain.ok, true, `audit chain must verify, got: ${chain.reason ?? ''}`);
+    const scenarioFinished = eventLines
+      .map((line) => JSON.parse(line) as { kind: string; payload?: { outcome?: string } })
+      .find((event) => event.kind === 'scenario_finished');
+    assert.equal(scenarioFinished?.payload?.outcome, 'pass');
 
     // Canonical evidence is registered through the configured artifact store
     // and must be byte-identical to the local audit streams. A text upload

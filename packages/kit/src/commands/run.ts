@@ -528,6 +528,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const unsafeScenarioPaths: string[] = [];
   const runtimeErrors: string[] = [];
   const executionErrors: string[] = [];
+  const scenarioOutcomes: Array<{ scenario_id: string; outcome: string }> = [];
   const executedScenarios: Scenario.Scenario[] = [];
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
@@ -575,6 +576,14 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       // exception (or write failure) is collected instead of bubbling out
       // and skipping the `run_finished` audit event.
       try {
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_started',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: {},
+        });
         const scenarioResult = await runScenario({
           scenario,
           run_id: runId,
@@ -584,12 +593,34 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
           findingIdSeed: scenariosRun,
         });
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: scenarioResult.outcome });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: {
+            outcome: scenarioResult.outcome,
+            execution_status: scenarioResult.execution_status,
+            findings: scenarioResult.finding ? 1 : 0,
+          },
+        });
         if (scenarioResult.execution_status === 'failed') {
           executionErrors.push(
             `${scenario.id}: ${scenarioResult.execution_error ?? 'probe execution failed'}`,
           );
         }
       } catch (e) {
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'error' });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: { outcome: 'error', execution_status: 'failed' },
+        });
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
@@ -631,6 +662,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       actor: { type: 'orchestrator', id: 'aqa-cli' },
       payload: {
         scenarios_run: scenariosRun,
+        scenario_outcomes: scenarioOutcomes,
         findings: findings.snapshot().length,
         pack_errors: packErrors.length,
         scenario_errors: scenarioErrors.length,

@@ -17,7 +17,12 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { FileArtifactStore } from '@aqa/artifacts';
-import { renderJson, renderMarkdown } from '@aqa/reporter';
+import {
+  type ScenarioOutcome,
+  type ScenarioOutcomeSummary,
+  renderJson,
+  renderMarkdown,
+} from '@aqa/reporter';
 import { Finding, Run } from '@aqa/schemas';
 
 export type ReportFormat = 'md' | 'json' | 'both';
@@ -179,6 +184,15 @@ export function runReport(opts: ReportOptions): ReportResult {
     };
   }
   const run = runParsed.data;
+  let scenarioOutcomes: readonly ScenarioOutcomeSummary[];
+  try {
+    scenarioOutcomes = readScenarioOutcomes(pickEvent(events, 'run_finished'));
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: invalid scenario outcomes in audit chain: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
 
   const written: string[] = [];
   // Writes can fail (read-only FS, disk full, permission). Return a
@@ -199,7 +213,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${mdPath}`,
         };
       }
-      artifactStore.putTextSync('report.md', renderMarkdown({ run, findings }));
+      artifactStore.putTextSync('report.md', renderMarkdown({ run, findings, scenarioOutcomes }));
       written.push(mdPath);
     }
     if (format === 'json' || format === 'both') {
@@ -210,7 +224,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${jsonPath}`,
         };
       }
-      artifactStore.putJsonSync('report.json', renderJson({ run, findings }));
+      artifactStore.putJsonSync('report.json', renderJson({ run, findings, scenarioOutcomes }));
       written.push(jsonPath);
     }
   } catch (e) {
@@ -393,6 +407,35 @@ function pickEvent(
 function readString(obj: Record<string, unknown> | undefined, key: string): string | undefined {
   const v = obj?.[key];
   return typeof v === 'string' ? v : undefined;
+}
+
+function readScenarioOutcomes(
+  finished: Record<string, unknown> | undefined,
+): readonly ScenarioOutcomeSummary[] {
+  const raw = (finished?.payload as Record<string, unknown> | undefined)?.scenario_outcomes;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error('scenario_outcomes must be an array');
+  return raw.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`scenario_outcomes[${index}] must be an object`);
+    }
+    const record = item as Record<string, unknown>;
+    const scenarioId = record.scenario_id;
+    const outcome = record.outcome;
+    if (typeof scenarioId !== 'string' || !scenarioId) {
+      throw new Error(`scenario_outcomes[${index}].scenario_id must be a string`);
+    }
+    if (
+      outcome !== 'pass' &&
+      outcome !== 'fail' &&
+      outcome !== 'error' &&
+      outcome !== 'blocked' &&
+      outcome !== 'not_run'
+    ) {
+      throw new Error(`scenario_outcomes[${index}].outcome is invalid`);
+    }
+    return { scenario_id: scenarioId, outcome: outcome as ScenarioOutcome };
+  });
 }
 
 function readPayloadString(

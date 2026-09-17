@@ -29,6 +29,12 @@
   `fail`, `error` and `blocked` instead of reducing all non-pass states to one
   ambiguous boolean.
 
+- **Typed outcomes must enter the immutable event stream.** Returning an outcome
+  only from an in-process runner loses it during restart or report rebuild.
+  Persist start/finish scenario events and summarize outcomes in the terminal
+  run event, then make UI/report consumers read that source rather than infer
+  state from human error strings.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

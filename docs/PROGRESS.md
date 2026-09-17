@@ -43,6 +43,17 @@
   assertion failures from provider/driver gaps. CLI/report persistence still
   needs to expose the field end-to-end for complete outcome coverage.
 
+- **Outcome persistence wired into the audit chain.** Kit runs now emit
+  `scenario_started`/`scenario_finished` and include `scenario_outcomes` in
+  `run_finished`, preserving `blocked` versus `error` in canonical evidence.
+  Admin/report rendering remains the next integration gap.
+
+- **Outcome reporting completed.** Reporter JSON now exposes validated
+  `scenario_outcomes`, Markdown renders each scenario state, and `aqa report`
+  reads the values from the terminal audit event with fail-closed validation.
+  Admin live rendering and persisted server projections remain separate UI/API
+  integration work.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the
