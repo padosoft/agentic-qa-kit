@@ -1,6 +1,182 @@
 # Lessons
 
+- **PostgreSQL `IF NOT EXISTS` does not serialize identity DDL.** Concurrent
+  first boots can race on the implicit sequence and fail with a duplicate
+  relation error. PostgreSQL adapter bootstrap migrations must use a stable,
+  transaction-scoped advisory lock when multiple replicas may initialize the
+  same schema.
+
+- **Route-handler tests do not prove HTTP adapter behavior.** A framework-
+  agnostic handler can accept a PATCH body while the Node dispatcher silently
+  drops it, and a browser can be blocked by a preflight method/header omission.
+  Complete-journey evidence must exercise parsing, CORS and dispatch at the
+  network boundary as well as the handler.
+
+- **Nullable SQL parameters need an explicit type at the query boundary.** A
+  PostgreSQL expression such as `$n IS NULL` has no type context when the
+  value is `null`; cast optional interpolated values (`::text`, etc.) rather
+  than relying on the column on the other side of an `OR` to infer them.
+
+- **Secret-manager boundaries should resolve lazily.** Persist only an opaque
+  reference, inject token retrieval at delivery, bound the network call,
+  validate reference paths and return generic provider errors; otherwise
+  rotation and failure handling can leak credentials into queue state or logs.
+
+- **API idempotency belongs at the route boundary.** Protecting only one queue
+  endpoint leaves profile, pack, tenant and SCIM mutations unsafe to retry.
+  Bind the key to tenant, route, parameters, body and conditional version;
+  coalesce concurrent requests; cache only final non-5xx responses; and make
+  the durable store an explicit boot dependency for multi-replica production.
+
+- **DNS validation must govern the socket, not only the URL.** An allowlisted
+  hostname can resolve to a private address or change between validation and
+  fetch. Resolve once, reject the entire answer set if any address is unsafe,
+  and connect directly to the pinned IP with original TLS SNI/Host; otherwise
+  delegate the same invariant to a connection-aware egress proxy.
+
+- **Cancellation is an execution outcome, never a pass.** Check the signal
+  between steps, stop new mutations, run compensating cleanup, and emit a
+  blocked/failed result even when no oracle exists. Otherwise an operator stop
+  can be reconstructed as a successful scenario.
+
+- **A timeout signal is not a hard kill.** Propagate a per-probe deadline and
+  classify late nominal responses as failures, but never claim containment for
+  an uncooperative custom driver. Hard process termination requires the
+  sandbox/OCI boundary and an independent integration test.
+
+- **Persist outcome before projecting it.** A report or UI that re-derives run
+  state from partial counters can disagree with the orchestrator policy. Store
+  the terminal state in the hash-chained completion event, use it for new
+  projections, and retain a clearly scoped fallback only for legacy events.
+
+- **Driver absence must be checked before side effects.** In mixed-probe
+  scenarios, discovering an unsupported browser/SQL/shell/LLM step during
+  execution can leave earlier mutations behind. A capability declaration must
+  preflight steps and cleanup, record the missing coverage, and suppress
+  findings until a real observation exists.
+
+- **Independent audit storage needs a distinct configuration namespace.**
+  Reusing the ordinary artifact bucket variables makes it too easy to believe
+  that a checkpoint is independently governed when it shares the run domain.
+  The CLI therefore requires a dedicated bucket and `COMPLIANCE` retention;
+  provider credentials still come from the normal SDK chain.
+
+- **A shell driver is a policy boundary, not a sandbox.** `shell:false`, argv
+  separation and allowlists prevent shell interpolation but do not contain a
+  process. Keep shell probes opt-in, run them in the OCI/non-privileged
+  sandbox, minimize environment inheritance, bound output and redact before
+  evidence leaves the process.
+
+- **SQL read-only checks need two layers.** Reject mutations and multi-
+  statements in the runner, but enforce the real boundary with a dedicated
+  database role, tenant-scoped views and statement timeout. A lexical guard
+  alone cannot make an untrusted database credential safe.
+
+- **Execution status and outcome are different contracts.** A failed transport
+  is not a failed SUT assertion, and an unavailable capability is not an
+  infrastructure error. Persist a canonical outcome so gates can distinguish
+  `fail`, `error` and `blocked` instead of reducing all non-pass states to one
+  ambiguous boolean.
+
+- **Typed outcomes must enter the immutable event stream.** Returning an outcome
+  only from an in-process runner loses it during restart or report rebuild.
+  Persist start/finish scenario events and summarize outcomes in the terminal
+  run event, then make UI/report consumers read that source rather than infer
+  state from human error strings.
+
+- **Browser automation needs a constrained action language.** A Playwright
+  session is valuable for checkout state, but arbitrary agent JavaScript and
+  unrestricted origins turn the QA driver into an exfiltration tool. Keep
+  actions structured, origins allowlisted, evidence bounded/redacted and close
+  the context explicitly; reconcile UI claims with authoritative state.
+
+- **Resource-owning drivers need orchestration-owned shutdown.** A browser or
+  DB adapter that works in isolation can leak state across scenarios if its
+  close hook is never called. Invoke and audit shutdown before publication;
+  cooperative close is still complemented by worker-level kill/cancellation.
+
+- **A generic SQL adapter becomes production evidence only with a live DB gate.**
+  Keep the query policy provider-neutral, then run a real Postgres contract in
+  the hosted service job. A local unit fixture cannot prove transaction mode,
+  timeout or connection lifecycle against the actual client.
+
+- **Commerce contracts need a live transport boundary.** In-memory journeys
+  prove arithmetic and idempotency semantics, not API routing or tenant header
+  propagation. Keep the HTTP adapter provider-neutral, parse snapshots at the
+  edge, bound responses and require a second authoritative read for payment,
+  order and inventory reconciliation.
+
+- **A local HTTP journey is stronger but still not provider evidence.** Route
+  the typed adapter through a real server boundary and re-run the complete
+  journey to catch path/header/serialization regressions, then keep that result
+  distinct from a real merchant/payment sandbox with external reconciliation.
+
+- **Object Lock request is not proof of retention.** Sending
+  `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
+  storage provider. Production WORM mode must read back both fields for the
+  content object and its metadata object and fail closed on absence or
+  truncation. This still does not replace independent checkpoint publication
+  or bucket-level versioning/KMS/restore evidence.
+
+- **A local checkpoint is not an independent attestation.** The run API must
+  accept a separately owned publication store and fail closed if that publish
+  fails. The production adapter still has to prove WORM, IAM separation, KMS,
+  backup and restore behavior; a second directory in the same authority domain
+  is only a contract fixture.
+
+- **Bun monorepos need a non-npm SBOM path.** `npm sbom` can return
+  `ESBOMPROBLEMS` and an empty stream when a root package-lock is absent and
+  workspace/link dependencies are resolved by Bun. Treating that output as a
+  CI artifact creates a false supply-chain gate. Generate CycloneDX from a
+  pinned Syft action after the build, validate the document, and keep the
+  limitation explicit until the exact released image/package is scanned.
+
+- **Token rotation needs a store transaction, not manager sequencing.** A
+  `revoke()` followed by `issue()` is safe only for a single-process fixture;
+  two production replicas can race. Keep the provider-neutral fallback for
+  tests, but make the durable store own the atomic revoke-and-insert boundary
+  and require a cross-instance contract before claiming HA readiness.
+
+- **A synchronous child process can invalidate an E2E HTTP journey.** If the
+  fixture server lives in the parent process, `spawnSync` blocks its event loop
+  while the child waits for the response and the probe eventually aborts. Use
+  an asynchronous child process, preserve a hard timeout, and assert the real
+  request path rather than replacing it with a fixture response.
+
+- **Hash-chain validity is not completeness.** A truncated prefix can still
+  verify perfectly, and an operator who can rewrite the file can recompute the
+  whole chain. Persist a checkpoint with sequence bounds, count, head and full
+  canonical digest; sign it only with an explicitly trusted key and retain it
+  outside the mutable run directory.
+
+- **Checkpointing belongs after `run_finished`.** Creating the checkpoint
+  before finalization attests an incomplete event set. Emit it only after the
+  terminal event, then reference it from the canonical manifest; this keeps
+  the run-local evidence internally discoverable while leaving WORM retention
+  as a separate trust boundary.
+
+- **WORM must be an explicit deployment mode.** An S3-compatible adapter that
+  merely supports Object Lock is not enough: operators can omit retention and
+  still get a successful run. Add a fail-closed requirement switch while
+  keeping actual bucket versioning, KMS and Object Lock verification as an
+  infrastructure gate.
+
+- **Signing configuration must fail closed before a run starts.** If an
+  operator supplies only a key ID or only private key material, silently
+  producing an unsigned checkpoint creates misleading evidence. Treat the two
+  environment variables as an atomic configuration pair and never print the
+  private value.
+
 ## 2026-09-17 — evidence-based enterprise review
+
+- **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.
+- **Cleanup is part of the evidence contract.** Running cleanup only on the happy path leaves commerce reservations and fixtures behind exactly when failures matter most. Execute every declared cleanup probe, catch its exception, and persist its result as cleanup evidence.
+- **Run state must have one owner.** Report and admin independently inferring “a `run_finished` event exists = success” drifted from CLI counters. Put the derivation beside the schema and make every consumer use it; test errors, zero scenarios and missing completion separately.
+- **Gate policy is part of persisted outcome.** A release-gate failure caused by findings has no runtime-error counter; if the completion event omits that policy result, downstream report/admin consumers cannot reconstruct the same verdict. Persist an explicit `release_gate_failed` fact.
+- **CJS bundles need a two-layout asset resolver.** ESM source resolves `dist/commands/../admin` and `../packs`; a single-file bundle executes from `dist/` where those assets are siblings. Test the actual bundled command and prefer `__dirname` when present, retaining the ESM URL fallback for unbundled code.
+- **A skipped security test must remain visible.** Bun's `node:test` compatibility currently throws when `t.skip()` is called. On unsupported Windows symlink environments, emit a warning and return; record that the negative test was not executed, and run it under a platform with symlink support before release.
+- **CI lint is a repository contract, not only a changed-file check.** The first PR failed on stale docs JSON and guard scripts plus the review diagnostic. Fix exact formatter/import/template findings, rerun the full repository lint, and document when a security negative remains environment-limited.
+- **A root build must match the CI dependency graph.** A docs-only root script cannot prepare workspace `dist/` files for typecheck, and a nested docs-site package is not installed by root Bun workspaces. Install its lockfile explicitly in CI and make the root build sequence docs + workspaces.
 
 - **A successful gate must prove execution, not merely absence of findings.** The default no-network probe returns 200; negative-content oracles can accept transport failure, and the shipped idempotency config is ignored by its oracle. Missing drivers and invalid oracle contracts must fail closed. See [review and reproducer](internal/enterprise-review-2026-09-17.md).
 - **A live API does not make the browser verifier genuine.** Compiled admin with a real HTTP backend reported CHAIN OK for a modified event rejected by the backend SHA verifier. Test a tampered payload and compare complete canonical records, not just link continuity or fixture flags.
@@ -215,6 +391,24 @@
 
 ## v1.5 — Admin design integration lessons (2026-05-18)
 
+## v2.0 — Truthful browser audit verification (2026-09-17)
+
+- **Never verify a live audit chain from display-normalized fields.** The admin previously converted `null` to a zero hash and retained only display values, making a continuity check insufficient to prove record integrity. Keep the original API object alongside presentation data and hash the canonical raw record in the browser.
+- **Async crypto invalidates synchronous source diagnostics.** Once Web Crypto is used, a static extractor that calls the verifier without `await` can report a false result (a Promise is truthy). The authoritative regression must drive the compiled browser UI and assert the visible `CHAIN BROKEN` state.
+- **Route metadata is not enforcement.** A framework-agnostic `requires` field protects nothing until the concrete HTTP adapter authenticates the request and calls the RBAC predicate. Keep an injectable verifier at the adapter boundary and test the actual HTTP response, not only the routing table metadata.
+- **Status changes are attestations, not ordinary CRUD.** A Finding status such as `verified` has schema-level evidence prerequisites and must be validated against the complete stored record before mutation. Persist the actor, reason and transition in the audit chain; otherwise the UI can manufacture an assertion with no accountable proof.
+- **Human-readable IDs still need global identity semantics.** A short counter tied to scenario position is not a durable primary key. Preserve legacy display formats, but generate new occurrence IDs with enough entropy and test ingestion across independent runs; clustering/deduplication must remain a separate concern.
+- **Replay success must identify the same defect.** Counting any finding from each retry is insufficient: different failing oracles, changed inputs or changed state can produce a false deterministic result. A production replay contract needs an immutable failure fingerprint and provenance snapshot before it can attest reproducibility.
+- **A replay fingerprint must be based on oracle semantics, not finding presence.** The same scenario can fail for different statuses or different assertions. Store the normalized failed-oracle set and reasons per attempt, then compare it with the original fingerprint or return inconclusive when provenance is missing.
+- **Replay artifacts are part of run finalization.** Generating them only in a separate reporter command leaves findings without a usable reproduction and makes the run misleadingly complete. Generate them before `run_finished`, record counts/errors in the event, and resolve relative URLs from the original target configuration.
+- **Lease fencing requires immutable delivery snapshots.** A token is ineffective if the queue returns a mutable internal object that later leases can rewrite. Return a copy to workers and require the exact token on ACK; test an actual expiry/reassignment interleaving.
+- **Tenant filtering must use an authoritative relation.** Filtering only on client-supplied headers or optional fields lets untagged records leak across projects. For findings, resolve the owning run and apply the requested project server-side; unresolved ownership must be hidden, not treated as global.
+- **HTTP safety belongs inside the driver.** A pack-level URL check is too late and redirects can escape the intended origin. Resolve and allowlist the final request before fetch, disable implicit redirects, and bound bytes while streaming evidence so the runner’s guardrail is not advisory.
+- **Unknown pricing is a safety failure, never zero.** A missing vendor/model price makes budget enforcement mathematically impossible. Preserve token accounting, surface a structured pricing error, and stop dispatch eligibility until pricing is explicitly configured.
+- **Redaction must precede hashing and persistence.** Sanitizing only the final Markdown still leaves secrets in JSONL, hashes, traces or replay inputs. Redact at the writer boundary, then hash the redacted representation so stored evidence cannot reconstruct the original value.
+- **Generated replay is executable evidence.** Relative URLs, `curl -f`, and naïve single-quoted interpolation can make a replay target the wrong service, hide the expected failure, or change command structure. Generate argv-equivalent shell arguments, use the original base URL, and test adversarial strings.
+- **Commerce contracts must encode uncertainty explicitly.** Money needs integer minor units and currency identity; inventory semantics depend on backorder policy; unavailable observers are `unsupported` or `inconclusive`, never empty objects interpreted as pass.
+
 - **Porting a hi-fi design-tool prototype to a real Vite + TS strict bundle.** The deliverable from Claude Design (or any similar tool) is shipped as a single big React tree authored with Babel-in-the-browser conventions. To make it run as a normal Vite SPA with TS strict + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`, the lowest-friction path is to: (a) concatenate all `.jsx` files into one `app.tsx` with `// @ts-nocheck` at the top, (b) `import * as React from 'react'` once and destructure hooks (`const { useState, useEffect } = React;`), (c) inline the prototype's CSS as raw `.css` files imported from `global.css`, (d) add Biome ignore rules for the bundled file + the CSS files so the rest of the repo keeps its strict lint posture. Anything else (re-modularizing into proper modules, removing `@ts-nocheck`) is multi-week work that the design refresh will invalidate on the next handoff.
 - **Design-tool-only hooks need production fallbacks.** The Claude Design prototype calls `window.useTweaks(defaults)` and `window.parent.postMessage(...)` for editor integration. Both crash in production. Pattern: at the bottom of the bundled file, *before* `ReactDOM.render`, inject fallbacks that match the design-tool signature exactly:
   ```ts
@@ -236,3 +430,1126 @@
 - **Match the prototype's actual DOM, not what `getByRole` expects.** Design prototypes commonly render styled `<div>`/`<span>` elements for tabs and segmented buttons (e.g. `.replay-tab`, `.seg-btn`). Playwright's `getByRole('button', { name: ... })` will not find them because they have no `role="button"` or `<button>` tag. Either use a class-scoped locator (`page.locator('.replay-tab', { hasText: /repro\.sh/i })`) or add `role="button"` to the prototype — class-scoped is less invasive and survives a design refresh.
 - **CI Playwright job needs to build the admin SPA *before* the dev server boots.** Otherwise the auto-started `bun run dev` races against `bun run build` dependencies (e.g. workspace dist/ outputs not present yet). Always: `bun install` → `bun run build` (root, topological) → `bun run build` (admin) → `bunx playwright install` → `bunx playwright test`. The webServer config in `playwright.config.ts` should boot `bun run dev` with `reuseExistingServer: !process.env.CI` and a long enough `timeout` (60s+) to survive cold starts in GitHub Actions runners.
 - **`gh pr edit --add-reviewer copilot-pull-request-reviewer` is idempotent but doesn't *trigger* the bot.** Assigning Copilot only updates `requested_reviewers`. The actual review is queued by the bot service, which can take 5-15 min, occasionally never arrives. Workarounds: (a) toggle reviewer off and back on to bump the queue, (b) re-run the verification workflow with `gh run rerun <id>` once Copilot is assigned — the check itself accepts assignment-present *or* prior review as proof. Skipping Copilot review entirely is allowed only when explicitly waived by the maintainer in the conversation, not as a default.
+- **A commerce contract needs an executable reference boundary.** Schemas alone can make a checkout fixture look complete. The reference merchant keeps cart, order, payment and inventory state together, rejects incompatible idempotency reuse, scopes reads by tenant/customer, and fails closed on the last item. It remains explicitly synthetic until a real adapter proves UI → API → durable state → provider evidence.
+- **Refunds need their own idempotency and remaining-balance invariant.** A payment status alone cannot prove safe retries: persist the cumulative refunded amount, reject a request that exceeds the captured balance, and key retries by operation plus payload. Provider chargebacks and fees are separate ledger effects and are intentionally not inferred by this reference merchant.
+- **OIDC discovery is not a session implementation.** A provider-neutral adapter can safely exchange a code and validate UserInfo, but CSRF state binding, PKCE verifier storage, secure cookie rotation, logout/revocation and tenant membership belong to the server boundary. Do not treat a successful token exchange as proof of authorization scope.
+- **Role checks and tenant checks are separate gates.** A user may legitimately hold an admin role in one organization and still be forbidden from another. Enforce membership at the HTTP dispatcher with an explicit server callback; client-supplied scope headers are selectors, never authorization evidence.
+- **A database adapter is not verified by compiling its driver.** The Postgres contract must run against an actual PostgreSQL service, including migration from empty schema, a fresh process reading prior state, concurrent atomic creates, audit ordering and close/reconnect behavior. Conditional local tests are evidence of intent only when the service is absent.
+- **Make unavailable infrastructure an explicit CI gate.** A conditional local test avoids a false green, but it is not enough. Provision the exact database major version in CI and export only an ephemeral test DSN; the result must be reported separately from unit coverage.
+- **Separate workspace builds from docs builds in CI.** A root aggregate command can hide a missing docs-site install, then fail every independent job before its actual test. Use `build:workspace` for package gates and explicitly install docs dependencies where documentation is part of the acceptance target.
+- **JSONB driver return types need runtime evidence.** Type declarations do not guarantee whether a PostgreSQL client decodes JSONB on every query path. Normalize at one boundary and exercise a real round-trip in CI; a TypeScript cast alone can turn a persisted string into a false object.
+- **Playwright 1.60 has two Chromium artifacts in headless CI.** `playwright install --with-deps chromium` can download Chrome for Testing while the runner launches the separate `chromium-headless-shell`; the resulting error is an absent executable, not an SPA failure. Provision `chromium chromium-headless-shell` explicitly in every install script and CI job.
+- **Do not mix `bunx playwright` with a workspace runner.** `bunx` may resolve a transient/latest CLI while `@playwright/test` resolves the lockfile version, leaving browser revisions such as 1243 installed while tests seek 1223. Install and run Playwright via the same package-local `bun run` scripts.
+- **A complete CI gate must include the browser journey after toolchain repair.** The successful run `35168485693` proves the install/run alignment worked: the 142 admin tests launched and completed, rather than merely listing tests or passing a browser-install step. Record the run ID alongside the individual package gates.
+- **A read-only user page still needs a write path.** If authentication is the only source of IdP identity and `listUsers()` has no persistence counterpart, a production Postgres adapter will truthfully return an empty directory forever. Upsert the validated authenticated snapshot at the HTTP boundary, then expose it read-only to admin; do not infer users from tokens or runs.
+- **Aggregations must preserve source measurements.** A Postgres adapter that only counts runs can make a cost dashboard look healthy while silently reporting zero tokens and USD. Derive every summary field from persisted run totals and test a non-zero fixture against a real database.
+- **Scanner output is not enforcement until it sits before persistence.** A pack scanner that only powers a report does not reduce supply-chain risk. The import boundary must reject critical/high findings and invalid declared signatures before `installPack`; warnings can remain visible without blocking low-risk packs.
+- **A hardened profile cannot silently downgrade to process execution.** The container backend must fail closed when no command is supplied, make network/filesystem/resource policy visible in the runtime arguments, and expose an injectable executor for deterministic tests. Unit tests prove policy construction; only a real OCI runtime proves the operational boundary.
+- **Container isolation needs an operational gate, not only argument assertions.** The CI contract launches the image and checks UID/filesystem behavior; a mocked executor proves error handling and policy composition but cannot prove Docker/Podman accepted the flags.
+- **A durable queue needs both locking and fencing.** `FOR UPDATE SKIP LOCKED` prevents two workers from leasing the same ready row, but an expired lease can still leave a stale worker alive; a per-lease token in the ACK predicate is required to reject that worker after reassignment. Reconnect tests must verify the terminal state survives a new client.
+- **Durability must be an explicit boot choice.** Keeping an in-memory queue as the development default is useful, but production code must have a visible DSN/configuration path and close the durable client on shutdown; otherwise operators can believe they deployed a shared queue while still losing jobs on restart.
+- **`CREATE TABLE IF NOT EXISTS` is not a concurrent migration lock.** Two fresh PostgreSQL clients can both pass the existence check and race in catalog creation. Serialize first-use migration with a database advisory lock, and give real container tests enough time for a cold image pull instead of weakening the assertion.
+- **Record the whole acceptance run, not only the interesting new job.** Run `35170349159` proves the durable queue and OCI sandbox while also keeping the existing build, runtime, CLI, and 142-browser-test gates green; individual job success alone would leave the integration matrix incomplete.
+- **Persistence evidence must cross process boundaries.** A round-trip on one database client can pass with an in-memory cache or connection-local state. The minimum durable contract is close → construct a fresh store → read the prior record, plus a concurrent create race that proves uniqueness is enforced by PostgreSQL rather than by a JavaScript map.
+# 2026-09-17 — every install route must share the safety boundary
+
+The YAML import route had schema/scanner/conflict controls while the older JSON route explicitly bypassed them. Enterprise hardening must audit all equivalent mutation routes, not only the newest UI path. Parsed JSON also loses the original YAML bytes, so signature verification needs a documented canonical-manifest digest; that still proves integrity, not publisher identity.
+
+# 2026-09-17 — artifact integrity starts at the writer boundary
+
+An artifact hash is meaningful only after redaction and normalization, otherwise the digest attests to bytes that must not be stored. Keep text/JSON redaction explicit, make binary writes opt-in, reject traversal before filesystem resolution, and use atomic replacement. The initial store contract is useful only once run finalization and API download paths stop bypassing it.
+
+The first useful integration target is replay generation because it has a bounded producer and an existing complete-journey test. Keep the sidecar metadata assertion in that journey; otherwise a passing replay file can hide that the old direct writer is still active.
+
+# 2026-09-17 — live LLM must remain bounded and redacted
+
+An HTTP LLM adapter is not production-grade merely because it parses a 200 response. The minimum safe contract includes abortable timeout, maximum generation bound, injectable transport for deterministic tests, redacted prompts/errors/responses, and a model provenance hash. Provider-specific auth and trust behavior still need separate adapters rather than pretending one wire protocol covers all vendors.
+
+# 2026-09-17 — OIDC local and production cookie policies differ
+
+An HttpOnly OIDC cookie that is always `Secure` cannot complete the login journey on the bundled local HTTP server; one that is never `Secure` is unsafe for production. Make the policy explicit, default it from loopback versus non-loopback deployment, and test both the authentication journey and post-logout denial.
+
+# 2026-09-17 — deployment templates need executable evidence
+
+Kubernetes YAML that looks hardened is not validated until rendered and linted by Helm (and ideally schema-checked against the target cluster version). When the local tool is unavailable, record that limitation and avoid calling the chart production-ready; review template indentation, selectors, PVC behavior and default namespace selectors manually, then make CI render the chart.
+
+# 2026-09-17 — a durable queue needs an explicit completion API
+
+Lease storage alone is not a worker contract. If dequeue exists but ACK is not reachable through the server, every successful worker execution appears as an expired lease and is retried. Expose ACK with the lease token and a separate runner credential boundary; stale tokens must be fenced and observable as conflicts.
+
+# 2026-09-17 — retries need a terminal policy
+
+Visibility leases without a maximum-attempt policy create infinite poison-job loops and hide systemic failures. Persist attempts and failure reason, expose an explicit worker failure path, and make both expiry and explicit failure terminal after the configured budget. The DLQ is evidence for operator action, not silent success.
+
+# 2026-09-17 — migrate synchronous producers without weakening their contract
+
+`aqa report` is intentionally synchronous, so migrating it to an async artifact API would have changed the CLI contract. A synchronous adapter method keeps the public behavior while moving the write security boundary; the journey must assert metadata sidecars to prove the old writer was actually removed.
+
+# 2026-09-17 — audit integrity requires a transaction boundary
+
+Reading the last audit event, mutating a finding, and appending the next event as three independent store calls allows concurrent writers to fork the hash chain or lose the status/audit pairing. The API must call one store primitive; PostgreSQL must serialize the complete sequence (including the empty-tail case) with a transaction-scoped advisory lock. A passing in-memory test is useful for the API contract, but only the live PostgreSQL concurrency branch proves the durable invariant.
+
+# 2026-09-17 — Object Lock is an adapter capability, not an authorization model
+
+An S3-compatible artifact adapter can request governance/compliance retention and verify content digests, but it cannot safely infer tenant identity from an artifact key. The API must derive the prefix from authenticated scope, and operators must enable bucket versioning, Object Lock and KMS policy separately. The adapter therefore accepts an explicit prefix and documents these controls instead of claiming that S3 alone makes artifacts enterprise-compliant.
+
+# 2026-09-17 — tenant filtering is not enough for resource writes
+
+Filtering a list by `org/project` does not prevent a same-name profile, risk or
+scenario from overwriting another tenant during `PUT` or `DELETE`. The storage
+key itself must carry the authenticated scope, while legacy unscoped keys need a
+deliberate compatibility rule. New namespaced records are now isolated in both
+adapters; full migration of legacy global records remains an operational task.
+
+# 2026-09-17 — migration idempotency needs serialization
+
+`CREATE TABLE IF NOT EXISTS` makes a statement repeatable, not a multi-step
+bootstrap safe across replicas. Version insertion, table creation and index
+creation must share a transaction-scoped advisory lock; otherwise two fresh
+servers can observe an incomplete schema/version state during startup.
+
+# 2026-09-17 — dependency clean is a release gate, not a dashboard badge
+
+Dependabot findings included transitive parser/URL vulnerabilities that were
+not visible in application tests. Run `bun audit` after lockfile changes, update
+the owning toolchain where possible, and use a narrowly scoped override only
+when the vulnerable transitive range has a compatible fixed release. Re-run
+the UI build, CLI bundle and full tests after toolchain upgrades.
+
+# 2026-09-17 — provider-specific LLM contracts must not share fake adapters
+
+An OpenAI-compatible endpoint cannot stand in for Anthropic Messages semantics:
+headers, system placement, content blocks, stop reasons and tool schemas differ.
+Implement each live provider behind the same bounded/redacted interface and keep
+unsupported providers as explicit scaffolds, so the registry cannot silently
+claim coverage that the wire contract does not provide.
+
+# 2026-09-17 — commerce adapters must prove effects, not response shapes
+
+A commerce provider can return schema-valid order/payment objects while still
+charging twice or overselling stock. The adapter contract therefore needs a
+capability preflight and an executable journey that compares before/after
+inventory, validates arithmetic invariants, and retries the same idempotency
+key. Missing observers are `unsupported`; malformed or inconsistent snapshots
+are `error`; neither is a successful checkout.
+
+Refunds are a separate journey, not a checkout assertion. A partial refund
+must be strictly below the captured amount, preserve currency and order
+identity, and return byte-equivalent state on an idempotent retry. The adapter
+contract now proves that boundary independently.
+
+# 2026-09-17 — legacy compatibility must not outrank tenant isolation
+
+Fallback reads are convenient during migrations but unsafe at an API boundary:
+a missing namespace can look like a valid record and cross a tenant boundary.
+Scoped stores must return only namespaced records. Legacy data should be
+handled by an explicit migration/import path, never by a transparent fallback.
+
+# 2026-09-17 — a durable queue without a durable store is still volatile
+
+Selecting PostgreSQL for worker leases while the admin keeps runs and
+findings in a process-local map creates a misleadingly durable deployment.
+Expose control-plane store selection separately, keep the in-memory default
+only for local development, and close both resources on shutdown. The
+configuration path must be explicit and must never print credentials.
+
+# 2026-09-17 — provider names are not wire contracts
+
+Google Gemini and Cohere expose different roles, content blocks, tool schema
+names and usage fields. Registering both behind an OpenAI-compatible adapter
+would make tests look green while sending semantically wrong requests. Each
+provider needs its own bounded/redacted adapter and injected transport tests;
+unsupported Bedrock remains explicit until SigV4 and runtime behavior are
+verified.
+
+Bedrock can now be live only when its AWS region and credentials are explicit:
+the adapter signs the native Converse request and never silently falls back to
+an OpenAI-compatible endpoint. Tests verify the authorization shape without
+calling AWS; IAM policy, credential rotation and private endpoint reachability
+still require deployment evidence.
+
+# 2026-09-17 — canonical evidence must be byte-preserved
+
+Publishing an audit stream through a convenience text method can silently
+re-run redaction and change the bytes after the hash chain was computed. The
+runner therefore sends canonical `events.jsonl` and `findings.jsonl` through
+`putBytes`, then records their digests in a manifest. Artifact publication is
+still not a distributed transaction, so partial remote uploads remain an
+explicit operational recovery concern.
+
+# 2026-09-17 — observability must not be the audit source of truth
+
+Telemetry exporters can be unavailable, slow or misconfigured. The persisted
+hash-chained event remains authoritative; an observability observer must be
+bounded and fail open after the event is written. Prometheus labels also need
+name validation and a hard series cap because scenario and tenant identifiers
+are untrusted cardinality inputs.
+
+# 2026-09-17 — air-gap installers need executable trust boundaries
+
+Bundling files is not installation evidence. An offline installer must reject
+unsafe archive paths and links before extraction, verify the complete manifest
+before loading images, make signature enforcement explicit, and pass chart
+ownership/context/namespace as operator inputs. The actual OCI runtime,
+cluster and Cosign key remain required for a live deployment proof.
+
+The first real bundle/verify run exposed two shell lifecycle pitfalls: traps
+cannot safely reference function-local variables after return, and a checksum
+manifest must exclude its own file. Both are now covered by the executable
+bundle→verify path; image loading remains intentionally unverified locally
+because this workstation has no Docker daemon.
+
+# 2026-09-17 — HA auth requires async boundaries
+
+An in-memory OIDC session map cannot be made shared by wrapping it in a
+promise. The PKCE consume operation and session lookup must be asynchronous at
+the HTTP boundary, with one-time state consumption serialized by the durable
+backend. Keeping the old synchronous API but failing closed when a shared
+backend is configured prevents accidental use of stale local state.
+
+The shared tables also need expiry indexes and opportunistic cleanup on writes;
+otherwise abandoned PKCE states and expired sessions become an unbounded store
+growth vector even when reads correctly reject them.
+
+# 2026-09-17 — notifications are not durable queues
+
+PostgreSQL `LISTEN/NOTIFY` is useful for low-latency replica fan-out but can
+lose messages across disconnects and has a small payload limit. The event bus
+therefore validates a bounded envelope, isolates subscriber failures, and
+documents store-first persistence plus reconciliation; runner jobs remain on
+the durable queue.
+
+# 2026-09-17 — idempotency must bind tenant and payload
+
+An idempotency key alone is unsafe: the same client token can be replayed in a
+different project or with a different request body. Qualify the key by the
+authorized scope, persist a canonical payload fingerprint, and compare after
+the unique-key conflict; otherwise a retry can silently return the wrong job.
+
+# 2026-09-17 — identifiers at trust boundaries need CSPRNG
+
+UUID-shaped strings generated with `Math.random()` are not security IDs.
+Queue/job/event identifiers cross tenant and retry boundaries, so use the
+runtime CSPRNG (`crypto.randomUUID`) rather than relying on visual UUID shape.
+
+# 2026-09-17 — migration must be a privileged operation
+
+Legacy global records cannot be safely made visible by fallback. A migration
+endpoint must derive its destination from authenticated tenant scope, preflight
+all target keys, refuse partial conflict moves, and leave scoped reads
+fail-closed. The migration boundary also needs a narrow resource allowlist so
+operational configuration cannot accidentally become a run or identity import.
+
+# 2026-09-17 — verification must be an evidence boundary
+
+The fix loop must not treat a successful local replay as a closed finding. `aqa verify` therefore requires an explicit real-system base URL (or a test-injected probe runner), bounds attempts, distinguishes deterministic from flaky outcomes through its exit code, and writes a unique sidecar artifact. CI, deployment, PR status, finding transition, and audit-chain integration remain separate evidence boundaries until they are explicitly wired and tested.
+
+# 2026-09-17 — coverage must be derived, not declared
+
+A coverage score is only trustworthy when its numerators come from explicit risk/scenario links and run evidence. The aggregation boundary now rejects invalid timestamps, counts flaky histories, applies the 30-day window, and marks missing runs stale. Persistence and UI integrations must feed this function rather than reimplementing the formula.
+
+# 2026-09-17 — root cause must not mean fuzzy merge
+
+A deterministic fingerprint can safely provide a stable root-cause key; it
+cannot prove that two different fingerprints are the same bug. Keep semantic
+similarity and human-approved linking as a later workflow, and make ranking
+inputs explicit and bounded so priority remains explainable in an audit.
+
+# 2026-09-17 — ingestion is not verification
+
+External test output is untrusted input. Normalize it behind a size limit,
+reject XML external entities, redact before persistence, and retain warnings
+from partial tool runs. A parsed JUnit/SAST record is evidence, not proof that
+an AQA finding is fixed or safe to close.
+
+# 2026-09-17 — discovery must start deterministic
+
+Risk discovery should create reviewable hypotheses, not silently claim that an
+agent understood a repository. The first CLI method is a fixed STRIDE catalog
+with explicit invariants, schema validation, scope tags and safe overwrite
+semantics; source-aware and LLM-assisted discovery must remain opt-in and
+auditable.
+
+# 2026-09-17 — API coverage must use the same scoring boundary
+
+The server must not reimplement risk scoring. It normalizes tenant-scoped
+store records and complete oracle event groups into `measureRiskCoverage()`;
+partial event groups are excluded, and missing replay evidence remains a gap.
+
+# 2026-09-17 — SLO math needs explicit no-data semantics
+
+An empty telemetry window is not a healthy SLO. Error-budget evaluation now
+returns `no_data` with warning status, validates impossible counters, rounds
+floating-point budget boundaries, and separates the pure decision from future
+metric/exporter wiring.
+
+# 2026-09-17 — project slug is not a tenant key
+
+Filtering a run/finding by project alone is unsafe when multiple organizations
+can reuse the same slug. Persist the org on Run, filter it in the store and
+check both dimensions at every scoped API read; legacy unscoped records must
+fail closed until explicitly migrated.
+
+# 2026-09-17 — admission quotas need atomic shared state
+
+Per-tenant queue quotas are useful as an immediate backpressure contract, but a
+PostgreSQL snapshot followed by an insert can oversubscribe under concurrent
+replicas. Keep the `429` behavior and bounded error shape, and serialize the
+snapshot plus insert with a transaction-scoped advisory lock (or durable
+counters) before calling the distributed guarantee complete.
+
+# 2026-09-17 — cost calculation is not a kill switch
+
+Charging after an LLM response cannot prevent the response that crosses a
+budget. Keep reconciliation separate from pre-call admission: unknown pricing,
+invalid token counts, budget exhaustion and operator halt must fail closed before
+the provider boundary, then be wired to durable worker state and audit events.
+
+# 2026-09-17 — skill discovery is a filesystem contract
+
+A skill filename that looks descriptive is not enough for agent hosts. Render
+each skill as its own directory with `SKILL.md` and validate frontmatter/path
+contracts centrally; host installation and discovery still require real versioned
+journey tests.
+
+# 2026-09-17 — telemetry export must be bounded and non-authoritative
+
+An OTLP exporter must not turn an outage into unbounded memory growth or make
+telemetry the audit record. Bound the queue, retry a failed batch, redact before
+serialization, and keep immutable hash-chained events as the source of truth.
+
+# 2026-09-17 — framework discovery must remain reviewable
+
+Adding a security framework is useful only when each generated item has a
+stable identifier, an executable invariant and an explicit framework tag. The
+OWASP catalog is deterministic baseline evidence, not source-code understanding
+or an approval to ship.
+
+# 2026-09-17 — FMEA needs failure modes, not generic threats
+
+FMEA discovery should produce operational failure hypotheses—cause/effect
+controls and detection invariants—not merely rename security threats. Keep the
+baseline bounded and reviewable until real process data can justify occurrence,
+detection and severity scoring.
+
+# 2026-09-17 — attack trees need bounded semantics
+
+An attack-tree feature must define AND/OR evaluation and reject cycles-by-ID,
+duplicate nodes, excessive depth and oversized fan-out before persistence. A
+risk-derived tree is only a reviewable skeleton until evidence marks leaves as
+observed or compromised.
+
+# 2026-09-17 — MFA must be enforced before session persistence
+
+An IdP claim is useful only if the policy boundary consumes it before issuing a
+session. Map accepted authentication methods explicitly, fail closed when the
+claim is absent, and keep enrollment/recovery as separate evidence-bearing
+flows rather than treating a boolean policy flag as complete MFA.
+
+# 2026-09-17 — SCIM must never inherit an unscoped user store
+
+SCIM is a tenant-facing write protocol. Keep the tenant in the provisioner and
+directory contract, reject cross-tenant IDs, validate role mapping and default
+to least privilege; exposing endpoints before the durable store and bearer-token
+boundary are ready would create a provisioning isolation bug.
+
+# 2026-09-17 — directory identity needs the same namespace contract
+
+Users are data too: a shared `id` or project slug cannot identify the tenant.
+Use the existing scoped record-key/columns for directory writes and reads, keep
+unscoped access explicit for migration/admin-only paths, and test two tenants
+with the same external user ID.
+
+# 2026-09-17 — SCIM DELETE must be a lifecycle transition
+
+Directory deprovisioning is security-sensitive and often retried. Treat DELETE
+as an idempotent deactivation until a reviewed retention/deletion contract exists;
+preserve the resource ID and auditability, and require a dedicated bearer verifier
+separate from interactive user authentication.
+
+# 2026-09-17 — sandbox budgets must bound bytes as well as calls and time
+
+An attacker can consume memory with one successful, non-blocking command that
+prints indefinitely. Enforce a combined output cap in the real child-process
+path, kill on breach and return an explicit failure; a test-only truncation is
+not a resource guard.
+
+# 2026-09-17 — mutable container tags are not deployment identity
+
+Charts should render immutable `repository@digest` references and fail before
+deployment when production policy requires a digest. Keeping a tag fallback for
+development is useful, but it must be an explicit non-production choice.
+
+# 2026-09-17 — SCIM pagination must happen after tenant filtering
+
+Compute `totalResults` from the already tenant-scoped and filter-matched set,
+then slice the page. Never paginate a global result before applying tenant
+authorization, or page boundaries can leak both counts and identities.
+
+# 2026-09-17 — test the published bundle at its real asset boundary
+
+An ESM source test and `cli --help` can both pass while a CJS artifact fails
+when it resolves bundled packs or the admin SPA. Asset discovery must be tested
+from the actual `dist/cli.cjs` entrypoint, and the built artifact should reject
+ESM-only path primitives rather than relying on a non-fatal bundler warning.
+
+# 2026-09-17 — SCIM bearer tokens need a lifecycle, not just verification
+
+Keep only a digest at rest, bind every verification to the tenant, use constant-
+time comparison, expire and rotate tokens, and emit classified audit events
+without including the presented secret. The route verifier still needs an
+atomic durable store and rate limiter before production signoff.
+
+# 2026-09-17 — performance ingestion must preserve measurements and policy boundaries
+
+Import p95 and failure/check rates as typed evidence rather than reducing a load
+test to a process exit code. If thresholds are absent, keep the metric visible
+without inventing a pass criterion; execution, threshold policy and functional
+oracles must remain separate.
+
+# 2026-09-17 — load-tool adapters should share outcome semantics
+
+k6 and Locust expose different summary shapes, but AQA should normalize both to
+the same fingerprinted records while preserving tool-specific measurements and
+warnings. Do not hide worker loss or failure counts behind a single process
+status, and do not invent SLO thresholds during ingestion.
+
+# 2026-09-17 — SAML support needs a crypto adapter boundary
+
+Do not implement XML signature verification with ad-hoc regexes. Let a maintained
+provider adapter verify and parse the assertion, then enforce issuer, audience,
+time, replay and least-privilege role rules in a small deterministic boundary;
+otherwise “SAML supported” is only a dangerous parsing claim.
+
+# 2026-09-17 — a DR document must separate contract from proof
+
+A runbook can define the exact restore checks, but it cannot prove a provider’s
+WAL, KMS, object-lock or replication behavior. Keep those infrastructure gates
+explicit and require a timed isolated drill before claiming production recovery.
+
+# 2026-09-17 — tender and promotion checks have different consistency boundaries
+
+Split tender validation is an exact accounting invariant: compare minor units with
+`BigInt`, reject duplicate instruments and require one currency. Promotion validity
+must be checked again at order commit, because cart pricing is stale by definition;
+the production provider still needs an atomic redemption counter and an auditable
+financial event.
+
+# 2026-09-17 — coverage UI must preserve evidence uncertainty
+
+The admin projection should render `covered`, `partial`, `gap` and `stale` as
+distinct states instead of converting missing observations into a green score.
+Live mode must use the tenant-scoped API; fixture mode is useful for visual
+verification but is not evidence of a live authenticated journey.
+
+# 2026-09-17 — performance parsing and gating are separate contracts
+
+Retain numeric measurements during k6/Locust ingestion, but do not turn an
+import into a CI verdict. A separately versioned threshold policy can evaluate
+p95, failure and check rates, emit explainable violations, and remain auditable
+when the same evidence is reprocessed under a different release policy.
+
+# 2026-09-17 — CLI adapters should preserve one artifact boundary
+
+Adding a tool to `aqa ingest` must reuse the same bounded parser and redacted
+artifact store as existing frameworks. The CLI should not duplicate parsing or
+write tool-specific files that bypass the evidence retention and secret-redaction
+guarantees.
+
+# 2026-09-17 — performance gate failure must preserve evidence
+
+A threshold violation is not an ingestion failure: the report must still be
+stored for diagnosis, while the CLI returns a distinct non-zero gate code and
+stores policy/violations separately. This preserves both CI enforcement and the
+ability to audit what was measured.
+
+# 2026-09-17 — CI fixture gates are wiring evidence, not load evidence
+
+An inline k6 summary is useful to prove the published CLI, exit-code contract
+and artifact path in CI, but it is not proof that k6 or Locust executed against
+a real SUT. Keep the fixture journey labelled and require a separately provisioned
+load environment before claiming performance validity.
+
+# 2026-09-17 — normalize tool semantics before evaluating policy
+
+Preserving a generic tool field such as k6 `rate` is insufficient for a
+cross-tool gate. Adapters must map it to explicit domain measurements such as
+`failure_rate` or `check_rate`; otherwise a policy evaluator can be technically
+correct yet silently skip the intended metric.
+
+# 2026-09-17 — telemetry needs an explicit shutdown contract
+
+Bounded export queues are not enough: background flushes can overlap and a
+process can exit with spans still pending. Serialize flushes, stop timers before
+shutdown, drain with a finite batch budget, and surface a failed drain while
+keeping the audit store independent from telemetry delivery.
+
+# 2026-09-17 — tested API routes must be reachable from the real boot path
+
+An API route can have complete handler tests yet remain dead in the product if
+the HTTP shell only delegates a narrower prefix. Keep the server's route-prefix
+allowlist aligned with the API registry and cover the boot process, especially
+for security-sensitive SCIM/provisioning endpoints.
+
+# 2026-09-17 — durable auth records need an independent storage contract
+
+Hash-only token lifecycle logic is not durable merely because its interface is
+async. Provide a storage implementation with serialized migration, tenant
+indexes, expiry handling and close semantics, then wire its DSN through the
+deployment chart and exercise it in the real database job.
+
+# 2026-09-17 — replay prevention must be atomic at the storage boundary
+
+Checking an assertion ID and inserting it as two operations permits concurrent
+replay. Use a unique key with an atomic insert result, retain expiry cleanup,
+and keep XML signature verification outside the persistence implementation.
+# 2026-09-17 — TOTP verification is not MFA lifecycle management
+
+An RFC 6238 verifier can safely validate a submitted code without becoming an
+enrollment or secret-management system. Keep secret creation, Vault/KMS-backed
+storage, replay/rate limits, recovery codes and WebAuthn as explicit follow-up
+boundaries; never log or persist the shared secret in the verifier path.
+
+The RFC vector also exposed two easy implementation traps: HMAC dynamic
+truncation must remain unsigned in JavaScript, and Base32 decoding must avoid
+32-bit bitwise overflow. Test vectors should include the exact encoded secret,
+not only the underlying ASCII value.
+
+# 2026-09-17 — SCIM limits must sit before credential work
+
+Provisioning endpoints need an abuse budget before expensive token-store and
+directory operations. The HTTP boundary now returns an explicit 429 through an
+injected tenant limiter. Process-local state is safe only for a single
+replica; production HA must replace it with an atomic shared counter and keep
+the limit key tenant/token scoped rather than trusting a client IP header.
+
+# 2026-09-17 — HA rate limits need an atomic storage decision
+
+A process-local counter protects one admin process only. The shared SCIM
+implementation serializes each tenant's window inside a PostgreSQL transaction
+and advisory lock, then wires the same DSN through the runtime and Helm. The
+unit fallback remains useful for development, but only the cross-instance
+database contract can support a multi-replica production claim.
+
+# 2026-09-17 — Telemetry wiring must be exercised through the real runner
+
+An exporter unit test only proves serialization. The CLI now attaches a
+payload-free span observer to the persisted event stream and drains it before
+`aqa run` returns. The complete-journey test uses a real local HTTP endpoint;
+Collector delivery failure remains a warning and can never mutate or replace
+the hash-chained audit source of truth.
+
+# 2026-09-17 — Webhook signatures require the raw body and a clock contract
+
+Provider-neutral webhook assertions are not enough to catch integration bugs.
+The Stripe-style boundary signs the exact raw body, accepts rotated `v1`
+signatures, rejects malformed/stale timestamps and uses a positive tolerance;
+the caller still needs durable event-effect idempotency after verification.
+
+# 2026-09-17 — Signature verification does not make side effects idempotent
+
+Retries can carry a valid signature and still execute capture, fulfillment or
+entitlement logic twice. Claim a logical effect key atomically before running
+the effect, treat the same event as a duplicate, and reject a different event
+reusing that key. The PostgreSQL unique-key contract is the multi-replica
+boundary; signature verification remains a separate prior check.
+
+# 2026-09-17 — Integrity hashes are not signer authentication
+
+A SHA-256 field can detect changed bytes but cannot establish which operator
+approved a pack. The detached Ed25519 path signs the canonical unsigned digest,
+looks up the key through an explicit allowlist, and is enforced at import. A
+keyless Sigstore/cosign implementation still needs certificate identity and
+trust-root policy; it must not be implied by a local public-key verifier.
+# 2026-09-17 — MFA verification is not an enrollment lifecycle
+
+TOTP verification alone does not establish a usable MFA product. Enrollment must confirm possession before activation, recovery codes must be stored as non-reversible hashes and consumed atomically, and the secret protector must be an explicit KMS/Vault boundary. A memory store or test protector is evidence for contract behavior only, never production persistence.
+# 2026-09-17 — execution failure is not a finding
+
+An oracle receiving no observation must not manufacture evidence of a SUT vulnerability. Keep transport/execution state and assertion state separate; a missing driver blocks the run and produces a coverage gap, while a finding requires a valid observation that violates an oracle. Tests that want a successful run must inject or boot a real driver explicitly.
+# 2026-09-17 — browser audit verification must share canonicalization
+
+Duplicating hash-chain logic in a UI invites drift in canonical JSON, especially when the API record contains nested actor/payload objects. Keep canonicalization in a runtime-neutral module and expose a browser WebCrypto entrypoint; a Node verifier and a browser verifier can differ in crypto API without differing in the signed bytes.
+# 2026-09-17 — oracle output scope must be explicit
+
+Aggregating every probe response makes a scenario oracle non-local: a success from one step can mask a failure in another. Add a typed `probe_id` reference, validate it against unique scenario steps, and fail closed when the referenced observation is absent. Keep legacy fallback behavior explicit and temporary rather than silently treating all outputs as interchangeable.
+# 2026-09-17 — migrate producers after strengthening a contract
+
+Adding a compatibility field without migrating first-party producers leaves the risky behavior dominant. After introducing typed oracle references, update every bundled pack and fixture so new installations exercise the precise contract; keep compatibility only at the external boundary.
+# 2026-09-17 — manifest signatures do not cover pack content
+
+Signing only `pack.yaml` leaves scenarios, probes and templates mutable after installation. A content-addressed pack digest must define a deterministic file set, include canonical unsigned manifest bytes, reject symlinks, and be enforced at the execution boundary—not merely exposed as a helper.
+# 2026-09-17 — Sigstore requires policy, not just bundle parsing
+
+A serialized Sigstore bundle is not a trust decision by itself. Verification must bind the payload, certificate identity, OIDC issuer and transparency-log evidence; malformed or policy-less bundles must fail closed. Pin a maintained verifier version and track its security advisories rather than reimplementing Fulcio/Rekor crypto.
+
+# 2026-09-17 — optional browser drivers must not poison the CLI bundle
+
+An optional Playwright capability can break every non-browser installation if
+its package is statically imported by the CLI dependency graph. Keep the
+browser package as a runtime dependency and load it only when the browser
+driver is selected; retain an injected factory for unit tests and controlled
+hosting. This fixes packaging, but it does not replace live Chromium and
+browser-sandbox evidence.
+
+# 2026-09-17 — a declared budget must affect scheduling and release state
+
+Schema-only budgets create false confidence. Enforce the wall-clock budget
+before starting each scenario, emit an explicit `not_run` outcome for the
+remaining coverage and fail the run. This is a scheduler gate, not a hard
+interrupt: a provider or browser operation already in flight still needs
+bounded driver timeouts and cancellation as a separate control.
+
+# 2026-09-17 — validate state transitions at the persistence boundary
+
+Validating a finding status only in the HTTP handler leaves direct store
+callers and races able to write impossible states. Keep the transition matrix
+in the shared schema package, re-check it inside each store transaction, parse
+the updated object, and return a conflict without changing data or audit state.
+
+# 2026-09-17 — terminal states must survive every projection
+
+Adding a budget failure only to the orchestrator is incomplete if report and
+admin reconstruct state from the audit event. Persist a reason/state marker
+and teach the shared derivation function about it; otherwise downstream views
+silently collapse governed aborts into generic failures.
+
+# 2026-09-17 — risk references need an execution-time resolver
+
+Declaring `risk_refs` in a scenario is not enough if the runner always emits
+the same severity. Resolve the project and selected-pack risk catalogs before
+execution, fail closed on missing references, and pass the typed risk into the
+finding builder. This keeps coverage gaps visible and makes severity traceable
+to an auditable declaration.
+
+# 2026-09-17 — every executable pack resource needs realpath containment
+
+Checking `resolve(root, relativePath)` is insufficient when a manifest points
+to a symlink. Apply realpath containment to risk catalogs as well as scenarios;
+otherwise a signed/approved pack can still cause the runner to parse external
+files at execution time.
+
+# 2026-09-17 — redirect policy is part of the HTTP destination boundary
+
+An origin allowlist on the initial URL is not enough if a client follows a
+redirect. Use manual redirects, validate `Location` against the same explicit
+allowlist, reject credential-bearing URLs and surface the blocked response as
+execution evidence rather than silently following it.
+
+# 2026-09-17 — validate every browser request, not only navigation inputs
+
+Checking the URL supplied to `page.goto()` does not constrain redirects,
+subresources or form-triggered requests. Install the network policy on the
+BrowserContext before the page exists and abort every non-HTTP or
+non-allowlisted request.
+
+# 2026-09-17 — cancellation must be a distinct durable state
+
+Marking a force-killed job `done` hides an operator abort and lets reporting
+claim success. Persist `cancelled`, clear the lease/fencing token, scope the
+mutation to the tenant and reject late ACKs; worker-side cooperative abort is
+a separate step and must not be implied by the queue mutation.
+
+# 2026-09-17 — queue cancellation needs a driver boundary
+
+A durable `cancelled` row does not stop work already executing. The worker must
+carry an `AbortSignal` through `runScenario` into each driver, and a driver must
+translate it into the provider's cancellation primitive. The HTTP implementation
+now aborts `fetch` and returns an execution failure, which prevents findings from
+being emitted. Until the worker runtime and the remaining drivers consume the
+signal, cancellation is only partially implemented.
+
+# 2026-09-17 — normalize queue adapter sync/async boundaries
+
+The memory queue is synchronous while the PostgreSQL queue is asynchronous. A
+worker that calls `.then()` directly on a queue result works in only one mode and
+fails in the other. Normalize every adapter call with `Promise.resolve(...)` at
+the worker boundary, then test cancellation against the in-memory implementation
+and compile the PostgreSQL implementation as part of the same contract.
+
+# 2026-09-17 — leased workers need renewal and loss semantics
+
+Polling cancellation is not enough for a long scenario: the visibility lease can
+expire and another worker can receive the same job. Renew with the exact fencing
+token while the handler runs; if renewal fails, abort the handler and report
+`lease_lost` without calling `ack` or `fail`. A lost lease is ownership loss, not
+an ordinary provider failure.
+
+# 2026-09-17 — never let queue payloads choose the worker filesystem root
+
+The queue-to-kit adapter must bind execution to an operator-configured project
+root. Accepting `root`, pack paths or arbitrary filesystem options from a tenant
+payload would turn a legitimate run request into local file access. Only narrow
+execution selectors such as profile and seed are decoded from the job payload;
+deployment configuration owns filesystem and pack boundaries.
+
+# 2026-09-17 — prove queue execution through the real orchestrator
+
+Testing `RunnerWorker` with a fake handler proves only queue mechanics. The
+meaningful journey must enqueue a job, use the real kit handler, hit a real local
+HTTP target, write the canonical run artifacts and ACK only after completion.
+The in-process journey now proves that chain; separate processes, PostgreSQL,
+remote artifacts and authenticated runner identity remain distinct evidence.
+
+# 2026-09-17 — killing a shell child is not a full sandbox kill
+
+The shell driver can translate `AbortSignal` into `child.kill()` and report an
+execution error, but a spawned process may create descendants. Production
+sandboxing must still enforce process-group/container cleanup and resource caps;
+driver cancellation alone is not evidence of complete process-tree isolation.
+
+# 2026-09-17 — durable queues must fail closed on runner identity
+
+Making runner authentication optional is acceptable for a local memory queue but
+unsafe once jobs are shared through PostgreSQL. Require an explicit verifier or
+a deployment token before boot, use a constant-time comparison boundary, and
+keep the token out of diagnostics. A static token is only a bootstrap fallback;
+enterprise deployments still need mTLS or short-lived identity with rotation.
+
+# 2026-09-17 — distinguish SQL observation from native query cancellation
+
+Passing an `AbortSignal` into an SQL adapter lets the host stop awaiting and
+prevents findings after cancellation, but it does not automatically cancel the
+database operation. Keep PostgreSQL statement timeouts and read-only
+transactions as bounded controls, and do not claim native query cancellation
+until the selected client and live database prove it.
+
+# 2026-09-17 — enforce LLM budgets before and after the provider call
+
+Charging only after a response permits an over-budget dispatch; checking only a
+rough estimate loses authoritative usage. Use both boundaries: estimate before
+dispatch to block known overages, then charge provider-reported tokens and stop
+future calls when the actual spend reaches the limit. Estimation and pricing
+must be versioned deployment inputs, not hidden constants.
+
+# 2026-09-17 — reserve distributed LLM spend before dispatch
+
+An in-process tracker cannot protect a project when two workers dispatch at the
+same time. Reserve estimated spend under a database row lock, settle exactly
+once with provider usage, and release the estimate on provider failure. Keep the
+reservation key tenant-scoped and treat pricing/version configuration as an
+audited deployment input.
+
+The PostgreSQL ledger must serialize both migration and budget configuration:
+advisory-lock DDL and compare the requested limit with the locked row before
+reserving. Otherwise two replicas can silently use different limits for the
+same project.
+
+# 2026-09-17 — every distributed reservation needs expiry recovery
+
+If a worker dies after admission, a reservation without TTL permanently reduces
+available budget. Store an expiry, reclaim rows with row locking and skip-locked
+concurrency, and make settlement/reaping idempotent. The deployment must run the
+reaper on a schedule and alert on expired reservations; a library method alone
+is not operational evidence.
+
+# 2026-09-17 — make cleanup schedulable and testable
+
+Keep the ledger's reaper logic independent from its deployment trigger. Expose a
+deterministic single tick for CronJob/systemd adapters and a guarded interval for
+embedded processes; prevent overlapping ticks and surface errors through an
+injected callback so operators can add metrics/alerts without leaking payloads.
+
+# 2026-09-17 — deployment wiring must fail closed too
+
+An in-process reaper is not an operational control until a deployment invokes it.
+The Helm CronJob must use a Secret-backed DSN, forbid overlapping jobs, bound
+retry history and enforce non-root/read-only execution. Both template-time
+configuration errors and the binary's missing-DSN path must fail closed.
+
+# 2026-09-17 — browser cancellation needs post-await checks
+
+Closing a page on abort is not sufficient if the fake or provider resolves the
+current await during close; the runner can otherwise continue and emit a normal
+body. Re-check the signal after browser awaits and convert the path to an
+execution error before oracle evaluation.
+
+# 2026-09-17 — cost evidence needs pricing identity
+
+Token counts without the applied pricing version are not reproducible financial
+evidence. Canonicalize model ordering, hash the catalog and carry version/hash
+with the tracker snapshot. Signature, distribution and rotation are separate
+trust controls; a local digest alone does not prove operator-approved pricing.
+
+# 2026-09-17 — settle usage with pricing provenance
+
+Budget totals alone are insufficient for reconciliation. Persist the model,
+authoritative provider token counts, actual charge and pricing catalog identity
+on settlement; expired reservations must release only the estimate and must not
+pretend that a provider usage event occurred.
+
+# 2026-09-17 — queue payloads are an API security boundary
+
+Never persist the raw run request into a worker queue. Validate a small strict
+contract first, derive tenant scope from authenticated headers and keep roots,
+credentials and execution controls operator-owned. This prevents a future
+worker from accidentally turning a harmless API extension into arbitrary path
+or runtime control.
+
+# 2026-09-17 — financial timestamps need a canonical timezone
+
+A pricing effective date without an explicit UTC instant is not reproducible
+across deployments. Validate and hash one canonical timestamp form; otherwise
+two operators can attach different temporal meanings to the same catalog.
+
+# 2026-09-17 — authenticate runners before assigning tenant work
+
+Runner credentials are not enough: a valid runner must also be constrained to
+the tenant projects it may process. Enforce the scope inside dequeue and repeat
+the check on ACK/fail, because route-level authentication alone cannot prevent
+cross-tenant work consumption or completion.
+
+# 2026-09-17 — a worker deployment must execute the real handler
+
+A Kubernetes StatefulSet that only has an image and environment is not a
+worker journey. The entrypoint must compose the durable queue, canonical run
+handler, scoped lease acquisition and graceful shutdown; otherwise rendered
+YAML creates a process that may never consume work.
+
+# 2026-09-17 — wildcard permissions must be explicit
+
+Configuration parsers should never infer a wildcard from a missing segment.
+Require `org/project` or the visibly intentional `org/*`; malformed values
+must fail before a worker connects to the durable queue.
+
+# 2026-09-17 — agent commerce approval is a TOCTOU contract
+
+An agent saying “approved” is not an authorization event. Bind human approval
+to the exact tool call, customer, cart revision and total, consume it once, and
+re-check those values atomically at the merchant mutation boundary.
+
+# 2026-09-17 — durable approval replay protection
+
+An in-memory consumed-approval set is useful for unit tests but is not a
+multi-replica security boundary. Make production authorization asynchronous and
+claim the approval in a shared unique-key ledger before allowing the mutation.
+
+# 2026-09-17 — WebAuthn counters are not universal
+
+WebAuthn signature counters are valuable clone-detection evidence, but a
+credential may legitimately be counterless. Require strict monotonicity only
+when registration records counter support; otherwise retain the one-time
+challenge and cryptographic assertion checks. Never treat an injected verifier
+or memory store as evidence of a real browser/provider ceremony.
+
+# 2026-09-17 — queue scope needs an authenticated identity
+
+Tenant filtering is not runner authentication. A queue can enforce scopes only
+after a trusted boundary has established who the worker is and how long its
+credential is valid. Keep JWT verification narrow (fixed algorithm, issuer,
+audience, lifetime and explicit scopes), reject partial environment wiring, and
+preserve static tokens only as visibly non-production bootstrap compatibility.
+
+# 2026-09-17 — timeout is not a negative commerce result
+
+After a payment or order request times out, the side effect may already exist.
+Never map every exception to “not committed” and blindly retry. Keep the
+approval claim, classify the result as unknown, and reconcile against the
+authoritative merchant/provider state before another mutation.
+
+# 2026-09-17 — a pricing digest is not operator authenticity
+
+A catalog can be modified and rehashed locally while remaining internally
+consistent. Carrying a SHA-256 digest proves reproducibility, not approval;
+sign the canonical catalog with an operator key and verify against an
+out-of-band trust map before using it for budget admission.
+
+# 2026-09-17 — WebAuthn replay state must be atomic
+
+Replica-safe passkeys need more than a shared table: challenge consumption must
+be a single destructive claim, and counter advancement must use a conditional
+write whose affected-row count decides the result. A read-then-write sequence
+allows two replicas to accept the same authenticator counter.
+
+# 2026-09-17 — wildcard CORS is a dangerous control-plane default
+
+An admin API should not emit `Access-Control-Allow-Origin: *` while its
+authentication model may use cookies or credentials. Default to same-origin,
+allow exact configured origins, vary caches by Origin, and reject disallowed
+state-changing cross-origin requests before route handling.
+
+# 2026-09-17 — error messages are an outbound data boundary
+
+Database and provider exceptions are not safe merely because they are
+diagnostic. A shared HTTP sanitizer must remove credential-bearing DSNs,
+tokens and payment identifiers, normalize control characters and enforce a
+hard bound; detailed diagnostics belong only in redacted, access-controlled
+logs. Sanitizing only the logger still leaves an independent API disclosure
+path.
+
+# 2026-09-17 — redaction must distinguish PANs from identifiers
+
+A generic 13–19 digit regex, especially when it accepts separators, can
+rewrite timestamps and run IDs in otherwise safe artifacts. Use Luhn-backed
+PAN detection and regression cases for both a real test card and production-
+shaped identifiers; redaction must never mutate audit identity fields.
+
+# 2026-09-17 — contextual entropy beats global token heuristics
+
+High-entropy detection is safest when attached to a secret-like assignment
+(`token=...`, `api_key: ...`) rather than scanning every opaque identifier.
+Organizations still need custom patterns, while binary screenshots/PDFs need a
+separate classifier instead of pretending text redaction protects them.
+
+# 2026-09-17 — replay must preserve failure identity
+
+“A finding appeared again” is weaker than “the original failure appeared
+again.” Stateful systems can produce different oracle failures on each run;
+persist the original fingerprint and require every replay attempt to match it,
+otherwise deterministic verification is a false green.
+
+# 2026-09-17 — report consumers must verify audit input
+
+An audit-chain verifier is not sufficient if a downstream report renderer
+trusts the same JSONL fields without invoking it. Every consumer that derives
+release or compliance output from audit events must verify the chain first;
+local verification still does not replace an independent checkpoint or WORM
+store for completeness and authorship.
+
+# 2026-09-17 — one repository can have multiple dependency perimeters
+
+The root Bun audit did not cover the separately installed `docs-site` npm
+lockfile. Enterprise supply-chain verification must audit every install graph
+used by build, docs, packaging, and runtime; a clean primary workspace is not
+evidence for a secondary lockfile.
+
+# 2026-09-17 — an e2e fixture must satisfy the same graph as production
+
+The live ecosystem journey failed before the browser started because its
+scenario referenced a risk that the generated pack manifest declared as empty.
+Fixture validity is part of the product journey: every scenario reference,
+API record and rendered row must be backed by the same schema and dependency
+graph as a real run.
+
+# 2026-09-17 — conflict detection must cross the HTTP boundary
+
+An optimistic-editor helper cannot prevent lost updates while the API still
+accepts unconditional last-write-wins PUTs. Version/content identity must be
+returned by reads and enforced before persistence; a stale write must return a
+machine-readable 412 and leave the newer server value untouched.
+
+# 2026-09-17 — capture the edit token at editor-open
+
+Protecting only the API is insufficient for an admin journey: the browser must
+capture the detail response ETag when the editor opens, attach it to the PUT,
+and replace it with the response ETag after a successful save. The three
+resource editors (profile, risk, scenario) now follow that lifecycle; the
+targeted Chromium test proves the header crosses the UI boundary.
+
+# 2026-09-17 — a 412 needs an operator recovery path
+
+Returning `PRECONDITION_FAILED` prevents lost updates but is not a complete
+admin journey by itself. The editor must explain that another writer won and
+offer an explicit reload of the authoritative representation and its new ETag;
+otherwise operators are left with a safe but unusable dead end. The profile,
+risk and scenario editors now implement that recovery path.
+
+# 2026-09-17 — live schema-valid evidence may be sparse
+
+The live Finding schema permits evidence such as empty owners/tags or missing
+reproducibility floors. A UI that only survives its rich demo fixture is not a
+live integration: normalize optional collections and reserved evidence states
+at the rendering boundary, then prove the sparse record through the browser.
+
+# 2026-09-17 — replay artifacts must match the driver contract
+
+A file named `repro.playwright.ts` or `repro.sql` is not evidence of replay if
+it only contains comments. Generated artifacts now use the same structured
+browser actions and read-only SQL parameter model as the runner; when a probe
+references an external spec that cannot be safely inlined, the artifact says
+so explicitly and remains skipped rather than claiming deterministic coverage.
+
+# 2026-09-17 — redaction must preserve artifact identity
+
+Luhn validation alone is not sufficient for arbitrary evidence strings: a
+timestamped run ID can contain 13–19 digits and accidentally look like a PAN.
+Redaction now rejects overly segmented identifier formats while preserving
+normal contiguous or conventionally grouped card-number detection. Checkpoint
+keys and audit hashes must never change as a side effect of DLP.
+
+# 2026-09-17 — concurrent state-machine tests need conflict semantics
+
+An atomic database lock does not make two incompatible state transitions both
+valid. A concurrent `draft → rejected` and `draft → fixed` pair is serialized;
+depending on lock order, the second operation can correctly fail because the
+first changed the state. Durable tests must assert atomicity plus explicit
+conflict handling, not assume scheduler order or require both incompatible
+writes to commit.
+
+# 2026-09-17 — generate API contracts from the route source
+
+An independently maintained OpenAPI file will drift as soon as a route,
+permission or path parameter changes. Generating the first contract from the
+same concrete route table catches omission and method/path drift immediately.
+Keep the transport generator separate from domain schemas: generic JSON
+placeholders are useful for discovery, but they must not be mistaken for a
+complete versioned payload contract or SDK-generation proof.
+
+# 2026-09-17 — SSE is a transport boundary, not a durable event source
+
+An event bus can make the admin UI responsive, but LISTEN/NOTIFY and in-process
+fan-out do not provide replay after a disconnect. The SSE adapter therefore
+filters by authenticated tenant before writing, emits bounded heartbeats and
+cleans up subscriptions on both request abort and response close. The UI must
+reconcile the durable store after reconnect; a live notification alone is never
+proof of complete run state.
+
+# 2026-09-17 — an SSE label is not a browser journey
+
+An animated terminal or a passing stream writer test can falsely suggest that
+the product is live. Meaningful proof is causal: create the subscriber, publish
+a tenant-scoped event, parse it in the actual SPA, render connection state, and
+assert it in Playwright. Keep that event as an invalidation hint and re-read
+authoritative projections; EventSource retry does not recover events missed
+during a disconnected interval.
+
+# 2026-09-17 — describe events separately from HTTP routes
+
+OpenAPI can document the SSE endpoint but not the message vocabulary and event
+payload contract. Keep a small event-type registry as the source for AsyncAPI,
+then make the stream adapter consume that same vocabulary. This prevents a
+consumer from discovering a transport that has no stable message semantics.
+
+# 2026-09-17 — schema references beat invented duplicate payloads
+
+When an API contract needs domain payloads, duplicating a second hand-written
+shape in OpenAPI creates a new drift source. Reference the versioned schemas
+package and model only the transport envelope locally. Keep genuinely generic
+endpoints visible as generic until their domain response is promoted, rather
+than publishing a plausible but unvalidated contract.
+
+# 2026-09-17 — reconnect must converge from authoritative state
+
+EventSource retry restores a socket, not the events lost while it was down.
+Have the browser refetch the durable projection on the reconnect edge, while
+still using individual events for low-latency refreshes. This gives correctness
+now and leaves room for a future cursor/replay optimization without coupling
+the UI to delivery guarantees the transport does not provide.
+
+# 2026-09-17 — cursor replay needs a gap contract
+
+SSE IDs alone do not provide replay. Persist the event before publishing the
+notification, subscribe before replaying, deduplicate IDs from the overlap,
+and explicitly signal a missing/unavailable cursor. Replay reduces recovery
+cost but cannot replace the authoritative projection refetch or an operator
+owned retention policy.
+
+# 2026-09-17 — webhook delivery is a reliability subsystem
+
+Vendor calls must leave the request path. Stable delivery IDs, signing the
+exact serialized body, bounded retry, `Retry-After`, per-integration rate
+limits and a visible DLQ are one contract. An in-memory queue can prove the
+state machine, but cannot be presented as production durability without an
+atomic persistent queue, secret rotation and an audited redrive path.
+
+# 2026-09-17 — durable queues must reference secrets
+
+Persist delivery metadata and a secret reference, never the signing secret.
+Claim rows atomically with `SKIP LOCKED`, release the lease before performing
+network I/O, and make destinations idempotent with a stable delivery ID.
+
+An HTTPS origin allowlist is necessary but not sufficient for SSRF safety:
+production transports must also pin/validate DNS results and reject private,
+loopback, link-local and metadata-service addresses at connection time.
+
+# 2026-09-17 — templates must not become credential adapters
+
+Keep Slack/Teams/Jira/PagerDuty payload rendering pure and deterministic. A
+formatter should never accept or serialize routing keys, tokens or secrets;
+the queue and secret resolver own delivery authentication, retry and audit.
+
+# 2026-09-17 — observe delivery metadata, not delivery content
+
+Webhook observability should expose stable IDs, tenant/integration, attempt,
+status and bounded outcome only. Payloads, URLs and secret references are not
+metrics labels or audit fields; observer failures must never block delivery.
+
+# 2026-09-17 — redirect safety is not DNS safety
+
+Revalidate the allowlist at send time and disable redirects, but do not claim
+SSRF protection from a portable `fetch` wrapper alone. Private-IP rejection and
+DNS pinning belong in a connection-aware egress proxy or runtime connector.
+
+# 2026-09-17 — order lifecycle needs separate fulfillment evidence
+
+Payment success is not shipment success. Keep fulfillment and RMA snapshots
+separate from order/payment state, enforce quantities against the original
+order, and require tracking/timestamps before claiming shipped or delivered.
+
+# 2026-09-17 — recurring billing and disputes are separate lifecycles
+
+Subscription state must carry its own period and cancellation semantics;
+chargebacks must link to the exact payment and bound amount/evidence timing.
+Neither can be inferred safely from an order status of `paid`.
+
+# 2026-09-17 — loyalty is a ledger, not a counter
+
+Reconcile points from immutable, idempotent transactions. A mutable balance
+alone cannot expose duplicate earn/redeem events or prevent negative value.
+
+# 2026-09-17 — cancellation must carry its financial consequence
+
+An accepted cancellation is not proof of money reversal. Preserve requested,
+accepted and rejected states, require decision timing, and link accepted paid
+order cancellations to a compensating refund or provider void.
+
+# 2026-09-17 — worker recovery must not depend on worker availability
+
+Visibility leases are useful only while a worker is polling. A fleet-wide
+outage can leave expired jobs stuck in `in_flight` until a new worker happens to
+dequeue. Keep an explicit, atomic queue reaper as a separately schedulable
+control, and treat requeue as a possible retry: it cannot undo an external
+provider effect. Handlers therefore need idempotency/effect-ledger evidence.
+
+# 2026-09-17 — recovery jobs need an explicit network path
+
+Adding a CronJob is not enough when the chart defaults to egress deny. In-cluster
+database selectors and managed-database CIDRs are different trust boundaries;
+the former can be rendered by Helm, while the latter must be operator-supplied.
+
+# 2026-09-17 — metrics exposure is a security boundary
+
+An in-process metrics registry is not operationally useful until the host
+exposes it, but an unauthenticated non-loopback scrape can leak tenant labels.
+Make exposure opt-in and fail closed at boot unless the host supplies an
+explicit scrape authorizer; keep payloads out of metric labels by construction.
+
+# 2026-09-17 — examples are part of the supply chain
+
+Dependabot alerts in an example are not harmless documentation noise: users
+copy examples into production and inherit their constraints. Keep framework
+examples locked, run the ecosystem-native audit (`composer audit --locked` or
+`npm audit`) and upgrade the example baseline instead of suppressing advisories.
+
+# 2026-09-17 — priority is not fairness
+
+A bounded priority field improves urgent-run latency but does not prove tenant
+fairness or prevent starvation. Preserve FIFO ties, persist the value, and keep
+fairness/load-test policy as a separate explicit contract rather than claiming
+that a sort order is a scheduler.
+
+# 2026-09-17 — IF NOT EXISTS is not a migration lock
+
+Concurrent PostgreSQL boots can still race inside relation/type creation even
+when DDL says `IF NOT EXISTS`. Shared adapters need a database advisory lock
+around the complete bootstrap sequence. With pooled clients, use
+`pg_advisory_xact_lock` inside `sql.begin` and issue every DDL statement on the
+transaction client: a session lock plus separate pooled calls can acquire and
+release on different sessions and therefore is not a valid cross-replica
+boundary. A local serial test cannot prove this property.
+
+# 2026-09-17 — JSONB drivers may return serialized values
+
+PostgreSQL JSONB persistence is not automatically equivalent to the in-memory
+object contract across drivers and runtimes. A cached idempotency response can
+come back as a JSON string, including the literal string `"null"` for nullable
+headers. Decode at the durable adapter boundary and test the live response
+shape, not only the database row or the original handler result.
+
+# 2026-09-17 — emergency controls must cross the worker boundary
+
+A process-local LLM budget halt is not an operational kill-switch when the
+queue can dispatch through multiple workers. Persist the halt beside the
+shared reservation ledger, check it before every reservation, bound the
+operator reason, and make reset explicit rather than allowing a retry to
+silently re-enable dispatch.

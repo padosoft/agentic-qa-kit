@@ -75,6 +75,7 @@ Each namespaced export bundles the Zod validator(s) for that domain. To work wit
 | `Finding` | `src/finding.ts` | Bug report with 3-level reproducibility + confidence components |
 | `Event` | `src/event.ts` | Hash-chained audit event |
 | `Run` | `src/run.ts` | Per-run manifest + totals + LLM cost rollup |
+| `RunRequest` | `src/run-request.ts` | Strict public queue request used by the control-plane API |
 | `PackManifest` | `src/pack-manifest.ts` | Pack manifest with `applies_when` predicates |
 
 ## Determinism contract (Finding)

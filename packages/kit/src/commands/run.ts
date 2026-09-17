@@ -11,19 +11,18 @@
  * writers we hand it; we never re-emit `finding_emitted` ourselves.
  *
  * Profiles with `require_deterministic_replay: true` (the canonical
- * "release-gate" signal from the schema) are *intended* to treat any
- * emitted finding as a run-level failure, but that strict semantic is
- * **deferred** until a real probe runner ships. Today's runs use the
- * no-network probe stub, so every finding is synthetic and not a real
- * regression — surfacing findings via `findingsCount` + `findings.jsonl`
+ * "release-gate" signal from the schema) treat any emitted finding as a
+ * run-level failure. Missing probe drivers and transport errors are recorded
+ * as failed evidence; they are never represented by a synthetic success.
  * is the honest signal for now. Both smoke and release-gate currently
  * report `ok: true` when scenarios completed without infrastructure
  * errors. The check re-engages automatically once findings reflect
  * actual SUT behavior.
  *
- * The default probe runner is the no-network stub from `@aqa/runner`. Wiring
- * real HTTP / browser probes against a live target is intentionally a
- * follow-up; this command owns the orchestration and the audit trail.
+ * When `.aqa/project.yaml` declares `sut.base_url`, the default probe runner
+ * is the origin-scoped HTTP driver from `@aqa/runner`. Browser, shell, SQL and
+ * provider-specific drivers remain explicit host integrations; this command
+ * owns orchestration and the audit trail.
  */
 
 import { createHash } from 'node:crypto';
@@ -36,15 +35,34 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import type { ArtifactStore } from '@aqa/artifacts';
+import {
+  type AuditCheckpointSigner,
+  createAuditCheckpoint,
+  parseEventLines,
+} from '@aqa/compliance';
+import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
-import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
-import { Profile, Project, Scenario } from '@aqa/schemas';
+import { verifyPackContentDigest } from '@aqa/pack-scanner';
+import { buildReplayArtifacts } from '@aqa/reporter';
+import {
+  EventChainWriter,
+  FindingsWriter,
+  type ProbeRunner,
+  makeHttpProbeRunner,
+  runScenario,
+} from '@aqa/runner';
+import { type Event, Profile, Project, RiskMap, Run, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
+import { createRunArtifactStore } from '../artifacts.js';
+
+type ClosableProbeRunner = ProbeRunner & { close?: () => Promise<void> };
 
 export interface RunOptions {
   root: string;
+  /** Cooperative cancellation owned by a queue worker or embedding host. */
+  signal?: AbortSignal;
   /**
    * Profile key from .aqa/profiles.yaml. When omitted, prefers "smoke" if
    * present; otherwise falls back to the first key in the file (insertion
@@ -68,6 +86,21 @@ export interface RunOptions {
    * beats bundled).
    */
   packsRoot?: string[];
+  /** Optional OTLP/HTTP endpoint; defaults to AQA_OTLP_ENDPOINT when set. */
+  otlpEndpoint?: string;
+  /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
+  probeRunner?: ClosableProbeRunner;
+  /** Optional capability declaration forwarded to runner preflight. */
+  supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
+  /** Optional operator key used to sign the final audit completeness checkpoint. */
+  auditCheckpointSigner?: AuditCheckpointSigner;
+  /** Independent store for the final checkpoint; failure blocks the run. */
+  auditCheckpointStore?: ArtifactStore;
+  /**
+   * Wall-clock source for the scheduler budget. Production uses Date.now;
+   * embedders/tests may inject a deterministic source.
+   */
+  now?: () => number;
 }
 
 export interface RunResult {
@@ -104,6 +137,8 @@ export interface RunResult {
    * `MAX_DETAIL_PER_KIND` entries per source.
    */
   warnings?: string[];
+  /** Artifact-store keys containing byte-preserved canonical run evidence. */
+  canonicalArtifacts?: string[];
 }
 
 /** Cap on how many detail entries per category we surface in events/RunResult. */
@@ -169,8 +204,18 @@ function discoverInDir(parentDir: string, candidates: string[]): void {
  */
 function bundledKitPacksDir(): string {
   // dist/commands/run.js → dist/packs
-  const here = dirname(fileURLToPath(import.meta.url));
-  return resolve(here, '..', 'packs');
+  const here = commandModuleDir();
+  const bundledPath = resolve(here, 'packs');
+  return existsSync(bundledPath) ? bundledPath : resolve(here, '..', 'packs');
+}
+
+function commandModuleDir(): string {
+  if (typeof __dirname !== 'undefined') return __dirname;
+  const entry = process.argv[1];
+  const name = entry ? basename(entry) : '';
+  if (entry && (name === 'cli.cjs' || name === 'run.js' || name === 'admin.js'))
+    return dirname(resolve(entry));
+  return resolve(process.cwd(), 'dist', 'commands');
 }
 
 function defaultPacksRoot(projectRoot: string): string[] {
@@ -310,6 +355,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   let project: Project.Project;
   let profilesFile: Profile.ProfilesFile;
+  let projectRiskMap: RiskMap.RiskMap;
   try {
     project = Project.Project.parse(readYaml<unknown>(projectPath));
   } catch (e) {
@@ -319,6 +365,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     profilesFile = Profile.ProfilesFile.parse(readYaml<unknown>(profilesPath));
   } catch (e) {
     return makeError(`.aqa/profiles.yaml: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const riskMapPath = join(opts.root, '.aqa', 'risk-map.yaml');
+  if (!existsSync(riskMapPath)) {
+    return makeError('.aqa/risk-map.yaml not found — add the project risk map before running');
+  }
+  try {
+    projectRiskMap = RiskMap.RiskMap.parse(readYaml<unknown>(riskMapPath));
+  } catch (e) {
+    return makeError(`.aqa/risk-map.yaml: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Default-profile policy: when --profile is omitted, prefer "smoke" if it
@@ -392,7 +447,22 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   const eventsPath = join(runDir, 'events.jsonl');
   const findingsPath = join(runDir, 'findings.jsonl');
-  const events = new EventChainWriter(eventsPath);
+  let telemetryError: string | undefined;
+  let telemetry: OtlpHttpSpanExporter | undefined;
+  let onEvent: ((event: Event.Event) => void) | undefined;
+  const otlpEndpoint = opts.otlpEndpoint ?? process.env.AQA_OTLP_ENDPOINT;
+  if (otlpEndpoint) {
+    try {
+      telemetry = new OtlpHttpSpanExporter({
+        endpoint: otlpEndpoint,
+        service_name: process.env.AQA_OTLP_SERVICE_NAME ?? 'aqa-kit',
+      });
+      onEvent = makeEventSpanObserver(new Tracer((span) => telemetry?.export(span)));
+    } catch (error) {
+      telemetryError = `OTLP configuration rejected: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  const events = new EventChainWriter(eventsPath, onEvent ? { onEvent } : {});
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,
   // even when a clean run produces zero findings. Wrap in try/catch so a
@@ -448,9 +518,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // executed and audited twice. First-seen wins, so the priority order
   // matches the discovery order above: project > node_modules > bundled.
   const seenPackNames = new Set<string>();
-  const probeRunner = project.sut.base_url
-    ? makeHttpProbeRunner({ baseUrl: project.sut.base_url })
-    : undefined;
+  const probeRunner: ClosableProbeRunner | undefined =
+    opts.probeRunner ??
+    (project.sut.base_url ? makeHttpProbeRunner({ baseUrl: project.sut.base_url }) : undefined);
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -477,10 +547,24 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const missingScenarios: string[] = [];
   const unsafeScenarioPaths: string[] = [];
   const runtimeErrors: string[] = [];
+  const executionErrors: string[] = [];
+  const scenarioOutcomes: Array<{ scenario_id: string; outcome: string }> = [];
+  const executedScenarios: Scenario.Scenario[] = [];
+  const riskCatalog = new Map(projectRiskMap.risks.map((risk) => [risk.id, risk]));
+  const now = opts.now ?? Date.now;
+  const budgetDeadline =
+    profile.budget_minutes === undefined ? undefined : now() + profile.budget_minutes * 60 * 1000;
+  let budgetExceeded = false;
+  let cancelled = false;
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
       pack = loadPack(packDir);
+      const contentIntegrity = verifyPackContentDigest(pack.root, pack.manifest);
+      if (!contentIntegrity.ok) {
+        packErrors.push(`${packDir}: ${contentIntegrity.reason}`);
+        continue;
+      }
     } catch (e) {
       packErrors.push(`${packDir}: ${e instanceof Error ? e.message : String(e)}`);
       continue;
@@ -501,6 +585,34 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     for (const rel of missing) missingScenarios.push(`${pack.manifest.name}:${rel}`);
     for (const rel of unsafe) unsafeScenarioPaths.push(`${pack.manifest.name}:${rel}`);
 
+    for (const relativeRiskPath of pack.manifest.risks ?? []) {
+      if (isAbsolute(relativeRiskPath)) {
+        packErrors.push(`${packDir}: unsafe risk path ${relativeRiskPath}`);
+        continue;
+      }
+      const riskPath = resolve(packDir, relativeRiskPath);
+      if (!isInside(packDir, riskPath) || !existsSync(riskPath)) {
+        packErrors.push(
+          `${packDir}: risk file is missing or escapes pack root: ${relativeRiskPath}`,
+        );
+        continue;
+      }
+      try {
+        const realPackRoot = realpathSync(packDir);
+        const realRiskPath = realpathSync(riskPath);
+        if (!isInside(realPackRoot, realRiskPath)) {
+          packErrors.push(`${packDir}: risk file symlink escapes pack root: ${relativeRiskPath}`);
+          continue;
+        }
+        const parsedRiskMap = RiskMap.RiskMap.parse(readYaml<unknown>(riskPath));
+        for (const risk of parsedRiskMap.risks) riskCatalog.set(risk.id, risk);
+      } catch (e) {
+        packErrors.push(
+          `${packDir}: invalid risk file ${relativeRiskPath}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
     for (const scenarioPath of paths) {
       let scenario: Scenario.Scenario;
       try {
@@ -510,24 +622,133 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       if (!tagsMatch(scenario.tags ?? [], profile.tags)) continue;
+      const missingRiskRefs = scenario.risk_refs.filter((riskId) => !riskCatalog.has(riskId));
+      if (missingRiskRefs.length > 0) {
+        scenarioErrors.push(`${scenarioPath}: unresolved risk_refs: ${missingRiskRefs.join(', ')}`);
+        continue;
+      }
+      const resolvedRisk = riskCatalog.get(scenario.risk_refs[0] ?? '');
+      if (opts.signal?.aborted) {
+        cancelled = true;
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'aqa-cli' },
+          scenario_id: scenario.id,
+          payload: { outcome: 'not_run', execution_status: 'not_started', reason: 'cancelled' },
+        });
+        continue;
+      }
       scenariosRun += 1;
+      executedScenarios.push(scenario);
       // runScenario itself appends `finding_emitted` to events and pushes the
       // finding through findings.append when both writers are provided — do
       // NOT re-emit here. Wrap in try/catch so a future probe-runner
       // exception (or write failure) is collected instead of bubbling out
       // and skipping the `run_finished` audit event.
       try {
-        await runScenario({
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_started',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: {},
+        });
+        if (budgetDeadline !== undefined && now() >= budgetDeadline) {
+          budgetExceeded = true;
+          scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+          events.append({
+            ts: new Date().toISOString(),
+            run_id: runId,
+            kind: 'scenario_finished',
+            actor: { type: 'orchestrator', id: 'aqa-cli' },
+            scenario_id: scenario.id,
+            payload: {
+              outcome: 'not_run',
+              execution_status: 'not_started',
+              reason: 'budget_exceeded',
+            },
+          });
+          continue;
+        }
+        const scenarioResult = await runScenario({
           scenario,
           run_id: runId,
           events,
           findings,
           ...(probeRunner ? { probeRunner } : {}),
+          ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
           findingIdSeed: scenariosRun,
+          ...(resolvedRisk ? { risk: resolvedRisk } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
         });
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: scenarioResult.outcome });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: {
+            outcome: scenarioResult.outcome,
+            execution_status: scenarioResult.execution_status,
+            findings: scenarioResult.finding ? 1 : 0,
+          },
+        });
+        if (scenarioResult.execution_status === 'failed') {
+          executionErrors.push(
+            `${scenario.id}: ${scenarioResult.execution_error ?? 'probe execution failed'}`,
+          );
+        }
       } catch (e) {
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'error' });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'kit' },
+          scenario_id: scenario.id,
+          payload: { outcome: 'error', execution_status: 'failed' },
+        });
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
+      if (opts.signal?.aborted) cancelled = true;
+    }
+  }
+
+  if (probeRunner?.close) {
+    try {
+      await probeRunner.close();
+    } catch (e) {
+      runtimeErrors.push(
+        `probe driver close failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  const replayArtifacts: string[] = [];
+  const replayErrors: string[] = [];
+  const artifactStore = createRunArtifactStore(runDir, runId);
+  for (const finding of findings.snapshot()) {
+    const scenario = executedScenarios.find((candidate) => candidate.id === finding.scenario_id);
+    if (!scenario) {
+      replayErrors.push(`${finding.id}: scenario ${finding.scenario_id} is unavailable`);
+      continue;
+    }
+    try {
+      for (const artifact of buildReplayArtifacts({
+        finding,
+        scenario,
+        ...(project.sut.base_url ? { base_url: project.sut.base_url } : {}),
+      })) {
+        await artifactStore.putText(artifact.path, artifact.contents, 'text/plain; charset=utf-8');
+        replayArtifacts.push(artifact.path);
+      }
+    } catch (e) {
+      replayErrors.push(`${finding.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -535,6 +756,34 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // so a write failure at finalization still returns a structured result
   // (with the finalization error appended) rather than throwing past the
   // structured RunResult.
+  const completionPayload = {
+    scenarios_run: scenariosRun,
+    scenario_outcomes: scenarioOutcomes,
+    findings: findings.snapshot().length,
+    pack_errors: packErrors.length,
+    scenario_errors: scenarioErrors.length,
+    missing_scenarios: missingScenarios.length,
+    unsafe_paths: unsafeScenarioPaths.length,
+    runtime_errors: runtimeErrors.length,
+    execution_errors: executionErrors.length,
+    budget_exceeded: budgetExceeded,
+    budget_minutes: profile.budget_minutes ?? null,
+    replay_artifacts: replayArtifacts.length,
+    replay_errors: replayErrors.length,
+    release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
+    pack_error_samples: cap(packErrors),
+    scenario_error_samples: cap(scenarioErrors),
+    missing_scenario_samples: cap(missingScenarios),
+    unsafe_path_samples: cap(unsafeScenarioPaths),
+    runtime_error_samples: cap(runtimeErrors),
+    execution_error_samples: cap(executionErrors),
+    replay_artifact_samples: cap(replayArtifacts),
+    replay_error_samples: cap(replayErrors),
+  };
+  const completionState = Run.deriveStateFromCompletion(
+    { payload: completionPayload },
+    scenariosRun,
+  );
   let finalizationError: string | undefined;
   try {
     events.append({
@@ -542,26 +791,89 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       run_id: runId,
       kind: 'run_finished',
       actor: { type: 'orchestrator', id: 'aqa-cli' },
-      payload: {
-        scenarios_run: scenariosRun,
-        findings: findings.snapshot().length,
-        pack_errors: packErrors.length,
-        scenario_errors: scenarioErrors.length,
-        missing_scenarios: missingScenarios.length,
-        unsafe_paths: unsafeScenarioPaths.length,
-        runtime_errors: runtimeErrors.length,
-        // Capped detail samples — let auditors diagnose the run from the
-        // audit trail alone, without having to re-execute it. Bounded so
-        // a runaway pack tree can't blow up the JSONL line size.
-        pack_error_samples: cap(packErrors),
-        scenario_error_samples: cap(scenarioErrors),
-        missing_scenario_samples: cap(missingScenarios),
-        unsafe_path_samples: cap(unsafeScenarioPaths),
-        runtime_error_samples: cap(runtimeErrors),
-      },
+      payload: { ...completionPayload, run_state: completionState },
     });
   } catch (e) {
     finalizationError = `cannot finalize run audit: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  // Publish the canonical streams only after run_finished has been appended.
+  // putBytes is intentional: putText applies redaction and would change the
+  // bytes (and therefore the hash-chain evidence) even when the local writers
+  // already emitted redacted content. The manifest makes the two immutable
+  // stream references discoverable without pretending the upload is atomic.
+  const canonicalArtifacts: string[] = [];
+  const canonicalArtifactErrors: string[] = [];
+  const canonicalRefs: Record<string, { id: string; sha256: string; bytes: number }> = {};
+  let externalCheckpointRef: { id: string; sha256: string; bytes: number; key: string } | undefined;
+  for (const [key, path] of [
+    ['canonical/events.jsonl', eventsPath],
+    ['canonical/findings.jsonl', findingsPath],
+  ] as const) {
+    try {
+      const ref = await artifactStore.putBytes(key, readFileSync(path));
+      canonicalArtifacts.push(ref.key);
+      canonicalRefs[key] = { id: ref.id, sha256: ref.sha256, bytes: ref.bytes };
+    } catch (e) {
+      canonicalArtifactErrors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (canonicalArtifactErrors.length === 0) {
+    try {
+      const checkpoint = createAuditCheckpoint(
+        parseEventLines(readFileSync(eventsPath, 'utf8')),
+        opts.auditCheckpointSigner,
+      );
+      const checkpointRef = await artifactStore.putJson('canonical/checkpoint.json', checkpoint);
+      canonicalArtifacts.push(checkpointRef.key);
+      canonicalRefs['canonical/checkpoint.json'] = {
+        id: checkpointRef.id,
+        sha256: checkpointRef.sha256,
+        bytes: checkpointRef.bytes,
+      };
+      if (opts.auditCheckpointStore) {
+        const externalRef = await opts.auditCheckpointStore.putJson(
+          `checkpoints/${runId}.json`,
+          checkpoint,
+        );
+        externalCheckpointRef = {
+          key: externalRef.key,
+          id: externalRef.id,
+          sha256: externalRef.sha256,
+          bytes: externalRef.bytes,
+        };
+      }
+    } catch (e) {
+      canonicalArtifactErrors.push(
+        `canonical/checkpoint.json: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+  if (canonicalArtifactErrors.length === 0) {
+    try {
+      const manifest = await artifactStore.putJson('canonical/manifest.json', {
+        schema_version: '1',
+        run_id: runId,
+        events_key: 'canonical/events.jsonl',
+        findings_key: 'canonical/findings.jsonl',
+        artifacts: canonicalRefs,
+        ...(externalCheckpointRef ? { external_checkpoint: externalCheckpointRef } : {}),
+        published_at: new Date().toISOString(),
+      });
+      canonicalArtifacts.push(manifest.key);
+    } catch (e) {
+      canonicalArtifactErrors.push(
+        `canonical/manifest.json: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  if (telemetry) {
+    try {
+      await telemetry.shutdown();
+    } catch (error) {
+      telemetryError = `OTLP delivery unavailable: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   // Build a structured error message when something went wrong. Any of these
@@ -632,6 +944,22 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     );
   if (runtimeErrors.length > 0)
     reasons.push(`${runtimeErrors.length} scenario(s) threw at runtime: ${fmtList(runtimeErrors)}`);
+  if (executionErrors.length > 0)
+    reasons.push(
+      `${executionErrors.length} scenario(s) could not execute: ${fmtList(executionErrors)}`,
+    );
+  if (budgetExceeded) {
+    reasons.push(
+      `profile "${profileKey}" exceeded budget_minutes=${profile.budget_minutes}; remaining scenarios were not run`,
+    );
+  }
+  if (cancelled) reasons.push('run cancelled by worker or operator');
+  if (replayErrors.length > 0)
+    reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
+  if (canonicalArtifactErrors.length > 0)
+    reasons.push(
+      `${canonicalArtifactErrors.length} canonical artifact(s) failed: ${fmtList(canonicalArtifactErrors)}`,
+    );
   if (scenariosRun === 0) {
     reasons.push(
       `profile "${profileKey}" ran 0 scenarios — check that profile.packs (${profile.packs.join(', ') || '<empty>'}) match a discoverable pack manifest and that profile.tags overlap with scenario tags`,
@@ -656,6 +984,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   if (packErrors.length > 0 && reasons.length === 0) {
     for (const e of cap(packErrors)) warnings.push(`pack: ${e}`);
   }
+  if (telemetryError) warnings.push(telemetryError);
 
   return {
     ok: reasons.length === 0,
@@ -665,5 +994,6 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     findingsCount,
     ...(reasons.length > 0 ? { error: reasons.join(' | ') } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(canonicalArtifacts.length > 0 ? { canonicalArtifacts } : {}),
   };
 }

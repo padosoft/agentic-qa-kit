@@ -68,3 +68,4 @@ docs/api/
 _site/
 .docmd-search/*
 !.docmd-search/config.json
+docs-site/docs/_docmd-search/

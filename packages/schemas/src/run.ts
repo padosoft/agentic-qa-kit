@@ -38,6 +38,8 @@ export const Run = z
     started_at: IsoDateTime,
     finished_at: IsoDateTime.optional(),
     state: RunState,
+    /** Tenant organization; absent only for explicitly unscoped legacy runs. */
+    org: Slug.optional(),
     project: Slug,
     profile: Slug,
     execution_mode: ExecutionMode,
@@ -79,3 +81,44 @@ export const Run = z
     }
   });
 export type Run = z.infer<typeof Run>;
+
+/**
+ * Derive the persisted run state from the completion event counters.
+ * Consumers must use the same fail-closed rule: a completion event alone is
+ * not proof of success when it reports errors or zero executed scenarios.
+ */
+export function deriveStateFromCompletion(completion: unknown, scenariosRun: number): RunState {
+  if (!completion || typeof completion !== 'object') return 'running';
+  const candidate = completion as Record<string, unknown>;
+  const payload =
+    candidate.payload && typeof candidate.payload === 'object'
+      ? (candidate.payload as Record<string, unknown>)
+      : candidate;
+  const explicitState = payload.run_state;
+  if (
+    explicitState === 'succeeded' ||
+    explicitState === 'failed' ||
+    explicitState === 'aborted' ||
+    explicitState === 'budget_exceeded'
+  ) {
+    return explicitState;
+  }
+  const errorKeys = [
+    'pack_errors',
+    'scenario_errors',
+    'missing_scenarios',
+    'unsafe_paths',
+    'runtime_errors',
+    'execution_errors',
+    'replay_errors',
+    'canonical_artifact_errors',
+  ] as const;
+  if (payload.budget_exceeded === true) return 'budget_exceeded';
+  if (
+    payload.release_gate_failed === true ||
+    errorKeys.some((key) => typeof payload[key] === 'number' && payload[key] > 0)
+  ) {
+    return 'failed';
+  }
+  return scenariosRun === 0 ? 'failed' : 'succeeded';
+}

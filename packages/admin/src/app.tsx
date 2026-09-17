@@ -6,6 +6,7 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { verifyEventChainBrowser } from '@aqa/compliance/browser';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 // Expose the YAML parser/stringifier on `window` so ScenarioYamlWizard
@@ -2967,6 +2968,25 @@ function runById(id) {
 function findingById(id) {
   return FINDINGS.find((f) => f.id === id);
 }
+function normalizeFindingForAdmin(finding) {
+  const reproducibility = finding?.reproducibility || {};
+  const floor = (level) =>
+    reproducibility[level] || { deterministic: false, attempts: 0, successes: 0 };
+  return {
+    ...finding,
+    owners: Array.isArray(finding?.owners) ? finding.owners : [],
+    tags: Array.isArray(finding?.tags) ? finding.tags : [],
+    verification_floor:
+      typeof finding?.verification_floor === 'string'
+        ? finding.verification_floor
+        : 'scenario_level',
+    reproducibility: {
+      bug_level: floor('bug_level'),
+      scenario_level: floor('scenario_level'),
+      agent_level: floor('agent_level'),
+    },
+  };
+}
 function riskById(id) {
   return RISKS.find((r) => r.id === id);
 }
@@ -2978,9 +2998,9 @@ function profileByName(n) {
 }
 
 // Findings grouped by signature (risk × scenario family)
-function clusteredFindings() {
+function clusteredFindings(source = FINDINGS) {
   const clusters = {};
-  for (const f of FINDINGS) {
+  for (const f of source) {
     const sig = f.risk_id + '::' + f.scenario_id.split('.').slice(0, 2).join('.');
     (clusters[sig] = clusters[sig] || {
       sig,
@@ -3520,11 +3540,10 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
     setFirstMismatch(null);
     setExpanded(null);
     let i = 0;
-    const tick = () => {
+    const tick = async () => {
       i = Math.min(i + 1, chain.length);
       setProgress(i / chain.length);
-      // detect mismatch — for demo, the tampered chain has a "broken" flag injected by `validateChain`
-      const issue = validateChainStep(chain, i);
+      const issue = await validateChainStep(chain, i);
       if (issue) {
         setFirstMismatch(issue);
         setVerifiedCount(issue.index);
@@ -3537,9 +3556,9 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
         return;
       }
       setVerifiedCount(i);
-      timerRef.current = setTimeout(tick, 25);
+      timerRef.current = setTimeout(() => void tick(), 25);
     };
-    tick();
+    void tick();
   };
 
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -3842,9 +3861,13 @@ function AuditChainViewer({ initialChain, demoGood, demoBad }) {
   );
 }
 
-// Simulated "chain verification" — for the demo, we detect a tampered event by recomputing
-// based on the prev_hash continuity logic (any modified event will surface a mismatch on the next event).
-function validateChainStep(chain, upto) {
+async function validateChainStep(chain, upto) {
+  const rawChain = chain.map((event) => event.raw).filter(Boolean);
+  if (rawChain.length === chain.length) return validateCanonicalChain(rawChain, upto);
+
+  // Legacy visual fixtures do not contain canonical Event records. Keep their
+  // continuity-only check for the demo, but live API records always use the
+  // cryptographic path above.
   for (let i = 1; i < upto; i++) {
     const prev = chain[i - 1];
     const cur = chain[i];
@@ -3861,6 +3884,17 @@ function validateChainStep(chain, upto) {
     }
   }
   return null;
+}
+
+async function validateCanonicalChain(chain, upto) {
+  const result = await verifyEventChainBrowser(chain, upto);
+  if (result.ok) return null;
+  const event = chain[result.bad_index];
+  return {
+    index: result.bad_index,
+    expected: result.reason === 'hash mismatch' ? 'recomputed hash' : 'previous hash',
+    got: event?.hash ?? event?.prev_hash ?? 'missing',
+  };
 }
 
 // -------------------------------------------------------------
@@ -4094,6 +4128,71 @@ function apiUrl(path) {
   return `${cleanBase}${path.startsWith('/') ? path : `/${path}`}`;
 }
 Object.assign(window, { __aqaApiUrl: apiUrl });
+
+// The admin keeps the durable API as the source of truth and uses SSE only as
+// a low-latency invalidation signal. EventSource reconnects automatically;
+// consumers should refetch their projection after a reconnect or event.
+function useLiveEventStream() {
+  const configured =
+    typeof import.meta !== 'undefined' &&
+    Boolean((import.meta).env?.VITE_AQA_SERVER_URL);
+  const [state, setState] = React.useState({
+    configured,
+    status: configured ? 'connecting' : 'disabled',
+    events: 0,
+    lastType: '',
+    lastId: '',
+  });
+  const statusRef = React.useRef(state.status);
+
+  React.useEffect(() => {
+    if (!configured || typeof EventSource === 'undefined') return undefined;
+    const streamUrl = `${apiUrl('/api/events/stream')}?org=padosoft&project=gescat`;
+    const source = new EventSource(streamUrl, { withCredentials: true });
+    const onOpen = () => {
+      const recovered = statusRef.current === 'reconnecting';
+      statusRef.current = 'connected';
+      setState((prev) => ({ ...prev, status: 'connected' }));
+      if (recovered) window.dispatchEvent(new CustomEvent('aqa:live-reconnected'));
+    };
+    const onError = () => {
+      statusRef.current = 'reconnecting';
+      setState((prev) => ({ ...prev, status: 'reconnecting' }));
+    };
+    const onEvent = (event) => {
+      let payload = null;
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      const type = typeof payload?.type === 'string' ? payload.type : event.type;
+      const id = typeof payload?.id === 'string' ? payload.id : event.lastEventId;
+      statusRef.current = 'connected';
+      setState((prev) => ({
+        ...prev,
+        status: 'connected',
+        events: prev.events + 1,
+        lastType: type,
+        lastId: id,
+      }));
+      window.dispatchEvent(new CustomEvent('aqa:live-event', { detail: payload }));
+    };
+    source.onopen = onOpen;
+    source.onerror = onError;
+    for (const type of ['run.requested', 'run.cancelled', 'finding.status_changed']) {
+      source.addEventListener(type, onEvent);
+    }
+    return () => {
+      source.close();
+      for (const type of ['run.requested', 'run.cancelled', 'finding.status_changed']) {
+        source.removeEventListener(type, onEvent);
+      }
+    };
+  }, [configured]);
+
+  return state;
+}
 
 function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   const [items, setItems] = React.useState(initialFindings);
@@ -5558,6 +5657,9 @@ function ScenarioYamlWizard({
 }) {
   // mode: 'edit' | 'clone'
   const [yamlText, setYamlText] = React.useState('');
+  const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -5589,18 +5691,66 @@ function ScenarioYamlWizard({
       // Copilot iter 7.
       setDebouncedYaml(seeded);
       setError(null);
+      setConflictDetected(false);
       setSubmitting(false);
       inFlightRef.current = false;
     }
   }, [open, scenarioId, mode, persistedBody]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!open || mode !== 'edit' || !scenarioId) {
+      setResourceEtag(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch(apiUrl(`/api/scenarios/${encodeURIComponent(scenarioId)}`), {
+      headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+    })
+      .then((res) => {
+        if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResourceEtag(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode, scenarioId]);
+
   function handleClose() {
     if (submitting) return;
     setYamlText('');
     setError(null);
+    setConflictDetected(false);
     setSubmitting(false);
     inFlightRef.current = false;
     onClose?.();
+  }
+
+  async function reloadLatestScenario() {
+    if (!scenarioId || mode !== 'edit' || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/scenarios/${encodeURIComponent(scenarioId)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.scenario) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      const latest = window.__aqaYamlStringify?.(parsed.scenario);
+      if (typeof latest !== 'string') throw new Error('server returned an invalid scenario');
+      setYamlText(latest);
+      setDebouncedYaml(latest);
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setError(null);
+      toast.push({ kind: 'info', title: 'Latest scenario loaded', body: scenarioId });
+    } catch (e) {
+      setError(`Could not reload the latest scenario: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
   }
 
   // Parse client-side for an early UX hint. Server is the trust
@@ -5715,7 +5865,10 @@ function ScenarioYamlWizard({
           : apiUrl('/api/scenarios');
       const res = await fetch(reqUrl, {
         method: mode === 'edit' ? 'PUT' : 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(mode === 'edit' && resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(parsedBody),
       });
       const text = await res.text();
@@ -5730,8 +5883,10 @@ function ScenarioYamlWizard({
         const fullMsg = `${subjectId}: ${msg}`;
         toast.push({ kind: 'error', title: `Save scenario failed`, body: fullMsg });
         setError(msg);
+        if (mode === 'edit' && res.status === 412) setConflictDetected(true);
         return;
       }
+      if (mode === 'edit') setResourceEtag(res.headers.get('etag') || resourceEtag);
       // PR #37 Copilot iter 3: broadcast the SERVER's response body,
       // not the client's parsedBody. The server (Zod) applies defaults
       // (probe/oracle defaults, `invariant_refs: []`, `cleanup: []`,
@@ -5812,6 +5967,11 @@ function ScenarioYamlWizard({
         {error && (
           <Alert kind="error" title="Save failed">
             <span data-testid="scenario-yaml-error">{error}</span>
+            {conflictDetected && (
+              <button className="btn xs ghost" data-testid="scenario-reload-latest" onClick={reloadLatestScenario} disabled={reloading} style={{ marginLeft: 8 }}>
+                {reloading ? 'Reloading…' : 'Reload latest'}
+              </button>
+            )}
           </Alert>
         )}
         {uxError && !error && (
@@ -5917,6 +6077,9 @@ function slugError(s) {
 
 function EditProfileWizard({ open, profile, onClose, onSaved }) {
   const [form, setForm] = React.useState(() => deriveProfileForm(profile ?? { packs: [], tags: [] }));
+  const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -5952,9 +6115,29 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     if (open) {
       setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
       setError(null);
+      setConflictDetected(false);
       setSubmitting(false);
       inFlightRef.current = false;
+      let cancelled = false;
+      if (profileName) {
+        fetch(apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        })
+          .then((res) => {
+            if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+          })
+          .catch(() => {
+            if (!cancelled) setResourceEtag(null);
+          });
+      } else {
+        setResourceEtag(null);
+      }
+      return () => {
+        cancelled = true;
+      };
     }
+    setResourceEtag(null);
+    return undefined;
   }, [open, profileName]);
 
   // Inline validation: parallelism must be a positive integer ≤ 64
@@ -6005,9 +6188,31 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     // submit those stale values. (Copilot review on PR #30 iter 7.)
     setForm(deriveProfileForm(profileRef.current ?? { packs: [], tags: [] }));
     setError(null);
+    setConflictDetected(false);
     setSubmitting(false);
     inFlightRef.current = false;
     onClose?.();
+  }
+
+  async function reloadLatestProfile() {
+    if (!profileName || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.profile) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      setForm(deriveProfileForm(parsed.profile));
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setError(null);
+      toast.push({ kind: 'info', title: 'Latest profile loaded', body: profileName });
+    } catch (e) {
+      setError(`Could not reload the latest profile: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
   }
 
   async function handleSubmit() {
@@ -6050,7 +6255,10 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     try {
       const res = await fetch(reqUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(body),
       });
       const text = await res.text();
@@ -6073,8 +6281,10 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
         const full = `${submittedName}: ${msg}`;
         toast.push({ kind: 'error', title: 'Save profile failed', body: full });
         if (stillCurrent) setError(msg);
+        if (stillCurrent && res.status === 412) setConflictDetected(true);
         return;
       }
+      setResourceEtag(res.headers.get('etag') || resourceEtag);
       toast.push({
         kind: 'success',
         title: 'Profile saved',
@@ -6143,7 +6353,12 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       <div className="col gap-12">
         {error && (
           <Alert kind="error" title="Save failed">
-            {error}
+            <span data-testid="profile-edit-error">{error}</span>
+            {conflictDetected && (
+              <button className="btn xs ghost" data-testid="profile-reload-latest" onClick={reloadLatestProfile} disabled={reloading} style={{ marginLeft: 8 }}>
+                {reloading ? 'Reloading…' : 'Reload latest'}
+              </button>
+            )}
           </Alert>
         )}
         <div className="field-row">
@@ -6507,6 +6722,7 @@ const NAV_TREE = [
       { key: 'runs', label: 'Runs', icon: 'Runs', route: '/runs' },
       { key: 'findings', label: 'Findings', icon: 'Bug', route: '/findings' },
       { key: 'risk-map', label: 'Risk map', icon: 'Shield', route: '/risk-map' },
+      { key: 'risk-coverage', label: 'Risk coverage', icon: 'Shield', route: '/risk-coverage' },
     ],
   },
   {
@@ -7290,18 +7506,45 @@ function PageDashboard({ onNavigate }) {
 
 // ---------------- Runs ----------------
 function PageRuns({ onNavigate, onOpenRun }) {
+  const [liveRuns, setLiveRuns] = React.useState(null);
   const [filterStatus, setFilterStatus] = React.useState('all');
   const [filterProfile, setFilterProfile] = React.useState('all');
   const [selected, setSelected] = React.useState(new Set());
 
-  const filtered = RUNS.filter((r) => {
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(apiUrl('/api/runs'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body?.runs)) setLiveRuns(body.runs);
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    };
+    void load();
+    window.addEventListener('aqa:live-event', load);
+    window.addEventListener('aqa:live-reconnected', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('aqa:live-event', load);
+      window.removeEventListener('aqa:live-reconnected', load);
+    };
+  }, []);
+
+  const runs = liveRuns ?? RUNS;
+
+  const filtered = runs.filter((r) => {
     if (filterStatus !== 'all' && r.state !== filterStatus) return false;
     if (filterProfile !== 'all' && r.profile !== filterProfile) return false;
     return true;
   });
 
-  const statusCounts = RUNS.reduce(
-    (a, r) => ({ ...a, [r.state]: (a[r.state] || 0) + 1, all: RUNS.length }),
+  const statusCounts = runs.reduce(
+    (a, r) => ({ ...a, [r.state]: (a[r.state] || 0) + 1, all: runs.length }),
     {},
   );
 
@@ -7315,7 +7558,7 @@ function PageRuns({ onNavigate, onOpenRun }) {
     <div className="page" data-screen-label="02 Runs">
       <PageHeader
         title="Runs"
-        sub={`${RUNS.length} runs in gescat · last 30 days`}
+        sub={`${runs.length} runs in gescat · ${liveRuns !== null ? 'live API' : 'local preview'}`}
         actions={
           <>
             <button className="btn sm">
@@ -7508,8 +7751,8 @@ function PageRuns({ onNavigate, onOpenRun }) {
           </table>
         </div>
         <div className="pagination">
-          <span className="pagination-info">
-            Showing {filtered.length} of {RUNS.length} · page 1 of 1
+            <span className="pagination-info">
+            Showing {filtered.length} of {runs.length} · page 1 of 1
           </span>
           <div className="pagination-controls">
             <button className="iconbtn" disabled>
@@ -7534,9 +7777,38 @@ function PageRuns({ onNavigate, onOpenRun }) {
 
 // ---------------- Run detail ----------------
 function PageRunDetail({ runId, onNavigate }) {
-  const run = runById(runId) || RUNS[0];
+  const [liveRun, setLiveRun] = React.useState(null);
+  const [liveFindings, setLiveFindings] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' };
+        const [runResponse, findingsResponse] = await Promise.all([
+          fetch(apiUrl(`/api/runs/${encodeURIComponent(runId)}`), { headers }),
+          fetch(apiUrl('/api/findings'), { headers }),
+        ]);
+        if (cancelled) return;
+        if (runResponse.ok) {
+          const body = await runResponse.json();
+          if (body?.run) setLiveRun(body.run);
+        }
+        if (findingsResponse.ok) {
+          const body = await findingsResponse.json();
+          if (Array.isArray(body?.findings)) setLiveFindings(body.findings);
+        }
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  const run = liveRun || runById(runId) || RUNS[0];
   const [tab, setTab] = React.useState('overview');
-  const findings = findingsByRun(run.id);
+  const findings = (liveFindings || FINDINGS).filter((finding) => finding.run_id === run.id);
   const dur = run.finished_at
     ? new Date(run.finished_at) - new Date(run.started_at)
     : NOW_REF - new Date(run.started_at);
@@ -7550,7 +7822,7 @@ function PageRunDetail({ runId, onNavigate }) {
             <StatusBadge status={run.state} />
           </span>
         }
-        sub={`profile=${run.profile} · ${fmtRelative(run.started_at)} · ${fmtDuration(dur)}`}
+        sub={`profile=${run.profile} · ${fmtRelative(run.started_at)} · ${fmtDuration(dur)} · ${liveRun ? 'live API' : 'local preview'}`}
         actions={
           <>
             <button className="btn sm">
@@ -8035,17 +8307,44 @@ Object.assign(window, { PageDashboard, PageRuns, PageRunDetail, PageRunCompare }
 
 // ---------------- Findings ----------------
 function PageFindings({ onNavigate, onOpenFinding }) {
+  const [liveFindings, setLiveFindings] = React.useState(null);
   const [view, setView] = React.useState('clusters'); // clusters | list | kanban
   const [filterSev, setFilterSev] = React.useState(new Set());
   const [filterStatus, setFilterStatus] = React.useState(new Set());
 
-  const all = FINDINGS;
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(apiUrl('/api/findings'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body?.findings)) {
+          setLiveFindings(body.findings.map(normalizeFindingForAdmin));
+        }
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    };
+    void load();
+    window.addEventListener('aqa:live-event', load);
+    window.addEventListener('aqa:live-reconnected', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('aqa:live-event', load);
+      window.removeEventListener('aqa:live-reconnected', load);
+    };
+  }, []);
+
+  const all = liveFindings ?? FINDINGS;
   const filtered = all.filter((f) => {
     if (filterSev.size && !filterSev.has(f.severity)) return false;
     if (filterStatus.size && !filterStatus.has(f.status)) return false;
     return true;
   });
-  const clusters = clusteredFindings();
+  const clusters = clusteredFindings(all);
 
   const toggleFilter = (set, setter, v) => {
     const next = new Set(set);
@@ -8057,7 +8356,7 @@ function PageFindings({ onNavigate, onOpenFinding }) {
     <div className="page" data-screen-label="05 Findings">
       <PageHeader
         title="Findings"
-        sub={`${all.length} findings across ${new Set(all.map((f) => f.run_id)).size} runs · clustered by signature`}
+        sub={`${all.length} findings across ${new Set(all.map((f) => f.run_id)).size} runs · ${liveFindings !== null ? 'live API' : 'local preview'} · clustered by signature`}
         actions={
           <>
             <span className="seg">
@@ -8239,14 +8538,34 @@ function PageFindings({ onNavigate, onOpenFinding }) {
         </div>
       )}
 
-      {view === 'kanban' && <FindingsKanban findings={FINDINGS} />}
+      {view === 'kanban' && <FindingsKanban findings={all} />}
     </div>
   );
 }
 
 // ---------------- Finding detail ----------------
 function PageFindingDetail({ findingId, onNavigate }) {
-  const f = findingById(findingId) || FINDINGS[0];
+  const [liveFinding, setLiveFinding] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/findings/${encodeURIComponent(findingId)}`), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (body?.finding) setLiveFinding(body.finding);
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [findingId]);
+
+  const f = normalizeFindingForAdmin(liveFinding || findingById(findingId) || FINDINGS[0]);
   const risk = riskById(f.risk_id);
   const run = runById(f.run_id);
   const [tab, setTab] = React.useState('overview');
@@ -8844,6 +9163,141 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks, updatedRisks }) {
 }
 
 // ---------------- Risk editor ----------------
+const MOCK_RISK_COVERAGE = [
+  {
+    risk_id: 'risk-cross-tenant-leak',
+    invariants_count: 3,
+    invariants_with_scenarios: 3,
+    scenarios_count: 4,
+    scenarios_with_oracles: 4,
+    scenarios_with_deterministic_replay: 3,
+    last_run_at: '2026-09-16T08:30:00Z',
+    pass_rate_30d: 0.98,
+    flaky_count: 0,
+    coverage_score: 0.95,
+    status: 'covered',
+    drift_alerts: [],
+  },
+  {
+    risk_id: 'risk-payment-double-capture',
+    invariants_count: 2,
+    invariants_with_scenarios: 1,
+    scenarios_count: 2,
+    scenarios_with_oracles: 2,
+    scenarios_with_deterministic_replay: 1,
+    last_run_at: '2026-08-28T13:10:00Z',
+    pass_rate_30d: 0.87,
+    flaky_count: 1,
+    coverage_score: 0.57,
+    status: 'partial',
+    drift_alerts: ['one or more invariants have no linked scenario', '1 flaky scenario(s) observed'],
+  },
+  {
+    risk_id: 'risk-inventory-oversell',
+    invariants_count: 2,
+    invariants_with_scenarios: 0,
+    scenarios_count: 0,
+    scenarios_with_oracles: 0,
+    scenarios_with_deterministic_replay: 0,
+    pass_rate_30d: 0,
+    flaky_count: 0,
+    coverage_score: 0,
+    status: 'stale',
+    drift_alerts: ['last successful coverage run is older than 30 days or missing'],
+  },
+];
+
+function coverageStatusLabel(status) {
+  return status === 'covered' ? 'Covered' : status === 'partial' ? 'Partial' : status === 'stale' ? 'Stale' : 'Gap';
+}
+
+function coverageStatusColor(status) {
+  return status === 'covered'
+    ? 'var(--status-success)'
+    : status === 'partial'
+      ? 'var(--status-warning)'
+      : status === 'stale'
+        ? 'var(--status-info)'
+        : 'var(--status-failed)';
+}
+
+function PageRiskCoverage({ mode, onNavigate }) {
+  const [state, setState] = React.useState({ loading: mode === 'live', rows: mode === 'live' ? [] : MOCK_RISK_COVERAGE, error: null });
+
+  React.useEffect(() => {
+    let active = true;
+    if (mode !== 'live') {
+      setState({ loading: false, rows: MOCK_RISK_COVERAGE, error: null });
+      return () => {
+        active = false;
+      };
+    }
+    setState({ loading: true, rows: [], error: null });
+    fetch(apiUrl('/api/risk-coverage'))
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        return body;
+      })
+      .then((body) => {
+        if (active) setState({ loading: false, rows: Array.isArray(body.coverage) ? body.coverage : [], error: null });
+      })
+      .catch((error) => {
+        if (active) setState({ loading: false, rows: [], error: error instanceof Error ? error.message : String(error) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [mode]);
+
+  return (
+    <div className="page" data-screen-label="08 Risk coverage">
+      <PageHeader
+        title="Risk coverage"
+        sub="Evidence-backed projection from invariants, scenarios, oracles and deterministic replay."
+        badge="DRIFT-AWARE"
+        actions={
+          <button className="btn sm ghost" onClick={() => onNavigate?.('risk-map', {})}>
+            <I.Shield size={12} /> Risk map
+          </button>
+        }
+      />
+      <Alert kind="info" title="Coverage is a measurement, not a claim">
+        Scores are computed from persisted declarations and run observations. Missing evidence is shown as a gap or stale state.
+      </Alert>
+      {state.error && <Alert kind="error" title="Coverage could not be loaded">{state.error}</Alert>}
+      {state.loading ? (
+        <div className="skeleton" style={{ height: 220, marginTop: 16 }} aria-label="Loading risk coverage" />
+      ) : state.rows.length === 0 ? (
+        <EmptyState icon={<I.Shield size={22} />} title="No risk coverage evidence" body="Create risks and execute linked scenarios to populate this projection." />
+      ) : (
+        <div className="panel" style={{ marginTop: 16, overflowX: 'auto' }}>
+          <table className="data-table" aria-label="Risk coverage table">
+            <thead><tr><th>Risk</th><th>Status</th><th>Score</th><th>Invariants</th><th>Scenarios</th><th>Replay</th><th>Pass rate</th><th>Drift</th></tr></thead>
+            <tbody>
+              {state.rows.map((row) => (
+                <tr key={row.risk_id} data-testid={`risk-coverage-${row.risk_id}`}>
+                  <td><button className="link-btn mono" onClick={() => onNavigate?.('risk-edit', { riskId: row.risk_id })}>{row.risk_id}</button></td>
+                  <td><span style={{ color: coverageStatusColor(row.status), fontWeight: 700 }}>{coverageStatusLabel(row.status)}</span></td>
+                  <td className="mono">{Math.round(row.coverage_score * 100)}%</td>
+                  <td className="mono">{row.invariants_with_scenarios}/{row.invariants_count}</td>
+                  <td className="mono">{row.scenarios_with_oracles}/{row.scenarios_count}</td>
+                  <td className="mono">{row.scenarios_with_deterministic_replay}/{row.scenarios_count}</td>
+                  <td className="mono">{Math.round(row.pass_rate_30d * 100)}%</td>
+                  <td>{row.drift_alerts?.length ? <span title={row.drift_alerts.join('; ')} style={{ color: 'var(--status-warning)' }}>{row.drift_alerts.length} alert{row.drift_alerts.length === 1 ? '' : 's'}</span> : <span style={{ color: 'var(--status-success)' }}>None</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted" style={{ marginTop: 12, fontSize: 11 }}>
+        {mode === 'live' ? 'Live server projection' : 'Fixture projection'} · status threshold: 90% covered · stale after 30 days
+      </p>
+    </div>
+  );
+}
+
 function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const isNew = riskId === 'new';
   const isDeleted = !isNew && (deletedRisks?.has?.(riskId) ?? false);
@@ -8870,6 +9324,9 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState(null);
+  const [resourceEtag, setResourceEtag] = React.useState(null);
+  const [conflictDetected, setConflictDetected] = React.useState(false);
+  const [reloading, setReloading] = React.useState(false);
   const inFlightRef = React.useRef(false);
   // Render-time ref so the stale-submit guard sees the LATEST riskId
   // after an in-flight PUT resolves. Matches EditProfileWizard's
@@ -8878,11 +9335,54 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   riskIdRef.current = riskId;
   const toast = useToast();
 
+  React.useEffect(() => {
+    let cancelled = false;
+    if (isNew || !riskId) {
+      setResourceEtag(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch(apiUrl(`/api/risks/${encodeURIComponent(riskId)}`), {
+      headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+    })
+      .then((res) => {
+        if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResourceEtag(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isNew, riskId]);
+
   // Inline UX validation mirrors the @aqa/schemas Risk shape so the
   // user gets immediate feedback. The server is the actual trust
   // boundary (PUT /api/risks/:id schema-validates the body).
   const titleError = r.title.trim().length < 4 ? 'min 4 chars' : null;
   const canSave = !isNew && titleError === null && !saving;
+
+  async function reloadLatestRisk() {
+    if (!riskId || isNew || reloading) return;
+    setReloading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/risks/${encodeURIComponent(riskId)}`), {
+        headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+      });
+      const parsed = await res.json().catch(() => null);
+      if (!res.ok || !parsed?.risk) throw new Error(parsed?.error ?? `HTTP ${res.status}`);
+      setR(parsed.risk);
+      setResourceEtag(res.headers.get('etag'));
+      setConflictDetected(false);
+      setSaveError(null);
+      toast.push({ kind: 'info', title: 'Latest risk loaded', body: riskId });
+    } catch (e) {
+      setSaveError(`Could not reload the latest risk: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReloading(false);
+    }
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -8912,7 +9412,10 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
     try {
       const res = await fetch(reqUrl, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(body),
       });
       const text = await res.text();
@@ -8927,8 +9430,10 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
         const msg = parsed?.error ?? `HTTP ${res.status}`;
         toast.push({ kind: 'error', title: 'Save risk failed', body: `${submittedId}: ${msg}` });
         if (stillCurrent) setSaveError(msg);
+        if (stillCurrent && res.status === 412) setConflictDetected(true);
         return;
       }
+      setResourceEtag(res.headers.get('etag') || resourceEtag);
       toast.push({ kind: 'success', title: 'Risk saved', body: submittedId });
       // The body sent to the server has schema-coerced fields (slugified
       // id, { id, statement } invariant objects). Re-merging that into
@@ -9094,6 +9599,11 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
             {saveError && (
               <Alert kind="error" title="Save failed">
                 <span data-testid="risk-edit-error">{saveError}</span>
+                {conflictDetected && (
+                  <button className="btn xs ghost" data-testid="risk-reload-latest" onClick={reloadLatestRisk} disabled={reloading} style={{ marginLeft: 8 }}>
+                    {reloading ? 'Reloading…' : 'Reload latest'}
+                  </button>
+                )}
               </Alert>
             )}
             <div className="row gap-12">
@@ -11219,8 +11729,9 @@ function normalizeAuditEventsForViewer(events) {
         : ev.actor?.id || ev.actor?.type || 'system',
     kind: ev.kind ?? 'event',
     payload: ev.payload ?? {},
-    prev_hash: ev.prev_hash ?? '0'.repeat(64),
+    prev_hash: ev.prev_hash === null ? null : (ev.prev_hash ?? '0'.repeat(64)),
     hash: ev.hash ?? '0'.repeat(64),
+    raw: ev,
   }));
 }
 
@@ -13427,6 +13938,12 @@ const ROUTES = {
       <PageRiskMap {...ctx} onOpenRisk={(id) => ctx.onNavigate('risk-edit', { riskId: id })} />
     ),
   },
+  'risk-coverage': {
+    label: 'Risk coverage',
+    section: 'Work',
+    parent: 'risk-map',
+    render: (ctx) => <PageRiskCoverage {...ctx} />,
+  },
   'risk-edit': {
     label: 'Risk editor',
     section: 'Work',
@@ -13558,7 +14075,12 @@ function App() {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-  const [mode, setMode] = React.useState('mock'); // mock | live | failed
+  const [mode, setMode] = React.useState(() =>
+    typeof import.meta !== 'undefined' && (import.meta).env?.VITE_AQA_SERVER_URL
+      ? 'live'
+      : 'mock',
+  ); // mock | live | failed
+  const liveStream = useLiveEventStream();
   const [lastTick, setLastTick] = React.useState(NOW_REF);
   const [signedIn, setSignedIn] = React.useState(true);
   // Profile deletions broadcast via `aqa:profile-deleted` CustomEvent
@@ -13888,6 +14410,27 @@ function App() {
             lastTick={lastTick}
           />
           {!isError && <BreadcrumbRow crumbs={crumbs} onNavigate={navigate} mode={mode} />}
+          {liveStream.configured && (
+            <div
+              className="live-banner"
+              data-testid="live-stream-status"
+              aria-live="polite"
+              style={{
+                borderColor:
+                  liveStream.status === 'connected'
+                    ? 'var(--status-success)'
+                    : 'var(--status-warning)',
+              }}
+            >
+              <I.Activity size={12} />
+              <b>Live event stream:</b> <span>{liveStream.status}</span>
+              {liveStream.events > 0 && (
+                <span className="mono" data-testid="live-stream-event">
+                  {liveStream.events} event{liveStream.events === 1 ? '' : 's'} · {liveStream.lastType}
+                </span>
+              )}
+            </div>
+          )}
           {mode === 'failed' && (
             <div
               className="live-banner"

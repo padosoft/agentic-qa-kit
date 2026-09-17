@@ -1,3 +1,4 @@
+import type { PricingCatalog } from './catalog.js';
 import { type ModelPricing, defaultPricing } from './pricing.js';
 
 export interface LlmCall {
@@ -13,11 +14,23 @@ export interface BudgetState {
   tokens_out: number;
   calls: number;
   exhausted: boolean;
+  pricing_error?: string;
+  halted_reason?: string;
+  pricing_version?: string;
+  pricing_sha256?: string;
+}
+
+export class BudgetDispatchBlockedError extends Error {
+  constructor(reason: string) {
+    super(`[cost] LLM dispatch blocked: ${reason}`);
+    this.name = 'BudgetDispatchBlockedError';
+  }
 }
 
 export interface BudgetTrackerOptions {
   budget_usd: number | null;
   pricing?: Record<string, ModelPricing>;
+  pricing_catalog?: PricingCatalog;
 }
 
 /**
@@ -32,7 +45,11 @@ export class BudgetTracker {
   private state: BudgetState;
 
   constructor(opts: BudgetTrackerOptions) {
-    this.pricing = opts.pricing ?? defaultPricing;
+    if (opts.budget_usd !== null && (!Number.isFinite(opts.budget_usd) || opts.budget_usd < 0))
+      throw new Error('[cost] budget_usd must be null or a non-negative finite number');
+    if (opts.pricing && opts.pricing_catalog)
+      throw new Error('[cost] pricing and pricing_catalog are mutually exclusive');
+    this.pricing = opts.pricing_catalog?.models ?? opts.pricing ?? defaultPricing;
     this.state = {
       budget_usd: opts.budget_usd,
       spent_usd: 0,
@@ -40,6 +57,12 @@ export class BudgetTracker {
       tokens_out: 0,
       calls: 0,
       exhausted: false,
+      ...(opts.pricing_catalog
+        ? {
+            pricing_version: opts.pricing_catalog.version,
+            pricing_sha256: opts.pricing_catalog.sha256,
+          }
+        : {}),
     };
   }
 
@@ -49,7 +72,19 @@ export class BudgetTracker {
    * dispatching new work.
    */
   charge(call: LlmCall): BudgetState {
+    this.validateCall(call);
     const price = this.pricing[call.model];
+    if (!price) {
+      this.state = {
+        ...this.state,
+        tokens_in: this.state.tokens_in + call.tokens_in,
+        tokens_out: this.state.tokens_out + call.tokens_out,
+        calls: this.state.calls + 1,
+        exhausted: true,
+        pricing_error: `no pricing configured for model "${call.model}"`,
+      };
+      return this.state;
+    }
     const usd = price
       ? (call.tokens_in / 1_000_000) * price.input_per_mtok +
         (call.tokens_out / 1_000_000) * price.output_per_mtok
@@ -66,6 +101,24 @@ export class BudgetTracker {
     return this.state;
   }
 
+  /**
+   * Hard admission boundary for callers that have not invoked the provider
+   * yet. Unknown pricing and a call that reaches the limit fail closed.
+   */
+  assertCanDispatch(call: LlmCall): void {
+    this.validateCall(call);
+    if (this.state.halted_reason) throw new BudgetDispatchBlockedError(this.state.halted_reason);
+    if (this.wouldExhaust(call)) throw new BudgetDispatchBlockedError('budget exhausted');
+  }
+
+  /** Permanently blocks new dispatches for this tracker instance. */
+  halt(reason: string): BudgetState {
+    const normalized = reason.trim().slice(0, 200);
+    if (!normalized) throw new Error('[cost] halt reason is required');
+    this.state = { ...this.state, exhausted: true, halted_reason: normalized };
+    return this.snapshot();
+  }
+
   /** Snapshot of the current accumulated state. */
   snapshot(): BudgetState {
     return { ...this.state };
@@ -73,12 +126,33 @@ export class BudgetTracker {
 
   /** Convenience: would the next call of (tokens_in, tokens_out, model) exhaust the budget? */
   wouldExhaust(call: LlmCall): boolean {
-    if (this.state.budget_usd === null) return false;
+    this.validateCall(call);
     const price = this.pricing[call.model];
-    if (!price) return false;
-    const next =
-      (call.tokens_in / 1_000_000) * price.input_per_mtok +
-      (call.tokens_out / 1_000_000) * price.output_per_mtok;
+    if (!price) return true;
+    if (this.state.budget_usd === null) return false;
+    const next = this.costOf(call);
     return this.state.spent_usd + next >= this.state.budget_usd;
+  }
+
+  costOf(call: LlmCall): number {
+    this.validateCall(call);
+    const price = this.pricing[call.model];
+    if (!price)
+      throw new BudgetDispatchBlockedError(`no pricing configured for model "${call.model}"`);
+    return (
+      (call.tokens_in / 1_000_000) * price.input_per_mtok +
+      (call.tokens_out / 1_000_000) * price.output_per_mtok
+    );
+  }
+
+  private validateCall(call: LlmCall): void {
+    if (!call.model.trim()) throw new Error('[cost] model is required');
+    if (
+      !Number.isSafeInteger(call.tokens_in) ||
+      call.tokens_in < 0 ||
+      !Number.isSafeInteger(call.tokens_out) ||
+      call.tokens_out < 0
+    )
+      throw new Error('[cost] token counts must be non-negative safe integers');
   }
 }

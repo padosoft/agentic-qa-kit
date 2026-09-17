@@ -14,6 +14,7 @@ import {
   Project,
   RiskMap,
   Run,
+  RunRequest,
   SCHEMA_VERSION,
   SavedView,
   Scenario,
@@ -47,6 +48,7 @@ const validators = {
   finding: Finding.Finding,
   event: Event.Event,
   run: Run.Run,
+  'run-request': RunRequest.RunRequest,
   'pack-manifest': PackManifest.PackManifest,
   // v1.4 admin surface
   notification: Notification.Notification,
@@ -61,6 +63,51 @@ const validators = {
 describe('schema version', () => {
   it('SCHEMA_VERSION is "1"', () => {
     assert.equal(SCHEMA_VERSION, '1');
+  });
+});
+
+describe('Run completion state derivation', () => {
+  it('does not treat a completed event with errors as success', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion(
+        { kind: 'run_finished', payload: { runtime_errors: 1, scenarios_run: 1 } },
+        1,
+      ),
+      'failed',
+    );
+  });
+
+  it('treats zero executed scenarios as failed', () => {
+    assert.equal(Run.deriveStateFromCompletion({}, 0), 'failed');
+  });
+
+  it('treats a failed release gate as failed even without runtime errors', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { release_gate_failed: true } }, 1),
+      'failed',
+    );
+  });
+
+  it('preserves an explicit budget-exceeded terminal state', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { budget_exceeded: true, scenarios_run: 2 } }, 2),
+      'budget_exceeded',
+    );
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { execution_errors: 1, scenarios_run: 2 } }, 2),
+      'failed',
+    );
+  });
+
+  it('treats a clean non-empty completion as succeeded', () => {
+    assert.equal(Run.deriveStateFromCompletion({}, 2), 'succeeded');
+  });
+
+  it('trusts the hash-protected explicit terminal state for new completions', () => {
+    assert.equal(
+      Run.deriveStateFromCompletion({ payload: { run_state: 'aborted', scenarios_run: 2 } }, 2),
+      'aborted',
+    );
   });
 });
 
@@ -100,6 +147,7 @@ const invalidExpectations: Record<string, string[]> = {
   'project--missing-stack.json': ['stack'],
   'risk-map--empty-risks.json': ['risks'],
   'run--bad-state.json': ['state'],
+  'run-request--unknown-field.json': [],
   'scenario--no-oracles.json': ['oracles'],
 };
 
@@ -168,5 +216,44 @@ describe('Finding.status=verified gating', () => {
       reproducibility: {},
     });
     assert.equal(f.success, true);
+  });
+});
+
+describe('Scenario oracle probe references', () => {
+  const base = {
+    schema_version: '1' as const,
+    id: 'scn-probe-ref',
+    title: 'Scenario with typed output references',
+    risk_refs: ['risk-ref'],
+    invariant_refs: [],
+    preconditions: [],
+    steps: [{ id: 'probe-health', kind: 'http' as const, with: {}, timeout_ms: 1000 }],
+    oracles: [
+      {
+        id: 'oracle-health',
+        kind: 'http_status' as const,
+        probe_id: 'probe-health',
+        with: { expected: 200 },
+        weight: 1,
+      },
+    ],
+    cleanup: [],
+    tags: [],
+  };
+
+  it('accepts an oracle that references an existing step', () => {
+    assert.equal(Scenario.Scenario.safeParse(base).success, true);
+  });
+
+  it('rejects duplicate steps and references to missing steps', () => {
+    const result = Scenario.Scenario.safeParse({
+      ...base,
+      steps: [base.steps[0], base.steps[0]],
+      oracles: [{ ...base.oracles[0], probe_id: 'missing-step' }],
+    });
+    assert.equal(result.success, false);
+    if (result.success) return;
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'oracles.0.probe_id'));
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'steps.1.id'));
   });
 });

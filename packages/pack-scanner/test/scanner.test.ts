@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { scanPack, verifySignature } from '../dist/index.js';
+import {
+  manifestDigest,
+  packContentDigest,
+  scanPack,
+  verifyManifestDigest,
+  verifyPackContentDigest,
+  verifySignature,
+  verifySigstoreBundle,
+  verifyTrustedManifestSignature,
+} from '../dist/index.js';
 
 const BASE = {
   schema_version: '1' as const,
@@ -58,5 +70,78 @@ describe('verifySignature', () => {
     const r = verifySignature(BASE, 'whatever');
     assert.equal(r.ok, false);
     assert.match(r.reason, /does not declare/);
+  });
+});
+
+describe('verifyManifestDigest', () => {
+  it('verifies the parsed JSON representation without signing recursion', () => {
+    const digest = manifestDigest(BASE);
+    const signed = { ...BASE, signing: { sha256: digest } };
+    assert.equal(verifyManifestDigest(signed).ok, true);
+    assert.equal(verifyManifestDigest({ ...signed, description: 'tampered' }).ok, false);
+  });
+});
+
+describe('verifyTrustedManifestSignature', () => {
+  it('verifies an Ed25519 signature against an operator trust root', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const keyId = 'release-key-1';
+    const signature = sign(null, Buffer.from(manifestDigest(BASE), 'utf8'), privateKey).toString(
+      'base64url',
+    );
+    const signed = {
+      ...BASE,
+      signing: { sha256: 'a'.repeat(64), key_id: keyId, ed25519_signature: signature },
+    };
+    assert.equal(
+      verifyTrustedManifestSignature(signed, {
+        [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      }).ok,
+      true,
+    );
+    assert.equal(verifyTrustedManifestSignature(signed, {}).ok, false);
+    assert.equal(
+      verifyTrustedManifestSignature(
+        { ...signed, description: 'tampered' },
+        {
+          [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        },
+      ).ok,
+      false,
+    );
+  });
+});
+
+describe('packContentDigest', () => {
+  it('detects tampering in a scenario file, not only the manifest', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-pack-digest-'));
+    mkdirSync(join(root, 'scenarios'));
+    writeFileSync(join(root, 'pack.yaml'), 'presentation', 'utf8');
+    writeFileSync(join(root, 'scenarios', 'one.yaml'), 'expected: 200\n', 'utf8');
+    const digest = packContentDigest(root, BASE);
+    const signed = { ...BASE, signing: { sha256: 'a'.repeat(64), content_sha256: digest } };
+    assert.equal(verifyPackContentDigest(root, signed).ok, true);
+    writeFileSync(join(root, 'scenarios', 'one.yaml'), 'expected: 500\n', 'utf8');
+    assert.equal(verifyPackContentDigest(root, signed).ok, false);
+  });
+});
+
+describe('verifySigstoreBundle', () => {
+  it('requires an explicit identity policy and fails closed on malformed bundles', async () => {
+    const missingPolicy = await verifySigstoreBundle(
+      { ...BASE, signing: { sha256: 'a'.repeat(64), sigstore_bundle: '{}' } },
+      {},
+    );
+    assert.equal(missingPolicy.ok, false);
+    assert.match(missingPolicy.reason, /policy requires/i);
+    const malformed = await verifySigstoreBundle(
+      { ...BASE, signing: { sha256: 'a'.repeat(64), sigstore_bundle: '{}' } },
+      {
+        certificate_identity: 'release@example.test',
+        certificate_oidc_issuer: 'https://issuer.test',
+      },
+    );
+    assert.equal(malformed.ok, false);
+    assert.match(malformed.reason, /Sigstore verification failed/i);
   });
 });

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalStringify } from './audit-canonical.js';
 
 /**
  * Hash-chain verification for `events.jsonl` audit logs.
@@ -34,14 +35,6 @@ export interface ChainVerifyResult {
   reason?: string;
   /** Total records walked. */
   count: number;
-}
-
-function canonicalStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`).join(',')}}`;
 }
 
 function computeHash(prevHash: string, rest: Record<string, unknown>): string {

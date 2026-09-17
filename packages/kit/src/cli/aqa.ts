@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
+import { createAuditCheckpointStore } from '../artifacts.js';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
+import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
+import { runRiskDiscover } from '../commands/risk-discover.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
+import { runVerify } from '../commands/verify.js';
+import { runWorker, runnerConfigFromEnv } from '../commands/worker.js';
 
 const VERSION = '0.0.1';
 
@@ -38,6 +43,14 @@ const VALUE_FLAGS = new Set([
   'format',
   'port',
   'host',
+  'finding-id',
+  'attempts',
+  'base-url',
+  'tool',
+  'threshold-file',
+  'method',
+  'scope',
+  'otlp-endpoint',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -100,7 +113,11 @@ ${bold('Commands')}
                                     plus per-agent skills under .claude/ .agents/ .gemini/ .github/
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
+  verify <finding-id>               Re-run a finding with bounded attempts and record evidence
+  ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
+  risk discover --method stride|owasp|fmea Generate a deterministic framework risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
+  worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
                                     — this path is only present in the source repo, not in the npm tarball)
@@ -114,6 +131,9 @@ ${bold('Common options')}
   --project-name <name>  (install-agent-files) override the slug embedded in instruction files
   --run-id <id>          (report) target a specific run; default = latest
   --format <fmt>         (report) md | json | both (default: both)
+  --threshold-file <f>   (ingest k6/locust) apply explicit performance policy JSON
+  --attempts <n>         (verify) attempts, 1..10 (default: 3)
+  --base-url <url>       (verify) allowlisted HTTP SUT base URL
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
   --host <h>             (admin) bind host (default 127.0.0.1 — recommended)
                          WARNING: \`aqa admin\` runs WITHOUT real authentication.
@@ -249,6 +269,26 @@ async function main(): Promise<number> {
       // silently falling back to the default profile.
       if (args.values.has('profile')) runOpts.profile = args.values.get('profile') ?? '';
       if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
+      if (args.values.has('otlp-endpoint'))
+        runOpts.otlpEndpoint = args.values.get('otlp-endpoint') ?? '';
+      const checkpointKeyId = process.env.AQA_AUDIT_CHECKPOINT_KEY_ID?.trim();
+      const checkpointPrivateKey = process.env.AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM;
+      if (checkpointKeyId || checkpointPrivateKey) {
+        if (!checkpointKeyId || !checkpointPrivateKey) {
+          console.error(
+            red(
+              'aqa run: AQA_AUDIT_CHECKPOINT_KEY_ID and AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM must be provided together',
+            ),
+          );
+          return 1;
+        }
+        runOpts.auditCheckpointSigner = {
+          key_id: checkpointKeyId,
+          private_key_pem: checkpointPrivateKey,
+        };
+      }
+      const auditCheckpointStore = createAuditCheckpointStore();
+      if (auditCheckpointStore) runOpts.auditCheckpointStore = auditCheckpointStore;
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));
@@ -303,6 +343,106 @@ async function main(): Promise<number> {
       for (const f of result.files) console.info(`    ${green('+')} ${f}`);
       return 0;
     }
+    case 'verify': {
+      printHeader('verify');
+      const findingId = args.positionals[0] ?? args.values.get('finding-id');
+      if (!findingId) {
+        console.error(red('aqa verify: missing <finding-id>'));
+        return 1;
+      }
+      const rawAttempts = args.values.get('attempts');
+      if (rawAttempts !== undefined) {
+        const parsedAttempts = Number(rawAttempts);
+        if (!Number.isInteger(parsedAttempts) || parsedAttempts < 1 || parsedAttempts > 10) {
+          console.error(red('aqa verify: --attempts must be an integer from 1 to 10'));
+          return 1;
+        }
+      }
+      const result = await runVerify({
+        root: cwd,
+        findingId,
+        ...(rawAttempts === undefined ? {} : { attempts: Number(rawAttempts) }),
+        ...(args.values.has('base-url') ? { baseUrl: args.values.get('base-url') ?? '' } : {}),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(
+        `  ${result.deterministic ? green('✓ deterministic') : yellow('⚠ non-deterministic')}`,
+      );
+      console.info(`    ${dim('finding:  ')}${result.findingId}`);
+      console.info(`    ${dim('attempts: ')}${result.successes}/${result.attempts}`);
+      console.info(`    ${dim('evidence: ')}${result.verificationPath}`);
+      return result.deterministic ? 0 : 2;
+    }
+    case 'ingest': {
+      printHeader('ingest');
+      const kind = args.positionals[0];
+      const file = args.positionals[1];
+      if (
+        kind !== 'junit' &&
+        kind !== 'sast' &&
+        kind !== 'semgrep' &&
+        kind !== 'k6' &&
+        kind !== 'locust'
+      ) {
+        console.error(red('aqa ingest: kind must be junit, sast, semgrep, k6, or locust'));
+        return 1;
+      }
+      if (!file) {
+        console.error(red('aqa ingest: missing <file>'));
+        return 1;
+      }
+      const result = runIngest({
+        root: cwd,
+        kind,
+        file,
+        ...(args.values.has('tool') ? { tool: args.values.get('tool') ?? '' } : {}),
+        ...(args.values.has('threshold-file')
+          ? { threshold_file: args.values.get('threshold-file') ?? '' }
+          : {}),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} ${result.report?.records.length ?? 0} record(s) ingested`);
+      console.info(`    ${dim('evidence: ')}${result.artifact_path}`);
+      if (result.threshold_result) {
+        console.info(
+          `    ${result.threshold_result.passed ? green('✓ thresholds passed') : red('✗ thresholds failed')} (${result.threshold_result.violations.length} violation(s))`,
+        );
+        console.info(`    ${dim('threshold evidence: ')}${result.threshold_artifact_path}`);
+      }
+      return result.threshold_result?.passed === false ? 2 : 0;
+    }
+    case 'risk': {
+      const subcommand = args.positionals[0];
+      if (subcommand !== 'discover') {
+        console.error(red('aqa risk: expected `discover`'));
+        return 1;
+      }
+      const method = args.values.get('method');
+      if (method !== 'stride' && method !== 'owasp' && method !== 'fmea') {
+        console.error(red('aqa risk discover: --method must be stride, owasp or fmea'));
+        return 1;
+      }
+      const result = runRiskDiscover({
+        root: cwd,
+        method,
+        ...(args.values.has('scope') ? { scope: args.values.get('scope') ?? '' } : {}),
+        force: args.flags.has('force'),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} generated ${result.risk_count} ${method.toUpperCase()} risks`);
+      console.info(`    ${dim('risk map: ')}${result.path}`);
+      console.info(`    ${dim('write:    ')}${result.write_result}`);
+      return 0;
+    }
     case 'admin': {
       printHeader('admin');
       if (args.flags.has('port') && !args.values.has('port')) {
@@ -349,6 +489,22 @@ async function main(): Promise<number> {
       // Block forever — until a signal triggers stop().
       await new Promise<void>(() => {});
       return 0;
+    }
+    case 'worker': {
+      printHeader('worker');
+      try {
+        const config = runnerConfigFromEnv();
+        console.info(`  ${green('✓')} scoped runner worker starting`);
+        console.info(`    ${dim('root:    ')}${config.root}`);
+        console.info(
+          `    ${dim('scopes:  ')}${config.scopes.map((s) => `${s.org}/${s.project ?? '*'}`).join(',')}`,
+        );
+        await runWorker(config);
+        return 0;
+      } catch (error) {
+        console.error(red(`  ✗ ${error instanceof Error ? error.message : String(error)}`));
+        return 1;
+      }
     }
     case 'pack': {
       // Subcommand router for `aqa pack <subcommand>`.

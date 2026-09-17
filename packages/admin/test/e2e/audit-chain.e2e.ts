@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { type Page, expect, test } from '@playwright/test';
 
 /**
@@ -12,6 +13,20 @@ async function openAudit(page: Page) {
     .first()
     .click();
   await expect(page.locator('.page-title, h1').first()).toContainText(/Audit/i);
+}
+
+function canonicalStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalStringify(object[key])}`)
+    .join(',')}}`;
+}
+
+function hashEvent(prevHash: string, event: Record<string, unknown>): string {
+  return createHash('sha256').update(prevHash).update(canonicalStringify(event)).digest('hex');
 }
 
 test('idle state shows the "Verify" call-to-action', async ({ page }) => {
@@ -48,28 +63,28 @@ test('Load tampered chain → Verify → CHAIN BROKEN', async ({ page }) => {
 });
 
 test('live /api/audit chain autoloads and verifies without demo-click', async ({ page }) => {
+  const first = {
+    ts: '2026-05-20T09:00:00.000Z',
+    actor: { id: 'system' },
+    kind: 'run.start',
+    payload: {},
+  };
+  const firstHash = hashEvent('0'.repeat(64), first);
+  const second = {
+    ts: '2026-05-20T09:00:01.000Z',
+    actor: { id: 'system' },
+    kind: 'run.end',
+    payload: {},
+  };
+  const secondHash = hashEvent(firstHash, second);
   await page.route('**/api/audit**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         events: [
-          {
-            ts: '2026-05-20T09:00:00.000Z',
-            actor: { id: 'system' },
-            kind: 'run.start',
-            payload: {},
-            prev_hash: '0'.repeat(64),
-            hash: 'a'.repeat(64),
-          },
-          {
-            ts: '2026-05-20T09:00:01.000Z',
-            actor: { id: 'system' },
-            kind: 'run.end',
-            payload: {},
-            prev_hash: 'a'.repeat(64),
-            hash: 'b'.repeat(64),
-          },
+          { ...first, prev_hash: null, hash: firstHash },
+          { ...second, prev_hash: firstHash, hash: secondHash },
         ],
       }),
     });

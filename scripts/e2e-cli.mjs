@@ -12,7 +12,7 @@
  *
  * Wire into CI via `bun run test:e2e-cli` from the root package.json.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -105,6 +105,26 @@ profiles:
   'utf8',
 );
 
+// The runner resolves scenario risk/invariant references against the
+// project's risk map. Keep this fixture honest: a schema-valid scenario is
+// not executable coverage if its references cannot be resolved.
+writeFileSync(
+  join(SANDBOX, '.aqa', 'risk-map.yaml'),
+  `schema_version: "1"
+project: aqa-cli-e2e-fixture
+risks:
+  - id: r-smoke
+    category: integration
+    title: Smoke health endpoint risk
+    severity: medium
+    likelihood: unlikely
+    invariants:
+      - id: inv-smoke
+        statement: The health endpoint responds successfully.
+`,
+  'utf8',
+);
+
 // Add a local smoke pack with one HTTP scenario and wire the smoke profile
 // to it. This keeps the e2e deterministic and independent from bundled pack
 // evolution.
@@ -172,6 +192,37 @@ const app = createServer((req, res) => {
   res.end(JSON.stringify({ ok: false }));
 });
 
+function runAsync(args, cwd, timeout) {
+  return new Promise((resolveRun) => {
+    const child = spawn(process.execPath, [AQA_BIN, ...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeout);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      resolveRun({ status: null, signal: null, stdout, stderr: `${stderr}${error.message}` });
+    });
+    child.once('close', (status, signal) => {
+      clearTimeout(timer);
+      resolveRun({ status: timedOut ? null : status, signal, stdout, stderr });
+    });
+  });
+}
+
 let failed = 0;
 try {
   const boundPort = await new Promise((resolve, reject) => {
@@ -211,11 +262,14 @@ tags: []
   );
 
   for (const c of cases) {
-    const result = spawnSync(process.execPath, [AQA_BIN, ...c.args], {
-      cwd: c.cwd ?? ROOT,
-      encoding: 'utf8',
-      timeout: c.timeout ?? 20_000,
-    });
+    const result =
+      c.label === 'run-smoke'
+        ? await runAsync(c.args, c.cwd ?? ROOT, c.timeout ?? 20_000)
+        : spawnSync(process.execPath, [AQA_BIN, ...c.args], {
+            cwd: c.cwd ?? ROOT,
+            encoding: 'utf8',
+            timeout: c.timeout ?? 20_000,
+          });
 
     const expectedExits = Array.isArray(c.expectExit) ? c.expectExit : [c.expectExit];
     const exitOk = expectedExits.includes(result.status ?? -1);

@@ -5,9 +5,34 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **`RunLifecycle`** — state machine (pending → running → {succeeded, failed, aborted, budget_exceeded}).
 - **`EventChainWriter`** — append-only `events.jsonl` writer. Each event computes
   `hash = sha256(prev_hash || canonical(event))`, giving the audit log SOC2-style tamper evidence.
+  An optional `onEvent` observer exposes a non-blocking integration point for
+  traces, metrics and event buses; observer failures never invalidate the
+  persisted audit chain.
 - **`FindingsWriter`** — append-only `findings.jsonl` with in-run dedup on `(run_id, scenario_id, risk_id, severity)`.
 - **`evaluateOracle`** + built-in `http_status` / `response_contains` / `response_not_contains` oracles.
 - **`runScenario`** — orchestrates one scenario: run probes, evaluate oracles, emit a Finding when oracles fail.
+- **Capability preflight** — optionally reject unsupported probe kinds before
+  executing steps or cleanup, preserving an explicit execution gap instead of
+  partial side effects or a false finding.
+- **Controlled shell driver** — `makeShellProbeRunner()` supports explicit,
+  allowlisted argv checks with `shell:false`, bounded output, timeout cleanup,
+  minimal environment and output redaction. It is not a sandbox and must be
+  hosted inside the configured execution boundary.
+- **Read-only SQL driver** — `makeSqlProbeRunner()` uses an injected DB
+  adapter, separate parameters, `SELECT`/`WITH`/`EXPLAIN`-only policy, row
+  limits and evidence redaction. It complements, but never replaces, a
+  database read-only role and statement timeout.
+- **Canonical outcomes** — scenario results distinguish `pass`, `fail`,
+  `error`, `blocked` and reserved `not_run`; missing capabilities never look
+  like a passing assertion.
+- **Controlled Playwright driver** — `makePlaywrightProbeRunner()` provides a
+  persistent browser context with origin allowlisting, structured actions,
+  bounded/redacted text evidence and explicit `close()`. It does not permit
+  arbitrary JavaScript or unrestricted navigation.
+- **Postgres adapter** — `makePostgresSqlProbeRunner()` executes the generic
+  read-only SQL contract in a `READ ONLY` transaction with statement timeout,
+  bounded rows and explicit shutdown. Use a least-privilege role and secret
+  manager in production; the DSN never belongs in a pack.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

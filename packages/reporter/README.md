@@ -14,5 +14,8 @@ for (const a of buildReplayArtifacts({ finding, scenario })) {
 
 - `renderMarkdown(input)` → severity-sorted Markdown report with run header + per-finding section.
 - `renderJson(input)` → stable JSON shape (`schema_version: '1'`) consumed by the admin UI.
-- `buildReplayArtifacts(input)` → `repro.sh` / `repro.curl` for HTTP probes, `repro.playwright.ts`
-  for Playwright probes, `repro.sql` placeholder for SQL probes. SARIF + HTML reporter land in v0.1.1.
+- `buildReplayArtifacts(input)` → `repro.sh` / `repro.curl` for HTTP probes,
+  executable structured-action `repro.playwright.ts`, and read-only prepared
+  `repro.sql` for SQL probes. External script-only browser probes are marked
+  explicitly as requiring the original spec; they are never presented as
+  deterministic replay.

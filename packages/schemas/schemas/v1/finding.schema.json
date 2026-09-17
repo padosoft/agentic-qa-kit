@@ -298,6 +298,22 @@
         "duplicate_of": {
           "type": "string",
           "pattern": "^AQA-\\d{4}-\\d{4,}$"
+        },
+        "root_cause_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+        },
+        "blast_radius": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        },
+        "cost_to_fix_estimate": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
         }
       },
       "required": [

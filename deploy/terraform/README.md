@@ -1,6 +1,8 @@
-# `deploy/terraform/` — Terraform module (v0.6 scaffold)
+# `deploy/terraform/` — Terraform module
 
-Minimal module that declares the AQA Kubernetes namespace and exports it.
+The module declares the AQA Kubernetes namespace and can optionally install
+the repository Helm chart. Managed PostgreSQL, IRSA and Workload Identity
+remain provider-specific inputs rather than hidden cloud assumptions.
 
 ## Usage
 
@@ -11,7 +13,6 @@ module "aqa" {
 }
 ```
 
-## Roadmap
-
-- v0.6 — namespace + variable scaffold (you are here).
-- v1.0 — RDS / Cloud SQL submodules, IRSA / Workload Identity, Helm release.
+Set `install_chart = true` and provide a chart path or packaged chart when
+Terraform should own the Helm release. Keep `install_chart = false` when a
+platform team owns Helm deployments.

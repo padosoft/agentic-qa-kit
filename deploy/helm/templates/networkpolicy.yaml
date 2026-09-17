@@ -1,4 +1,7 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- if and (or .Values.runner.worker.enabled .Values.runner.reaper.enabled) (not .Values.postgres.subchart.enabled) (not .Values.networkPolicy.runnerExtraEgressCidrs) }}
+{{- fail "networkPolicy.enabled with a runner or runner.reaper requires networkPolicy.runnerExtraEgressCidrs for managed PostgreSQL" }}
+{{- end }}
 # Server: allow ingress from runner pods + (optionally) ingress controller.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -23,7 +26,9 @@ spec:
           port: 8080
     {{- if .Values.ingress.enabled }}
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
       ports:
         - protocol: TCP
           port: 8080
@@ -45,7 +50,9 @@ spec:
   egress:
     # DNS
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
       ports:
         - protocol: UDP
           port: 53
@@ -60,6 +67,17 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    {{- if .Values.postgres.subchart.enabled }}
+    # In-cluster PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aqa.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     {{- if .Values.networkPolicy.runnerExtraEgressCidrs }}
     # Operator-provided QA target CIDRs
     - to:
@@ -67,5 +85,51 @@ spec:
         - ipBlock:
             cidr: {{ . | quote }}
       {{- end }}
+    {{- end }}
+{{- end }}
+{{- if and .Values.networkPolicy.enabled .Values.runner.reaper.enabled }}
+---
+# Runner lease reaper: database access only, with no server or QA-target egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-runner-reaper
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "aqa.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runner-reaper
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if .Values.postgres.subchart.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "aqa.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+    {{- if .Values.networkPolicy.runnerExtraEgressCidrs }}
+    - to:
+      {{- range .Values.networkPolicy.runnerExtraEgressCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+      {{- end }}
+      ports:
+        - protocol: TCP
+          port: 5432
     {{- end }}
 {{- end }}

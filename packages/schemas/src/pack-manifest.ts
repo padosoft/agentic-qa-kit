@@ -31,6 +31,12 @@ export const PackManifest = z.object({
     .object({
       sigstore_bundle: z.string().optional(),
       sha256: Sha256,
+      content_sha256: Sha256.optional(),
+      key_id: z.string().min(1).max(128).optional(),
+      ed25519_signature: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]+$/)
+        .optional(),
     })
     .optional(),
 });

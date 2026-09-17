@@ -93,11 +93,19 @@ describe('renderMarkdown', () => {
 
 describe('renderJson', () => {
   it('returns a stable shape with summary', () => {
-    const j = renderJson({ run: RUN, findings: FINDINGS }, new Date('2026-05-17T10:10:00Z'));
+    const j = renderJson(
+      {
+        run: RUN,
+        findings: FINDINGS,
+        scenarioOutcomes: [{ scenario_id: 'scn-a', outcome: 'blocked' }],
+      },
+      new Date('2026-05-17T10:10:00Z'),
+    );
     assert.equal(j.schema_version, '1');
     assert.equal(j.summary.total, 2);
     assert.equal(j.summary.severities.critical, 1);
     assert.equal(j.summary.severities.high, 1);
     assert.equal(j.run.id, 'run-1');
+    assert.deepEqual(j.scenario_outcomes, [{ scenario_id: 'scn-a', outcome: 'blocked' }]);
   });
 });

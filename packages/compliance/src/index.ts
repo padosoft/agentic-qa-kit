@@ -12,3 +12,16 @@ export {
   type AuditEvent,
   type ChainVerifyResult,
 } from './audit-verify.js';
+export {
+  verifyEventChainBrowser,
+  type BrowserAuditEvent,
+  type BrowserChainVerifyResult,
+} from './audit-verify-browser.js';
+export {
+  createAuditCheckpoint,
+  verifyAuditCheckpoint,
+  type AuditCheckpoint,
+  type AuditCheckpointSigner,
+  type AuditCheckpointSignature,
+  type AuditCheckpointVerifyResult,
+} from './audit-checkpoint.js';

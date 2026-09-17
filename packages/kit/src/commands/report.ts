@@ -14,9 +14,16 @@
  *    findings, replay artifacts, plus the rendered report).
  */
 
-import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { renderJson, renderMarkdown } from '@aqa/reporter';
+import { FileArtifactStore } from '@aqa/artifacts';
+import { verifyEventChain } from '@aqa/compliance';
+import {
+  type ScenarioOutcome,
+  type ScenarioOutcomeSummary,
+  renderJson,
+  renderMarkdown,
+} from '@aqa/reporter';
 import { Finding, Run } from '@aqa/schemas';
 
 export type ReportFormat = 'md' | 'json' | 'both';
@@ -134,6 +141,13 @@ export function runReport(opts: ReportOptions): ReportResult {
       error: `report: cannot read events.jsonl: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
+  const chain = verifyEventChain(events as Parameters<typeof verifyEventChain>[0]);
+  if (!chain.ok) {
+    return {
+      ok: false,
+      error: `report: audit chain verification failed at event ${chain.bad_index}: ${chain.reason ?? 'unknown error'}`,
+    };
+  }
 
   const findingsPath = join(runDir, 'findings.jsonl');
   if (!existsSync(findingsPath)) {
@@ -178,6 +192,15 @@ export function runReport(opts: ReportOptions): ReportResult {
     };
   }
   const run = runParsed.data;
+  let scenarioOutcomes: readonly ScenarioOutcomeSummary[];
+  try {
+    scenarioOutcomes = readScenarioOutcomes(pickEvent(events, 'run_finished'));
+  } catch (e) {
+    return {
+      ok: false,
+      error: `report: invalid scenario outcomes in audit chain: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
 
   const written: string[] = [];
   // Writes can fail (read-only FS, disk full, permission). Return a
@@ -189,6 +212,7 @@ export function runReport(opts: ReportOptions): ReportResult {
   // by writeFileSync and let an attacker (or a prior run) redirect the
   // writes outside the project. lstat each target before writing.
   try {
+    const artifactStore = new FileArtifactStore(runDir);
     if (format === 'md' || format === 'both') {
       const mdPath = join(runDir, 'report.md');
       if (existsSync(mdPath) && lstatSync(mdPath).isSymbolicLink()) {
@@ -197,7 +221,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${mdPath}`,
         };
       }
-      writeFileSync(mdPath, renderMarkdown({ run, findings }), 'utf8');
+      artifactStore.putTextSync('report.md', renderMarkdown({ run, findings, scenarioOutcomes }));
       written.push(mdPath);
     }
     if (format === 'json' || format === 'both') {
@@ -208,11 +232,7 @@ export function runReport(opts: ReportOptions): ReportResult {
           error: `report: refusing to overwrite symlinked report file ${jsonPath}`,
         };
       }
-      writeFileSync(
-        jsonPath,
-        `${JSON.stringify(renderJson({ run, findings }), null, 2)}\n`,
-        'utf8',
-      );
+      artifactStore.putJsonSync('report.json', renderJson({ run, findings, scenarioOutcomes }));
       written.push(jsonPath);
     }
   } catch (e) {
@@ -335,7 +355,7 @@ function reconstructRun(input: ReconstructInput): Run.Run {
   const scenariosRun = readPayloadNumber(finished, 'scenarios_run') ?? 0;
   const totalsFindings = readPayloadNumber(finished, 'findings') ?? findingsCount;
 
-  const state: Run.Run['state'] = deriveState(finished, scenariosRun);
+  const state = Run.deriveStateFromCompletion(finished, scenariosRun);
 
   const run: Run.Run = {
     schema_version: '1',
@@ -373,31 +393,6 @@ function reconstructRun(input: ReconstructInput): Run.Run {
   return run;
 }
 
-function deriveState(
-  finished: Record<string, unknown> | undefined,
-  scenariosRun: number,
-): Run.Run['state'] {
-  // `runRun` writes `run_finished` on success AND on most failure paths
-  // (pack errors, scenario errors, missing scenarios, unsafe paths, runtime
-  // errors, zero scenarios). Treat any non-zero error counter — or a run
-  // that completed zero scenarios — as `failed` so the report doesn't
-  // mislabel broken runs as successes.
-  if (!finished) return 'running';
-  const errorKeys = [
-    'pack_errors',
-    'scenario_errors',
-    'missing_scenarios',
-    'unsafe_paths',
-    'runtime_errors',
-  ] as const;
-  for (const k of errorKeys) {
-    const v = readPayloadNumber(finished, k);
-    if (typeof v === 'number' && v > 0) return 'failed';
-  }
-  if (scenariosRun === 0) return 'failed';
-  return 'succeeded';
-}
-
 function pickEvent(
   events: ReadonlyArray<Record<string, unknown>>,
   kind: string,
@@ -420,6 +415,35 @@ function pickEvent(
 function readString(obj: Record<string, unknown> | undefined, key: string): string | undefined {
   const v = obj?.[key];
   return typeof v === 'string' ? v : undefined;
+}
+
+function readScenarioOutcomes(
+  finished: Record<string, unknown> | undefined,
+): readonly ScenarioOutcomeSummary[] {
+  const raw = (finished?.payload as Record<string, unknown> | undefined)?.scenario_outcomes;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error('scenario_outcomes must be an array');
+  return raw.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`scenario_outcomes[${index}] must be an object`);
+    }
+    const record = item as Record<string, unknown>;
+    const scenarioId = record.scenario_id;
+    const outcome = record.outcome;
+    if (typeof scenarioId !== 'string' || !scenarioId) {
+      throw new Error(`scenario_outcomes[${index}].scenario_id must be a string`);
+    }
+    if (
+      outcome !== 'pass' &&
+      outcome !== 'fail' &&
+      outcome !== 'error' &&
+      outcome !== 'blocked' &&
+      outcome !== 'not_run'
+    ) {
+      throw new Error(`scenario_outcomes[${index}].outcome is invalid`);
+    }
+    return { scenario_id: scenarioId, outcome: outcome as ScenarioOutcome };
+  });
 }
 
 function readPayloadString(

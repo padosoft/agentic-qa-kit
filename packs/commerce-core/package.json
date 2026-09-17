@@ -1,0 +1,8 @@
+{
+  "name": "@aqa/pack-commerce-core",
+  "version": "0.1.0",
+  "description": "Commerce assurance pack for checkout, inventory, payments and webhooks.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": ["pack.yaml", "scenarios", "risks", "oracles", "README.md"]
+}

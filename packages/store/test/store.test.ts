@@ -28,6 +28,26 @@ const RUN = {
   artifact_dir: '.aqa/runs/run-a',
 };
 
+const FINDING = {
+  schema_version: '1' as const,
+  id: 'AQA-2026-9001',
+  run_id: 'run-a',
+  scenario_id: 'checkout',
+  risk_id: 'payment',
+  title: 'Payment error',
+  summary: 'A payment error can be reproduced during checkout.',
+  severity: 'high' as const,
+  status: 'draft' as const,
+  execution_mode: 'orchestrator' as const,
+  discovered_at: '2026-05-17T10:00:00Z',
+  confidence: 0.8,
+  confidence_components: {},
+  reproducibility: {},
+  verification_floor: 'scenario_level' as const,
+  evidence: [],
+  tags: [],
+};
+
 describe('MemoryStore', () => {
   it('round-trips a Run', async () => {
     const s = new MemoryStore();
@@ -70,6 +90,103 @@ describe('MemoryStore', () => {
     await s.appendFinding(f);
     assert.equal((await s.listFindings({ run_id: 'run-a' })).length, 1);
     assert.equal((await s.listFindings({ severity: 'critical' })).length, 0);
+  });
+
+  it('atomically changes finding status and appends its audit event', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+    const result = await s.transitionFindingStatus(
+      FINDING.id,
+      'rejected',
+      'qa-user',
+      'not reproducible after verification',
+    );
+    assert.equal(result?.finding.status, 'rejected');
+    assert.equal(result?.event.payload.action, 'finding_status_changed');
+    assert.equal((await s.listEvents(FINDING.run_id)).length, 1);
+    assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
+  });
+
+  it('rejects a no-op status transition without mutating or auditing', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+    await assert.rejects(
+      s.transitionFindingStatus(FINDING.id, 'draft', 'qa-user', 'duplicate review'),
+      /already draft/,
+    );
+    assert.equal((await s.loadFinding(FINDING.id))?.status, 'draft');
+    assert.equal((await s.listEvents(FINDING.run_id)).length, 0);
+  });
+
+  it('keeps newly written configuration resources isolated by tenant scope', async () => {
+    const s = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'shared-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    const alpha = { org: 'acme', project: 'alpha' };
+    const beta = { org: 'acme', project: 'beta' };
+    await s.saveProfile(profile, alpha);
+    await s.saveProfile({ ...profile, tags: ['beta'] }, beta);
+    assert.deepEqual((await s.loadProfile(profile.name, alpha))?.tags, []);
+    assert.deepEqual((await s.loadProfile(profile.name, beta))?.tags, ['beta']);
+    assert.equal((await s.listProfiles(alpha)).length, 1);
+    assert.equal((await s.listProfiles(beta)).length, 1);
+  });
+
+  it('never falls back from a tenant-scoped read to a legacy global record', async () => {
+    const s = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: ['global'],
+    };
+    await s.saveProfile(profile);
+    assert.deepEqual(await s.loadProfile(profile.name), profile);
+    assert.equal(await s.loadProfile(profile.name, { org: 'acme', project: 'alpha' }), null);
+    assert.deepEqual(await s.listProfiles({ org: 'acme', project: 'alpha' }), []);
+  });
+
+  it('migrates legacy configuration only into an explicit namespace and never overwrites it', async () => {
+    const store = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    await store.saveProfile(profile);
+    const first = await store.migrateLegacyConfiguration({ org: 'acme', project: 'shop' });
+    assert.deepEqual(first, { migrated: 1, skipped: 0, conflicts: [] });
+    assert.equal(await store.loadProfile(profile.name), null);
+    assert.deepEqual(
+      await store.loadProfile(profile.name, { org: 'acme', project: 'shop' }),
+      profile,
+    );
+
+    await store.saveProfile(profile);
+    const conflict = await store.migrateLegacyConfiguration({ org: 'acme', project: 'shop' });
+    assert.equal(conflict.migrated, 0);
+    assert.deepEqual(conflict.conflicts, [`profile:${profile.name}`]);
+    assert.deepEqual(await store.loadProfile(profile.name), profile);
   });
 
   it('close() clears state', async () => {
@@ -121,104 +238,169 @@ describe('MemoryStore', () => {
     await s.saveSsoConfig(sampleConfig);
     assert.deepEqual(await s.loadSsoConfig(), sampleConfig);
   });
+
+  it('isolates directory users by organization and project scope', async () => {
+    const s = new MemoryStore();
+    const user = {
+      id: 'same-id',
+      email: 'same@example.com',
+      display_name: 'Same User',
+      roles: ['viewer'] as const,
+      status: 'active' as const,
+    };
+    await s.upsertUser(user, { org: 'org-a', project: 'shop' });
+    await s.upsertUser({ ...user, display_name: 'Other User' }, { org: 'org-b', project: 'shop' });
+    assert.equal(
+      (await s.listUsers({ org: 'org-a', project: 'shop' }))[0]?.display_name,
+      'Same User',
+    );
+    assert.equal(
+      (await s.listUsers({ org: 'org-b', project: 'shop' }))[0]?.display_name,
+      'Other User',
+    );
+    assert.equal((await s.listUsers({ org: 'org-a', project: 'other' })).length, 0);
+  });
 });
 
-describe('PostgresStore (v0.3 scaffold)', () => {
+describe('PostgresStore', () => {
   it('refuses empty DSN at construction', () => {
     assert.throws(() => new PostgresStore(''), /DSN is empty/);
   });
-  it('every method throws "not implemented" with a clear message', async () => {
-    const s = new PostgresStore('postgres://localhost/aqa');
-    await assert.rejects(() => s.saveRun(RUN), /not implemented/);
-    await assert.rejects(() => s.loadRun('x'), /not implemented/);
-    // Profile CRUD (v1.7 slice 4c) — keep this list in sync with the
-    // Store interface so the scaffold contract stays accurate as new
-    // methods are added.
-    await assert.rejects(() => s.listProfiles(), /not implemented/);
-    await assert.rejects(() => s.loadProfile('p'), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveProfile({
-          schema_version: '1',
-          name: 'p',
-          execution_mode: 'orchestrator',
-          llm_usage: [],
-          llm_budget_usd: null,
-          packs: [],
-          tags: [],
-          parallelism: 1,
-          require_deterministic_replay: false,
+  it('runs the durable contract when a PostgreSQL DSN is supplied', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      assert.ok(true, 'integration contract requires AQA_TEST_POSTGRES_DSN');
+      return;
+    }
+    const s = new PostgresStore(dsn);
+    try {
+      await s.saveRun(RUN);
+      assert.deepEqual(await s.loadRun(RUN.id), RUN);
+      assert.equal(
+        (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
+        true,
+      );
+    } finally {
+      await s.close();
+    }
+
+    const reopened = new PostgresStore(dsn);
+    try {
+      assert.deepEqual(
+        await reopened.loadRun(RUN.id),
+        RUN,
+        'a fresh store instance must read state written by the previous process',
+      );
+      await reopened.saveRun({
+        ...RUN,
+        id: 'cost-run',
+        totals: {
+          ...RUN.totals,
+          llm_tokens_in: 11,
+          llm_tokens_out: 7,
+          llm_cost_usd: 1.25,
+        },
+      });
+      const costs = await reopened.costSummary({
+        org: 'demo-org',
+        project: RUN.project,
+        from: '2026-05-17T00:00:00Z',
+        to: '2026-05-17T23:59:59Z',
+      });
+      assert.equal(costs.total_usd, 1.25);
+      assert.deepEqual(costs.by_profile, [
+        {
+          profile: RUN.profile,
+          llm_tokens_in: 11,
+          llm_tokens_out: 7,
+          llm_cost_usd: 1.25,
+          runs: 2,
+        },
+      ]);
+
+      const profile = {
+        schema_version: '1' as const,
+        name: 'ci-concurrency',
+        execution_mode: 'orchestrator' as const,
+        llm_usage: [],
+        llm_budget_usd: null,
+        parallelism: 1,
+        require_deterministic_replay: false,
+        packs: [],
+        tags: [],
+      };
+      const creates = await Promise.all(
+        Array.from({ length: 8 }, () => reopened.createProfile(profile)),
+      );
+      assert.equal(creates.filter((result) => result.created).length, 1);
+      assert.deepEqual(await reopened.loadProfile(profile.name), profile);
+      await reopened.saveProfile(profile, { org: 'ci-org', project: 'alpha' });
+      await reopened.saveProfile(
+        { ...profile, tags: ['beta'] },
+        { org: 'ci-org', project: 'beta' },
+      );
+      assert.deepEqual(
+        (await reopened.listProfiles({ org: 'ci-org', project: 'beta' })).find(
+          (item) => item.name === profile.name,
+        )?.tags,
+        ['beta'],
+      );
+      const legacyProfile = { ...profile, name: `legacy-${Date.now()}` };
+      await reopened.saveProfile(legacyProfile);
+      const migrated = await reopened.migrateLegacyConfiguration({
+        org: 'ci-org',
+        project: 'legacy-project',
+      });
+      assert.equal(migrated.conflicts.length, 0);
+      assert.ok(migrated.migrated >= 1);
+      assert.equal(await reopened.loadProfile(legacyProfile.name), null);
+      assert.deepEqual(
+        await reopened.loadProfile(legacyProfile.name, {
+          org: 'ci-org',
+          project: 'legacy-project',
         }),
-      /not implemented/,
-    );
-    await assert.rejects(
-      () =>
-        s.createProfile({
-          schema_version: '1',
-          name: 'p',
-          execution_mode: 'orchestrator',
-          llm_usage: [],
-          llm_budget_usd: null,
-          packs: [],
-          tags: [],
-          parallelism: 1,
-          require_deterministic_replay: false,
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(() => s.deleteProfile('p'), /not implemented/);
-    // Scenario CRUD (v1.7 slice 4c.6) — assert the whole scenario
-    // surface so the scaffold contract stays accurate as the
-    // interface evolves.
-    await assert.rejects(() => s.listScenarios(), /not implemented/);
-    await assert.rejects(() => s.loadScenario('s'), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveScenario({
-          schema_version: '1',
-          id: 's',
-          title: 'A scaffold-test scenario',
-          risk_refs: ['risk-x'],
-          invariant_refs: [],
-          preconditions: [],
-          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
-          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
-          cleanup: [],
-          tags: [],
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(
-      () =>
-        s.createScenario({
-          schema_version: '1',
-          id: 's',
-          title: 'A scaffold-test scenario',
-          risk_refs: ['risk-x'],
-          invariant_refs: [],
-          preconditions: [],
-          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
-          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
-          cleanup: [],
-          tags: [],
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
-    await assert.rejects(() => s.loadSsoConfig(), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveSsoConfig({
-          schema_version: '1',
-          provider: 'oidc',
-          enabled: true,
-          issuer_url: 'https://id.example.com/realms/main',
-          client_id: 'aqa-admin',
-          client_secret_set: true,
-          allowed_email_domains: ['example.com'],
-          claim_mappings: { 'user.id': 'sub' },
-        }),
-      /not implemented/,
-    );
+        legacyProfile,
+      );
+
+      const user = {
+        id: 'ci-user',
+        email: 'ci-user@example.com',
+        display_name: 'CI User',
+        roles: ['admin'] as const,
+        status: 'active' as const,
+        last_active_at: '2026-05-17T10:00:00Z',
+      };
+      await reopened.upsertUser(user);
+      assert.deepEqual(await reopened.listUsers(), [user]);
+
+      await reopened.appendFinding(FINDING);
+      const beforeTransitionHashes = new Set(
+        (await reopened.listEvents(FINDING.run_id)).map((event) => event.hash),
+      );
+      // Concurrent decisions are serialized by the database advisory lock.
+      // Depending on lock acquisition order, one decision may legitimately
+      // become invalid after the other reaches a terminal state; that is a
+      // conflict, not evidence that the store lost atomicity.
+      const transitions = await Promise.allSettled([
+        reopened.transitionFindingStatus(FINDING.id, 'rejected', 'ci-a', 'first decision'),
+        reopened.transitionFindingStatus(FINDING.id, 'fixed', 'ci-b', 'second decision'),
+      ]);
+      const fulfilled = transitions.filter((result) => result.status === 'fulfilled');
+      const rejected = transitions.filter((result) => result.status === 'rejected');
+      assert.ok(fulfilled.length >= 1);
+      for (const result of rejected) {
+        assert.match(String(result.reason), /status transition .* is not allowed/);
+      }
+      const auditEvents = (await reopened.listEvents(FINDING.run_id)).filter(
+        (event) =>
+          event.payload.action === 'finding_status_changed' &&
+          !beforeTransitionHashes.has(event.hash),
+      );
+      assert.equal(auditEvents.length, fulfilled.length);
+      assert.equal(new Set(auditEvents.map((event) => event.seq)).size, fulfilled.length);
+      assert.equal(new Set(auditEvents.map((event) => event.hash)).size, fulfilled.length);
+    } finally {
+      await reopened.close();
+    }
   });
 });

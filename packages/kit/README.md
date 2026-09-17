@@ -14,6 +14,8 @@
 - [Junior-friendly quick start](#junior-friendly-quick-start)
 - [Project profiler](#project-profiler)
 - [Programmatic API](#programmatic-api)
+- [Durable artifact backend](#durable-artifact-backend)
+- [Durable admin state](#durable-admin-state)
 - [Development](#development)
 
 ## What's inside
@@ -67,6 +69,65 @@ bunx aqa validate             # schema-validate .aqa/* (CI-safe)
 `aqa init` is **non-destructive**: existing files are left alone unless you pass `--force`. Pair it
 with `--dry-run` to preview the writes.
 
+## Durable artifact backend
+
+Runs use the local filesystem by default. For AWS S3, MinIO or another
+S3-compatible endpoint, configure the deployment environment before `aqa run`:
+
+```text
+AQA_ARTIFACT_S3_BUCKET=aqa-artifacts
+AQA_ARTIFACT_S3_PREFIX=tenant/acme
+AQA_ARTIFACT_S3_ENDPOINT=https://minio.example.internal   # optional
+AQA_ARTIFACT_S3_FORCE_PATH_STYLE=true                    # MinIO commonly needs this
+```
+
+The AWS SDK uses its normal credential chain; credentials must never be passed
+as CLI arguments or committed. Optional Object Lock requests use
+`AQA_ARTIFACT_S3_RETAIN_UNTIL` (ISO timestamp) together with
+`AQA_ARTIFACT_S3_RETENTION_MODE=GOVERNANCE|COMPLIANCE`. Bucket versioning,
+Object Lock enablement, KMS and tenant authorization remain operator controls.
+
+Set `AQA_ARTIFACT_S3_REQUIRE_RETENTION=true` in production to fail closed when
+the S3 backend is missing both Object Lock retention settings. The run backend
+also reads back the applied Object Lock mode/date after each content and
+metadata write. This validates the application/provider contract; it does not
+provision bucket versioning, KMS or Object Lock itself.
+
+After `run_finished`, the selected store also receives byte-preserved
+`canonical/events.jsonl` and `canonical/findings.jsonl`, plus
+`canonical/manifest.json` with SHA-256 digests and byte counts. A failed
+publication fails the run result; publication is not a distributed transaction
+and partial uploads require operational retry or cleanup.
+
+For an independently administered audit domain, callers embedding `runRun()`
+can pass a separate `auditCheckpointStore`. The final checkpoint is then
+published as `checkpoints/<run_id>.json` and its digest is recorded in the local
+manifest. Configure that store with its own tenant boundary, Object Lock/KMS,
+backup and restore evidence; the runner does not infer those controls.
+
+The CLI configures the same boundary when all of the following are present:
+`AQA_AUDIT_CHECKPOINT_S3_BUCKET`, optional
+`AQA_AUDIT_CHECKPOINT_S3_PREFIX`/`AQA_AUDIT_CHECKPOINT_S3_ENDPOINT`,
+`AQA_AUDIT_CHECKPOINT_S3_RETAIN_UNTIL`, and
+`AQA_AUDIT_CHECKPOINT_S3_RETENTION_MODE=COMPLIANCE`. Partial or non-compliance
+configuration fails before the run starts. Credentials still come from the AWS
+credential chain and are never accepted as CLI values.
+
+## Durable admin state
+
+`aqa admin` uses `MemoryStore` for local development. Set `AQA_STORE_DSN` to a
+PostgreSQL connection string to persist runs, findings, configuration and
+audit records across process restarts. Set `AQA_QUEUE_DSN` separately to make
+worker leases durable. Both clients are closed during graceful shutdown.
+
+The PostgreSQL service, credentials, TLS policy, migrations and backups remain
+operator responsibilities; the CLI does not print the DSN or credentials.
+
+Host applications can inject a bounded `MetricsRegistry` into `runAdmin` to
+expose `GET /metrics` in Prometheus text format. Scraping is opt-in; a
+non-loopback bind fails closed unless `metricsAuthorize` is supplied. Metric
+labels must remain bounded and payload-free.
+
 ## Project profiler
 
 `profileRepo(root)` inspects the repo and returns a `ProjectProfile`:
@@ -97,6 +158,35 @@ const init = await runInit({ root: process.cwd() });
 const doctor = runDoctor({ root: process.cwd() });
 const validation = runValidate({ root: process.cwd() });
 ```
+
+## Verify a finding after a fix
+
+Use the finding ID from `aqa run` or `aqa report` to replay its scenario against
+the real system under test:
+
+```bash
+aqa verify <finding-id> --base-url http://127.0.0.1:3000 --attempts 3
+```
+
+The command refuses to use the runner's no-network stub, executes the scenario
+up to ten times, and writes a redacted verification result beside the original
+run artifacts. Exit code `0` means every attempt passed deterministically;
+exit code `2` means the replay completed but was flaky or non-deterministic.
+This is an evidence-producing replay primitive: it does not silently close the
+finding or claim that CI, deployment, or a pull request has been verified.
+
+## Ingest external test and security results
+
+Normalize JUnit or Semgrep-compatible output into redacted AQA evidence:
+
+```bash
+aqa ingest junit test-results/junit.xml
+aqa ingest sast semgrep.json --tool semgrep
+```
+
+The parser is size bounded and rejects XML external-entity declarations. Ingest
+does not automatically verify or close findings; policy-controlled linkage is
+an explicit later step.
 
 Each command is exposed as a single function with explicit options. They do touch disk (writes for
 `runInit`, reads for `runValidate`/`runDoctor`/`profileRepo`), but only against the `root` you pass

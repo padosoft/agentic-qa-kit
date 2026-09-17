@@ -13,6 +13,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -70,6 +71,57 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
     assert.equal(typeof meta.bytes, 'number');
     assert.ok(meta.bytes > 0);
     assert.match(meta.generated_at, /^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('executes run and admin help from the bundled entrypoint', () => {
+    if (!existsSync(bundlePath)) return;
+    const run = spawnSync(process.execPath, [bundlePath, 'run', '--help'], {
+      cwd: kitRoot,
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, `bundled run failed: ${run.stderr}`);
+    const admin = spawnSync(process.execPath, [bundlePath, 'admin', '--help'], {
+      cwd: kitRoot,
+      encoding: 'utf8',
+    });
+    assert.equal(admin.status, 0, `bundled admin failed: ${admin.stderr}`);
+  });
+
+  it('does not retain ESM-only import.meta path dependencies in the CJS artifact', () => {
+    if (!existsSync(bundlePath)) return;
+    const bundle = readFileSync(bundlePath, 'utf8');
+    assert.doesNotMatch(
+      bundle,
+      /import\.meta/,
+      'the published CJS CLI must resolve bundled assets without import.meta',
+    );
+  });
+
+  it('serves the health endpoint from the real bundled admin process', async () => {
+    if (!existsSync(bundlePath)) return;
+    const port = 32_000 + Math.floor(Math.random() * 1_000);
+    const child = spawn(process.execPath, [bundlePath, 'admin', '--port', String(port)], {
+      cwd: kitRoot,
+      stdio: 'ignore',
+    });
+    try {
+      let response: Response | undefined;
+      for (let attempt = 0; attempt < 30 && !response; attempt += 1) {
+        try {
+          response = await fetch(`http://127.0.0.1:${port}/api/healthz`);
+          break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+      assert.ok(response, 'bundled admin did not become reachable within 3 seconds');
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: true });
+    } finally {
+      if (child.exitCode === null) child.kill();
+      if (child.exitCode === null)
+        await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    }
   });
 });
 

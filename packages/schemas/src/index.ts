@@ -6,6 +6,7 @@ export * as Scenario from './scenario.js';
 export * as Finding from './finding.js';
 export * as Event from './event.js';
 export * as Run from './run.js';
+export * as RunRequest from './run-request.js';
 export * as PackManifest from './pack-manifest.js';
 export * as Notification from './notification.js';
 export * as SavedView from './saved-view.js';

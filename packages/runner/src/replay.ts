@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Scenario } from '@aqa/schemas';
 import { type ProbeRunner, type ScenarioRunResult, runScenario } from './run.js';
 
@@ -6,6 +7,8 @@ export interface VerifyOptions {
   run_id: string;
   attempts: number;
   probeRunner: ProbeRunner;
+  /** Fingerprint from the original finding, when replaying a persisted finding. */
+  expected_fingerprint?: string;
 }
 
 export interface VerifyResult {
@@ -13,7 +16,23 @@ export interface VerifyResult {
   successes: number;
   deterministic: boolean;
   /** Per-attempt summary used by the audit log. */
-  attempts_detail: ReadonlyArray<{ index: number; finding_present: boolean }>;
+  attempts_detail: ReadonlyArray<{
+    index: number;
+    finding_present: boolean;
+    failure_fingerprint?: string;
+  }>;
+  fingerprint?: string;
+}
+
+function failureFingerprint(result: ScenarioRunResult): string | undefined {
+  const failed = result.oracles
+    .filter((oracle) => !oracle.passed)
+    .map((oracle) => ({ oracle_id: oracle.oracle_id, reason: oracle.reason }))
+    .sort((a, b) => a.oracle_id.localeCompare(b.oracle_id));
+  if (failed.length === 0) return undefined;
+  return createHash('sha256')
+    .update(JSON.stringify({ scenario_id: result.scenario_id, failed }))
+    .digest('hex');
 }
 
 /**
@@ -28,8 +47,14 @@ export async function verifyScenario(opts: VerifyOptions): Promise<VerifyResult>
   if (opts.attempts < 1) {
     throw new Error('[runner.verify] attempts must be >= 1');
   }
-  const detail: Array<{ index: number; finding_present: boolean }> = [];
+  const detail: Array<{
+    index: number;
+    finding_present: boolean;
+    failure_fingerprint?: string;
+  }> = [];
   let successes = 0;
+  let observedFingerprint: string | undefined;
+  const targetFingerprint = opts.expected_fingerprint;
   for (let i = 0; i < opts.attempts; i += 1) {
     const result: ScenarioRunResult = await runScenario({
       scenario: opts.scenario,
@@ -37,13 +62,24 @@ export async function verifyScenario(opts: VerifyOptions): Promise<VerifyResult>
       probeRunner: opts.probeRunner,
     });
     const present = result.finding !== null;
-    detail.push({ index: i, finding_present: present });
-    if (present) successes += 1;
+    const fingerprint = present ? failureFingerprint(result) : undefined;
+    detail.push({
+      index: i,
+      finding_present: present,
+      ...(fingerprint ? { failure_fingerprint: fingerprint } : {}),
+    });
+    if (fingerprint && observedFingerprint === undefined) observedFingerprint = fingerprint;
+    const expected = targetFingerprint ?? observedFingerprint;
+    if (fingerprint !== undefined && expected !== undefined && fingerprint === expected) {
+      successes += 1;
+    }
   }
-  return {
+  const result: VerifyResult = {
     attempts: opts.attempts,
     successes,
     deterministic: successes === opts.attempts && opts.attempts >= 1,
     attempts_detail: detail,
   };
+  const resultFingerprint = targetFingerprint ?? observedFingerprint;
+  return resultFingerprint === undefined ? result : { ...result, fingerprint: resultFingerprint };
 }

@@ -50,6 +50,22 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install documentation dependencies
+        working-directory: docs-site
+        # The native ONNX package runs a platform-specific binary download
+        # during install. Documentation builds do not execute that optional
+        # native path; skipping lifecycle scripts keeps CI hermetic and avoids
+        # an external NuGet outage turning the repository gate red.
+        run: npm ci --ignore-scripts
+
+      - name: Audit documentation dependency graph
+        working-directory: docs-site
+        run: npm audit --audit-level=high
+
+      - name: Check documentation source
+        working-directory: docs-site
+        run: npm run check
+
       - name: Lint (Biome)
         run: bun run lint
 
@@ -58,7 +74,7 @@ jobs:
         # (dist/index.{js,d.ts}). Typecheck of a downstream package therefore
         # needs the upstream dist to exist. Run a full build before typecheck.
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Typecheck (all workspaces)
         run: bun run typecheck
@@ -82,7 +98,7 @@ jobs:
 
       - name: Build all workspaces (tests import the built dist/)
         if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Run unit tests
         if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
@@ -126,7 +142,7 @@ jobs:
         # packages' dist/. Build once up front in topological order so each
         # package's pretest sees a fresh dist for everything it imports.
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Run unit tests under Node
         env:
@@ -158,6 +174,121 @@ jobs:
           done
           exit $worst
 
+  test-postgres:
+    name: Integration (PostgreSQL 16 store)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [typecheck-lint]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aqa
+          POSTGRES_PASSWORD: aqa-ci-only
+          POSTGRES_DB: aqa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aqa -d aqa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Run PostgreSQL persistence contract
+        env:
+          AQA_TEST_POSTGRES_DSN: postgres://aqa:aqa-ci-only@127.0.0.1:5432/aqa_test
+        run: |
+          bun test packages/store/test/store.test.ts
+          bun test packages/server/test/postgres-queue.test.ts
+          bun test packages/server/test/postgres-idempotency.test.ts
+          bun test packages/cost/test/postgres-ledger.test.ts
+          bun test packages/auth/test/oidc-session.test.ts
+          bun test packages/auth/test/postgres-scim-token.test.ts
+          bun test packages/integrations/test/webhook.test.ts
+          bun test packages/server/test/event-bus.test.ts
+          bun test packages/runner/test/postgres-driver.test.ts
+
+  test-container-sandbox:
+    name: Integration (OCI container sandbox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [typecheck-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build sandbox
+        run: bun run --filter @aqa/sandbox build
+      - name: Run real Docker sandbox contract
+        working-directory: packages/sandbox
+        env:
+          AQA_TEST_CONTAINER_RUNTIME: docker
+        run: bun test test/sandbox.test.ts
+
+  validate-helm:
+    name: Validate Helm deployment chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate air-gap installer syntax
+        run: bash -n scripts/air-gap-install.sh
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Lint chart
+        run: helm lint deploy/helm
+      - name: Render default and production-shaped values
+        run: |
+          helm template aqa deploy/helm > /tmp/aqa-default.yaml
+          helm template aqa deploy/helm \
+            --set ingress.enabled=true \
+            --set ingress.tls.enabled=true \
+            --set ingress.tls.secretName=aqa-tls \
+            --set postgres.urlSecretRef=aqa-db \
+            --set runner.worker.enabled=true \
+            --set-string 'runner.worker.scopes[0]=padosoft/*' \
+            --set runner.reaper.enabled=true \
+            --set-string 'networkPolicy.runnerExtraEgressCidrs[0]=10.0.0.0/8' \
+            --set cost.reaper.enabled=true \
+            --set cost.reaper.ledgerDsnSecretRef=aqa-db \
+            > /tmp/aqa-production.yaml
+          test -s /tmp/aqa-default.yaml
+          test -s /tmp/aqa-production.yaml
+          grep -q 'PersistentVolumeClaim' /tmp/aqa-production.yaml
+          test "$(grep -c 'name: AQA_STORE_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_QUEUE_DSN' /tmp/aqa-production.yaml)" -eq 2
+          test "$(grep -c 'name: AQA_IDEMPOTENCY_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_OIDC_SESSION_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_SCIM_TOKEN_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_SCIM_RATE_LIMIT_DSN' /tmp/aqa-production.yaml)" -eq 1
+          grep -q 'kind: CronJob' /tmp/aqa-production.yaml
+          grep -q 'name: AQA_BUDGET_LEDGER_DSN' /tmp/aqa-production.yaml
+          grep -q 'name: AQA_RUNNER_QUEUE_DSN' /tmp/aqa-production.yaml
+          grep -q 'name: aqa-runner-reaper' /tmp/aqa-production.yaml
+          grep -q 'name: AQA_RUNNER_SCOPES' /tmp/aqa-production.yaml
+          grep -q 'command:' /tmp/aqa-production.yaml
+          ! grep -q 'namespaceSelector: {}' /tmp/aqa-production.yaml
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -177,10 +308,30 @@ jobs:
       - name: Build (all workspaces)
         run: |
           if [ -d packages ]; then
+            npm --prefix docs-site ci
             bun run build
           else
             echo "No packages yet — gate placeholder."
           fi
+
+      - name: Generate CycloneDX SBOM for the built repository
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: aqa-sbom.cdx.json
+          artifact-name: aqa-sbom-cyclonedx
+
+      - name: Validate CycloneDX SBOM
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const bom = JSON.parse(readFileSync('aqa-sbom.cdx.json', 'utf8'));
+          if (bom.bomFormat !== 'CycloneDX' || !bom.specVersion || !Array.isArray(bom.components) || bom.components.length === 0) {
+            throw new Error('SBOM is not a non-empty CycloneDX component inventory');
+          }
+          console.log(`CycloneDX ${bom.specVersion}: ${bom.components.length} components`);
+          NODE
 
   e2e-cli:
     name: E2E (CLI smoke)
@@ -199,10 +350,29 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build all workspaces
-        run: bun run build
+        run: |
+          npm --prefix docs-site ci
+          bun run build
 
       - name: Run CLI smoke checks
         run: bun run test:e2e-cli
+
+      - name: Run performance evidence threshold journey
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d)"
+          cat > "$fixture/k6.json" <<'JSON'
+          {"metrics":{"http_req_duration":{"values":{"p(95)":250}}}}
+          JSON
+          cat > "$fixture/thresholds.json" <<'JSON'
+          {"max_p95_ms":100}
+          JSON
+          set +e
+          node packages/kit/dist/cli.cjs ingest k6 "$fixture/k6.json" --threshold-file "$fixture/thresholds.json"
+          exit_code=$?
+          set -e
+          test "$exit_code" -eq 2
+          test -n "$(find .aqa/ingest -name '*.threshold.json' -print -quit)"
 
   e2e:
     name: E2E (Playwright, admin UI)
@@ -222,16 +392,22 @@ jobs:
 
       - name: Install Playwright browsers
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
-        run: bunx playwright install --with-deps chromium
+        # Playwright 1.60 launches Chromium through its separate headless
+        # shell in headless CI. Install both artifacts explicitly so a
+        # browser package update cannot leave the runner half-provisioned.
+        working-directory: packages/admin
+        run: bun run test:install-browsers
 
       - name: Build admin (Vite) for the dev server Playwright will boot
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
-        run: bun run build
+        run: |
+          npm --prefix docs-site ci
+          bun run build
 
       - name: Run Playwright (admin SPA)
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
         working-directory: packages/admin
-        run: bunx playwright test --reporter=line
+        run: bun run test:e2e
 
       - name: Skip notice
         if: ${{ hashFiles('packages/admin/playwright.config.*') == '' }}

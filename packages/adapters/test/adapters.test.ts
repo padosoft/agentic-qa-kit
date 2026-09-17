@@ -92,4 +92,15 @@ describe('renderForTargets', () => {
       assert.ok(a.capabilities.instruction_file.length > 0);
     }
   });
+
+  it('renders every skill with the interoperable directory/SKILL.md shape', () => {
+    for (const adapter of adapters) {
+      const skills = adapter.render(ctx).filter((file) => file.kind === 'skill');
+      assert.ok(skills.length > 0, `${adapter.target} must render a skill`);
+      for (const skill of skills) {
+        assert.match(skill.path, /\/skills\/[^/]+\/SKILL\.md$/);
+        assert.match(skill.contents, /^---\nname: [^\n]+\ndescription: .+\n---/);
+      }
+    }
+  });
 });

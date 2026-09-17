@@ -15,5 +15,6 @@ steps:
 oracles:
   - id: o-same-id
     kind: response_contains
+    probe_id: probe-post-2
     with: { jsonpath: "$.id", equals: "@probe-post-1.body.id" }
 tags: [api, idempotency]

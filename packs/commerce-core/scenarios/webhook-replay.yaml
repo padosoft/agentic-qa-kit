@@ -1,0 +1,27 @@
+schema_version: "1"
+id: scn-commerce-webhook-replay
+title: Webhook replay must be rejected or applied exactly once
+risk_refs: [r-webhook-replay]
+invariant_refs: [inv-webhook-replay]
+preconditions:
+  - "a signed payment or order webhook can be delivered to the SUT"
+steps:
+  - id: webhook-first
+    kind: http
+    with: { method: "POST", url: "/api/webhooks/commerce", body: { event_id: "aqa-event-1", type: "payment.succeeded" }, headers: { "Stripe-Signature": "${VALID_SIGNATURE}" } }
+  - id: webhook-replay
+    kind: http
+    with: { method: "POST", url: "/api/webhooks/commerce", body: { event_id: "aqa-event-1", type: "payment.succeeded" }, headers: { "Stripe-Signature": "${VALID_SIGNATURE}" } }
+  - id: effects
+    kind: http
+    with: { method: "GET", url: "/api/orders/${ORDER_ID}/effects" }
+oracles:
+  - id: replay-idempotent
+    kind: custom
+    probe_id: effects
+    with: { assertion: "event_id aqa-event-1 has exactly one applied business effect" }
+  - id: replay-response
+    kind: http_status
+    probe_id: webhook-replay
+    with: { expected: 200 }
+tags: [ecommerce, webhooks, security, idempotency]

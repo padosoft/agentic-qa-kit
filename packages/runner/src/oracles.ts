@@ -10,6 +10,8 @@ export interface OracleResult {
 
 export interface ProbeRunResult {
   probe_id: string;
+  /** Transport/execution outcome; assertion status is represented separately by OracleResult. */
+  execution_status?: 'completed' | 'failed';
   status?: number;
   body?: unknown;
   headers?: Record<string, string>;
@@ -20,6 +22,11 @@ export type OracleEvaluator = (
   oracle: Scenario.Oracle,
   ctx: { probes: readonly ProbeRunResult[] },
 ) => OracleResult;
+
+function transportError(ctx: { probes: readonly ProbeRunResult[] }): string | null {
+  const failed = ctx.probes.find((probe) => probe.error);
+  return failed?.error ? `transport error on probe "${failed.probe_id}": ${failed.error}` : null;
+}
 
 const httpStatus: OracleEvaluator = (oracle, ctx) => {
   const expected = Number(oracle.with.expected);
@@ -36,6 +43,10 @@ const httpStatus: OracleEvaluator = (oracle, ctx) => {
 };
 
 const responseContains: OracleEvaluator = (oracle, ctx) => {
+  const error = transportError(ctx);
+  if (error) {
+    return { oracle_id: oracle.id, passed: false, reason: error, agreement: 0 };
+  }
   const needle = String(oracle.with.value ?? '');
   const haystack = ctx.probes.map((p) => JSON.stringify(p.body ?? '')).join(' ');
   const passed = haystack.includes(needle);
@@ -48,6 +59,10 @@ const responseContains: OracleEvaluator = (oracle, ctx) => {
 };
 
 const responseNotContains: OracleEvaluator = (oracle, ctx) => {
+  const error = transportError(ctx);
+  if (error) {
+    return { oracle_id: oracle.id, passed: false, reason: error, agreement: 0 };
+  }
   const needle = String(oracle.with.value ?? '');
   const haystack = ctx.probes.map((p) => JSON.stringify(p.body ?? '')).join(' ');
   const passed = !haystack.includes(needle);
@@ -81,5 +96,15 @@ export function evaluateOracle(
       agreement: 0,
     };
   }
-  return ev(oracle, ctx);
+  if (!oracle.probe_id) return ev(oracle, ctx);
+  const probe = ctx.probes.find((candidate) => candidate.probe_id === oracle.probe_id);
+  if (!probe) {
+    return {
+      oracle_id: oracle.id,
+      passed: false,
+      reason: `oracle references missing probe "${oracle.probe_id}"`,
+      agreement: 0,
+    };
+  }
+  return ev(oracle, { probes: [probe] });
 }

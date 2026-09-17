@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
-import { RunnerQueue, makeApi } from '../dist/index.js';
+import {
+  MemoryApiIdempotencyStore,
+  type QueueQuota,
+  RunnerQueue,
+  buildAsyncApiDocument,
+  buildOpenApiDocument,
+  makeApi,
+} from '../dist/index.js';
 
 const FAKE_USER = {
   id: '1',
@@ -13,11 +22,30 @@ const FAKE_USER = {
   roles: ['admin' as const],
 };
 
-function ctx(opts: { projectRoot?: string } = {}) {
+function ctx(
+  opts: {
+    projectRoot?: string;
+    eventBus?: { publish: (event: unknown) => Promise<void> };
+    quota?: QueueQuota;
+    scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
+    packTrustedKeys?: Readonly<Record<string, string>>;
+    packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
+    runnerAuthorize?: (
+      headers: Record<string, string>,
+    ) => Promise<
+      boolean | { runner_id: string; scopes: readonly { org: string; project?: string }[] }
+    >;
+  } = {},
+) {
   return {
     store: new MemoryStore(),
-    queue: new RunnerQueue(),
+    queue: new RunnerQueue({ quota: opts.quota }),
     authenticate: async () => FAKE_USER,
+    ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
+    ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
+    ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
+    ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
+    ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -49,6 +77,28 @@ after(() => {
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
 
 describe('makeApi', () => {
+  it('publishes an OpenAPI operation for every concrete route with permission metadata', () => {
+    const routes = makeApi();
+    const document = buildOpenApiDocument(routes);
+    const operations = Object.values(document.paths).flatMap((path) => Object.values(path));
+    assert.equal(document.openapi, '3.1.0');
+    assert.equal(operations.length, routes.length);
+    assert.ok(operations.every((operation) => typeof operation.operationId === 'string'));
+    assert.ok(operations.some((operation) => operation['x-aqa-permission'] === 'runs:read'));
+    assert.ok(document.paths['/api/runs/{id}']?.get);
+  });
+
+  it('publishes an AsyncAPI operation for every supported live event type', () => {
+    const document = buildAsyncApiDocument();
+    assert.equal(document.asyncapi, '3.0.0');
+    assert.deepEqual(Object.keys(document.operations).sort(), [
+      'receive_finding_status_changed',
+      'receive_run_cancelled',
+      'receive_run_requested',
+    ]);
+    assert.equal(document.components.schemas.BusEvent.type, 'object');
+  });
+
   it('exposes the v1.4 route surface (>= 28 routes)', () => {
     const api = makeApi();
     assert.ok(api.length >= 28, `expected >= 28 routes, got ${api.length}`);
@@ -71,6 +121,116 @@ describe('makeApi', () => {
     assert.deepEqual((scoped?.body as { runs: unknown[] }).runs, []);
   });
 
+  it('GET /api/risk-coverage aggregates tenant-scoped scenario events', async () => {
+    const c = ctx();
+    await c.store.saveRisk(
+      {
+        id: 'risk-checkout',
+        category: 'business_logic',
+        title: 'Checkout integrity',
+        severity: 'high',
+        likelihood: 'likely',
+        invariants: [{ id: 'inv-total', statement: 'total matches line items' }],
+        owners: [],
+        tags: [],
+      },
+      { org: 'padosoft', project: 'demo' },
+    );
+    await c.store.saveScenario(
+      {
+        schema_version: '1',
+        id: 'checkout-total',
+        title: 'Checkout total remains correct',
+        risk_refs: ['risk-checkout'],
+        invariant_refs: ['inv-total'],
+        steps: [{ id: 'checkout', kind: 'http', with: {} }],
+        oracles: [{ id: 'total', kind: 'http_status', with: {} }],
+        preconditions: [],
+        cleanup: [],
+        tags: [],
+      },
+      { org: 'padosoft', project: 'demo' },
+    );
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-coverage-demo',
+      started_at: '2026-09-16T10:00:00Z',
+      finished_at: '2026-09-16T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
+      totals: {
+        scenarios: 1,
+        findings: 0,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-coverage-demo',
+    });
+    await c.store.appendEvent({
+      schema_version: '1',
+      seq: 0,
+      prev_hash: null,
+      hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      ts: '2026-09-16T10:01:00Z',
+      run_id: 'run-coverage-demo',
+      kind: 'oracle_evaluated',
+      actor: { type: 'orchestrator', id: 'test' },
+      scenario_id: 'checkout-total',
+      payload: { oracle_id: 'total', passed: true },
+    });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/risk-coverage');
+    const missing = await route?.handle({ headers: {}, params: {} }, c);
+    assert.equal(missing?.status, 400);
+    const response = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(response?.status, 200);
+    const coverage = (
+      response?.body as { coverage: Array<{ risk_id: string; pass_rate_30d: number }> }
+    ).coverage;
+    assert.equal(coverage.length, 1);
+    assert.equal(coverage[0]?.risk_id, 'risk-checkout');
+    assert.equal(coverage[0]?.pass_rate_30d, 1);
+  });
+
+  it('POST /api/admin/migrate-legacy-configuration requires an explicit destination scope', async () => {
+    const c = ctx();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    await c.store.saveProfile(profile);
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/admin/migrate-legacy-configuration',
+    );
+    const missing = await route?.handle({ headers: {}, params: {} }, c);
+    assert.equal(missing?.status, 400);
+    const migrated = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(migrated?.status, 200);
+    assert.deepEqual(migrated?.body, { migrated: 1, skipped: 0, conflicts: [] });
+    assert.equal(await c.store.loadProfile(profile.name), null);
+    assert.deepEqual(
+      await c.store.loadProfile(profile.name, { org: 'padosoft', project: 'demo' }),
+      profile,
+    );
+  });
+
   it('GET /api/runs/:id 404s when missing', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs/:id');
@@ -86,11 +246,168 @@ describe('makeApi', () => {
   });
 
   it('POST /api/runs enqueues a job', async () => {
-    const c = ctx();
+    const events: unknown[] = [];
+    const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
     const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
-    const res = await route?.handle({ headers: {}, params: {}, body: { profile: 'smoke' } }, c);
+    const res = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke', priority: 5 } },
+      c,
+    );
     assert.equal(res?.status, 202);
     assert.equal(c.queue.size(), 1);
+    assert.equal(c.queue.snapshot()[0]?.priority, 5);
+    assert.equal((events[0] as { type: string }).type, 'run.requested');
+  });
+
+  it('POST /api/runs rejects fields outside the worker request contract', async () => {
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const response = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke', root: 'C:/unsafe' } },
+      ctx(),
+    );
+    assert.equal(response?.status, 400);
+    assert.match(String((response?.body as { error?: string }).error), /Unrecognized key|root/i);
+  });
+
+  it('POST /api/runs/:id/cancel is tenant-scoped and fences the queued job', async () => {
+    const events: unknown[] = [];
+    const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });
+    const create = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const created = await create?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    const jobId = (created?.body as { job: { id: string } }).job.id;
+    const cancel = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs/:id/cancel');
+    const denied = await cancel?.handle(
+      {
+        headers: { 'x-aqa-org': 'other', 'x-aqa-project': 'demo' },
+        params: { id: jobId },
+        body: {},
+      },
+      c,
+    );
+    assert.equal(denied?.status, 404);
+    const cancelled = await cancel?.handle(
+      { headers: TENANT_HEADERS, params: { id: jobId }, body: { reason: 'operator stop' } },
+      c,
+    );
+    assert.equal(cancelled?.status, 200);
+    assert.equal(c.queue.snapshot()[0]?.status, 'cancelled');
+    assert.equal((events.at(-1) as { type: string }).type, 'run.cancelled');
+  });
+
+  it('POST /api/runs requires tenant scope and deduplicates retries', async () => {
+    const c = ctx();
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const missingScope = await route?.handle(
+      { headers: {}, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    assert.equal(missingScope?.status, 400);
+    const headers = { ...TENANT_HEADERS, 'Idempotency-Key': 'checkout-like-run-1' };
+    const first = await route?.handle({ headers, params: {}, body: { profile: 'smoke' } }, c);
+    const retry = await route?.handle({ headers, params: {}, body: { profile: 'smoke' } }, c);
+    assert.equal(first?.status, 202);
+    assert.equal(retry?.status, 202);
+    assert.equal(
+      (first?.body as { job: { id: string } }).job.id,
+      (retry?.body as { job: { id: string } }).job.id,
+    );
+    assert.equal(c.queue.size(), 1);
+    const conflict = await route?.handle(
+      { headers, params: {}, body: { profile: 'release-gate' } },
+      c,
+    );
+    assert.equal(conflict?.status, 409);
+  });
+
+  it('POST /api/runs returns a bounded 429 when tenant admission is full', async () => {
+    const c = ctx({ quota: { concurrent_runs_max: 1 } });
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const first = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    const second = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'release' } },
+      c,
+    );
+    assert.equal(first?.status, 202);
+    assert.equal(second?.status, 429);
+    assert.deepEqual(second?.body, {
+      error: '[server/queue] resource quota exceeded: concurrent_runs_max',
+      code: 'RESOURCE_QUOTA_EXCEEDED',
+      quota: 'concurrent_runs_max',
+      limit: 1,
+      current: 1,
+      requested: 1,
+    });
+  });
+
+  it('applies the API idempotency contract to non-run mutations', async () => {
+    const c = ctx();
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/orgs');
+    const headers = { ...TENANT_HEADERS, 'Idempotency-Key': 'org-create-1' };
+    const body = { id: 'org-1', name: 'Acme' };
+    const first = await route?.handle({ headers, params: {}, body }, c);
+    const retry = await route?.handle({ headers, params: {}, body }, c);
+    assert.equal(first?.status, 201);
+    assert.deepEqual(retry, first);
+    assert.deepEqual(await c.store.listOrgs(), [{ id: 'org-1', name: 'Acme' }]);
+    const conflict = await route?.handle(
+      { headers, params: {}, body: { id: 'org-1', name: 'Other' } },
+      c,
+    );
+    assert.equal(conflict?.status, 409);
+    const invalid = await route?.handle(
+      { headers: { ...TENANT_HEADERS, 'Idempotency-Key': ' ' }, params: {}, body },
+      c,
+    );
+    assert.equal(invalid?.status, 400);
+  });
+
+  it('coalesces concurrent idempotent operations and does not cache 5xx responses', async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new MemoryApiIdempotencyStore();
+    const operation = {
+      scope: 'org/project:POST:/api/orgs',
+      key: 'concurrent-1',
+      fingerprint: 'a',
+    };
+    const first = store.execute(operation, async () => {
+      calls += 1;
+      await gate;
+      return { status: 201, body: { ok: true } };
+    });
+    const second = store.execute(operation, async () => {
+      calls += 1;
+      return { status: 201, body: { ok: false } };
+    });
+    release();
+    assert.deepEqual(await Promise.all([first, second]), [
+      { status: 201, body: { ok: true } },
+      { status: 201, body: { ok: true } },
+    ]);
+    assert.equal(calls, 1);
+    const retry = await store.execute(operation, async () => ({
+      status: 500,
+      body: { ok: false },
+    }));
+    assert.equal(retry.status, 201);
+    const serverErrorStore = new MemoryApiIdempotencyStore();
+    let failures = 0;
+    const failing = () => {
+      failures += 1;
+      return Promise.resolve({ status: 503, body: { error: 'temporary' } });
+    };
+    await serverErrorStore.execute(operation, failing);
+    await serverErrorStore.execute(operation, failing);
+    assert.equal(failures, 2);
   });
 
   it('GET /api/runner/jobs/next pops from the queue', async () => {
@@ -106,6 +423,97 @@ describe('makeApi', () => {
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runner/jobs/next');
     const res = await route?.handle({ headers: {}, params: {} }, c);
     assert.equal(res?.status, 204);
+  });
+
+  it('POST /api/runner/jobs/:id/ack closes only the current lease token', async () => {
+    const c = ctx();
+    c.queue.enqueue({ id: 'job-ack', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' });
+    const next = await c.queue.dequeue();
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/ack',
+    );
+    assert.ok(route);
+    const stale = await route.handle(
+      { headers: {}, params: { id: 'job-ack' }, body: { lease_token: 'stale' } },
+      c,
+    );
+    assert.equal(stale.status, 409);
+    const ok = await route.handle(
+      { headers: {}, params: { id: 'job-ack' }, body: { lease_token: next?.lease_token } },
+      c,
+    );
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.body, { acknowledged: true });
+  });
+
+  it('POST /api/runner/jobs/:id/fail records a bounded failure', async () => {
+    const c = ctx();
+    c.queue.enqueue({ id: 'job-fail', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' });
+    const next = await c.queue.dequeue();
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/fail',
+    );
+    assert.ok(route);
+    const res = await route.handle(
+      {
+        headers: {},
+        params: { id: 'job-fail' },
+        body: { lease_token: next?.lease_token, reason: 'provider timeout' },
+      },
+      c,
+    );
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { failed: true });
+    assert.equal((await c.queue.snapshot()).find((job) => job.id === 'job-fail')?.status, 'failed');
+  });
+
+  it('runner-only queue routes enforce the optional runner credential verifier', async () => {
+    const c = {
+      ...ctx(),
+      runnerAuthorize: async (headers: Record<string, string>) =>
+        headers.authorization === 'Bearer runner-test',
+    };
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runner/jobs/next');
+    assert.ok(route);
+    assert.equal((await route.handle({ headers: {}, params: {} }, c)).status, 401);
+    assert.equal(
+      (await route.handle({ headers: { authorization: 'Bearer runner-test' }, params: {} }, c))
+        .status,
+      204,
+    );
+  });
+
+  it('runner authorization scopes dequeue and ACK to the declared tenant project', async () => {
+    const c = ctx({
+      runnerAuthorize: async () => ({
+        runner_id: 'runner-shop',
+        scopes: [{ org: 'padosoft', project: 'shop' }],
+      }),
+    });
+    c.queue.enqueue({
+      id: 'shop-job',
+      payload: { org: 'padosoft', project: 'shop' },
+      enqueued_at: '2026-05-17T10:00:00Z',
+    });
+    c.queue.enqueue({
+      id: 'other-job',
+      payload: { org: 'other', project: 'shop' },
+      enqueued_at: '2026-05-17T10:01:00Z',
+    });
+    const nextRoute = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/runner/jobs/next',
+    );
+    const ackRoute = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/ack',
+    );
+    assert.ok(nextRoute && ackRoute);
+    const next = await nextRoute.handle({ headers: {}, params: {} }, c);
+    assert.equal((next.body as { job: { id: string } }).job.id, 'shop-job');
+    const crossTenant = await ackRoute.handle(
+      { headers: {}, params: { id: 'other-job' }, body: { lease_token: 'unknown' } },
+      c,
+    );
+    assert.equal(crossTenant.status, 404);
   });
 
   it('GET /api/queue snapshots the queue', async () => {
@@ -154,12 +562,289 @@ describe('makeApi', () => {
     assert.equal(bad?.status, 400);
   });
 
+  it('POST /api/findings/:id/status rejects unproven verified state', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-status',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'a'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-status',
+    });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9001',
+      run_id: 'run-status',
+      scenario_id: 'scenario-status',
+      risk_id: 'risk-status',
+      title: 'A finding that needs proof',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/findings/:id/status',
+    );
+    const res = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9001' },
+        body: { status: 'verified', reason: 'Review without a deterministic replay' },
+      },
+      c,
+    );
+    assert.equal(res?.status, 400);
+    assert.equal((await c.store.loadFinding('AQA-2026-9001'))?.status, 'draft');
+    assert.equal((await c.store.listAuditEvents({})).length, 0);
+  });
+
+  it('POST /api/findings/:id/status persists a valid transition and audit event', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-status-ok',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'b'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-status-ok',
+    });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9002',
+      run_id: 'run-status-ok',
+      scenario_id: 'scenario-status',
+      risk_id: 'risk-status',
+      title: 'A finding that can be rejected',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/findings/:id/status',
+    );
+    const res = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9002' },
+        body: { status: 'rejected', reason: 'Reproduced as a false positive in staging' },
+      },
+      c,
+    );
+    assert.equal(res?.status, 200);
+    assert.equal((await c.store.loadFinding('AQA-2026-9002'))?.status, 'rejected');
+    const audit = await c.store.listAuditEvents({});
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]?.payload.action, 'finding_status_changed');
+    assert.equal(audit[0]?.prev_hash, null);
+  });
+
+  it('GET /api/findings only returns findings whose run belongs to the requested project', async () => {
+    const c = ctx();
+    const run = {
+      schema_version: '1' as const,
+      id: 'run-tenant-findings',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded' as const,
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator' as const,
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator' as const,
+        packs: [],
+        config_hash: 'c'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-tenant-findings',
+    };
+    await c.store.saveRun(run);
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9010',
+      run_id: run.id,
+      scenario_id: 'scenario-tenant',
+      risk_id: 'risk-tenant',
+      title: 'Tenant-scoped finding',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    await c.store.saveRun({ ...run, id: 'run-tenant-foreign', org: 'other' });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9011',
+      run_id: 'run-tenant-foreign',
+      scenario_id: 'scenario-tenant',
+      risk_id: 'risk-tenant',
+      title: 'Foreign tenant finding',
+      summary: 'A sufficiently long finding summary',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/findings');
+    const visible = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    const foreign = await route?.handle(
+      { headers: { ...TENANT_HEADERS, 'x-aqa-project': 'other' }, params: {} },
+      c,
+    );
+    assert.equal((visible?.body as { findings: unknown[] }).findings.length, 1);
+    assert.equal((foreign?.body as { findings: unknown[] }).findings.length, 0);
+  });
+
   it('GET /api/orgs returns empty list initially', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/orgs');
     const res = await route?.handle({ headers: {}, params: {} }, c);
     assert.equal(res?.status, 200);
     assert.deepEqual((res?.body as { orgs: unknown[] }).orgs, []);
+  });
+
+  it('exposes tenant-bound SCIM users with bearer authorization and soft delete', async () => {
+    const c = ctx({
+      scimAuthorize: async (headers) => headers.authorization === 'Bearer scim-test',
+    });
+    const headers = { 'x-aqa-org': 'scim-org', authorization: 'Bearer scim-test' };
+    const create = makeApi().find((r) => r.method === 'POST' && r.path === '/scim/v2/Users');
+    const list = makeApi().find((r) => r.method === 'GET' && r.path === '/scim/v2/Users');
+    const detail = makeApi().find((r) => r.method === 'GET' && r.path === '/scim/v2/Users/:id');
+    const patch = makeApi().find((r) => r.method === 'PATCH' && r.path === '/scim/v2/Users/:id');
+    const remove = makeApi().find((r) => r.method === 'DELETE' && r.path === '/scim/v2/Users/:id');
+    assert.equal((await create?.handle({ headers: {}, params: {}, body: {} }, c))?.status, 401);
+    const created = await create?.handle(
+      {
+        headers,
+        params: {},
+        body: {
+          userName: 'scim-user',
+          displayName: 'SCIM User',
+          emails: [{ value: 'scim@example.test', primary: true }],
+          roles: [{ value: 'developer' }],
+        },
+      },
+      c,
+    );
+    assert.equal(created?.status, 201);
+    const id = (created?.body as { id: string }).id;
+    assert.equal(
+      (
+        await patch?.handle(
+          {
+            headers,
+            params: { id },
+            body: { Operations: [{ op: 'replace', path: 'active', value: false }] },
+          },
+          c,
+        )
+      )?.status,
+      200,
+    );
+    const afterPatch = await detail?.handle({ headers, params: { id } }, c);
+    assert.equal((afterPatch?.body as { userName: string }).userName, 'scim-user');
+    const listed = await list?.handle({ headers, params: {} }, c);
+    assert.equal((listed?.body as { totalResults: number }).totalResults, 1);
+    const filtered = await list?.handle(
+      {
+        headers,
+        params: {},
+        query: { filter: 'userName eq "scim-user"', startIndex: '1', count: '1' },
+      },
+      c,
+    );
+    assert.deepEqual(
+      (filtered?.body as { Resources: Array<{ userName: string }> }).Resources.map(
+        (u) => u.userName,
+      ),
+      ['scim-user'],
+    );
+    assert.equal((filtered?.body as { totalResults: number }).totalResults, 1);
+    assert.equal(
+      (
+        await detail?.handle(
+          { headers: { ...headers, 'x-aqa-org': 'other-org' }, params: { id } },
+          c,
+        )
+      )?.status,
+      404,
+    );
+    assert.equal((await remove?.handle({ headers, params: { id } }, c))?.status, 204);
   });
 
   // ============ v1.7 slice 4b — Pack import (admin "Import manifest") ============
@@ -220,6 +905,45 @@ probes: []
       assert.equal(body.code, 'EINVAL');
     });
 
+    it('requires and verifies an operator-trusted Ed25519 pack signature', async () => {
+      const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+      const keyId = 'operator-key-1';
+      const unsigned = {
+        schema_version: '1' as const,
+        name: 'pack-trusted',
+        version: '0.1.0',
+        description: 'Trusted pack',
+        author: 'Test',
+        license: 'Apache-2.0',
+        applies_when: {},
+        templates: [],
+        scenarios: [],
+        risks: [],
+        oracles: [],
+        probes: [],
+      };
+      const digest = manifestDigest(unsigned);
+      const signature = sign(null, Buffer.from(digest, 'utf8'), privateKey).toString('base64url');
+      const yaml = JSON.stringify({
+        ...unsigned,
+        signing: { sha256: digest, key_id: keyId, ed25519_signature: signature },
+      });
+      const c = ctx({
+        packTrustedKeys: {
+          [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        },
+      });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const accepted = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
+      assert.equal(accepted?.status, 201);
+      const rejected = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: yaml.replace(signature, `${signature}x`) } },
+        c,
+      );
+      assert.equal(rejected?.status, 400);
+      assert.equal((rejected?.body as { code: string }).code, 'ESIGNATURE');
+    });
+
     it('returns 400 on schema-invalid manifest (code=EINVAL, concise path:msg list)', async () => {
       const c = ctx();
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
@@ -238,6 +962,18 @@ probes: []
         !body.error.includes('\n') || body.error.split('\n').length <= 2,
         `error should be concise, got multi-line dump: ${body.error}`,
       );
+    });
+
+    it('rejects an unsigned shell pack at the import boundary', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const yaml = VALID_YAML.replace('probes: []', 'probes: [probes/shell.yaml]');
+      const res = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
+      assert.equal(res?.status, 400);
+      const body = res?.body as { code: string; issues: Array<{ rule: string }> };
+      assert.equal(body.code, 'EPACKSCAN');
+      assert.ok(body.issues.some((issue) => issue.rule === 'unsigned-shell-pack'));
+      assert.equal(await c.store.loadPack('pack-imported'), null);
     });
 
     it('returns 409 when a pack with that name already exists', async () => {
@@ -284,6 +1020,76 @@ probes: []
     });
   });
 
+  describe('POST /api/packs JSON safety boundary', () => {
+    const manifest = {
+      schema_version: '1' as const,
+      name: 'json-pack',
+      version: '0.1.0',
+      description: 'JSON pack',
+      author: 'Test',
+      license: 'Apache-2.0',
+      applies_when: { sut_type: ['api'] },
+      templates: [],
+      scenarios: [],
+      risks: [],
+      oracles: [],
+      probes: [],
+    };
+
+    it('validates, scans, and rejects duplicate installs unless forced', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      assert.equal(
+        (await route.handle({ headers: {}, params: {}, body: manifest }, c)).status,
+        201,
+      );
+      const duplicate = await route.handle({ headers: {}, params: {}, body: manifest }, c);
+      assert.equal(duplicate.status, 409);
+      assert.equal((duplicate.body as { code: string }).code, 'EEXIST');
+      assert.equal(
+        (await route.handle({ headers: {}, params: {}, body: { ...manifest, force: true } }, c))
+          .status,
+        201,
+      );
+    });
+
+    it('rejects malformed and unsigned shell manifests before persistence', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      const malformed = await route.handle({ headers: {}, params: {}, body: { name: 'bad' } }, c);
+      assert.equal(malformed.status, 400);
+      const shell = await route.handle(
+        {
+          headers: {},
+          params: {},
+          body: { ...manifest, name: 'shell-json', probes: ['probes/shell.yaml'] },
+        },
+        c,
+      );
+      assert.equal(shell.status, 400);
+      assert.equal((shell.body as { code: string }).code, 'EPACKSCAN');
+      assert.equal(await c.store.loadPack('shell-json'), null);
+    });
+
+    it('rejects a declared Sigstore bundle when no operator identity policy is configured', async () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      const signed = {
+        ...manifest,
+        name: 'sigstore-without-policy',
+        signing: {
+          sha256: manifestDigest({ ...manifest, name: 'sigstore-without-policy' }),
+          sigstore_bundle: '{}',
+        },
+      };
+      const res = await route.handle({ headers: {}, params: {}, body: signed }, ctx());
+      assert.equal(res.status, 400);
+      assert.equal((res.body as { code: string }).code, 'ESIGNATURE');
+    });
+  });
+
   // ============ v1.7 slice 4c.2 — PUT /api/profiles/:name validation ============
 
   describe('PUT /api/profiles/:name', () => {
@@ -308,6 +1114,28 @@ probes: []
       );
       assert.equal(res?.status, 200);
       assert.equal((res?.body as { profile: { name: string } }).profile.name, 'smoke');
+    });
+
+    it('returns an ETag and rejects a stale If-Match before writing', async () => {
+      const c = ctx();
+      await c.store.saveProfile(validProfile);
+      const get = makeApi().find((r) => r.method === 'GET' && r.path === '/api/profiles/:name');
+      const put = makeApi().find((r) => r.method === 'PUT' && r.path === '/api/profiles/:name');
+      const snapshot = await get?.handle({ headers: {}, params: { name: 'smoke' } }, c);
+      const etag = snapshot?.headers?.ETag;
+      assert.ok(etag);
+      await c.store.saveProfile({ ...validProfile, tags: ['server-edit'] });
+      const stale = await put?.handle(
+        {
+          headers: { 'If-Match': etag },
+          params: { name: 'smoke' },
+          body: { ...validProfile, tags: ['client-edit'] },
+        },
+        c,
+      );
+      assert.equal(stale?.status, 412);
+      assert.equal((stale?.body as { code: string }).code, 'PRECONDITION_FAILED');
+      assert.deepEqual((await c.store.loadProfile('smoke'))?.tags, ['server-edit']);
     });
 
     it('rejects a body that fails Profile schema parsing (400)', async () => {
@@ -420,6 +1248,30 @@ probes: []
       ]);
       const statuses = [a?.status, b?.status].sort();
       assert.deepEqual(statuses, [201, 409]);
+    });
+
+    it('allows the same profile name in separate tenant projects without leakage', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/profiles');
+      const alpha = { ...TENANT_HEADERS, 'x-aqa-project': 'alpha' };
+      const beta = { ...TENANT_HEADERS, 'x-aqa-project': 'beta' };
+      const a = await route?.handle({ headers: alpha, params: {}, body: validProfile }, c);
+      const b = await route?.handle(
+        { headers: beta, params: {}, body: { ...validProfile, tags: ['beta'] } },
+        c,
+      );
+      assert.equal(a?.status, 201);
+      assert.equal(b?.status, 201);
+      assert.deepEqual(
+        (await c.store.loadProfile(validProfile.name, { org: 'padosoft', project: 'beta' }))?.tags,
+        ['beta'],
+      );
+      const list = makeApi().find((r) => r.method === 'GET' && r.path === '/api/profiles');
+      const alphaList = await list?.handle({ headers: alpha, params: {} }, c);
+      assert.deepEqual(
+        (alphaList?.body as { profiles: Array<{ tags: string[] }> }).profiles[0]?.tags,
+        [],
+      );
     });
 
     it('requires the profiles:edit permission', () => {

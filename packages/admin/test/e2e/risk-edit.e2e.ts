@@ -53,13 +53,25 @@ test.describe('Risk edit', () => {
   }) => {
     type Req = { url: string; method: string; body: Record<string, unknown> };
     const calls: Req[] = [];
+    let observedIfMatch: string | undefined;
     await page.route('**/api/risks/**', async (route) => {
       const method = route.request().method();
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          headers: { etag: '"risk-version-1"' },
+          contentType: 'application/json',
+          body: JSON.stringify({ risk: { id: 'risk-live', title: 'Live risk' } }),
+        });
+        return;
+      }
       if (method !== 'PUT') return route.continue();
+      observedIfMatch = route.request().headers()['if-match'];
       const body = route.request().postDataJSON() as Record<string, unknown>;
       calls.push({ url: route.request().url(), method, body });
       await route.fulfill({
         status: 200,
+        headers: { etag: '"risk-version-2"' },
         contentType: 'application/json',
         body: JSON.stringify({ risk: body }),
       });
@@ -70,6 +82,7 @@ test.describe('Risk edit', () => {
     await page.getByTestId('risk-save-btn').click();
     await expect(page.locator('.toast.success', { hasText: /Risk saved/i })).toBeVisible();
     expect(calls.length).toBe(1);
+    expect(observedIfMatch).toBe('"risk-version-1"');
     expect(calls[0]?.method).toBe('PUT');
     // Path id is the displayed (and stored) id — no client-side
     // slugification (see app.tsx handleSave comment for rationale).
@@ -157,6 +170,55 @@ test.describe('Risk edit', () => {
     await expect(page.getByTestId('risk-edit-error')).toContainText(/failed schema validation/i);
     // Editor stays on the page — we didn't navigate back to the map.
     await expect(page.locator('h1').first()).not.toContainText(/Risk map/i);
+  });
+
+  test('stale ETag exposes a reload-latest conflict recovery action', async ({ page }) => {
+    let getCount = 0;
+    await page.route('**/api/risks/**', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        getCount += 1;
+        await route.fulfill({
+          status: 200,
+          headers: { etag: getCount === 1 ? '"risk-v1"' : '"risk-v2"' },
+          contentType: 'application/json',
+          body: JSON.stringify({
+            risk: {
+              id: 'risk-live',
+              title: getCount === 1 ? 'Original title' : 'Server changed title',
+              category: 'auth',
+              severity: 'medium',
+              likelihood: 'possible',
+              invariants: [],
+              owners: [],
+              tags: [],
+              description: '',
+            },
+          }),
+        });
+        return;
+      }
+      if (method === 'PUT') {
+        await route.fulfill({
+          status: 412,
+          headers: { etag: '"risk-v2"' },
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'resource changed since it was read',
+            code: 'PRECONDITION_FAILED',
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await openFirstRiskEditor(page);
+    await page.getByTestId('risk-edit-title').fill('Client title');
+    await page.getByTestId('risk-save-btn').click();
+    await expect(page.getByTestId('risk-reload-latest')).toBeVisible();
+    await page.getByTestId('risk-reload-latest').click();
+    await expect(page.getByTestId('risk-edit-title')).toHaveValue('Server changed title');
+    await expect(page.getByTestId('risk-reload-latest')).toHaveCount(0);
   });
 
   test('Cancel is disabled while Save is in flight', async ({ page }) => {

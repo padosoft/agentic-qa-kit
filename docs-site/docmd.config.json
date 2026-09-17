@@ -42,9 +42,7 @@
     "primaryColor": "#0d9488",
     "name": "default",
     "defaultMode": "dark",
-    "customCss": [
-      "assets/custom.css"
-    ]
+    "customCss": ["assets/custom.css"]
   },
   "navigation": [
     {

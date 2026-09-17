@@ -8,16 +8,16 @@ describe('adapterFor', () => {
     assert.equal(a.provider, 'fixture');
   });
 
-  it('returns a scaffold that throws for live providers', async () => {
-    const a = adapterFor('anthropic');
+  it('returns Bedrock adapter and fails closed when credentials are absent', async () => {
+    const a = adapterFor('bedrock');
     await assert.rejects(
       () =>
         a.call({
-          provider: 'anthropic',
-          model: 'claude-opus-4-7',
+          provider: 'bedrock',
+          model: 'bedrock-test',
           messages: [{ role: 'user', content: 'hi' }],
         }),
-      /not implemented at v0.3/,
+      /requires AWS region and credentials/,
     );
   });
 });

@@ -104,7 +104,7 @@ A good invariant is **one sentence**, **falsifiable**, and **independent of impl
 bunx aqa run --profile smoke
 ```
 
-Each run writes `events.jsonl`, `findings.jsonl`, and per-finding replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`) under `.aqa/runs/<run-id>/`.
+Each run writes `events.jsonl`, `findings.jsonl`, and per-finding replay artifacts (`repro.sh`, `repro.curl`, `repro.playwright.ts`) under `.aqa/runs/<run-id>/`. With the S3-compatible artifact backend, it additionally publishes byte-preserved canonical streams and a digest manifest under `canonical/`; a publication failure is a failed run.
 
 ## 8. Render the report (10 sec)
 

@@ -6,7 +6,7 @@ const INSTRUCTIONS = (ctx: RenderContext) => `# Claude Code instructions for \`$
 
 ## Claude-specific guidance
 
-- Use the \`Skill\` tool to invoke any \`.claude/skills/aqa-*\` skill.
+- Use the \`Skill\` tool to invoke any skill under \`.claude/skills/*/SKILL.md\`.
 - Use sub-agents (\`Task\` tool with \`subagent_type\`) for parallel work; pass the handoff
   context defined in \`AGENTS.md\`.
 - Prefer the \`Explore\` sub-agent for cross-codebase searches and \`Plan\` for design checks.
@@ -46,8 +46,8 @@ export const claudeAdapter: Adapter = {
   render(ctx: RenderContext): RenderedFile[] {
     return [
       { path: 'CLAUDE.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
-      { path: '.claude/skills/aqa-run.md', kind: 'skill', contents: SKILL_AQA_RUN },
-      { path: '.claude/skills/aqa-validate.md', kind: 'skill', contents: SKILL_AQA_VALIDATE },
+      { path: '.claude/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
+      { path: '.claude/skills/aqa-validate/SKILL.md', kind: 'skill', contents: SKILL_AQA_VALIDATE },
     ];
   },
 };

@@ -1,0 +1,28 @@
+schema_version: "1"
+id: scn-commerce-inventory-oversell
+title: Concurrent last-item checkout must reject the losing buyer
+risk_refs: [r-inventory-oversell]
+invariant_refs: [inv-inventory-no-oversell]
+preconditions:
+  - "exactly one unit of the SKU is available"
+  - "two isolated customers have valid carts"
+steps:
+  - id: checkout-contender-a
+    kind: http
+    with: { method: "POST", url: "/api/checkout", body: { cart_id: "${CART_A}" }, headers: { "Idempotency-Key": "aqa-stock-a" } }
+  - id: checkout-contender-b
+    kind: http
+    with: { method: "POST", url: "/api/checkout", body: { cart_id: "${CART_B}" }, headers: { "Idempotency-Key": "aqa-stock-b" } }
+  - id: inventory-after
+    kind: http
+    with: { method: "GET", url: "/api/inventory/demo-sku" }
+oracles:
+  - id: inventory-bounded
+    kind: response_contains
+    probe_id: inventory-after
+    with: { jsonpath: "$.oversold", equals: false }
+  - id: one-commit
+    kind: custom
+    probe_id: inventory-after
+    with: { assertion: "committed + reserved <= on_hand unless backorder_allowed" }
+tags: [ecommerce, inventory, concurrency]

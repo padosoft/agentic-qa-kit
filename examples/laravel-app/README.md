@@ -1,6 +1,6 @@
 # `examples/laravel-app`
 
-Minimal Laravel 11 PHP app showing `agentic-qa-kit` against a non-JS
+Minimal Laravel 12 PHP app showing `agentic-qa-kit` against a non-JS
 target. AQA itself runs on Bun/Node, but the **target under QA** can be
 any HTTP-speaking server.
 

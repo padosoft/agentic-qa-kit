@@ -25,12 +25,16 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { FileArtifactStore } from '@aqa/artifacts';
+import { RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
+import { makeKitWorker } from '../dist/worker.js';
 
 /**
  * Re-walk the writer's hash chain. This mirrors `packages/runner/src/events.ts`
@@ -132,6 +136,20 @@ function fixtureProject(): { root: string; packDir: string } {
   writeFileSync(join(root, 'src', 'server.ts'), 'export {};\n', 'utf8');
   runInit({ root, projectName: 'smoke-fixture' });
 
+  const riskMapPath = join(root, '.aqa', 'risk-map.yaml');
+  const riskMap = yamlParse(readFileSync(riskMapPath, 'utf8')) as {
+    risks: Array<Record<string, unknown>>;
+  };
+  riskMap.risks.push({
+    id: 'r-smoke',
+    category: 'integration',
+    title: 'Smoke fixture risk',
+    severity: 'medium',
+    likelihood: 'unlikely',
+    invariants: [{ id: 'inv-smoke', statement: 'The smoke endpoint responds successfully.' }],
+  });
+  writeFileSync(riskMapPath, yamlStringify(riskMap), 'utf8');
+
   const packDir = join(root, 'local-pack');
   mkdirSync(join(packDir, 'scenarios'), { recursive: true });
   writeFileSync(join(packDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');
@@ -157,10 +175,53 @@ function fixtureProject(): { root: string; packDir: string } {
   return { root, packDir };
 }
 
+const fixtureProbeRunner = async (probe: { id: string }) => ({
+  probe_id: probe.id,
+  status: 200,
+});
+
+function runFixture(options: Parameters<typeof runRun>[0]): ReturnType<typeof runRun> {
+  return runRun({ ...options, probeRunner: fixtureProbeRunner });
+}
+
 describe('aqa run', () => {
+  it('executes a queued job through the real worker and HTTP run lifecycle', async () => {
+    const { root, packDir } = fixtureProject();
+    const target = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const address = target.address();
+    assert.ok(address && typeof address === 'object');
+    const projectPath = join(root, '.aqa', 'project.yaml');
+    const project = yamlParse(readFileSync(projectPath, 'utf8')) as Record<string, unknown>;
+    project.sut = {
+      ...(project.sut as Record<string, unknown>),
+      base_url: `http://127.0.0.1:${address.port}`,
+    };
+    writeFileSync(projectPath, yamlStringify(project));
+    try {
+      const queue = new RunnerQueue({ lease_ms: 1_000 });
+      const job = queue.enqueue({
+        id: 'worker-http-journey',
+        payload: { profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      const worker = makeKitWorker({ queue, root, packsRoot: [packDir], poll_ms: 10 });
+      assert.deepEqual(await worker.runOnce(), { status: 'completed', job_id: job.id });
+      assert.equal(queue.get(job.id)?.status, 'done');
+      assert.ok(readdirSync(join(root, '.aqa', 'runs')).length > 0);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        target.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
     const { root, packDir } = fixtureProject();
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
 
     assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
     assert.ok(result.runId, 'runId must be set');
@@ -180,17 +241,136 @@ describe('aqa run', () => {
 
     const chain = verifyWriterChain(eventLines);
     assert.equal(chain.ok, true, `audit chain must verify, got: ${chain.reason ?? ''}`);
+    const scenarioFinished = eventLines
+      .map((line) => JSON.parse(line) as { kind: string; payload?: { outcome?: string } })
+      .find((event) => event.kind === 'scenario_finished');
+    assert.equal(scenarioFinished?.payload?.outcome, 'pass');
+
+    // Canonical evidence is registered through the configured artifact store
+    // and must be byte-identical to the local audit streams. A text upload
+    // would be a regression because adapter redaction could change hashes.
+    assert.deepEqual(result.canonicalArtifacts, [
+      'canonical/events.jsonl',
+      'canonical/findings.jsonl',
+      'canonical/checkpoint.json',
+      'canonical/manifest.json',
+    ]);
+    assert.equal(
+      readFileSync(join(result.runDir, 'canonical', 'events.jsonl'), 'utf8'),
+      readFileSync(eventsPath, 'utf8'),
+    );
+    assert.equal(
+      readFileSync(join(result.runDir, 'canonical', 'findings.jsonl'), 'utf8'),
+      readFileSync(findingsPath, 'utf8'),
+    );
+    assert.ok(existsSync(join(result.runDir, 'canonical', 'manifest.json.meta.json')));
+    assert.ok(existsSync(join(result.runDir, 'canonical', 'checkpoint.json.meta.json')));
   });
 
-  it('emits exactly one `finding_emitted` event per failing scenario', async () => {
-    // Build a fixture whose oracle deliberately fails so we get a finding.
+  it('fails closed and records remaining scenarios when the profile wall-clock budget is exceeded', async () => {
+    const { root, packDir } = fixtureProject();
+    const secondScenario = SMOKE_SCENARIO.replace('scn-smoke-noop', 'scn-smoke-second');
+    writeFileSync(join(packDir, 'scenarios', 'second.yaml'), secondScenario, 'utf8');
+    writeFileSync(
+      join(packDir, 'pack.yaml'),
+      SMOKE_PACK_MANIFEST.replace(
+        '  - scenarios/smoke-noop.yaml',
+        '  - scenarios/smoke-noop.yaml\n  - scenarios/second.yaml',
+      ),
+      'utf8',
+    );
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, Record<string, unknown>>;
+    };
+    profiles.profiles.smoke = { ...profiles.profiles.smoke, budget_minutes: 1 };
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    let clockRead = 0;
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      now: () => {
+        const value = clockRead === 0 ? 0 : clockRead === 1 ? 0 : 60_001;
+        clockRead += 1;
+        return value;
+      },
+    });
+    assert.equal(result.ok, false, 'budget exhaustion must never greenlight partial coverage');
+    assert.match(result.error ?? '', /budget_minutes=1/);
+    assert.ok(result.runDir);
+    const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            kind: string;
+            scenario_id?: string;
+            payload?: Record<string, unknown>;
+          },
+      );
+    const secondFinished = events.find(
+      (event) => event.kind === 'scenario_finished' && event.scenario_id === 'scn-smoke-second',
+    );
+    assert.equal(secondFinished?.payload?.outcome, 'not_run');
+    assert.equal(secondFinished?.payload?.reason, 'budget_exceeded');
+  });
+
+  it('publishes the signed completeness checkpoint to an independent store', async () => {
+    const { root, packDir } = fixtureProject();
+    const externalRoot = mkdtempSync(join(tmpdir(), 'aqa-checkpoint-'));
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      auditCheckpointStore: new FileArtifactStore(externalRoot),
+    });
+    assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
+    assert.ok(result.runId);
+    assert.ok(result.runDir);
+    const externalPath = join(externalRoot, 'checkpoints', `${result.runId}.json`);
+    assert.ok(existsSync(externalPath), 'external checkpoint must be independently published');
+    const manifest = JSON.parse(
+      readFileSync(join(result.runDir, 'canonical', 'manifest.json'), 'utf8'),
+    ) as { external_checkpoint?: { key: string; sha256: string } };
+    assert.equal(manifest.external_checkpoint?.key, `checkpoints/${result.runId}.json`);
+    assert.equal(manifest.external_checkpoint?.sha256.length, 64);
+  });
+
+  it('closes a lifecycle-aware probe driver before publishing the run', async () => {
+    const { root, packDir } = fixtureProject();
+    let closed = false;
+    const runner = Object.assign(
+      async (probe: { id: string }) => ({ probe_id: probe.id, status: 200 }),
+      {
+        close: async () => {
+          closed = true;
+        },
+      },
+    );
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      probeRunner: runner,
+    });
+    assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
+    assert.equal(closed, true);
+  });
+
+  it('does not emit a finding when a scenario has no executable driver', async () => {
+    // This fixture has no SUT base URL, so the missing driver is an execution
+    // gap, not evidence that the SUT violated the oracle.
     const { root, packDir } = fixtureProject();
     const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
     writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
 
     const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
-    assert.equal(result.ok, true);
-    assert.equal(result.findingsCount, 1, 'one failing scenario must produce one finding');
+    assert.equal(result.ok, false);
+    assert.equal(result.findingsCount, 0);
+    assert.match(result.error ?? '', /could not execute|no probe runner/i);
 
     const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8')
       .trim()
@@ -198,33 +378,66 @@ describe('aqa run', () => {
       .filter(Boolean)
       .map((l) => JSON.parse(l) as { kind: string });
     const findingEvents = events.filter((e) => e.kind === 'finding_emitted');
-    assert.equal(
-      findingEvents.length,
-      1,
-      `expected exactly 1 finding_emitted event, got ${findingEvents.length}`,
-    );
+    assert.equal(findingEvents.length, 0);
 
     const findingsLines = readFileSync(join(result.runDir, 'findings.jsonl'), 'utf8')
       .trim()
       .split('\n')
       .filter(Boolean);
-    assert.equal(
-      findingsLines.length,
-      1,
-      `expected exactly 1 finding line, got ${findingsLines.length}`,
-    );
+    assert.equal(findingsLines.length, 0);
+    const finished = events.find((e) => e.kind === 'run_finished') as {
+      payload?: { replay_artifacts?: number; run_state?: string };
+    };
+    assert.equal(finished.payload?.replay_artifacts, 0);
+    assert.equal(finished.payload?.run_state, 'failed');
+  });
+
+  it('exports audit event spans to a configured OTLP endpoint and drains before return', async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        payloads.push(JSON.parse(body) as Record<string, unknown>);
+        res.writeHead(200).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    try {
+      const { root, packDir } = fixtureProject();
+      const result = await runFixture({
+        root,
+        profile: 'smoke',
+        packsRoot: [packDir],
+        otlpEndpoint: `http://127.0.0.1:${address.port}/v1/traces`,
+      });
+      assert.equal(result.ok, true);
+      assert.ok(payloads.length >= 1, 'run must deliver at least one OTLP batch before return');
+      const spans =
+        (payloads[0]?.resourceSpans as Array<{ scopeSpans: Array<{ spans: unknown[] }> }>) ?? [];
+      assert.ok((spans[0]?.scopeSpans[0]?.spans.length ?? 0) >= 1);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it('rejects an unknown profile rather than silently running all scenarios', async () => {
     const { root, packDir } = fixtureProject();
-    const result = await runRun({ root, profile: 'no-such-profile', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'no-such-profile', packsRoot: [packDir] });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /profile/i);
   });
 
   it('rejects an empty --profile value', async () => {
     const { root, packDir } = fixtureProject();
-    const result = await runRun({ root, profile: '', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: '', packsRoot: [packDir] });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /--profile/);
   });
@@ -232,13 +445,13 @@ describe('aqa run', () => {
   it('produces a deterministic run_id when seed is provided', async () => {
     const { root: rootA, packDir: packA } = fixtureProject();
     const { root: rootB, packDir: packB } = fixtureProject();
-    const a = await runRun({
+    const a = await runFixture({
       root: rootA,
       profile: 'smoke',
       seed: 'fixed-seed',
       packsRoot: [packA],
     });
-    const b = await runRun({
+    const b = await runFixture({
       root: rootB,
       profile: 'smoke',
       seed: 'fixed-seed',
@@ -255,7 +468,7 @@ describe('aqa run', () => {
       `schema_version: "1"\nid: scn-broken\n`, // missing title, risk_refs, etc.
       'utf8',
     );
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'malformed scenario must surface as ok=false');
     assert.match(result.error ?? '', /scenario/i);
   });
@@ -271,7 +484,7 @@ describe('aqa run', () => {
     if (profiles.profiles.smoke) profiles.profiles.smoke.packs = ['pack-does-not-exist'];
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'zero-scenario run must not silently succeed');
     assert.match(result.error ?? '', /0 scenarios/i);
   });
@@ -279,7 +492,7 @@ describe('aqa run', () => {
   it('surfaces a malformed pack.yaml as a pack error', async () => {
     const { root, packDir } = fixtureProject();
     writeFileSync(join(packDir, 'pack.yaml'), 'not valid YAML: : :\n', 'utf8');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'broken pack.yaml must fail the run');
     assert.match(result.error ?? '', /pack/i);
   });
@@ -292,7 +505,7 @@ describe('aqa run', () => {
       'scenarios/does-not-exist.yaml',
     );
     writeFileSync(join(packDir, 'pack.yaml'), brokenManifest, 'utf8');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'missing manifest scenario must surface as ok=false');
     assert.match(result.error ?? '', /missing/i);
   });
@@ -305,7 +518,7 @@ describe('aqa run', () => {
       '../../../etc/passwd',
     );
     writeFileSync(join(packDir, 'pack.yaml'), evilManifest, 'utf8');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'path traversal must fail the run');
     assert.match(result.error ?? '', /unsafe/i);
   });
@@ -323,6 +536,12 @@ describe('aqa run', () => {
     try {
       symlinkSync(outsideTarget, link, 'file');
     } catch {
+      if (process.versions.bun) {
+        console.warn(
+          '[run-cmd.test] symlink case not executable: Bun node:test skip is unsupported',
+        );
+        return;
+      }
       t.skip('symlink creation not supported on this platform/permission level');
       return;
     }
@@ -332,7 +551,7 @@ describe('aqa run', () => {
       'scenarios/evil-link.yaml',
     );
     writeFileSync(join(packDir, 'pack.yaml'), linkedManifest, 'utf8');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'symlink escape must fail the run');
     assert.match(result.error ?? '', /unsafe/i);
   });
@@ -352,7 +571,7 @@ describe('aqa run', () => {
     }
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke' });
+    const result = await runFixture({ root, profile: 'smoke' });
     assert.equal(
       result.ok,
       true,
@@ -368,7 +587,7 @@ describe('aqa run', () => {
     // `defaultPacksRoot()` discovers it without an explicit packsRoot.
     const nmPack = join(root, 'node_modules', '@aqa', 'pack-local-smoke');
     cpSync(packDir, nmPack, { recursive: true });
-    const result = await runRun({ root, profile: 'smoke' });
+    const result = await runFixture({ root, profile: 'smoke' });
     assert.equal(
       result.ok,
       true,
@@ -393,7 +612,7 @@ describe('aqa run', () => {
     }
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'a selected pack absent from discovery must fail');
     assert.match(result.error ?? '', /pack-ghost|selected pack/i);
   });
@@ -416,7 +635,7 @@ describe('aqa run', () => {
     }
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({
+    const result = await runFixture({
       root,
       profile: 'smoke',
       packsRoot: [packDir, brokenPackDir],
@@ -431,7 +650,7 @@ describe('aqa run', () => {
     mkdirSync(strayPackDir, { recursive: true });
     writeFileSync(join(strayPackDir, 'pack.yaml'), 'this is: : not valid YAML\n', 'utf8');
 
-    const result = await runRun({
+    const result = await runFixture({
       root,
       profile: 'smoke',
       packsRoot: [packDir, strayPackDir],
@@ -456,7 +675,7 @@ describe('aqa run', () => {
     mkdirSync(strayPackDir, { recursive: true });
     writeFileSync(join(strayPackDir, 'pack.yaml'), 'this is: : not valid YAML\n', 'utf8');
 
-    const result = await runRun({
+    const result = await runFixture({
       root,
       profile: 'smoke',
       packsRoot: [packDir, strayPackDir],
@@ -496,7 +715,7 @@ describe('aqa run', () => {
     }
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [customDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [customDir] });
     assert.equal(
       result.ok,
       true,
@@ -514,12 +733,12 @@ describe('aqa run', () => {
     if (profiles.profiles.smoke) profiles.profiles.smoke.execution_mode = 'agent';
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'agent-mode profile must fail until implemented');
     assert.match(result.error ?? '', /execution_mode|orchestrator/i);
   });
 
-  it('release-gate profile fails when findings are emitted', async () => {
+  it('release-gate profile fails when the SUT driver is unavailable', async () => {
     const { root, packDir } = fixtureProject();
     const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
     writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
@@ -535,18 +754,19 @@ describe('aqa run', () => {
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
     const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
-    assert.equal(result.findingsCount, 1, 'expected 1 finding from a failing oracle');
+    assert.equal(result.findingsCount, 0);
     assert.equal(result.ok, false);
-    assert.match(result.error ?? '', /requires deterministic replay|finding/i);
+    assert.match(result.error ?? '', /could not execute|no probe runner/i);
   });
 
-  it('smoke profile reports ok=true even when findings are emitted (informational)', async () => {
+  it('smoke profile reports an execution gap instead of a false finding', async () => {
     const { root, packDir } = fixtureProject();
     const failingScenario = SMOKE_SCENARIO.replace('expected: 200', 'expected: 999');
     writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), failingScenario, 'utf8');
     const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
-    assert.equal(result.findingsCount, 1);
-    assert.equal(result.ok, true, 'smoke profile must not fail on findings alone');
+    assert.equal(result.findingsCount, 0);
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /could not execute|no probe runner/i);
   });
 
   it('deduplicates a pack discovered from multiple roots by manifest name', async () => {
@@ -564,7 +784,7 @@ describe('aqa run', () => {
     );
     writeFileSync(join(duplicateDir, 'scenarios', 'smoke-noop.yaml'), SMOKE_SCENARIO, 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir, duplicateDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir, duplicateDir] });
     assert.equal(result.ok, true);
     assert.equal(result.scenariosRun, 1, 'duplicate pack must only execute once');
   });
@@ -580,7 +800,7 @@ describe('aqa run', () => {
     if (profiles.profiles.smoke) profiles.profiles.smoke.packs = ['local-smoke'];
     writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
 
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, true, `legacy alias must match, got: ${JSON.stringify(result)}`);
   });
 
@@ -590,17 +810,22 @@ describe('aqa run', () => {
     // pack should be skipped entirely and the run reports zero scenarios.
     const webOnlyManifest = SMOKE_PACK_MANIFEST.replace('sut_type: [api]', 'sut_type: [web]');
     writeFileSync(join(packDir, 'pack.yaml'), webOnlyManifest, 'utf8');
-    const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false, 'no eligible packs → ok=false');
     assert.match(result.error ?? '', /0 scenarios/i);
   });
 
   it('refuses to re-use a deterministic run directory rather than corrupting the audit chain', async () => {
     const { root, packDir } = fixtureProject();
-    const first = await runRun({ root, profile: 'smoke', seed: 'same-seed', packsRoot: [packDir] });
+    const first = await runFixture({
+      root,
+      profile: 'smoke',
+      seed: 'same-seed',
+      packsRoot: [packDir],
+    });
     assert.equal(first.ok, true);
 
-    const second = await runRun({
+    const second = await runFixture({
       root,
       profile: 'smoke',
       seed: 'same-seed',
@@ -614,9 +839,9 @@ describe('aqa run', () => {
 describe('aqa run — fs layout', () => {
   it('creates a separate run directory per non-seeded invocation', async () => {
     const { root, packDir } = fixtureProject();
-    await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     await new Promise((r) => setTimeout(r, 10));
-    await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
+    await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     const runsDir = join(root, '.aqa', 'runs');
     const entries = readdirSync(runsDir);
     assert.ok(entries.length >= 2, `expected ≥2 run directories, found ${entries.length}`);

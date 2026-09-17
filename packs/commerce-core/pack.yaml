@@ -1,0 +1,20 @@
+schema_version: "1"
+name: pack-commerce-core
+version: 0.1.0
+description: "Commerce assurance pack — checkout, inventory, refunds, tax/shipping and webhook replay invariants."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [ecommerce, commerce, shop, storefront]
+templates: []
+scenarios:
+  - scenarios/checkout-idempotency.yaml
+  - scenarios/inventory-oversell.yaml
+  - scenarios/tax-shipping-currency.yaml
+  - scenarios/refund-idempotency.yaml
+  - scenarios/webhook-replay.yaml
+risks:
+  - risks/commerce.yaml
+oracles:
+  - oracles/http_status.yaml
+probes: []

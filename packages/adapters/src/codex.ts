@@ -17,7 +17,7 @@ export const codexAdapter: Adapter = {
   render(ctx: RenderContext): RenderedFile[] {
     return [
       { path: 'AGENTS.md', kind: 'instruction', contents: renderAgentsMd(ctx) },
-      { path: '.agents/skills/aqa-run.md', kind: 'skill', contents: SKILL_AQA_RUN },
+      { path: '.agents/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
     ];
   },
 };

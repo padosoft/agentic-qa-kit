@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/loader.test.ts test/applies-when.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/loader.test.ts test/applies-when.test.ts test/bundled-integrity.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {

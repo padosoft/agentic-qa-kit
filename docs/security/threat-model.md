@@ -43,7 +43,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | Per-runner mTLS or signed JWT (design intent for `@aqa/auth` + `@aqa/server`). The current `/api/runner/jobs/next` route in `packages/server/src/api.ts` ships with `requires: null` — runner-credential validation lands in a future server iteration. | **Partial — design specified, enforcement deferred.** |
+| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | `RunnerJwtAuthorizer` verifies RS256 signature, issuer, audience, lifetime and explicit org/project scopes; `@aqa/server` enforces the returned scopes on dequeue and ACK/fail. `aqa admin` wires the verifier from the three `AQA_RUNNER_JWT_*` settings. | **Mitigated at the configured JWT boundary; live IdP issuance, rotation and mTLS remain deployment evidence.** |
 | S-02 | User session hijack via cookie theft | High | `Secure` + `HttpOnly` + `SameSite=Lax` enforced as Risk invariant; pack-security asserts it. | Mitigated |
 | S-03 | Pack-author spoofing (malicious pack pretending to be `@aqa/...`) | Critical | Pack signing (cosign-compatible). `@aqa/pack-scanner` currently raises a **critical** issue for unsigned packs that include **shell probes** specifically — full unsigned-≥1.0 rejection is broader than what the current scanner rule covers. | **Partial — covered for unsigned-shell-pack; broader unsigned rejection is roadmap.** |
 | S-04 | LLM vendor MITM (response forgery) | Medium | TLS pinning at adapter layer (`@aqa/llm-adapters`); content-hash deterministic replay for fixture mode. | Partial — pinning per-adapter, not enforced. |
@@ -52,7 +52,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| T-01 | Audit log tamper | Critical | Hash-chained `events.jsonl` (`sha256(prev_hash ‖ canonical(rest))`); `aqa-audit-verify` re-walks the chain. | Mitigated |
+| T-01 | Audit log tamper | Critical | Hash-chained `events.jsonl` (`sha256(prev_hash ‖ canonical(rest))`); `aqa-audit-verify` and `aqa report` re-walk the chain before trusting events. | **Partial — local payload tampering is detected; independent checkpoint/WORM storage is still required against full-file rewrite or truncation.** |
 | T-02 | Finding tamper post-emission | High | Findings written to append-only store; hash chain references finding events. | Mitigated |
 | T-03 | Pack manifest swap after signing | Critical | Signature covers manifest hash; load-time verification rejects mismatch. | Mitigated |
 | T-04 | DB write bypass (runner writes findings directly) | High | Runner cannot write to store; goes through server API gated by RBAC. | Mitigated |
@@ -70,17 +70,17 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| I-01 | Finding contents leak (e.g. secrets in summary) | High | Pack contract requires probes to redact known secret formats; finding text passes through allowlist. | Partial — allowlist per pack, not centralised. |
+| I-01 | Finding contents leak (e.g. secrets in summary) | High | Shared `@aqa/observability` redaction covers findings, audit events, SQL/shell/browser evidence and artifacts; HTTP failures additionally use `safeErrorMessage()` with DSN/token/PAN/IBAN redaction and a 500-character bound. | **Partial — textual paths are centralised; binary/provider-specific DLP and high-entropy custom secrets remain open.** |
 | I-02 | Audit log discloses target endpoints to readers | Medium | Audit reader role gated by `@aqa/auth` `audit:read`. | Mitigated |
-| I-03 | Cross-tenant findings visible | Critical | Tenant-aware data path is roadmap: `@aqa/auth` `User`, `@aqa/server` `makeApi()` handlers, and `@aqa/store` `StoreProvider` do not yet carry a tenant field, so server-side filtering by tenant is not enforced. | **Unmitigated — roadmap.** |
-| I-04 | LLM prompt leaks proprietary code via vendor logging | High | On-prem LLM adapter option (`@aqa/llm-adapters` `ScaffoldAdapter` for vLLM/Ollama). | Mitigated for self-hosted; vendor-dependent otherwise. |
+| I-03 | Cross-tenant findings visible | Critical | Scoped server reads require org/project headers, resolve finding ownership through an `org` + `project`-carrying Run, and filter risks/scenarios/runs server-side. Legacy runs without an org are not visible to scoped reads. | **Mitigated for scoped API paths; legacy migration and authenticated membership policy remain operational controls.** |
+| I-04 | LLM prompt leaks proprietary code via vendor logging | High | On-prem LLM adapters for vLLM/Ollama with explicit endpoint and redaction policy. | Mitigated for self-hosted; vendor-dependent otherwise. |
 
 ### Denial of service
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
 | D-01 | Runaway LLM cost (intentional or accidental) | Critical | `@aqa/cost` ships `BudgetTracker` + `defaultPricing`. The tracker accumulates spend; callers are expected to stop dispatching when the cap is hit. The server-side enforcement gate inside `makeApi()` is roadmap. | **Partial — tracker shipped, server gate not yet wired.** |
-| D-02 | Runner pool overwhelmed | Medium | `RunnerQueue` FIFO with visibility leases; backpressure via 429. | Mitigated |
+| D-02 | Runner pool overwhelmed | Medium | FIFO/lease queue plus scoped `429` quota admission; PostgreSQL multi-replica admission is currently advisory until serialized counters land. | Partially mitigated |
 | D-03 | SUT DoS by misconfigured probe | Medium | Per-scenario probe rate documented in pack manifest; profile `release-gate` enforces conservative defaults. | Advisory — enforcement is per-pack. |
 | D-04 | Adversarial pack publishes infinite-loop probe | High | Container sandbox CPU/memory limits via cgroups; wallclock cap per probe. | Mitigated via `@aqa/sandbox` (process default; container default with `selectSandbox`). |
 

@@ -6,19 +6,53 @@ server:
   image:
     repository: ghcr.io/padosoft/agentic-qa-kit-server
     tag: "1.1.0"
+    digest: ""
+    requireDigest: false
     pullPolicy: IfNotPresent
   replicaCount: 1
   resources:
     requests: { cpu: "200m", memory: "256Mi" }
     limits:   { cpu: "1000m", memory: "1Gi" }
-  # Hash-chained audit log path (v0.2 contract — must be a writable volume in
-  # production; in-cluster default is an emptyDir for the scaffold).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: { drop: ["ALL"] }
+  auditPersistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: ""
+  # Hash-chained audit log path. In production this is backed by the PVC
+  # below; disabling persistence is an explicit non-production choice.
   auditLogPath: /var/lib/aqa/events.jsonl
 
 runner:
+  worker:
+    # The source repo's runner image must contain `aqa worker`. Keep disabled
+    # for the scaffold/PoC default; production values should enable it.
+    enabled: false
+    root: /var/lib/aqa/project
+    scopes: []
+    queueDsnSecretRef: ""
+    queueDsnSecretKey: url
+    command: ["aqa", "worker"]
+  reaper:
+    # Reclaims expired worker leases even while the worker fleet is stopped.
+    enabled: false
+    schedule: "*/1 * * * *"
+    queueDsnSecretRef: ""
+    queueDsnSecretKey: url
+    command: ["aqa-runner-reaper"]
   image:
     repository: ghcr.io/padosoft/agentic-qa-kit-runner
     tag: "1.1.0"
+    digest: ""
+    requireDigest: false
     pullPolicy: IfNotPresent
   # StatefulSet — stable identity + per-runner PVC for deterministic fixtures.
   replicaCount: 2
@@ -39,10 +73,16 @@ ingress:
   annotations: {}
 
 networkPolicy:
-  # When enabled, locks down pod-to-pod traffic:
+  # When enabled, locks down pod-to-pod traffic. For managed PostgreSQL, add
+  # its CIDR to runnerExtraEgressCidrs; a DSN Secret cannot imply its network
+  # identity safely:
   #   - server: ingress only from ingress controller + runner pods
   #   - runner: egress to server + Postgres + DNS only (no internet by default)
   enabled: true
+  # Override for the namespace containing the ingress controller. An empty
+  # selector would allow every namespace and is intentionally not the default.
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
   # Extra egress CIDRs the runner is allowed to reach (e.g. the QA target).
   runnerExtraEgressCidrs: []
 
@@ -65,6 +105,12 @@ postgres:
 # Cost governance hard cap (Task 11). Server refuses to start with budget=0.
 cost:
   monthlyBudgetUsd: 100
+  reaper:
+    # One-shot budget reservation cleanup. Requires a PostgreSQL DSN Secret.
+    enabled: false
+    schedule: "*/5 * * * *"
+    ledgerDsnSecretRef: ""
+    command: ["aqa-budget-reaper"]
 
 # Feature flags echoing the determinism contract (Task 10). These exist so
 # operators can pin behavior across replicas.

@@ -1,5 +1,5 @@
 export { renderMarkdown } from './markdown.js';
-export { renderJson } from './json.js';
+export { renderJson, type ScenarioOutcome, type ScenarioOutcomeSummary } from './json.js';
 export {
   buildReplayArtifacts,
   type ReplayArtifact,

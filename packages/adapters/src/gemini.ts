@@ -6,7 +6,7 @@ const INSTRUCTIONS = (ctx: RenderContext) => `# Gemini CLI instructions for \`${
 
 ## Skill activation
 
-The Gemini CLI auto-discovers skills under \`.gemini/skills/*.md\`. Activate them via the
+The Gemini CLI auto-discovers skills under \`.gemini/skills/*/SKILL.md\`. Activate them via the
 \`activate_skill\` tool. Run \`aqa-run\` before opening a PR.
 
 ## Permission profile
@@ -32,7 +32,7 @@ export const geminiAdapter: Adapter = {
   render(ctx: RenderContext): RenderedFile[] {
     return [
       { path: 'GEMINI.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
-      { path: '.gemini/skills/aqa-run.md', kind: 'skill', contents: SKILL_AQA_RUN },
+      { path: '.gemini/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
     ];
   },
 };

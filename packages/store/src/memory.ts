@@ -1,9 +1,9 @@
+import { Finding } from '@aqa/schemas';
 import type {
   Agent,
   ApiToken,
   CostSummary,
   Event,
-  Finding,
   Notification,
   PackManifest,
   Profile,
@@ -14,7 +14,14 @@ import type {
   SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
-import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
+import { InvalidFindingTransitionError, findingStatusAudit } from './audit.js';
+import {
+  type StoreProvider,
+  type StoreScope,
+  type StoreUserDirectoryEntry,
+  isScopedRecordKey,
+  scopedRecordKey,
+} from './types.js';
 
 /**
  * In-memory StoreProvider — the v0.3 default. Useful for tests, smoke runs,
@@ -39,7 +46,24 @@ export class MemoryStore implements StoreProvider {
   private ssoConfig: SsoConfig.SsoConfig | null = null;
   // v1.7 slice 4g — directory snapshot of users known to the admin.
   // Real deployments seed this from the IdP (OIDC userinfo or SCIM).
-  private users: StoreUserDirectoryEntry[] = [];
+  private users = new Map<string, StoreUserDirectoryEntry>();
+
+  private visible<T>(map: Map<string, T>, scope?: StoreScope): T[] {
+    if (!scope?.org && !scope?.project) return [...map.values()];
+    const prefix =
+      scope.org && scope.project
+        ? scopedRecordKey('', scope)
+        : scope.org
+          ? `@scope/${encodeURIComponent(scope.org)}/`
+          : `@scope//${encodeURIComponent(scope.project ?? '')}/`;
+    return [...map.entries()]
+      .filter(([key]) => isScopedRecordKey(key) && key.startsWith(prefix))
+      .map(([, value]) => value);
+  }
+
+  private key(key: string, scope?: StoreScope): string {
+    return scopedRecordKey(key, scope);
+  }
 
   // ----- Runs -----
   async saveRun(run: Run.Run): Promise<void> {
@@ -50,6 +74,7 @@ export class MemoryStore implements StoreProvider {
   }
   async listRuns(
     opts: {
+      org?: string;
       project?: string;
       profile?: string;
       state?: Run.Run['state'];
@@ -57,6 +82,7 @@ export class MemoryStore implements StoreProvider {
     } = {},
   ): Promise<Run.Run[]> {
     let out = [...this.runs.values()];
+    if (opts.org) out = out.filter((r) => r.org === opts.org);
     if (opts.project) out = out.filter((r) => r.project === opts.project);
     if (opts.profile) out = out.filter((r) => r.profile === opts.profile);
     if (opts.state) out = out.filter((r) => r.state === opts.state);
@@ -133,6 +159,34 @@ export class MemoryStore implements StoreProvider {
     this.findings.set(id, updated);
     return updated;
   }
+  async transitionFindingStatus(
+    id: string,
+    status: Finding.Finding['status'],
+    actor: string,
+    reason: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
+    const current = this.findings.get(id);
+    if (!current) return null;
+    const transition = Finding.validateStatusTransition(current.status, status);
+    if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
+    const updated = Finding.Finding.parse({ ...current, status });
+    const previous = this.audit[this.audit.length - 1];
+    const event = findingStatusAudit(
+      current,
+      actor,
+      current.status,
+      status,
+      reason,
+      this.audit.length,
+      previous,
+    );
+    this.findings.set(id, updated);
+    this.audit.push(event);
+    const bucket = this.events.get(current.run_id) ?? [];
+    bucket.push(event);
+    this.events.set(current.run_id, bucket);
+    return { finding: updated, event };
+  }
   async listFindings(opts: {
     run_id?: string;
     severity?: Finding.Finding['severity'];
@@ -147,38 +201,39 @@ export class MemoryStore implements StoreProvider {
   }
 
   // ----- Packs -----
-  async listPacks(): Promise<PackManifest.PackManifest[]> {
-    return [...this.packs.values()];
+  async listPacks(scope?: StoreScope): Promise<PackManifest.PackManifest[]> {
+    return this.visible(this.packs, scope);
   }
-  async loadPack(slug: string): Promise<PackManifest.PackManifest | null> {
-    return this.packs.get(slug) ?? null;
+  async loadPack(slug: string, scope?: StoreScope): Promise<PackManifest.PackManifest | null> {
+    return this.packs.get(this.key(slug, scope)) ?? null;
   }
-  async installPack(manifest: PackManifest.PackManifest): Promise<void> {
-    this.packs.set(manifest.name, manifest);
+  async installPack(manifest: PackManifest.PackManifest, scope?: StoreScope): Promise<void> {
+    this.packs.set(this.key(manifest.name, scope), manifest);
   }
-  async uninstallPack(slug: string): Promise<void> {
-    this.packs.delete(slug);
+  async uninstallPack(slug: string, scope?: StoreScope): Promise<void> {
+    this.packs.delete(this.key(slug, scope));
   }
 
   // ----- Profiles -----
-  async listProfiles(): Promise<Profile.Profile[]> {
-    return [...this.profiles.values()];
+  async listProfiles(scope?: StoreScope): Promise<Profile.Profile[]> {
+    return this.visible(this.profiles, scope);
   }
-  async loadProfile(name: string): Promise<Profile.Profile | null> {
-    return this.profiles.get(name) ?? null;
+  async loadProfile(name: string, scope?: StoreScope): Promise<Profile.Profile | null> {
+    return this.profiles.get(this.key(name, scope)) ?? null;
   }
-  async saveProfile(profile: Profile.Profile): Promise<void> {
-    this.profiles.set(profile.name, profile);
+  async saveProfile(profile: Profile.Profile, scope?: StoreScope): Promise<void> {
+    this.profiles.set(this.key(profile.name, scope), profile);
   }
-  async createProfile(profile: Profile.Profile): Promise<{ created: boolean }> {
+  async createProfile(profile: Profile.Profile, scope?: StoreScope): Promise<{ created: boolean }> {
     // `has` + `set` runs synchronously between awaits, so two concurrent
     // callers can't both observe "missing" and overwrite each other.
-    if (this.profiles.has(profile.name)) return { created: false };
-    this.profiles.set(profile.name, profile);
+    const key = this.key(profile.name, scope);
+    if (this.profiles.has(key)) return { created: false };
+    this.profiles.set(key, profile);
     return { created: true };
   }
-  async deleteProfile(name: string): Promise<void> {
-    this.profiles.delete(name);
+  async deleteProfile(name: string, scope?: StoreScope): Promise<void> {
+    this.profiles.delete(this.key(name, scope));
   }
 
   // ----- Risks -----
@@ -189,42 +244,78 @@ export class MemoryStore implements StoreProvider {
       category?: RiskMap.Risk['category'];
     } = {},
   ): Promise<RiskMap.Risk[]> {
-    let out = [...this.risks.values()];
+    let out = this.visible(this.risks, opts);
     if (opts.category) out = out.filter((r) => r.category === opts.category);
     return out;
   }
-  async loadRisk(id: string): Promise<RiskMap.Risk | null> {
-    return this.risks.get(id) ?? null;
+  async loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null> {
+    return this.risks.get(this.key(id, scope)) ?? null;
   }
-  async saveRisk(risk: RiskMap.Risk): Promise<void> {
-    this.risks.set(risk.id, risk);
+  async saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void> {
+    this.risks.set(this.key(risk.id, scope), risk);
   }
-  async deleteRisk(id: string): Promise<void> {
-    this.risks.delete(id);
+  async deleteRisk(id: string, scope?: StoreScope): Promise<void> {
+    this.risks.delete(this.key(id, scope));
   }
 
   // ----- Scenarios -----
   async listScenarios(
-    opts: { pack?: string; risk_id?: string } = {},
+    opts: { pack?: string; risk_id?: string; org?: string; project?: string } = {},
   ): Promise<Scenario.Scenario[]> {
-    let out = [...this.scenarios.values()];
+    let out = this.visible(this.scenarios, opts);
     const riskId = opts.risk_id;
     if (riskId) out = out.filter((s) => s.risk_refs.includes(riskId));
     return out;
   }
-  async loadScenario(id: string): Promise<Scenario.Scenario | null> {
-    return this.scenarios.get(id) ?? null;
+  async loadScenario(id: string, scope?: StoreScope): Promise<Scenario.Scenario | null> {
+    return this.scenarios.get(this.key(id, scope)) ?? null;
   }
-  async saveScenario(scenario: Scenario.Scenario): Promise<void> {
-    this.scenarios.set(scenario.id, scenario);
+  async saveScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<void> {
+    this.scenarios.set(this.key(scenario.id, scope), scenario);
   }
-  async createScenario(scenario: Scenario.Scenario): Promise<{ created: boolean }> {
-    if (this.scenarios.has(scenario.id)) return { created: false };
-    this.scenarios.set(scenario.id, scenario);
+  async createScenario(
+    scenario: Scenario.Scenario,
+    scope?: StoreScope,
+  ): Promise<{ created: boolean }> {
+    const key = this.key(scenario.id, scope);
+    if (this.scenarios.has(key)) return { created: false };
+    this.scenarios.set(key, scenario);
     return { created: true };
   }
-  async deleteScenario(id: string): Promise<void> {
-    this.scenarios.delete(id);
+  async deleteScenario(id: string, scope?: StoreScope): Promise<void> {
+    this.scenarios.delete(this.key(id, scope));
+  }
+
+  async migrateLegacyConfiguration(scope: StoreScope) {
+    if (!scope.org && !scope.project)
+      throw new Error('legacy migration requires an org or project destination');
+    const resources = [
+      ['pack', this.packs],
+      ['profile', this.profiles],
+      ['risk', this.risks],
+      ['scenario', this.scenarios],
+    ] as unknown as Array<[string, Map<string, unknown>]>;
+    const conflicts: string[] = [];
+    let skipped = 0;
+    for (const [kind, map] of resources) {
+      for (const key of map.keys()) {
+        if (isScopedRecordKey(key)) continue;
+        const target = this.key(key, scope);
+        if (map.has(target)) conflicts.push(`${kind}:${key}`);
+        else skipped += 1;
+      }
+    }
+    if (conflicts.length > 0) return { migrated: 0, skipped, conflicts };
+    let migrated = 0;
+    for (const [, map] of resources) {
+      for (const [key, value] of [...map.entries()]) {
+        if (isScopedRecordKey(key)) continue;
+        map.set(this.key(key, scope), value);
+        map.delete(key);
+        migrated += 1;
+      }
+    }
+    return { migrated, skipped: 0, conflicts: [] };
   }
 
   // ----- Agents (v1.7 slice 4d) -----
@@ -260,12 +351,22 @@ export class MemoryStore implements StoreProvider {
     this.agents.set(a.id, a);
   }
   __test_seedUser(u: StoreUserDirectoryEntry): void {
-    this.users.push(u);
+    this.users.set(u.id, u);
   }
 
   // ----- Users (v1.7 slice 4g) -----
-  async listUsers(): Promise<StoreUserDirectoryEntry[]> {
-    return [...this.users];
+  async listUsers(scope?: { org?: string; project?: string }): Promise<StoreUserDirectoryEntry[]> {
+    if (!scope?.org && !scope?.project) return [...this.users.values()];
+    const prefix = scopedRecordKey('', scope);
+    return [...this.users.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, user]) => user);
+  }
+  async upsertUser(
+    user: StoreUserDirectoryEntry,
+    scope?: { org?: string; project?: string },
+  ): Promise<void> {
+    this.users.set(scopedRecordKey(user.id, scope), user);
   }
 
   // ----- SSO config (v1.7 slice 4h) -----
@@ -407,7 +508,7 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.agents.clear();
-    this.users = [];
+    this.users.clear();
     this.notifications = [];
     this.savedViews.clear();
     this.tokens.clear();

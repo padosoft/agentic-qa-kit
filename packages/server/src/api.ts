@@ -1,11 +1,26 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
+import { ScimProvisioner } from '@aqa/auth';
+import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
+import { measureRiskCoverage } from '@aqa/methodology';
+import { safeErrorMessage } from '@aqa/observability';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
 import {
+  type SigstoreVerificationPolicy,
+  scanPack,
+  verifyManifestDigest,
+  verifySignature,
+  verifySigstoreBundle,
+  verifyTrustedManifestSignature,
+} from '@aqa/pack-scanner';
+import {
+  Finding as FindingSchema,
   PackManifest as PackManifestSchema,
   Profile as ProfileSchema,
   RiskMap as RiskMapSchema,
+  RunRequest as RunRequestSchema,
   Scenario as ScenarioSchema,
   SsoConfig as SsoConfigSchema,
 } from '@aqa/schemas';
@@ -27,13 +42,38 @@ import type {
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
-import type { RunnerQueue } from './runner-queue.js';
+import {
+  type ApiIdempotencyStore,
+  MemoryApiIdempotencyStore,
+  validateIdempotencyKey,
+} from './api-idempotency.js';
+import type { EventBus } from './event-bus.js';
+import { IdempotencyConflictError, ResourceQuotaExceededError } from './runner-queue.js';
+import {
+  type RunnerAuthorizationResult,
+  type RunnerQueueLike,
+  matchesRunnerScopes,
+} from './runner-queue.js';
 
 export interface ApiContext {
   store: StoreProvider;
-  queue: RunnerQueue;
+  queue: RunnerQueueLike;
+  /** Optional low-latency fan-out; authoritative state remains in store/queue. */
+  eventBus?: EventBus;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
+  /** Optional runner credential verifier for runner-only endpoints. */
+  runnerAuthorize?: (headers: Record<string, string>) => Promise<RunnerAuthorizationResult>;
+  /** Authorize the authenticated user for the requested org/project scope. */
+  authorizeScope?: (user: User, scope: { org: string; project?: string }) => Promise<boolean>;
+  /** Verify a dedicated SCIM bearer token for the requested organization. */
+  scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
+  /** Optional tenant-scoped abuse limiter; return false to reject with 429. */
+  scimRateLimit?: (org: string) => Promise<boolean> | boolean;
+  /** Trusted Ed25519 pack keys keyed by operator-managed key_id. */
+  packTrustedKeys?: Readonly<Record<string, string>>;
+  /** Required policy when a pack declares a Sigstore bundle. */
+  packSigstorePolicy?: SigstoreVerificationPolicy;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER
@@ -45,19 +85,23 @@ export interface ApiContext {
    * unset rather than silently writing to cwd.
    */
   projectRoot?: string;
+  /** Shared idempotency state for mutating API requests. */
+  idempotency?: ApiIdempotencyStore;
 }
 
-export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface ApiRequest {
   headers: Record<string, string>;
   body?: unknown;
   params: Record<string, string>;
+  query?: Record<string, string | undefined>;
 }
 
 export interface ApiResponse {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
 }
 
 export interface ApiHandler {
@@ -98,6 +142,135 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
   }
 }
 
+function scimOrg(req: ApiRequest): string | undefined {
+  const value = req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'];
+  return value?.trim() || undefined;
+}
+
+async function authorizeScim(
+  req: ApiRequest,
+  ctx: ApiContext,
+  org: string,
+): Promise<ApiResponse | null> {
+  if (ctx.scimRateLimit && !(await ctx.scimRateLimit(org)))
+    return { status: 429, body: { error: 'scim_rate_limited' } };
+  if (!ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+    return { status: 401, body: { error: 'unauthorized' } };
+  return null;
+}
+
+function scimResource(input: unknown): ScimUserResource | null {
+  if (!input || typeof input !== 'object') return null;
+  const value = input as { userName?: unknown };
+  return typeof value.userName === 'string' ? (input as ScimUserResource) : null;
+}
+
+function scimUserResource(user: ScimDirectoryUser): Record<string, unknown> {
+  return {
+    schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+    id: user.id,
+    userName: user.user_name,
+    displayName: user.display_name,
+    active: user.active,
+    emails: [{ value: user.email, primary: true }],
+    roles: user.roles.map((value) => ({ value })),
+    meta: { resourceType: 'User', lastModified: user.updated_at },
+  };
+}
+
+function scimDirectory(ctx: ApiContext): ScimDirectory {
+  return {
+    async get(tenant, id) {
+      const user = (await ctx.store.listUsers({ org: tenant })).find((entry) => entry.id === id);
+      return user
+        ? {
+            id: user.id,
+            user_name: user.user_name ?? user.email,
+            email: user.email,
+            display_name: user.display_name,
+            roles: user.roles,
+            active: user.status !== 'suspended',
+            tenant,
+            updated_at: user.last_active_at ?? new Date(0).toISOString(),
+          }
+        : null;
+    },
+    async list(tenant, filter) {
+      const users = await ctx.store.listUsers({ org: tenant });
+      const exact = filter?.match(/^userName\s+eq\s+"([^"]+)"$/i)?.[1];
+      return users
+        .filter(
+          (entry) =>
+            !exact || entry.user_name === exact || entry.email === exact || entry.id === exact,
+        )
+        .map((entry) => ({
+          id: entry.id,
+          user_name: entry.user_name ?? entry.email,
+          email: entry.email,
+          display_name: entry.display_name,
+          roles: entry.roles,
+          active: entry.status !== 'suspended',
+          tenant,
+          updated_at: entry.last_active_at ?? new Date(0).toISOString(),
+        }));
+    },
+    async put(user) {
+      await ctx.store.upsertUser(
+        {
+          id: user.id,
+          user_name: user.user_name,
+          email: user.email,
+          display_name: user.display_name,
+          roles: user.roles,
+          status: user.active ? 'active' : 'suspended',
+          last_active_at: user.updated_at,
+        },
+        { org: user.tenant },
+      );
+    },
+    async remove() {
+      // SCIM DELETE is deliberately a deactivation at this boundary; the
+      // store has no destructive user-delete contract yet.
+    },
+  };
+}
+
+function validatePackForInstall(
+  input: unknown,
+): { ok: true; manifest: PackManifest.PackManifest } | { ok: false; response: ApiResponse } {
+  const validated = PackManifestSchema.PackManifest.safeParse(input);
+  if (!validated.success) {
+    return {
+      ok: false,
+      response: asResponse(
+        {
+          error: `manifest failed schema validation: ${formatZodError(validated.error)}`,
+          code: 'EINVAL',
+        },
+        400,
+      ),
+    };
+  }
+  const manifest = validated.data;
+  const blockingIssues = scanPack(manifest).issues.filter(
+    (issue) => issue.severity === 'critical' || issue.severity === 'high',
+  );
+  if (blockingIssues.length > 0) {
+    return {
+      ok: false,
+      response: asResponse(
+        {
+          error: 'pack rejected by supply-chain scanner',
+          code: 'EPACKSCAN',
+          issues: blockingIssues,
+        },
+        400,
+      ),
+    };
+  }
+  return { ok: true, manifest };
+}
+
 /**
  * Format a Zod safeParse failure as a concise list of `path: message`
  * lines. The default `error.message` is the full Zod dump (multi-line
@@ -136,17 +309,59 @@ function asResponse(value: unknown, status = 200): ApiResponse {
   return { status, body: value };
 }
 
+function entityTag(value: unknown): string {
+  return `"${createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex')}"`;
+}
+
+function conditionalConflict(req: ApiRequest, current: unknown): ApiResponse | null {
+  const ifMatch = req.headers['if-match'] ?? req.headers['If-Match'];
+  if (!ifMatch || ifMatch === '*' || ifMatch === entityTag(current)) return null;
+  return {
+    status: 412,
+    body: { error: 'resource changed since it was read', code: 'PRECONDITION_FAILED' },
+    headers: { ETag: entityTag(current) },
+  };
+}
+
 function notFound(what: string): ApiResponse {
   return { status: 404, body: { error: `${what} not found` } };
 }
 
 function cryptoUuid(): string {
-  return `${hex(8)}-${hex(4)}-4${hex(3)}-${hex(4)}-${hex(12)}`;
+  return randomUUID();
 }
-function hex(n: number): string {
-  let s = '';
-  for (let i = 0; i < n; i += 1) s += Math.floor(Math.random() * 16).toString(16);
-  return s;
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.fromEntries(
+      Object.entries(current as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, item]),
+    );
+  });
+}
+
+async function publishApiEvent(
+  ctx: ApiContext,
+  req: ApiRequest,
+  type: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  if (!ctx.eventBus) return;
+  const tenant = scope(req);
+  try {
+    await ctx.eventBus.publish({
+      id: cryptoUuid(),
+      type,
+      occurred_at: new Date().toISOString(),
+      ...(tenant.org ? { org: tenant.org } : {}),
+      ...(tenant.project ? { project: tenant.project } : {}),
+      data,
+    });
+  } catch {
+    // State is authoritative; consumers reconcile after a notification gap.
+  }
 }
 
 /**
@@ -162,8 +377,22 @@ function hex(n: number): string {
  * The admin panel (`packages/admin`) consumes this surface end-to-end.
  */
 export function makeApi(): ApiHandler[] {
-  return [
+  const fallbackIdempotency = new MemoryApiIdempotencyStore();
+  const routes: ApiHandler[] = [
     // ============ Runs ============
+    {
+      method: 'GET',
+      path: '/api/events/stream',
+      requires: 'runs:read',
+      async handle() {
+        // The Node adapter upgrades this route to a real SSE response. Other
+        // adapters must implement the same authenticated stream contract.
+        return {
+          status: 501,
+          body: { error: 'live event streaming is not supported by this adapter' },
+        };
+      },
+    },
     {
       method: 'GET',
       path: '/api/runs',
@@ -174,7 +403,7 @@ export function makeApi(): ApiHandler[] {
         // x-aqa-project; CLI consumers must do the same.
         const s = requireScope(req);
         if ('status' in s) return s;
-        const runs = await ctx.store.listRuns({ project: s.project, limit: 100 });
+        const runs = await ctx.store.listRuns({ org: s.org, project: s.project, limit: 100 });
         return asResponse({ runs } satisfies { runs: Run.Run[] });
       },
     },
@@ -190,7 +419,7 @@ export function makeApi(): ApiHandler[] {
         const run = await ctx.store.loadRun(id);
         // Match-or-404: a cross-tenant lookup must look identical to a missing
         // record so probing for IDs in other projects gains no information.
-        if (!run || run.project !== s.project) return notFound('run');
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('run');
         return asResponse({ run } satisfies { run: Run.Run });
       },
     },
@@ -199,12 +428,95 @@ export function makeApi(): ApiHandler[] {
       path: '/api/runs',
       requires: 'runs:create',
       async handle(req, ctx) {
-        const job = ctx.queue.enqueue({
-          id: cryptoUuid(),
-          payload: req.body as Record<string, unknown>,
-          enqueued_at: new Date().toISOString(),
-        });
-        return asResponse({ job }, 202);
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+          return { status: 400, body: { error: 'run request body must be an object' } };
+        }
+        const parsedRequest = RunRequestSchema.RunRequest.safeParse(req.body);
+        if (!parsedRequest.success) {
+          return asResponse(
+            {
+              error: `run request failed schema validation: ${formatZodError(parsedRequest.error)}`,
+            },
+            400,
+          );
+        }
+        const payload = {
+          ...parsedRequest.data,
+          org: s.org,
+          project: s.project,
+        };
+        const rawKey = req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'];
+        const idempotencyKey = rawKey?.trim();
+        if (
+          idempotencyKey !== undefined &&
+          (idempotencyKey.length === 0 || idempotencyKey.length > 200)
+        ) {
+          return { status: 400, body: { error: 'Idempotency-Key must be 1..200 characters' } };
+        }
+        try {
+          const job = await ctx.queue.enqueue({
+            id: cryptoUuid(),
+            payload,
+            enqueued_at: new Date().toISOString(),
+            ...(parsedRequest.data.priority !== undefined
+              ? { priority: parsedRequest.data.priority }
+              : {}),
+            ...(idempotencyKey
+              ? {
+                  idempotency_key: `${s.org}/${s.project}:${idempotencyKey}`,
+                  idempotency_fingerprint: canonicalJson(payload),
+                }
+              : {}),
+          });
+          await publishApiEvent(ctx, req, 'run.requested', { job_id: job.id });
+          return asResponse({ job }, 202);
+        } catch (error) {
+          if (error instanceof IdempotencyConflictError) {
+            return { status: 409, body: { error: error.message, code: 'IDEMPOTENCY_CONFLICT' } };
+          }
+          if (error instanceof ResourceQuotaExceededError) {
+            return {
+              status: 429,
+              body: {
+                error: error.message,
+                code: 'RESOURCE_QUOTA_EXCEEDED',
+                quota: error.quota,
+                limit: error.limit,
+                current: error.current,
+                requested: error.requested,
+              },
+            };
+          }
+          throw error;
+        }
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/runs/:id/cancel',
+      requires: 'runs:create',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('run job');
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const body = (req.body ?? {}) as { reason?: unknown };
+        if (body.reason !== undefined && (typeof body.reason !== 'string' || !body.reason.trim())) {
+          return {
+            status: 400,
+            body: { error: 'reason must be a non-empty string when provided' },
+          };
+        }
+        const cancelled = await ctx.queue.cancel(
+          id,
+          typeof body.reason === 'string' ? body.reason : 'cancelled by operator',
+          s,
+        );
+        if (!cancelled) return notFound('run job');
+        await publishApiEvent(ctx, req, 'run.cancelled', { job_id: id });
+        return asResponse({ id, cancelled: true });
       },
     },
     {
@@ -229,9 +541,16 @@ export function makeApi(): ApiHandler[] {
       path: '/api/findings',
       requires: 'findings:read',
       async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
         const filter: { run_id?: string } = {};
         if (req.params.run_id) filter.run_id = req.params.run_id;
-        const findings = await ctx.store.listFindings(filter);
+        const candidates = await ctx.store.listFindings(filter);
+        const findings = [];
+        for (const finding of candidates) {
+          const run = await ctx.store.loadRun(finding.run_id);
+          if (run?.org === s.org && run.project === s.project) findings.push(finding);
+        }
         return asResponse({ findings } satisfies { findings: Finding.Finding[] });
       },
     },
@@ -249,7 +568,7 @@ export function makeApi(): ApiHandler[] {
         // Verify the finding's run lives in the requested project; treat
         // cross-tenant access identically to "not found".
         const run = await ctx.store.loadRun(finding.run_id);
-        if (!run || run.project !== s.project) return notFound('finding');
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('finding');
         return asResponse({ finding });
       },
     },
@@ -262,15 +581,47 @@ export function makeApi(): ApiHandler[] {
         if (!id) return notFound('finding');
         const user = await ctx.authenticate(req.headers);
         if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const existing = await ctx.store.loadFinding(id);
+        if (!existing) return notFound('finding');
+        const run = await ctx.store.loadRun(existing.run_id);
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('finding');
         const body = req.body as
-          | { status?: Finding.Finding['status']; reason?: string }
+          | { status?: unknown; reason?: unknown; duplicate_of?: unknown }
           | undefined;
-        if (!body?.status || !body.reason) {
+        if (typeof body?.status !== 'string' || typeof body.reason !== 'string' || !body.reason) {
           return { status: 400, body: { error: 'status + reason required' } };
         }
-        const updated = await ctx.store.updateFindingStatus(id, body.status, user.id, body.reason);
-        if (!updated) return notFound('finding');
-        return asResponse({ finding: updated });
+        const candidate = {
+          ...existing,
+          status: body.status,
+          ...(body.duplicate_of !== undefined ? { duplicate_of: body.duplicate_of } : {}),
+        };
+        const parsed = FindingSchema.Finding.safeParse(candidate);
+        if (!parsed.success) {
+          return { status: 400, body: { error: formatZodError(parsed.error) } };
+        }
+        let transitioned: Awaited<ReturnType<StoreProvider['transitionFindingStatus']>>;
+        try {
+          transitioned = await ctx.store.transitionFindingStatus(
+            id,
+            parsed.data.status,
+            user.id,
+            body.reason,
+          );
+        } catch (error) {
+          if (error instanceof Error && error.name === 'InvalidFindingTransitionError') {
+            return { status: 409, body: { error: error.message, code: 'INVALID_TRANSITION' } };
+          }
+          throw error;
+        }
+        if (!transitioned) return notFound('finding');
+        await publishApiEvent(ctx, req, 'finding.status_changed', {
+          finding_id: transitioned.finding.id,
+          status: transitioned.finding.status,
+        });
+        return asResponse({ finding: transitioned.finding });
       },
     },
 
@@ -291,7 +642,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const slug = req.params.slug;
         if (!slug) return notFound('pack');
-        const pack = await ctx.store.loadPack(slug);
+        const pack = await ctx.store.loadPack(slug, scope(req));
         if (!pack) return notFound('pack');
         return asResponse({ pack });
       },
@@ -301,19 +652,60 @@ export function makeApi(): ApiHandler[] {
       path: '/api/packs',
       requires: 'packs:install',
       async handle(req, ctx) {
-        // NOTE: this v1.4 endpoint accepts a pre-parsed JSON manifest
-        // and currently does NOT validate against the schema or
-        // detect duplicates — `MemoryStore.installPack` silently
-        // overwrites. The newer `POST /api/packs/import` (slice 4b)
-        // adds full validation + conflict detection on a YAML body.
-        // Consolidating both onto a shared helper (validate-then-
-        // install, with `force` semantics) is tracked as a v1.7.x
-        // follow-up; doing it here would change long-standing
-        // behavior callers may depend on, so it's intentionally
-        // out of scope for this slice. Until then, callers wanting
-        // safety guarantees should prefer `/api/packs/import`.
-        const manifest = req.body as PackManifest.PackManifest;
-        await ctx.store.installPack(manifest);
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        if (body.force !== undefined && typeof body.force !== 'boolean') {
+          return asResponse(
+            { error: 'force must be a boolean when provided', code: 'EINVAL' },
+            400,
+          );
+        }
+        const checked = validatePackForInstall(body.manifest ?? req.body);
+        if (!checked.ok) return checked.response;
+        const manifest = checked.manifest;
+        if (manifest.signing) {
+          const signature = verifyManifestDigest(manifest);
+          if (!signature.ok) {
+            return asResponse(
+              { error: `pack signature invalid: ${signature.reason}`, code: 'ESIGNATURE' },
+              400,
+            );
+          }
+          if (ctx.packTrustedKeys) {
+            const trusted = verifyTrustedManifestSignature(manifest, ctx.packTrustedKeys);
+            if (!trusted.ok)
+              return asResponse(
+                { error: `pack trust verification failed: ${trusted.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
+          if (manifest.signing.sigstore_bundle) {
+            if (!ctx.packSigstorePolicy)
+              return asResponse(
+                {
+                  error: 'Sigstore bundle requires an operator verification policy',
+                  code: 'ESIGNATURE',
+                },
+                400,
+              );
+            const sigstore = await verifySigstoreBundle(manifest, ctx.packSigstorePolicy);
+            if (!sigstore.ok)
+              return asResponse(
+                { error: `Sigstore verification failed: ${sigstore.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
+        }
+        const existing = await ctx.store.loadPack(manifest.name, scope(req));
+        if (existing && body.force !== true) {
+          return asResponse(
+            {
+              error: `pack "${manifest.name}" already exists; pass force=true to overwrite`,
+              code: 'EEXIST',
+            },
+            409,
+          );
+        }
+        await ctx.store.installPack(manifest, scope(req));
         return asResponse({ pack: manifest }, 201);
       },
     },
@@ -324,7 +716,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const slug = req.params.slug;
         if (!slug) return notFound('pack');
-        await ctx.store.uninstallPack(slug);
+        await ctx.store.uninstallPack(slug, scope(req));
         return asResponse({ ok: true });
       },
     },
@@ -504,7 +896,56 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const manifest = validated.data;
-        const existing = await ctx.store.loadPack(manifest.name);
+        const scan = scanPack(manifest);
+        const blockingIssues = scan.issues.filter(
+          (issue) => issue.severity === 'critical' || issue.severity === 'high',
+        );
+        if (blockingIssues.length > 0) {
+          return asResponse(
+            {
+              error: 'pack rejected by supply-chain scanner',
+              code: 'EPACKSCAN',
+              issues: blockingIssues,
+            },
+            400,
+          );
+        }
+        if (manifest.signing) {
+          const signature = manifest.signing.ed25519_signature
+            ? verifyManifestDigest(manifest)
+            : verifySignature(manifest, body.yaml);
+          if (!signature.ok) {
+            return asResponse(
+              { error: `pack signature invalid: ${signature.reason}`, code: 'ESIGNATURE' },
+              400,
+            );
+          }
+          if (ctx.packTrustedKeys) {
+            const trusted = verifyTrustedManifestSignature(manifest, ctx.packTrustedKeys);
+            if (!trusted.ok)
+              return asResponse(
+                { error: `pack trust verification failed: ${trusted.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
+          if (manifest.signing.sigstore_bundle) {
+            if (!ctx.packSigstorePolicy)
+              return asResponse(
+                {
+                  error: 'Sigstore bundle requires an operator verification policy',
+                  code: 'ESIGNATURE',
+                },
+                400,
+              );
+            const sigstore = await verifySigstoreBundle(manifest, ctx.packSigstorePolicy);
+            if (!sigstore.ok)
+              return asResponse(
+                { error: `Sigstore verification failed: ${sigstore.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
+        }
+        const existing = await ctx.store.loadPack(manifest.name, scope(req));
         if (existing && body.force !== true) {
           return asResponse(
             {
@@ -515,7 +956,7 @@ export function makeApi(): ApiHandler[] {
           );
         }
         try {
-          await ctx.store.installPack(manifest);
+          await ctx.store.installPack(manifest, scope(req));
         } catch (e) {
           return asResponse(
             {
@@ -561,7 +1002,7 @@ export function makeApi(): ApiHandler[] {
         // Atomic check+create at the store layer — two concurrent POSTs
         // for the same name can't both observe "missing" and overwrite
         // each other. saveProfile + a prior loadProfile would race.
-        const { created } = await ctx.store.createProfile(profile);
+        const { created } = await ctx.store.createProfile(profile, scope(req));
         if (!created) {
           return asResponse(
             {
@@ -581,9 +1022,9 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const name = req.params.name;
         if (!name) return notFound('profile');
-        const profile = await ctx.store.loadProfile(name);
+        const profile = await ctx.store.loadProfile(name, scope(req));
         if (!profile) return notFound('profile');
-        return asResponse({ profile });
+        return { ...asResponse({ profile }), headers: { ETag: entityTag(profile) } };
       },
     },
     {
@@ -623,8 +1064,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveProfile(profile);
-        return asResponse({ profile });
+        const existing = await ctx.store.loadProfile(pathName, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
+        await ctx.store.saveProfile(profile, scope(req));
+        return { ...asResponse({ profile }), headers: { ETag: entityTag(profile) } };
       },
     },
     {
@@ -634,7 +1080,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const name = req.params.name;
         if (!name) return notFound('profile');
-        await ctx.store.deleteProfile(name);
+        await ctx.store.deleteProfile(name, scope(req));
         return asResponse({ ok: true });
       },
     },
@@ -656,9 +1102,9 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('risk');
-        const risk = await ctx.store.loadRisk(id);
+        const risk = await ctx.store.loadRisk(id, scope(req));
         if (!risk) return notFound('risk');
-        return asResponse({ risk });
+        return { ...asResponse({ risk }), headers: { ETag: entityTag(risk) } };
       },
     },
     {
@@ -687,8 +1133,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveRisk(risk);
-        return asResponse({ risk });
+        const existing = await ctx.store.loadRisk(pathId, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
+        await ctx.store.saveRisk(risk, scope(req));
+        return { ...asResponse({ risk }), headers: { ETag: entityTag(risk) } };
       },
     },
     {
@@ -702,8 +1153,56 @@ export function makeApi(): ApiHandler[] {
         // desired end state is "no risk with this id" regardless of
         // whether one was there to begin with. The admin UI treats
         // 200 as success either way.
-        await ctx.store.deleteRisk(id);
+        await ctx.store.deleteRisk(id, scope(req));
         return asResponse({ id, deleted: true });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/risk-coverage',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const risks = await ctx.store.listRisks({ org: s.org, project: s.project });
+        if (risks.length === 0)
+          return asResponse({ coverage: [], generated_at: new Date().toISOString() });
+        const scenarios = await ctx.store.listScenarios({ org: s.org, project: s.project });
+        const runs = await ctx.store.listRuns({ org: s.org, project: s.project, limit: 1_000 });
+        const observations = [];
+        for (const run of runs) {
+          const events = await ctx.store.listEvents(run.id);
+          const byScenario = new Map<string, typeof events>();
+          for (const event of events) {
+            if (event.kind !== 'oracle_evaluated' || !event.scenario_id) continue;
+            const bucket = byScenario.get(event.scenario_id) ?? [];
+            bucket.push(event);
+            byScenario.set(event.scenario_id, bucket);
+          }
+          for (const [scenarioId, oracleEvents] of byScenario) {
+            const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
+            if (!scenario || oracleEvents.length < scenario.oracles.length) continue;
+            const passed = oracleEvents.every((event) => event.payload.passed === true);
+            const replay = events.some(
+              (event) =>
+                event.kind === 'replay_finished' &&
+                event.scenario_id === scenarioId &&
+                event.payload.deterministic === true,
+            );
+            observations.push({
+              scenario_id: scenarioId,
+              executed_at: run.finished_at ?? run.started_at,
+              passed,
+              deterministic_replay: replay,
+            });
+          }
+        }
+        const coverage = measureRiskCoverage({
+          risk_map: { schema_version: '1', project: s.project, risks },
+          scenarios,
+          runs: observations,
+        });
+        return asResponse({ coverage, generated_at: new Date().toISOString() });
       },
     },
 
@@ -716,7 +1215,7 @@ export function makeApi(): ApiHandler[] {
         const opts: { pack?: string; risk_id?: string } = {};
         if (req.params.pack) opts.pack = req.params.pack;
         if (req.params.risk_id) opts.risk_id = req.params.risk_id;
-        const scenarios = await ctx.store.listScenarios(opts);
+        const scenarios = await ctx.store.listScenarios({ ...opts, ...scope(req) });
         return asResponse({ scenarios } satisfies { scenarios: Scenario.Scenario[] });
       },
     },
@@ -727,9 +1226,9 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const id = req.params.id;
         if (!id) return notFound('scenario');
-        const scenario = await ctx.store.loadScenario(id);
+        const scenario = await ctx.store.loadScenario(id, scope(req));
         if (!scenario) return notFound('scenario');
-        return asResponse({ scenario });
+        return { ...asResponse({ scenario }), headers: { ETag: entityTag(scenario) } };
       },
     },
     {
@@ -749,7 +1248,7 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const scenario = parsed.data;
-        const { created } = await ctx.store.createScenario(scenario);
+        const { created } = await ctx.store.createScenario(scenario, scope(req));
         if (!created) {
           return asResponse(
             {
@@ -786,8 +1285,13 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        await ctx.store.saveScenario(scenario);
-        return asResponse({ scenario });
+        const existing = await ctx.store.loadScenario(pathId, scope(req));
+        if (existing) {
+          const conflict = conditionalConflict(req, existing);
+          if (conflict) return conflict;
+        }
+        await ctx.store.saveScenario(scenario, scope(req));
+        return { ...asResponse({ scenario }), headers: { ETag: entityTag(scenario) } };
       },
     },
     {
@@ -804,7 +1308,7 @@ export function makeApi(): ApiHandler[] {
         // returns the older { ok: true } shape — its admin wizard
         // doesn't need correlation since it always navigates back to
         // the profiles list.)
-        await ctx.store.deleteScenario(id);
+        await ctx.store.deleteScenario(id, scope(req));
         return asResponse({ id, deleted: true });
       },
     },
@@ -861,8 +1365,11 @@ export function makeApi(): ApiHandler[] {
       method: 'GET',
       path: '/api/users',
       requires: 'settings:read',
-      async handle(_req, ctx) {
-        const users = await ctx.store.listUsers();
+      async handle(req, ctx) {
+        const requested = scope(req);
+        const users = await ctx.store.listUsers(
+          requested.org || requested.project ? requested : undefined,
+        );
         return asResponse({ users });
       },
     },
@@ -970,16 +1477,75 @@ export function makeApi(): ApiHandler[] {
       path: '/api/queue',
       requires: 'runs:read',
       async handle(_req, ctx) {
-        return asResponse({ jobs: ctx.queue.snapshot() });
+        return asResponse({ jobs: await ctx.queue.snapshot() });
       },
     },
     {
       method: 'GET',
       path: '/api/runner/jobs/next',
       requires: null,
-      async handle(_req, ctx) {
-        const next = ctx.queue.dequeue();
+      async handle(req, ctx) {
+        const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
+        if (authorization === false) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
+        const scopes = authorization === true ? undefined : authorization.scopes;
+        const next = await ctx.queue.dequeue(undefined, scopes);
         return { status: next ? 200 : 204, body: next ? { job: next } : null };
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/runner/jobs/:id/ack',
+      requires: null,
+      async handle(req, ctx) {
+        const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
+        if (authorization === false) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
+        const id = req.params.id;
+        const body = (req.body ?? {}) as { lease_token?: unknown };
+        if (!id || typeof body.lease_token !== 'string' || !body.lease_token) {
+          return { status: 400, body: { error: 'job id and lease_token are required' } };
+        }
+        const job = await ctx.queue.get(id);
+        if (
+          authorization !== true &&
+          (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
+        )
+          return { status: 404, body: { error: 'job not found' } };
+        const acknowledged = await ctx.queue.ack(id, body.lease_token);
+        return asResponse({ acknowledged }, acknowledged ? 200 : 409);
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/runner/jobs/:id/fail',
+      requires: null,
+      async handle(req, ctx) {
+        const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
+        if (authorization === false) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
+        const id = req.params.id;
+        const body = (req.body ?? {}) as { lease_token?: unknown; reason?: unknown };
+        if (
+          !id ||
+          typeof body.lease_token !== 'string' ||
+          !body.lease_token ||
+          typeof body.reason !== 'string' ||
+          !body.reason.trim()
+        ) {
+          return { status: 400, body: { error: 'job id, lease_token and reason are required' } };
+        }
+        const job = await ctx.queue.get(id);
+        if (
+          authorization !== true &&
+          (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
+        )
+          return { status: 404, body: { error: 'job not found' } };
+        const failed = await ctx.queue.fail(id, body.lease_token, body.reason);
+        return asResponse({ failed }, failed ? 200 : 409);
       },
     },
 
@@ -1104,6 +1670,147 @@ export function makeApi(): ApiHandler[] {
     // ============ Tenancy ============
     {
       method: 'GET',
+      path: '/scim/v2/Users',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        const directory = scimDirectory(ctx);
+        const query = req.query ?? {};
+        const startIndex = Math.max(1, Number.parseInt(query.startIndex ?? '1', 10) || 1);
+        const count = Math.max(0, Number.parseInt(query.count ?? '0', 10) || 0);
+        const allUsers = await new ScimProvisioner(directory, org).list(query.filter);
+        const pageStart = startIndex - 1;
+        const users =
+          count > 0 ? allUsers.slice(pageStart, pageStart + count) : allUsers.slice(pageStart);
+        return asResponse({
+          schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'],
+          totalResults: allUsers.length,
+          startIndex,
+          itemsPerPage: users.length,
+          Resources: users.map(scimUserResource),
+        });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/scim/v2/Users',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        const resource = scimResource(req.body);
+        if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).create(resource);
+          return asResponse(scimUserResource(user), 201);
+        } catch (error) {
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
+        }
+      },
+    },
+    {
+      method: 'GET',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).get(req.params.id ?? '');
+          return asResponse(scimUserResource(user));
+        } catch {
+          return asResponse({ error: 'SCIM resource not found' }, 404);
+        }
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        const resource = scimResource(req.body);
+        if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).replace(
+            req.params.id ?? '',
+            resource,
+          );
+          return asResponse(scimUserResource(user));
+        } catch (error) {
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
+        }
+      },
+    },
+    {
+      method: 'PATCH',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        const operations = (req.body as { Operations?: unknown })?.Operations;
+        if (!Array.isArray(operations))
+          return asResponse({ error: 'SCIM Operations is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).patch(
+            req.params.id ?? '',
+            operations as never,
+          );
+          return asResponse(scimUserResource(user));
+        } catch (error) {
+          return asResponse({ error: safeErrorMessage(error, 'invalid commerce request') }, 400);
+        }
+      },
+    },
+    {
+      method: 'DELETE',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
+        try {
+          await new ScimProvisioner(scimDirectory(ctx), org).deactivate(req.params.id ?? '');
+          return asResponse(null, 204);
+        } catch {
+          return asResponse({ error: 'SCIM resource not found' }, 404);
+        }
+      },
+    },
+
+    // ============ Tenancy ============
+    {
+      method: 'POST',
+      path: '/api/admin/migrate-legacy-configuration',
+      requires: 'admin:everything',
+      async handle(req, ctx) {
+        const destination = scope(req);
+        if (!destination.org && !destination.project)
+          return asResponse(
+            { error: 'x-aqa-org or x-aqa-project is required for legacy migration' },
+            400,
+          );
+        const result = await ctx.store.migrateLegacyConfiguration(destination);
+        return asResponse(result);
+      },
+    },
+    {
+      method: 'GET',
       path: '/api/orgs',
       requires: 'settings:read',
       async handle(_req, ctx) {
@@ -1143,4 +1850,37 @@ export function makeApi(): ApiHandler[] {
       },
     },
   ];
+  return routes.map((route) => {
+    if (route.method === 'GET') return route;
+    const handler = route.handle;
+    return {
+      ...route,
+      async handle(req, ctx) {
+        let key: string | undefined;
+        try {
+          key = validateIdempotencyKey(
+            req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'],
+          );
+        } catch (error) {
+          return {
+            status: 400,
+            body: { error: error instanceof Error ? error.message : 'invalid idempotency key' },
+          };
+        }
+        if (!key) return handler(req, ctx);
+        const tenant = `${req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'] ?? ''}/${req.headers['x-aqa-project'] ?? req.headers['X-Aqa-Project'] ?? ''}`;
+        const fingerprint = canonicalJson({
+          method: route.method,
+          path: route.path,
+          params: req.params,
+          body: req.body,
+          if_match: req.headers['if-match'] ?? req.headers['If-Match'],
+        });
+        return (ctx.idempotency ?? fallbackIdempotency).execute(
+          { scope: `${tenant}:${route.method}:${route.path}`, key, fingerprint },
+          () => handler(req, ctx),
+        );
+      },
+    };
+  });
 }

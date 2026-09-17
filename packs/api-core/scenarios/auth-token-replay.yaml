@@ -13,5 +13,6 @@ steps:
 oracles:
   - id: o-401
     kind: http_status
+    probe_id: probe-use-old
     with: { expected: 401 }
 tags: [api, auth]

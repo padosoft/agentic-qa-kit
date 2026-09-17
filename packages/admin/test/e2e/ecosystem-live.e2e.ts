@@ -20,3 +20,27 @@ test('ecosystem live: finding_emitted is visible in live audit and chain verifie
     .click();
   await expect(page.getByRole('heading', { name: /CHAIN OK/i })).toBeVisible({ timeout: 15_000 });
 });
+
+test('ecosystem live: browser receives the tenant-scoped event stream', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('live-stream-status')).toContainText(/connected/i, {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId('live-stream-event')).toContainText(/run\.requested/i, {
+    timeout: 15_000,
+  });
+});
+
+test('ecosystem live: runs and findings pages consume the live API', async ({ page }) => {
+  await page.goto('/');
+  await nav(page, 'Runs').click();
+  await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('tbody tr').first().click();
+  await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
+  await nav(page, 'Findings').click();
+  await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.cluster-card').first().click();
+  await expect(page.getByText(/Cross-tenant|ecosystem smoke/i).first()).toBeVisible({
+    timeout: 15_000,
+  });
+});

@@ -1,0 +1,23 @@
+{
+  "name": "@aqa/artifacts",
+  "version": "0.0.1",
+  "description": "Content-addressed, redaction-aware artifact storage for agentic-qa-kit.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/artifacts.test.ts",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
+  },
+  "dependencies": {
+    "@aqa/observability": "workspace:*",
+    "@aws-sdk/client-s3": "^3.862.0"
+  },
+  "publishConfig": { "access": "public" }
+}

@@ -1,0 +1,17 @@
+{{- if .Values.server.auditPersistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-server-audit
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.server.auditPersistence.size }}
+  {{- if .Values.server.auditPersistence.storageClassName }}
+  storageClassName: {{ .Values.server.auditPersistence.storageClassName | quote }}
+  {{- end }}
+{{- end }}

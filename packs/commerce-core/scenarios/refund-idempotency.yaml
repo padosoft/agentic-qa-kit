@@ -1,0 +1,27 @@
+schema_version: "1"
+id: scn-commerce-refund-idempotency
+title: Repeating a partial refund must not refund twice
+risk_refs: [r-refund-overcharge]
+invariant_refs: [inv-refund-idempotency]
+preconditions:
+  - "a captured order exists with a payment greater than zero"
+steps:
+  - id: refund-first
+    kind: http
+    with: { method: "POST", url: "/api/refunds", body: { order_id: "${ORDER_ID}", amount_minor: 100, currency: "EUR" }, headers: { "Idempotency-Key": "aqa-refund-1" } }
+  - id: refund-retry
+    kind: http
+    with: { method: "POST", url: "/api/refunds", body: { order_id: "${ORDER_ID}", amount_minor: 100, currency: "EUR" }, headers: { "Idempotency-Key": "aqa-refund-1" } }
+  - id: payment-after
+    kind: http
+    with: { method: "GET", url: "/api/orders/${ORDER_ID}/payment" }
+oracles:
+  - id: same-refund
+    kind: response_contains
+    probe_id: refund-retry
+    with: { jsonpath: "$.refund_id", equals: "@refund-first.body.refund_id" }
+  - id: refund-bounded
+    kind: custom
+    probe_id: payment-after
+    with: { assertion: "refunded_amount_minor <= captured_amount_minor" }
+tags: [ecommerce, payments, refunds, idempotency]

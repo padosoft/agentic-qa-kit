@@ -17,9 +17,16 @@ spec:
         {{- include "aqa.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
     spec:
+      securityContext:
+        {{- toYaml .Values.server.podSecurityContext | nindent 8 }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       containers:
         - name: server
-          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          {{- if and .Values.server.image.requireDigest (not .Values.server.image.digest) }}
+          {{- fail "server.image.digest is required when server.image.requireDigest is true" }}
+          {{- end }}
+          image: "{{ .Values.server.image.repository }}{{ if .Values.server.image.digest }}@{{ .Values.server.image.digest }}{{ else }}:{{ .Values.server.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
           env:
             - name: AQA_AUDIT_LOG_PATH
@@ -29,24 +36,110 @@ spec:
             - name: AQA_MONTHLY_BUDGET_USD
               value: {{ .Values.cost.monthlyBudgetUsd | quote }}
             {{- if .Values.postgres.subchart.enabled }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_IDEMPOTENCY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_QUEUE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_OIDC_SESSION_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_EVENT_BUS_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_SCIM_TOKEN_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_SCIM_RATE_LIMIT_DSN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-postgres
                   key: url
             {{- else if .Values.postgres.urlSecretRef }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_IDEMPOTENCY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_QUEUE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_OIDC_SESSION_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_EVENT_BUS_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_SCIM_TOKEN_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_SCIM_RATE_LIMIT_DSN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgres.urlSecretRef }}
                   key: url
             {{- else if .Values.postgres.url }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_IDEMPOTENCY_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_QUEUE_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_OIDC_SESSION_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_EVENT_BUS_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_SCIM_TOKEN_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_SCIM_RATE_LIMIT_DSN
               value: {{ .Values.postgres.url | quote }}
             {{- end }}
           ports:
             - containerPort: 8080
               name: http
+          securityContext:
+            {{- toYaml .Values.server.containerSecurityContext | nindent 12 }}
+          startupProbe:
+            tcpSocket: { port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
           volumeMounts:
@@ -54,4 +147,9 @@ spec:
               mountPath: /var/lib/aqa
       volumes:
         - name: audit-log
+          {{- if .Values.server.auditPersistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-server-audit
+          {{- else }}
           emptyDir: {}
+          {{- end }}

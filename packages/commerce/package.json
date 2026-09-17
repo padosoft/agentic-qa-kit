@@ -1,0 +1,18 @@
+{
+  "name": "@aqa/commerce",
+  "version": "0.1.0",
+  "description": "Typed, fail-closed commerce assurance contracts for Agentic QA Kit.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/contracts.test.ts"
+  },
+  "dependencies": { "postgres": "^3.4.9", "zod": "^3.24.0" }
+}
