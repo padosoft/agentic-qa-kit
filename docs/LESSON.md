@@ -1762,3 +1762,10 @@ Making an oracle field mandatory can expose previously accepted but semantically
 invalid test fixtures at API boundaries. When the validator becomes stricter,
 update every schema-conforming fixture with an explicit contract value and let
 the hosted Bun/Node matrix prove the compatibility surface.
+# 2026-09-17 — agent mode must be explicit at the host boundary
+
+An execution-mode enum is not an agent implementation. Accepting an agent
+profile without a host-owned driver would mislabel orchestrator events and
+findings. Require explicit injection, propagate actor identity through every
+audit event, and keep provider/model/tool-policy selection outside the generic
+runner until its contracts are implemented and verified.

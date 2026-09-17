@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Opened the agent execution boundary.** `aqa run` now accepts
+  `execution_mode: agent` only with an explicit host-owned `agentRunner`; the
+  run fails closed before allocation when it is missing. Agent runs propagate
+  agent actors to probe/oracle/finding evidence and mark findings with agent
+  provenance. Evidence: runner + kit boundary suite **62 pass / 0 fail**,
+  workspace typecheck/lint green. ADR-188 records that provider-backed
+  trajectories, model pinning and MCP/tool policy remain separate integrations.
+
 - **Added pre-execution scenario contract validation.** `Scenario` now rejects
   unsupported HTTP probe fields, malformed named auth references, non-string
   headers, non-numeric HTTP status expectations, and incomplete JSONPath

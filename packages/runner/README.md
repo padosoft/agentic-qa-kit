@@ -59,3 +59,8 @@ const result = await runScenario({
   findings,
 });
 ```
+
+Set `execution_mode: 'agent'` when a host-owned agent driver is injected.
+Probe/oracle events and emitted findings then retain agent identity; provider
+selection, tool policy, trajectory storage, and model pinning remain outside
+this provider-neutral runner boundary.

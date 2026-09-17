@@ -80,6 +80,15 @@ AQA_HTTP_SECRET_OLD_TOKEN=<provided-by-ci-secret-store>
 Embedding hosts may pass `RunOptions.httpSecrets` instead. Missing references
 fail before dispatch and secret values are not persisted in run evidence.
 
+### Agent execution
+
+Profiles with `execution_mode: agent` require an explicit host-owned
+`RunOptions.agentRunner`. The runner receives the same bounded probe contract
+and cooperative cancellation signal as orchestrator execution; audit events and
+findings are marked with agent provenance. The CLI does not choose an LLM,
+provider, MCP server, credentials, or tool policy implicitly. Hosts inject
+those policies and keep model/trajectory evidence in their integration adapter.
+
 ## Durable artifact backend
 
 Runs use the local filesystem by default. For AWS S3, MinIO or another
