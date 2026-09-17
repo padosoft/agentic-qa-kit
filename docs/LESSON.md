@@ -1182,3 +1182,11 @@ credential may legitimately be counterless. Require strict monotonicity only
 when registration records counter support; otherwise retain the one-time
 challenge and cryptographic assertion checks. Never treat an injected verifier
 or memory store as evidence of a real browser/provider ceremony.
+
+# 2026-09-17 — queue scope needs an authenticated identity
+
+Tenant filtering is not runner authentication. A queue can enforce scopes only
+after a trusted boundary has established who the worker is and how long its
+credential is valid. Keep JWT verification narrow (fixed algorithm, issuer,
+audience, lifetime and explicit scopes), reject partial environment wiring, and
+preserve static tokens only as visibly non-production bootstrap compatibility.

@@ -892,3 +892,8 @@
 # 2026-09-17 — enterprise regression after WebAuthn increment
 
 - Evidence: repository `typecheck`, **591 tests passed / 0 failed**, workspace build and Biome lint all passed locally. The local run has no `AQA_TEST_POSTGRES_DSN`, so PostgreSQL-dependent tests remain explicit non-evidence skips; GitHub CI run `35205836642` has PostgreSQL integration and Bun tests passed, while Node 22 and Build were still running at ledger update time. No Copilot review was requested or awaited per user instruction.
+
+# 2026-09-17 — scoped runner JWT authentication
+
+- Added `RunnerJwtAuthorizer` with an RS256-only trust boundary, exact issuer/audience, required expiry, optional bounded not-before, runner subject and strict `org/project` or explicit `org/*` scopes. `aqa admin` now wires the verifier from `AQA_RUNNER_JWT_PUBLIC_KEY`, `AQA_RUNNER_JWT_ISSUER` and `AQA_RUNNER_JWT_AUDIENCE`, rejecting partial configuration; static `AQA_RUNNER_TOKEN` remains an explicit bootstrap fallback.
+- Evidence: auth build/typecheck and **33 tests passed**, kit typecheck and its **135 passed / 2 platform skips** suite passed. Live IdP token issuance/rotation, mTLS and multi-process server-to-worker JWT journey remain deployment evidence.

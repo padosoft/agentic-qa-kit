@@ -28,6 +28,7 @@ import {
   OidcSessionManager,
   PostgresScimRateLimiter,
   PostgresScimTokenStore,
+  RunnerJwtAuthorizer,
   ScimRateLimiter,
   ScimTokenManager,
   allows,
@@ -202,7 +203,28 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const queueDsn = opts.queueDsn ?? process.env.AQA_QUEUE_DSN;
   const queue = opts.queue ?? (queueDsn ? new PostgresRunnerQueue(queueDsn) : new RunnerQueue());
   const runnerToken = process.env.AQA_RUNNER_TOKEN?.trim();
-  if (queueDsn && !opts.runnerAuthorize && !runnerToken) {
+  const runnerJwtPublicKey = process.env.AQA_RUNNER_JWT_PUBLIC_KEY?.trim();
+  const runnerJwtIssuer = process.env.AQA_RUNNER_JWT_ISSUER?.trim();
+  const runnerJwtAudience = process.env.AQA_RUNNER_JWT_AUDIENCE?.trim();
+  const hasRunnerJwtConfig = Boolean(runnerJwtPublicKey || runnerJwtIssuer || runnerJwtAudience);
+  const runnerJwtComplete = Boolean(runnerJwtPublicKey && runnerJwtIssuer && runnerJwtAudience);
+  if (hasRunnerJwtConfig && !runnerJwtComplete) {
+    await store.close();
+    await (queue as { close?: () => Promise<void> }).close?.();
+    return {
+      ok: false,
+      error:
+        'admin: AQA_RUNNER_JWT_PUBLIC_KEY, AQA_RUNNER_JWT_ISSUER and AQA_RUNNER_JWT_AUDIENCE must be configured together',
+    };
+  }
+  const runnerJwt = runnerJwtComplete
+    ? new RunnerJwtAuthorizer({
+        public_key_pem: runnerJwtPublicKey ?? '',
+        issuer: runnerJwtIssuer ?? '',
+        audience: runnerJwtAudience ?? '',
+      })
+    : undefined;
+  if (queueDsn && !opts.runnerAuthorize && !runnerToken && !runnerJwt) {
     await store.close();
     await (queue as { close?: () => Promise<void> }).close?.();
     return {
@@ -242,9 +264,11 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       })),
     ...(opts.runnerAuthorize
       ? { runnerAuthorize: opts.runnerAuthorize }
-      : runnerToken
-        ? { runnerAuthorize: bearerTokenAuthorizer(runnerToken) }
-        : {}),
+      : runnerJwt
+        ? { runnerAuthorize: (headers: Record<string, string>) => runnerJwt.authorize(headers) }
+        : runnerToken
+          ? { runnerAuthorize: bearerTokenAuthorizer(runnerToken) }
+          : {}),
     ...(opts.scimAuthorize
       ? { scimAuthorize: opts.scimAuthorize }
       : scimTokenManager

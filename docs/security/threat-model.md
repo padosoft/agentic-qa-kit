@@ -43,7 +43,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | Per-runner mTLS or signed JWT (design intent for `@aqa/auth` + `@aqa/server`). The current `/api/runner/jobs/next` route in `packages/server/src/api.ts` ships with `requires: null` — runner-credential validation lands in a future server iteration. | **Partial — design specified, enforcement deferred.** |
+| S-01 | Runner impersonation (rogue worker claims fleet credential) | High | `RunnerJwtAuthorizer` verifies RS256 signature, issuer, audience, lifetime and explicit org/project scopes; `@aqa/server` enforces the returned scopes on dequeue and ACK/fail. `aqa admin` wires the verifier from the three `AQA_RUNNER_JWT_*` settings. | **Mitigated at the configured JWT boundary; live IdP issuance, rotation and mTLS remain deployment evidence.** |
 | S-02 | User session hijack via cookie theft | High | `Secure` + `HttpOnly` + `SameSite=Lax` enforced as Risk invariant; pack-security asserts it. | Mitigated |
 | S-03 | Pack-author spoofing (malicious pack pretending to be `@aqa/...`) | Critical | Pack signing (cosign-compatible). `@aqa/pack-scanner` currently raises a **critical** issue for unsigned packs that include **shell probes** specifically — full unsigned-≥1.0 rejection is broader than what the current scanner rule covers. | **Partial — covered for unsigned-shell-pack; broader unsigned rejection is roadmap.** |
 | S-04 | LLM vendor MITM (response forgery) | Medium | TLS pinning at adapter layer (`@aqa/llm-adapters`); content-hash deterministic replay for fixture mode. | Partial — pinning per-adapter, not enforced. |

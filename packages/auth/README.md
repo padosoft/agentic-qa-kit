@@ -16,6 +16,14 @@ backend is configured, so callers must use `authenticateAsync`. The adapter
 never logs client secrets or bearer tokens and never grants an implicit admin
 role.
 
+`RunnerJwtAuthorizer` verifies dedicated runner credentials using an explicit
+RS256 trust root, issuer, audience, bounded clock skew, expiry/not-before and
+tenant/project scopes. It rejects unsigned or algorithm-switched tokens and
+does not infer a wildcard from malformed scope text. `aqa admin` can wire it
+from `AQA_RUNNER_JWT_PUBLIC_KEY`, `AQA_RUNNER_JWT_ISSUER` and
+`AQA_RUNNER_JWT_AUDIENCE`; all three must be present together. Static
+`AQA_RUNNER_TOKEN` remains only as an explicit bootstrap compatibility path.
+
 `WebAuthnLifecycle` supplies the server-side challenge/assertion boundary for
 passkeys. Challenges are random, short-lived and single-use; assertions are
 bound to the authenticated user, HTTPS origin, RP ID and registered credential.
