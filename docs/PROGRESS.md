@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added restore-drill evidence validation.** `@aqa/compliance` now checks a
+  drill against the signed backup inventory: source and restored manifest
+  identity, monotonic timestamps, observed RPO/RTO against approved objectives,
+  tenant isolation, audit-chain, queue-fencing and secret-redaction controls.
+  Drift, objective violations and incomplete controls fail closed. Evidence:
+  compliance tests **15 passed / 0 failed**, build/typecheck/Biome/diff-check
+  pass. This validates submitted evidence; it does not execute a cluster
+  restore.
+
 - **Hardened AI scenario generation provenance and fallback validity.** Review
   queue items now retain provider/model/version plus SHA-256 hashes for the
   invariant, prompt and raw model response, while raw prompt/response text is

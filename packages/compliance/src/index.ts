@@ -35,3 +35,4 @@ export {
   type SignedBackupInventory,
   type BackupInventory,
 } from './dr-manifest.js';
+export { assertRestoreDrillEvidence, type RestoreDrillEvidence } from './restore-drill.js';
