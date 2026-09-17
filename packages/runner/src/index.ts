@@ -36,6 +36,7 @@ export {
 } from './agent.js';
 export {
   AgentTrajectoryStore,
+  PostgresAgentTrajectoryStore,
   AgentTrajectoryRecorder,
   agentTrajectoryDigest,
   type AgentModelIdentity,
@@ -43,6 +44,8 @@ export {
   type AgentTrajectoryRecorderOptions,
   type AgentTrajectoryArtifact,
   type AgentTrajectoryStoreOptions,
+  type PostgresTrajectoryClient,
+  type PostgresTrajectoryStoreOptions,
   type AgentTrajectorySnapshot,
   type AgentTrajectoryStep,
   type AgentTrajectoryVerifyResult,

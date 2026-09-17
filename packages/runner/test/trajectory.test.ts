@@ -7,6 +7,7 @@ import { EventChainWriter } from '../dist/events.js';
 import {
   AgentTrajectoryRecorder,
   AgentTrajectoryStore,
+  PostgresAgentTrajectoryStore,
   verifyAgentTrajectory,
 } from '../dist/trajectory.js';
 
@@ -130,5 +131,51 @@ describe('AgentTrajectoryRecorder', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('persists immutable trajectory identities through the PostgreSQL contract', async () => {
+    const rows = new Map<string, { snapshot_sha256: string; envelope: unknown }>();
+    const client = {
+      async unsafe(query: string, parameters: unknown[] = []) {
+        if (query.startsWith('CREATE TABLE')) return [];
+        const run = String(parameters[0]);
+        const scenario = String(parameters[1]);
+        const key = `${run}/${scenario}`;
+        if (query.startsWith('INSERT')) {
+          if (rows.has(key)) return [];
+          rows.set(key, {
+            snapshot_sha256: String(parameters[2]),
+            envelope: JSON.parse(String(parameters[3])),
+          });
+          return [{ snapshot_sha256: String(parameters[2]) }];
+        }
+        const row = rows.get(key);
+        return row ? [{ run_id: run, scenario_id: scenario, ...row }] : [];
+      },
+    };
+    const store = new PostgresAgentTrajectoryStore({ client });
+    const snapshot = recorder().snapshot();
+    const first = await store.save(snapshot);
+    const retry = await store.save(snapshot);
+    assert.equal(retry.digest, first.digest);
+    await assert.rejects(
+      () => store.save({ ...snapshot, agent_id: 'different-agent' }),
+      /immutable and already exists/,
+    );
+    assert.deepEqual(await store.load(snapshot.run_id, snapshot.scenario_id), snapshot);
+    const stored = rows.get(`${snapshot.run_id}/${snapshot.scenario_id}`);
+    assert.ok(stored);
+    stored.envelope = { ...(stored.envelope as object), snapshot_sha256: '0'.repeat(64) };
+    await assert.rejects(
+      () => store.load(snapshot.run_id, snapshot.scenario_id),
+      /integrity|database digest/,
+    );
+  });
+
+  it('requires a DSN or injected client and rejects unsafe database identities', async () => {
+    assert.throws(() => new PostgresAgentTrajectoryStore({}), /PostgreSQL DSN is required/);
+    const client = { unsafe: async () => [] };
+    const store = new PostgresAgentTrajectoryStore({ client });
+    await assert.rejects(() => store.load('../escape', 'scenario-agent'), /path segment/);
   });
 });
