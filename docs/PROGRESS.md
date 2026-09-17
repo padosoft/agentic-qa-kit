@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added bounded source-aware risk discovery.** `aqa risk discover
+  --method source` scans up to 200 safe, bounded source/manifest files and
+  emits only deterministic risks whose authentication, interpreter, outbound
+  request or secret signals are observed. Each result carries source-aware and
+  bounded evidence-path tags; no source leaves the project. Evidence:
+  risk-discovery tests **6 passed / 0 failed**, kit build/bundle/typecheck/
+  Biome/diff-check pass. This is an explainable heuristic baseline, not an
+  autonomous LLM/security review.
+
 - **Added W3C trace propagation across HTTP probe boundaries.**
   `makeHttpProbeRunner` now accepts an explicit trusted trace context and
   propagates `traceparent` to the target, overriding any scenario-supplied

@@ -66,6 +66,30 @@ describe('risk discovery', () => {
     assert.ok(map.risks.some((risk) => risk.tags.includes('fmea:concurrency-race')));
   });
 
+  it('generates source-aware risks from bounded repository signals', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-risk-source-'));
+    mkdirSync(join(root, 'src'));
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        dependencies: { postgres: '1.0.0', jsonwebtoken: '1.0.0', axios: '1.0.0' },
+      }),
+    );
+    writeFileSync(
+      join(root, 'src', 'app.ts'),
+      'fetch("https://payments.test"); const key = process.env.API_KEY;\n',
+    );
+    const result = runRiskDiscover({ root, method: 'source', scope: 'src' });
+    assert.equal(result.ok, true);
+    assert.equal(result.risk_count, 4);
+    const map = yamlParse(readFileSync(join(root, '.aqa', 'risk-map.yaml'), 'utf8')) as {
+      risks: Array<{ tags: string[]; description: string }>;
+    };
+    assert.ok(map.risks.every((risk) => risk.tags.includes('source-aware')));
+    assert.ok(map.risks.every((risk) => risk.description.includes('Source-aware signal')));
+    assert.ok(map.risks.some((risk) => risk.tags.some((tag) => tag.startsWith('evidence:'))));
+  });
+
   it('rejects traversal and symlink targets', () => {
     const root = mkdtempSync(join(tmpdir(), 'aqa-risk-'));
     assert.equal(runRiskDiscover({ root, method: 'stride', scope: '../secrets' }).ok, false);

@@ -115,7 +115,7 @@ ${bold('Commands')}
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
-  risk discover --method stride|owasp|fmea Generate a deterministic framework risk baseline
+  risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -424,8 +424,8 @@ async function main(): Promise<number> {
         return 1;
       }
       const method = args.values.get('method');
-      if (method !== 'stride' && method !== 'owasp' && method !== 'fmea') {
-        console.error(red('aqa risk discover: --method must be stride, owasp or fmea'));
+      if (method !== 'stride' && method !== 'owasp' && method !== 'fmea' && method !== 'source') {
+        console.error(red('aqa risk discover: --method must be stride, owasp, fmea or source'));
         return 1;
       }
       const result = runRiskDiscover({
