@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Hardened the DR evidence CLI after automated review.** Restore evidence now
+  must reconcile `observed_rto_minutes` with the raw `started_at` and
+  `completed_at` timestamps, bundled-entrypoint tests cover both DR commands
+  and missing `--public-key` values, and CLI failures use the shared
+  redaction-safe error formatter. Targeted compliance/kit tests are green;
+  full repository gates are the next proof before pushing the PR update.
+
 - **Added DR evidence CLI gates.** `aqa dr inventory` now validates and hashes a
   machine-readable backup inventory, verifies signed inventory envelopes only
   with an explicit Ed25519 public key, and `aqa dr restore` validates a restore

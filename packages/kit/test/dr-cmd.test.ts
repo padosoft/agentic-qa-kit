@@ -94,9 +94,26 @@ describe('aqa dr command boundary', () => {
   it('rejects restore drill evidence that violates recovery objectives', () => {
     const result = runDrRestore({
       inventoryFile: tempFile('inventory.json', inventory),
-      evidenceFile: tempFile('restore.json', { ...restoreEvidence, observed_rto_minutes: 61 }),
+      evidenceFile: tempFile('restore.json', {
+        ...restoreEvidence,
+        completed_at: '2026-09-18T11:01:00Z',
+        observed_rto_minutes: 61,
+      }),
     });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /RTO/);
+  });
+
+  it('rejects restore drill evidence whose declared RTO disagrees with timestamps', () => {
+    const result = runDrRestore({
+      inventoryFile: tempFile('inventory.json', inventory),
+      evidenceFile: tempFile('restore.json', {
+        ...restoreEvidence,
+        completed_at: '2026-09-18T11:00:00Z',
+        observed_rto_minutes: 20,
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /observed RTO/);
   });
 });

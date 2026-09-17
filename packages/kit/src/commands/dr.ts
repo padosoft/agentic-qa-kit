@@ -6,6 +6,7 @@ import {
   parseBackupInventory,
   verifyBackupInventory,
 } from '@aqa/compliance';
+import { safeErrorMessage } from '@aqa/observability';
 
 export interface DrInventoryOptions {
   inventoryFile: string;
@@ -40,7 +41,7 @@ export function runDrInventory(opts: DrInventoryOptions): DrInventoryResult {
       signature,
     };
   } catch (error) {
-    return { ok: false, error: safeMessage(error) };
+    return { ok: false, error: safeErrorMessage(error) };
   }
 }
 
@@ -58,7 +59,7 @@ export function runDrRestore(opts: DrRestoreOptions): DrRestoreResult {
       observed_rto_minutes: evidence.observed_rto_minutes,
     };
   } catch (error) {
-    return { ok: false, error: safeMessage(error) };
+    return { ok: false, error: safeErrorMessage(error) };
   }
 }
 
@@ -83,10 +84,6 @@ function readJson(path: string): unknown {
   } catch {
     throw new Error('DR evidence file must be readable JSON');
   }
-}
-
-function safeMessage(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

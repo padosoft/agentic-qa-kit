@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — CLI evidence must validate claimed timing against raw timestamps
+
+An RTO field that is merely below the approved objective can still be false.
+Restore evidence must derive elapsed time from trusted event timestamps and
+reject disagreement; CLI tests must exercise the bundled artifact and missing
+required flag values, while user-facing errors should use the central
+redaction-safe formatter.
+
 # 2026-09-18 — DR evidence needs a CLI gate
 
 A validated library contract is easy to bypass operationally if the runbook has

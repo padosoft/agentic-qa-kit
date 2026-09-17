@@ -428,6 +428,10 @@ async function main(): Promise<number> {
       printHeader('dr');
       const subcommand = args.positionals[0];
       const publicKeyFile = args.values.get('public-key');
+      if (args.flags.has('public-key') && !args.values.has('public-key')) {
+        console.error(red('aqa dr: --public-key requires a value'));
+        return 1;
+      }
       if (subcommand === 'inventory') {
         const inventoryFile = args.positionals[1];
         if (!inventoryFile) {

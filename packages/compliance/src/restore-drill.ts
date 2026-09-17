@@ -58,6 +58,11 @@ export function assertRestoreDrillEvidence(
     throw new Error('restore drill artifact manifest changed during restore');
   if (Date.parse(evidence.completed_at) <= Date.parse(evidence.started_at))
     throw new Error('restore drill completed_at must be after started_at');
+  const elapsedRtoMinutes = Math.ceil(
+    (Date.parse(evidence.completed_at) - Date.parse(evidence.started_at)) / 60_000,
+  );
+  if (evidence.observed_rto_minutes !== elapsedRtoMinutes)
+    throw new Error('restore drill observed RTO does not match started_at/completed_at');
   if (evidence.observed_rpo_minutes > inventory.objectives.rpo_minutes)
     throw new Error('restore drill exceeded the approved RPO');
   if (evidence.observed_rto_minutes > inventory.objectives.rto_minutes)
