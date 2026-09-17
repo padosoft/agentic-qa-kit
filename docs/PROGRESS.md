@@ -812,3 +812,8 @@
 
 - SQL runner adapters now receive the worker `AbortSignal`; pre-cancelled queries are rejected and cancellation is rechecked after adapter completion. PostgreSQL preserves its bounded read-only transaction and statement timeout, then reports cancellation if the signal arrived; the underlying driver has no claimed native abort primitive.
 - Evidence: runner build/typecheck, **22 tests passed**, including signal propagation to an injected adapter, and `git diff --check` passed. Native PostgreSQL query cancellation, live DSN evidence and resource cleanup remain open.
+
+# 2026-09-17 — LLM budget enforcement at adapter boundary
+
+- Added `BudgetedLlmAdapter`: it performs pre-dispatch admission using a configurable token estimate, charges authoritative provider usage after the call, exposes a budget snapshot, and blocks subsequent dispatches once the USD budget is exhausted. Unknown model pricing remains fail-closed through `BudgetTracker`.
+- Evidence: LLM adapter build and **15 tests passed**, including no-dispatch admission denial and post-call exhaustion. Default character-based estimation is conservative scaffolding; production should inject versioned tokenizer/pricing data and persist aggregate usage across workers/projects.

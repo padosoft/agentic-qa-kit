@@ -1065,6 +1065,14 @@ database operation. Keep PostgreSQL statement timeouts and read-only
 transactions as bounded controls, and do not claim native query cancellation
 until the selected client and live database prove it.
 
+# 2026-09-17 — enforce LLM budgets before and after the provider call
+
+Charging only after a response permits an over-budget dispatch; checking only a
+rough estimate loses authoritative usage. Use both boundaries: estimate before
+dispatch to block known overages, then charge provider-reported tokens and stop
+future calls when the actual spend reaches the limit. Estimation and pricing
+must be versioned deployment inputs, not hidden constants.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the

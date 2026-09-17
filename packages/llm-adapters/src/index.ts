@@ -6,3 +6,4 @@ export { AnthropicAdapter, type AnthropicOptions } from './anthropic.js';
 export { BedrockAdapter, type BedrockOptions } from './bedrock.js';
 export { CohereAdapter, type CohereOptions } from './cohere.js';
 export { GoogleAdapter, type GoogleOptions } from './google.js';
+export { BudgetedLlmAdapter, type BudgetedLlmAdapterOptions } from './budgeted.js';

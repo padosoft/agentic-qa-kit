@@ -134,6 +134,9 @@
     "packages/llm-adapters": {
       "name": "@aqa/llm-adapters",
       "version": "0.0.1",
+      "dependencies": {
+        "@aqa/cost": "workspace:*",
+      },
     },
     "packages/methodology": {
       "name": "@aqa/methodology",
