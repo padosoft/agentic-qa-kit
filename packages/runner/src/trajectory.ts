@@ -9,6 +9,8 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import type { Event } from '@aqa/schemas';
+import postgres from 'postgres';
+import type { Sql } from 'postgres';
 import type { EventChainWriter } from './events.js';
 
 function canonicalise(value: unknown): string {
@@ -135,6 +137,148 @@ export class AgentTrajectoryStore {
       throw new Error('trajectory artifact integrity verification failed');
     return { snapshot: envelope.snapshot, digest };
   }
+}
+
+export interface PostgresTrajectoryStoreOptions {
+  dsn?: string;
+  client?: PostgresTrajectoryClient;
+  max_bytes?: number;
+}
+
+export interface PostgresTrajectoryClient {
+  unsafe(query: string, parameters?: unknown[]): Promise<unknown>;
+}
+
+interface StoredPostgresTrajectory {
+  run_id: string;
+  scenario_id: string;
+  snapshot_sha256: string;
+  envelope: unknown;
+}
+
+/** Cross-replica trajectory store with an immutable identity key. */
+export class PostgresAgentTrajectoryStore {
+  private readonly sql: PostgresTrajectoryClient;
+  private readonly maxBytes: number;
+  private readonly ownedClient: Sql | undefined;
+  private readonly ready: Promise<void>;
+
+  constructor(options: PostgresTrajectoryStoreOptions) {
+    if (options.client) {
+      this.sql = options.client;
+    } else {
+      if (!options.dsn?.trim()) throw new Error('trajectory PostgreSQL DSN is required');
+      this.ownedClient = postgres(options.dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
+      this.sql = this.ownedClient as unknown as PostgresTrajectoryClient;
+    }
+    this.maxBytes = options.max_bytes ?? 1_048_576;
+    if (!Number.isSafeInteger(this.maxBytes) || this.maxBytes < 1)
+      throw new Error('trajectory store max_bytes must be a positive safe integer');
+    this.ready = this.migrate();
+  }
+
+  async save(snapshot: AgentTrajectorySnapshot): Promise<AgentTrajectoryArtifact> {
+    await this.ready;
+    const run = safeSegment(snapshot.run_id, 'run_id');
+    const scenario = safeSegment(snapshot.scenario_id, 'scenario_id');
+    if (!verifyAgentTrajectory(snapshot).ok) throw new Error('cannot persist invalid trajectory');
+    const digest = agentTrajectoryDigest(snapshot);
+    const envelope: StoredTrajectoryEnvelope = {
+      schema_version: '1',
+      snapshot,
+      snapshot_sha256: digest,
+    };
+    const serialized = JSON.stringify(envelope);
+    if (Buffer.byteLength(serialized, 'utf8') > this.maxBytes)
+      throw new Error('trajectory artifact exceeds byte budget');
+    const inserted = await this.query<{ snapshot_sha256: string }>(
+      `INSERT INTO aqa_agent_trajectories
+       (run_id, scenario_id, snapshot_sha256, envelope)
+       VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (run_id, scenario_id) DO NOTHING
+       RETURNING snapshot_sha256`,
+      [run, scenario, digest, serialized],
+    );
+    if (inserted[0]?.snapshot_sha256 === digest)
+      return { path: this.artifactPath(run, scenario), digest };
+    const existing = await this.query<StoredPostgresTrajectory>(
+      `SELECT run_id, scenario_id, snapshot_sha256, envelope
+       FROM aqa_agent_trajectories WHERE run_id = $1 AND scenario_id = $2`,
+      [run, scenario],
+    );
+    const row = existing[0];
+    if (!row) throw new Error('trajectory artifact insert did not persist');
+    if (row.snapshot_sha256 !== digest)
+      throw new Error('trajectory artifact is immutable and already exists');
+    return { path: this.artifactPath(run, scenario), digest };
+  }
+
+  async load(runId: string, scenarioId: string): Promise<AgentTrajectorySnapshot> {
+    await this.ready;
+    const run = safeSegment(runId, 'run_id');
+    const scenario = safeSegment(scenarioId, 'scenario_id');
+    const rows = await this.query<StoredPostgresTrajectory>(
+      `SELECT run_id, scenario_id, snapshot_sha256, envelope
+       FROM aqa_agent_trajectories WHERE run_id = $1 AND scenario_id = $2`,
+      [run, scenario],
+    );
+    const row = rows[0];
+    if (!row) throw new Error('trajectory artifact cannot be read');
+    const envelope = parseEnvelope(row.envelope);
+    if (envelope.snapshot.run_id !== run || envelope.snapshot.scenario_id !== scenario)
+      throw new Error('trajectory artifact identity mismatch');
+    if (row.snapshot_sha256 !== envelope.snapshot_sha256)
+      throw new Error('trajectory artifact database digest mismatch');
+    const digest = agentTrajectoryDigest(envelope.snapshot);
+    if (digest !== envelope.snapshot_sha256 || !verifyAgentTrajectory(envelope.snapshot).ok)
+      throw new Error('trajectory artifact integrity verification failed');
+    return envelope.snapshot;
+  }
+
+  async close(): Promise<void> {
+    await this.ready;
+    if (this.ownedClient) await this.ownedClient.end({ timeout: 5 });
+  }
+
+  private artifactPath(run: string, scenario: string): string {
+    return `postgres:trajectory/${run}/${scenario}`;
+  }
+
+  private async migrate(): Promise<void> {
+    await this.query(
+      `CREATE TABLE IF NOT EXISTS aqa_agent_trajectories (
+        run_id text NOT NULL,
+        scenario_id text NOT NULL,
+        snapshot_sha256 text NOT NULL CHECK (snapshot_sha256 ~ '^[a-f0-9]{64}$'),
+        envelope jsonb NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (run_id, scenario_id)
+      )`,
+    );
+  }
+
+  private async query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {
+    return (await this.sql.unsafe(text, values)) as T[];
+  }
+}
+
+function parseEnvelope(value: unknown): StoredTrajectoryEnvelope {
+  let parsed: unknown;
+  try {
+    parsed = typeof value === 'string' ? JSON.parse(value) : value;
+  } catch {
+    throw new Error('trajectory artifact envelope is invalid');
+  }
+  if (!parsed || typeof parsed !== 'object')
+    throw new Error('trajectory artifact envelope is invalid');
+  const envelope = parsed as Partial<StoredTrajectoryEnvelope>;
+  if (
+    envelope.schema_version !== '1' ||
+    !envelope.snapshot ||
+    typeof envelope.snapshot_sha256 !== 'string'
+  )
+    throw new Error('trajectory artifact envelope is invalid');
+  return envelope as StoredTrajectoryEnvelope;
 }
 
 export interface AgentModelIdentity {

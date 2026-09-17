@@ -8,8 +8,11 @@ Both consume opaque scores and model identities, not private judge rationales.
 
 `AgentTrajectoryStore` persists validated, digest-bound trajectory envelopes
 with atomic writes, size bounds and immutable `(run_id, scenario_id)` keys.
-Reads verify the digest before returning the snapshot; mount the host root on
-WORM/Object-Lock storage when retention guarantees are required.
+Reads verify the digest before returning the snapshot.
+`PostgresAgentTrajectoryStore` provides the same immutable contract across
+worker replicas with atomic conflict handling and read-time invariant checks.
+Mount the production artifact domain on WORM/Object-Lock storage when legal
+retention guarantees are required.
 
 Orchestrator runner for `agentic-qa-kit`. Ships:
 

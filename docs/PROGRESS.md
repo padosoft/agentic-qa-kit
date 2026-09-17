@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added cross-replica PostgreSQL trajectory persistence.**
+  `PostgresAgentTrajectoryStore` uses an immutable `(run_id, scenario_id)`
+  primary key, atomic conflict-safe insert, bounded envelopes and digest plus
+  invariant verification on read. Evidence: runner suite **65 pass / 0 fail**
+  including idempotent retry, conflict, tamper, traversal and injected-SQL
+  cases; live PostgreSQL backup/PITR/restore and WORM evidence remain open.
+  ADR-196 records the storage boundary.
+
 - **Added authenticated MCP HTTP transport.** `McpHttpTransport` now mounts
   the bounded JSON request/response MCP surface through the Fetch API: every
   request is authenticated, sessions are principal-bound and capped, bodies

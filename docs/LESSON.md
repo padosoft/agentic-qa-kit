@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-17 — shared trajectory storage needs an immutable identity key
+
+Cross-replica retries cannot rely on a filesystem check. Use a database
+primary key for `(run_id, scenario_id)`, insert atomically, and compare the
+stored digest on conflict. Verify both the JSON envelope and trajectory
+invariants after reading; PostgreSQL persistence still does not prove backup,
+PITR or WORM operations.
+
 # 2026-09-17 — bind MCP sessions to identity at the transport edge
 
 An authenticated JSON-RPC method is not enough for a deployed MCP endpoint.
