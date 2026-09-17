@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
+  bounded, fail-closed verifier with constant-time code comparison, Base32
+  decoding, configurable period/digits/skew window and RFC vector coverage.
+  This deliberately does not claim enrollment, secret persistence, recovery
+  codes or WebAuthn; those remain separate security work. Evidence: auth
+  suite **18 passed, 3 PostgreSQL-dependent skips, 0 failures**, lint and
+  diff-check pass. The RFC vector caught and fixed an unsigned HMAC truncation
+  issue and an incorrect test secret encoding.
+
 - **Formal risk coverage measurement shipped.** `@aqa/methodology` now
   computes the M2 weighted score (invariant mapping 35%, oracle-backed
   scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health

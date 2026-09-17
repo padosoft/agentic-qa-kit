@@ -736,3 +736,14 @@ deployment chart and exercise it in the real database job.
 Checking an assertion ID and inserting it as two operations permits concurrent
 replay. Use a unique key with an atomic insert result, retain expiry cleanup,
 and keep XML signature verification outside the persistence implementation.
+# 2026-09-17 — TOTP verification is not MFA lifecycle management
+
+An RFC 6238 verifier can safely validate a submitted code without becoming an
+enrollment or secret-management system. Keep secret creation, Vault/KMS-backed
+storage, replay/rate limits, recovery codes and WebAuthn as explicit follow-up
+boundaries; never log or persist the shared secret in the verifier path.
+
+The RFC vector also exposed two easy implementation traps: HMAC dynamic
+truncation must remain unsigned in JavaScript, and Base32 decoding must avoid
+32-bit bitwise overflow. Test vectors should include the exact encoded secret,
+not only the underlying ASCII value.

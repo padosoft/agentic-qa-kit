@@ -10,6 +10,7 @@ import {
   allows,
   enforceMfa,
   mfaRequired,
+  verifyTotp,
 } from '../dist/index.js';
 
 const viewer = { id: '1', email: 'v@x.test', display_name: 'V', roles: ['viewer' as const] };
@@ -41,6 +42,23 @@ describe('MFA policy', () => {
       ...admin,
       mfa_verified: true,
     });
+  });
+
+  it('verifies RFC 6238 TOTP vectors with bounded clock skew', () => {
+    const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+    assert.equal(
+      verifyTotp({ secret_base32: secret, code: '94287082', now_ms: 59_000, digits: 8, window: 0 }),
+      true,
+    );
+    assert.equal(
+      verifyTotp({ secret_base32: secret, code: '94287081', now_ms: 59_000, digits: 8, window: 0 }),
+      false,
+    );
+    assert.equal(
+      verifyTotp({ secret_base32: secret, code: '94287082', now_ms: 89_000, digits: 8, window: 1 }),
+      true,
+    );
+    assert.equal(verifyTotp({ secret_base32: secret, code: 'bad', now_ms: 59_000 }), false);
   });
 });
 

@@ -1,5 +1,11 @@
 export { User, Role, Permission, AuthSession } from './types.js';
-export { enforceMfa, mfaRequired, type MfaPolicy } from './mfa.js';
+export {
+  enforceMfa,
+  mfaRequired,
+  verifyTotp,
+  type MfaPolicy,
+  type TotpVerifyOptions,
+} from './mfa.js';
 export {
   ScimProvisioner,
   ScimValidationError,
