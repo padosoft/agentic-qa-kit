@@ -18,5 +18,10 @@ export {
   type IntegrationNotification,
   type IntegrationProvider,
 } from './providers.js';
-export { HttpWebhookTransport, type HttpWebhookTransportOptions } from './http-transport.js';
+export {
+  HttpWebhookTransport,
+  NodePinnedHttpsWebhookTransport,
+  type HttpWebhookTransportOptions,
+  type NodePinnedHttpsTransportOptions,
+} from './http-transport.js';
 export { VaultSecretResolver, type VaultSecretResolverOptions } from './vault-secrets.js';

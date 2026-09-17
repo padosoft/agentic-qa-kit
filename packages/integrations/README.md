@@ -14,6 +14,8 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - redacted audit observer hooks for Prometheus/OTel/log adapters.
 - bounded HTTP transport with timeout, no redirects and `Retry-After` parsing.
 - lazy `VaultSecretResolver` support for Vault KV-v2 without persisting tokens.
+- Node `NodePinnedHttpsWebhookTransport` for one-shot DNS resolution, TLS SNI
+  pinning and private/link-local address rejection at connection time.
 
 ## Setup
 
@@ -37,5 +39,8 @@ tenant, integration, stable ID, attempt number and HTTP status). It never
 receives the URL, payload, secret or secret reference.
 
 `HttpWebhookTransport` is safe against redirect-based destination changes and
-limits response handling. DNS rebinding and private/link-local IP rejection
-still require a connection-aware transport/runtime policy.
+limits response handling. For direct Node egress, use
+`NodePinnedHttpsWebhookTransport`: it resolves all answers once, rejects a
+private/local answer in the set, and connects to a selected IP while retaining
+the original hostname for TLS SNI and `Host`. A service-mesh egress proxy may
+provide the equivalent connection-time policy for other runtimes.

@@ -55,6 +55,13 @@
   response store; the PostgreSQL CI contract exercises two clients competing
   for one mutation key. The local memory store remains an explicit fallback.
 
+- **Added connection-aware webhook egress.** `NodePinnedHttpsWebhookTransport`
+  resolves DNS once, rejects every private/local/multicast answer before
+  connecting, pins the selected IP in the TLS socket while retaining hostname
+  SNI/Host, disables redirect behavior by construction and bounds response
+  bytes. A regression test proves mixed public/private DNS answers are denied;
+  non-Node runtimes must use an equivalent egress proxy policy.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.

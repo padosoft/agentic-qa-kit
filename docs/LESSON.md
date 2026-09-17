@@ -28,6 +28,12 @@
   coalesce concurrent requests; cache only final non-5xx responses; and make
   the durable store an explicit boot dependency for multi-replica production.
 
+- **DNS validation must govern the socket, not only the URL.** An allowlisted
+  hostname can resolve to a private address or change between validation and
+  fetch. Resolve once, reject the entire answer set if any address is unsafe,
+  and connect directly to the pinned IP with original TLS SNI/Host; otherwise
+  delegate the same invariant to a connection-aware egress proxy.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

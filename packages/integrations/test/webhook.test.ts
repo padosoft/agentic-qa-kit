@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   HttpWebhookTransport,
   MemoryWebhookQueue,
+  NodePinnedHttpsWebhookTransport,
   PostgresWebhookQueue,
   VaultSecretResolver,
   WebhookDestinationPolicy,
@@ -191,6 +192,18 @@ describe('outbound webhooks', () => {
       () =>
         new VaultSecretResolver({ endpoint: 'http://vault.example.test', token: async () => 'x' }),
       /HTTPS/,
+    );
+  });
+
+  it('rejects private and mixed DNS answers before opening an outbound connection', async () => {
+    const policy = new WebhookDestinationPolicy(['https://hooks.example.test']);
+    const transport = new NodePinnedHttpsWebhookTransport({
+      destinationPolicy: policy,
+      resolver: async () => ['93.184.216.34', '127.0.0.1'],
+    });
+    await assert.rejects(
+      () => transport.send({ url: 'https://hooks.example.test/hook', body: '{}', headers: {} }),
+      /private or local address/,
     );
   });
 });
