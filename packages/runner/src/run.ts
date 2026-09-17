@@ -382,9 +382,14 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
     // UUID entropy gives each occurrence a globally unique code while the
     // legacy four-digit prefix remains accepted for imported fixtures.
     const seed = randomUUID().replace(/\D/g, '').slice(0, 20).padEnd(20, '0');
-    const agreement = oracleResults.length
-      ? oracleResults.reduce((s, o) => s + o.agreement, 0) / oracleResults.length
-      : 0;
+    const weighted = oracleResults.reduce(
+      (total, oracle, index) => {
+        const weight = opts.scenario.oracles[index]?.weight ?? 1;
+        return { score: total.score + oracle.agreement * weight, weight: total.weight + weight };
+      },
+      { score: 0, weight: 0 },
+    );
+    const agreement = weighted.weight > 0 ? weighted.score / weighted.weight : 0;
     finding = Finding.Finding.parse({
       schema_version: '1',
       id: `AQA-${year}-${seed}`,

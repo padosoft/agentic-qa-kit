@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Aligned finding confidence with declared oracle weights.** Runner findings
+  now use a weighted mean of oracle agreement instead of an unweighted average;
+  severity remains derived from the resolved risk. Evidence: runner build,
+  typecheck, targeted tests including the 1:3 weighting regression, Biome and
+  diff-check pass. Statistical calibration and project-specific weight quality
+  remain separate evidence.
+
 - **Fixed single-target agent bootstrap consistency.** Claude, Gemini and
   Copilot adapters now emit the canonical `AGENTS.md` they already reference,
   matching Codex behavior. Adapter tests cover every target's bootstrap and
