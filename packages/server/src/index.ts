@@ -56,6 +56,7 @@ export {
 export {
   AQA_MCP_PROTOCOL_VERSIONS,
   AqaMcpServer,
+  createMcpRunPort,
   type AqaMcpProtocolVersion,
   type McpEvidenceSummary,
   type McpJsonRpcRequest,
