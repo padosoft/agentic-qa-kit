@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Closed the trajectory verification loop.** `verifyAgentTrajectory()` now
+  checks identity, contiguous sequence, SHA-256 digests, token reconciliation
+  and (when supplied) one-to-one correspondence with agent hash-chain events.
+  Evidence: trajectory verifier suite **4 pass / 0 fail** including tamper and
+  event-mismatch cases. ADR-191 records the privacy-preserving replay boundary;
+  signatures, durable remote attestation and semantic grading remain separate.
+
 - **Added pinned opaque agent trajectory evidence.** `AgentTrajectoryRecorder`
   enforces contiguous step and token budgets, pins provider/model identity, and
   emits `llm_call`/`tool_call` audit events with SHA-256 digests and usage only.

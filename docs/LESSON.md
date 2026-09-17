@@ -1781,3 +1781,9 @@ Agent replay evidence must bind every call to one explicit provider/model
 identity and preserve contiguous step/token accounting. Store hashes and usage
 metadata rather than prompts or tool results; otherwise the trajectory becomes
 either non-reproducible or a sensitive data sink.
+# 2026-09-17 — recorder output needs an independent verifier
+
+Hashing payloads at write time does not prove that a later snapshot still
+matches the run. Verify sequence, totals, identity and event correspondence in
+a separate consumer; otherwise replay can accept a self-consistent but
+unrecorded trajectory.

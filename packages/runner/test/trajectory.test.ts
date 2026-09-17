@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
-import { AgentTrajectoryRecorder } from '../dist/trajectory.js';
+import { AgentTrajectoryRecorder, verifyAgentTrajectory } from '../dist/trajectory.js';
 
 function recorder(options: Partial<ConstructorParameters<typeof AgentTrajectoryRecorder>[0]> = {}) {
   return new AgentTrajectoryRecorder({
@@ -38,6 +38,9 @@ describe('AgentTrajectoryRecorder', () => {
     assert.equal(JSON.stringify(snapshot).includes('secret-value'), false);
     assert.equal(events.snapshot()[1]?.actor.model, 'fixture/agent-v1');
     assert.equal(events.snapshot()[0]?.kind, 'llm_call');
+    assert.deepEqual(verifyAgentTrajectory(snapshot, events.snapshot()), { ok: true });
+    const tampered = { ...snapshot, steps: [{ ...snapshot.steps[0], operation: 'unsafe' }] };
+    assert.equal(verifyAgentTrajectory(tampered, events.snapshot()).ok, false);
   });
 
   it('fails closed on step and token budgets', () => {
@@ -66,6 +69,28 @@ describe('AgentTrajectoryRecorder', () => {
       () =>
         recorder().recordLlmCall({ operation: 'plan', input: {}, usage: { input: -1, output: 0 } }),
       /token usage/,
+    );
+  });
+
+  it('rejects broken sequence and reconciled totals', () => {
+    const snapshot = recorder().snapshot();
+    assert.equal(verifyAgentTrajectory(snapshot).ok, true);
+    assert.equal(verifyAgentTrajectory({ ...snapshot, totals: { input: 1, output: 0 } }).ok, false);
+    assert.equal(
+      verifyAgentTrajectory({
+        ...snapshot,
+        steps: [
+          {
+            seq: 1,
+            kind: 'tool_call',
+            operation: 'read_cart',
+            status: 'completed',
+            input_sha256: '0'.repeat(64),
+          },
+        ],
+        totals: { input: 0, output: 0 },
+      }).ok,
+      false,
     );
   });
 });
