@@ -46,6 +46,8 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **Agent trajectory recorder** — `AgentTrajectoryRecorder` pins model identity,
   enforces step/token budgets and records ordered `llm_call`/`tool_call` digests
   without persisting prompts, completions or tool results.
+- **Trajectory verifier** — `verifyAgentTrajectory()` fails closed on altered
+  order, identity, digests, totals or missing/mismatched hash-chain events.
 
 The probe runner is injected as a function so the runner has no ambient network
 surface; production hosts choose and configure the HTTP/shell/Playwright/SQL

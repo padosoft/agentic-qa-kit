@@ -41,5 +41,7 @@ export {
   type AgentTrajectoryRecorderOptions,
   type AgentTrajectorySnapshot,
   type AgentTrajectoryStep,
+  type AgentTrajectoryVerifyResult,
   type RecordAgentCallOptions,
+  verifyAgentTrajectory,
 } from './trajectory.js';

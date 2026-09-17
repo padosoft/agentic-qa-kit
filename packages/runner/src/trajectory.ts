@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Event } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 
 function canonicalise(value: unknown): string {
@@ -75,6 +76,95 @@ export interface RecordAgentCallOptions {
   output?: unknown;
   status?: AgentTrajectoryStep['status'];
   usage?: AgentTokenUsage;
+}
+
+export interface AgentTrajectoryVerifyResult {
+  ok: boolean;
+  reason?: string;
+}
+
+const SHA256 = /^[a-f0-9]{64}$/u;
+
+/**
+ * Verify an opaque trajectory independently from the producer.
+ *
+ * When events are supplied, the verifier also binds every trajectory step to
+ * the corresponding hash-chain event. A snapshot alone proves accounting and
+ * digest shape; the event comparison proves that it was actually emitted by
+ * the run being replayed.
+ */
+export function verifyAgentTrajectory(
+  snapshot: AgentTrajectorySnapshot,
+  events: readonly Event.Event[] = [],
+): AgentTrajectoryVerifyResult {
+  if (snapshot.schema_version !== '1')
+    return { ok: false, reason: 'unsupported trajectory schema' };
+  if (!snapshot.run_id || !snapshot.scenario_id || !snapshot.agent_id) {
+    return { ok: false, reason: 'trajectory identity is incomplete' };
+  }
+  if (!snapshot.model.provider || !snapshot.model.model_id) {
+    return { ok: false, reason: 'trajectory model identity is incomplete' };
+  }
+  if (
+    !Number.isSafeInteger(snapshot.totals.input) ||
+    snapshot.totals.input < 0 ||
+    !Number.isSafeInteger(snapshot.totals.output) ||
+    snapshot.totals.output < 0
+  ) {
+    return { ok: false, reason: 'trajectory token totals are invalid' };
+  }
+  let inputTotal = 0;
+  let outputTotal = 0;
+  for (const [index, step] of snapshot.steps.entries()) {
+    if (step.seq !== index) return { ok: false, reason: 'trajectory sequence is not contiguous' };
+    if (!step.operation.trim()) return { ok: false, reason: 'trajectory operation is empty' };
+    if (!SHA256.test(step.input_sha256))
+      return { ok: false, reason: 'trajectory input digest is invalid' };
+    if (step.output_sha256 !== undefined && !SHA256.test(step.output_sha256)) {
+      return { ok: false, reason: 'trajectory output digest is invalid' };
+    }
+    const input = step.input_tokens ?? 0;
+    const output = step.output_tokens ?? 0;
+    if (!Number.isSafeInteger(input) || input < 0 || !Number.isSafeInteger(output) || output < 0) {
+      return { ok: false, reason: 'trajectory step token usage is invalid' };
+    }
+    inputTotal += input;
+    outputTotal += output;
+  }
+  if (inputTotal !== snapshot.totals.input || outputTotal !== snapshot.totals.output) {
+    return { ok: false, reason: 'trajectory token totals do not reconcile' };
+  }
+  if (events.length === 0) return { ok: true };
+  const matching = events.filter(
+    (event) =>
+      event.run_id === snapshot.run_id &&
+      event.scenario_id === snapshot.scenario_id &&
+      event.actor.type === 'agent' &&
+      (event.kind === 'llm_call' || event.kind === 'tool_call'),
+  );
+  if (matching.length !== snapshot.steps.length) {
+    return { ok: false, reason: 'trajectory step count does not match audit events' };
+  }
+  for (const [index, step] of snapshot.steps.entries()) {
+    const event = matching[index];
+    if (!event) return { ok: false, reason: `trajectory event ${index} is missing` };
+    if (event.kind !== step.kind)
+      return { ok: false, reason: `trajectory event ${index} kind mismatch` };
+    if (event.actor.id !== snapshot.agent_id) {
+      return { ok: false, reason: `trajectory event ${index} agent identity mismatch` };
+    }
+    const payload = event.payload;
+    if (
+      payload.seq !== step.seq ||
+      payload.operation !== step.operation ||
+      payload.input_sha256 !== step.input_sha256 ||
+      payload.status !== step.status ||
+      (step.output_sha256 !== undefined && payload.output_sha256 !== step.output_sha256)
+    ) {
+      return { ok: false, reason: `trajectory event ${index} payload mismatch` };
+    }
+  }
+  return { ok: true };
 }
 
 /**
