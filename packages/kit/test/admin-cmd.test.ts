@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { type OidcAdapter, OidcSessionManager } from '@aqa/auth';
+import { MemoryStore } from '@aqa/store';
 import { runAdmin } from '../dist/commands/admin.js';
 
 function makeTempRoot(): string {
@@ -193,6 +194,37 @@ describe('aqa admin — boot + smoke', () => {
       // (empty list) or 401/403 depending on auth wiring — we accept
       // any non-404 here because the goal is "route is reachable".
       assert.notEqual(res.status, 404, `/api/orgs should be reachable, got ${res.status}`);
+    } finally {
+      await boot.close();
+    }
+  });
+
+  it('uses an injected control-plane store instead of silently creating memory state', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const store = new MemoryStore();
+    await store.saveOrg({
+      schema_version: '1',
+      slug: 'persisted-org',
+      display_name: 'Persisted Org',
+      created_at: new Date().toISOString(),
+    });
+    const boot = await runAdmin({ root, port: 0, host: '127.0.0.1', adminDistDir, store });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const response = await fetchText(`${boot.url}/api/orgs`);
+      assert.equal(response.status, 200);
+      assert.deepEqual(JSON.parse(response.text), {
+        orgs: [
+          {
+            schema_version: '1',
+            slug: 'persisted-org',
+            display_name: 'Persisted Org',
+            created_at: JSON.parse(response.text).orgs[0].created_at,
+          },
+        ],
+      });
     } finally {
       await boot.close();
     }

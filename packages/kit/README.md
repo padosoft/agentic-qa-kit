@@ -15,6 +15,7 @@
 - [Project profiler](#project-profiler)
 - [Programmatic API](#programmatic-api)
 - [Durable artifact backend](#durable-artifact-backend)
+- [Durable admin state](#durable-admin-state)
 - [Development](#development)
 
 ## What's inside
@@ -85,6 +86,16 @@ as CLI arguments or committed. Optional Object Lock requests use
 `AQA_ARTIFACT_S3_RETAIN_UNTIL` (ISO timestamp) together with
 `AQA_ARTIFACT_S3_RETENTION_MODE=GOVERNANCE|COMPLIANCE`. Bucket versioning,
 Object Lock enablement, KMS and tenant authorization remain operator controls.
+
+## Durable admin state
+
+`aqa admin` uses `MemoryStore` for local development. Set `AQA_STORE_DSN` to a
+PostgreSQL connection string to persist runs, findings, configuration and
+audit records across process restarts. Set `AQA_QUEUE_DSN` separately to make
+worker leases durable. Both clients are closed during graceful shutdown.
+
+The PostgreSQL service, credentials, TLS policy, migrations and backups remain
+operator responsibilities; the CLI does not print the DSN or credentials.
 
 ## Project profiler
 

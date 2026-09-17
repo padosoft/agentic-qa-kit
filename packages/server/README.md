@@ -12,6 +12,7 @@ Multi-team API server scaffold (Task 19 of the durable plan).
   either implementation through `RunnerQueueLike`.
 
 Permission gates use `@aqa/auth`'s `allows()` predicate. Storage uses
-`@aqa/store`'s `StoreProvider` — MemoryStore in tests, PostgresStore (Task 13
-follow-up) in production. `aqa admin` selects `PostgresRunnerQueue` when
-`AQA_QUEUE_DSN` is configured; otherwise it intentionally uses the local queue.
+`@aqa/store`'s `StoreProvider` — MemoryStore in tests, PostgresStore in
+production. `aqa admin` selects `PostgresRunnerQueue` when `AQA_QUEUE_DSN` is
+configured and `PostgresStore` when `AQA_STORE_DSN` is configured; otherwise it
+intentionally uses local in-memory components for development.

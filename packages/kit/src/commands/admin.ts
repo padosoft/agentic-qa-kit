@@ -47,6 +47,10 @@ export interface AdminOptions {
   queueDsn?: string;
   /** Inject a queue implementation (useful for host applications/tests). */
   queue?: ApiContext['queue'];
+  /** Use a durable PostgreSQL control-plane store instead of MemoryStore. */
+  storeDsn?: string;
+  /** Inject a store implementation (useful for host applications/tests). */
+  store?: ApiContext['store'];
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -129,16 +133,20 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     };
   }
 
-  // Dynamic imports keep the bundle slim: makeApi() + RunnerQueue +
-  // MemoryStore are only needed when `aqa admin` is actually invoked.
+  // Dynamic imports keep the bundle slim: makeApi() + queues + stores are
+  // only needed when `aqa admin` is actually invoked.
   // (The kit↔server static cycle that motivated this pattern in an
   // earlier iteration was resolved by extracting `runPackNew` into
   // `@aqa/pack-author`; the dynamic import is now an optimisation, not
   // a workaround.)
   const { makeApi, PostgresRunnerQueue, RunnerQueue } = await import('@aqa/server');
-  const { MemoryStore } = await import('@aqa/store');
+  const { MemoryStore, PostgresStore } = await import('@aqa/store');
 
-  const store = new MemoryStore();
+  if (opts.store && opts.storeDsn) {
+    return { ok: false, error: 'admin: pass store or storeDsn, not both' };
+  }
+  const storeDsn = opts.storeDsn ?? process.env.AQA_STORE_DSN;
+  const store = opts.store ?? (storeDsn ? new PostgresStore(storeDsn) : new MemoryStore());
   const seedReport = await seedStoreFromRuns(
     store,
     opts.runsRoot ?? join(opts.root, '.aqa', 'runs'),
@@ -213,7 +221,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   // Log seed summary so the junior sees their local runs were detected.
   if (seedReport.runs > 0) {
     console.info(
-      `[admin] seeded ${seedReport.runs} local run(s), ${seedReport.events} event(s), ${seedReport.findings} finding(s) into the in-memory store`,
+      `[admin] seeded ${seedReport.runs} local run(s), ${seedReport.events} event(s), ${seedReport.findings} finding(s) into the configured store`,
     );
   } else {
     console.info(
@@ -230,6 +238,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       await closeServer(server);
       const closable = queue as { close?: () => Promise<void> };
       await closable.close?.();
+      await store.close();
     },
   };
 }

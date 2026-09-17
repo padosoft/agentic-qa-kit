@@ -370,3 +370,11 @@ Refunds are a separate journey, not a checkout assertion. A partial refund
 must be strictly below the captured amount, preserve currency and order
 identity, and return byte-equivalent state on an idempotent retry. The adapter
 contract now proves that boundary independently.
+
+# 2026-09-17 — a durable queue without a durable store is still volatile
+
+Selecting PostgreSQL for worker leases while the admin keeps runs and
+findings in a process-local map creates a misleadingly durable deployment.
+Expose control-plane store selection separately, keep the in-memory default
+only for local development, and close both resources on shutdown. The
+configuration path must be explicit and must never print credentials.
