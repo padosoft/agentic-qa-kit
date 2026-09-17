@@ -4,6 +4,7 @@ import { EventChainWriter } from '../dist/events.js';
 import { FindingsWriter } from '../dist/findings.js';
 import { makeHttpProbeRunner, runScenario } from '../dist/run.js';
 import { makeShellProbeRunner } from '../dist/shell.js';
+import { makeSqlProbeRunner } from '../dist/sql.js';
 
 const SCENARIO = {
   schema_version: '1' as const,
@@ -235,6 +236,60 @@ describe('runScenario', () => {
       timeout_ms: 2_000,
     });
     assert.match(result.error ?? '', /not allowlisted/);
+  });
+
+  it('makeSqlProbeRunner enforces read-only bounded queries and redacts rows', async () => {
+    const seen: { sql: string; params: readonly unknown[] }[] = [];
+    const runner = makeSqlProbeRunner({
+      maxRows: 2,
+      query: async (sql, params) => {
+        seen.push({ sql, params });
+        return [{ email: 'customer@example.test', token: 'secret-token', total: 12 }];
+      },
+    });
+    const result = await runner({
+      id: 'probe-sql',
+      kind: 'sql',
+      with: { query: 'SELECT email, token FROM orders WHERE id = $1', params: ['o-1'] },
+      timeout_ms: 1_000,
+    });
+    assert.deepEqual(seen, [
+      { sql: 'SELECT email, token FROM orders WHERE id = $1', params: ['o-1'] },
+    ]);
+    assert.deepEqual(result.body, [{ email: '[REDACTED-EMAIL]', token: '[REDACTED]', total: 12 }]);
+  });
+
+  it('makeSqlProbeRunner rejects mutations, multi-statements and excessive rows', async () => {
+    let calls = 0;
+    const runner = makeSqlProbeRunner({
+      maxRows: 1,
+      query: async () => {
+        calls += 1;
+        return [{ id: 1 }, { id: 2 }];
+      },
+    });
+    const mutation = await runner({
+      id: 'probe-sql-write',
+      kind: 'sql',
+      with: { query: 'DELETE FROM orders' },
+      timeout_ms: 1_000,
+    });
+    const multi = await runner({
+      id: 'probe-sql-multi',
+      kind: 'sql',
+      with: { query: 'SELECT 1; DELETE FROM orders' },
+      timeout_ms: 1_000,
+    });
+    const tooMany = await runner({
+      id: 'probe-sql-many',
+      kind: 'sql',
+      with: { query: 'SELECT id FROM orders' },
+      timeout_ms: 1_000,
+    });
+    assert.match(mutation.error ?? '', /read-only/);
+    assert.match(multi.error ?? '', /read-only/);
+    assert.match(tooMany.error ?? '', /exceeds 1 rows/);
+    assert.equal(calls, 1);
   });
 
   it('makeHttpProbeRunner rejects unsupported probe kinds', async () => {

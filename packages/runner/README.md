@@ -18,6 +18,10 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   allowlisted argv checks with `shell:false`, bounded output, timeout cleanup,
   minimal environment and output redaction. It is not a sandbox and must be
   hosted inside the configured execution boundary.
+- **Read-only SQL driver** — `makeSqlProbeRunner()` uses an injected DB
+  adapter, separate parameters, `SELECT`/`WITH`/`EXPLAIN`-only policy, row
+  limits and evidence redaction. It complements, but never replaces, a
+  database read-only role and statement timeout.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

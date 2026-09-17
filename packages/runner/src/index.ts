@@ -16,4 +16,5 @@ export {
   type ScenarioRunResult,
 } from './run.js';
 export { makeShellProbeRunner, type ShellProbeRunnerOptions } from './shell.js';
+export { makeSqlProbeRunner, type SqlProbeRunnerOptions, type SqlRow } from './sql.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

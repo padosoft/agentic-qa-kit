@@ -32,6 +32,12 @@
   not a sandbox; OCI/non-privileged deployment and explicit capability wiring
   remain required before production use.
 
+- **Read-only SQL driver added.** `makeSqlProbeRunner()` now exposes an
+  injected database observer for ecommerce invariants with parameter binding,
+  lexical mutation/multi-statement rejection, row limits and redacted rows.
+  It is not a DB permission boundary; a production adapter still needs a
+  dedicated read-only role, timeout, tenant views and live provider evidence.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

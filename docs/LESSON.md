@@ -18,6 +18,11 @@
   sandbox, minimize environment inheritance, bound output and redact before
   evidence leaves the process.
 
+- **SQL read-only checks need two layers.** Reject mutations and multi-
+  statements in the runner, but enforce the real boundary with a dedicated
+  database role, tenant-scoped views and statement timeout. A lexical guard
+  alone cannot make an untrusted database credential safe.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the
