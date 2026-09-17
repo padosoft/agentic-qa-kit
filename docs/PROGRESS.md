@@ -471,3 +471,8 @@
 
 - Added numeric measurement retention to k6/Locust ingestion and a separate `evaluatePerformanceThresholds` boundary for p95, failure-rate and check-rate gates. Parsing remains evidence-only; policy now produces deterministic violations without mutating imported records.
 - Evidence: ingest test 10/10; workspace typecheck, 502 tests passed, 4 PostgreSQL integration tests skipped without DSN, lint and diff-check passed. Live load execution and CI artifact wiring remain open.
+
+# 2026-09-17 — CLI performance ingestion wiring
+
+- Extended `aqa ingest` to accept k6 and Locust JSON summaries, preserving the same bounded/redacted artifact path and normalized report contract used by JUnit/SAST. Added a CLI-boundary test for both frameworks.
+- Evidence: workspace typecheck, full workspace test gate passed (506 tests, 4 PostgreSQL skips, 0 failures), lint and diff-check passed. Threshold-file CLI flags and live CI gate enforcement remain separate follow-up work.

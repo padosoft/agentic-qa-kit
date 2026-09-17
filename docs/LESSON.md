@@ -681,3 +681,10 @@ Retain numeric measurements during k6/Locust ingestion, but do not turn an
 import into a CI verdict. A separately versioned threshold policy can evaluate
 p95, failure and check rates, emit explainable violations, and remain auditable
 when the same evidence is reprocessed under a different release policy.
+
+# 2026-09-17 — CLI adapters should preserve one artifact boundary
+
+Adding a tool to `aqa ingest` must reuse the same bounded parser and redacted
+artifact store as existing frameworks. The CLI should not duplicate parsing or
+write tool-specific files that bypass the evidence retention and secret-redaction
+guarantees.

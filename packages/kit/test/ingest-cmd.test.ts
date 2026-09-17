@@ -29,4 +29,24 @@ describe('aqa ingest', () => {
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /JSON|position/i);
   });
+
+  it('ingests k6 and Locust summaries through the CLI command boundary', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-ingest-'));
+    const k6 = join(root, 'k6.json');
+    const locust = join(root, 'locust.json');
+    writeFileSync(
+      k6,
+      JSON.stringify({ metrics: { http_req_duration: { values: { 'p(95)': 12 } } } }),
+    );
+    writeFileSync(
+      locust,
+      JSON.stringify({ stats: [{ name: '/health', num_requests: 2, num_failures: 0 }] }),
+    );
+    const k6Result = runIngest({ root, kind: 'k6', file: k6 });
+    const locustResult = runIngest({ root, kind: 'locust', file: locust });
+    assert.equal(k6Result.report?.framework, 'k6');
+    assert.equal(locustResult.report?.framework, 'locust');
+    assert.equal(k6Result.ok, true);
+    assert.equal(locustResult.ok, true);
+  });
 });

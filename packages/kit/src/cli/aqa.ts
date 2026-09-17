@@ -110,7 +110,7 @@ ${bold('Commands')}
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
-  ingest <junit|sast> <file>         Normalize external test/security results into redacted evidence
+  ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
   risk discover --method stride|owasp|fmea Generate a deterministic framework risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -354,8 +354,14 @@ async function main(): Promise<number> {
       printHeader('ingest');
       const kind = args.positionals[0];
       const file = args.positionals[1];
-      if (kind !== 'junit' && kind !== 'sast' && kind !== 'semgrep') {
-        console.error(red('aqa ingest: kind must be junit, sast, or semgrep'));
+      if (
+        kind !== 'junit' &&
+        kind !== 'sast' &&
+        kind !== 'semgrep' &&
+        kind !== 'k6' &&
+        kind !== 'locust'
+      ) {
+        console.error(red('aqa ingest: kind must be junit, sast, semgrep, k6, or locust'));
         return 1;
       }
       if (!file) {
