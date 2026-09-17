@@ -1787,3 +1787,16 @@ Hashing payloads at write time does not prove that a later snapshot still
 matches the run. Verify sequence, totals, identity and event correspondence in
 a separate consumer; otherwise replay can accept a self-consistent but
 unrecorded trajectory.
+# 2026-09-17 — MCP must expose a narrow control plane
+
+Mapping an entire REST API into agent tools grants more authority than the
+agent needs and makes tenant leakage easy. Keep MCP tools few and explicit,
+derive scope from the authenticated principal, require idempotency for starts,
+and return evidence metadata rather than raw payloads. Transport/auth/provider
+integration still needs deployed end-to-end evidence.
+# 2026-09-17 — Node strip-only tests reject parameter properties
+
+TypeScript parameter properties compile normally but fail when Node 22 loads
+test sources through its strip-only TypeScript support. New cross-runtime
+code must use explicit class fields and run the actual Node test entrypoint;
+typecheck alone cannot prove fallback-runtime compatibility.

@@ -11,6 +11,21 @@
 
 ## 2026-09-17
 
+- **Fixed the Node 22 CI compatibility regression in the MCP slice.** The
+  first hosted matrix caught a TypeScript parameter-property unsupported by
+  Node's strip-only loader; the server class now uses explicit fields. This
+  is a real runtime-compatibility fix, not a CI suppression. The PR will be
+  re-pushed and the full Bun/Node matrix rerun.
+
+- **Added the bounded MCP control surface.** `AqaMcpServer` negotiates an
+  explicitly supported protocol version and exposes only tenant-scoped plan,
+  start, status, cancel and metadata-only evidence tools. Permission checks,
+  principal-derived scope, bounded inputs and idempotent starts are enforced
+  before the host port is called. Evidence: server MCP suite **4 pass / 0
+  fail**, package build/typecheck/Biome green. Streamable HTTP authentication,
+  real queue/provider binding and deployed MCP journey remain required.
+  ADR-192 records the transport-neutral boundary.
+
 - **Closed the trajectory verification loop.** `verifyAgentTrajectory()` now
   checks identity, contiguous sequence, SHA-256 digests, token reconciliation
   and (when supplied) one-to-one correspondence with agent hash-chain events.
