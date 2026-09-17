@@ -49,6 +49,46 @@ export const Scenario = z
   })
   .superRefine((scenario, ctx) => {
     const stepIds = new Set<string>();
+    const validateHttpProbe = (step: Probe, path: (string | number)[]) => {
+      if (step.kind !== 'http') return;
+      const allowed = new Set(['method', 'url', 'headers', 'body', 'auth']);
+      for (const key of Object.keys(step.with)) {
+        if (!allowed.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...path, 'with', key],
+            message: `unsupported HTTP probe field "${key}"`,
+          });
+        }
+      }
+      if (
+        step.with.auth !== undefined &&
+        (typeof step.with.auth !== 'string' ||
+          !/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/u.test(step.with.auth))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [...path, 'with', 'auth'],
+          message: 'auth must be a named secret reference such as ${TOKEN}',
+        });
+      }
+      const headers = step.with.headers;
+      if (
+        headers !== undefined &&
+        (!headers ||
+          typeof headers !== 'object' ||
+          Array.isArray(headers) ||
+          Object.values(headers as Record<string, unknown>).some(
+            (value) => typeof value !== 'string',
+          ))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [...path, 'with', 'headers'],
+          message: 'headers must be an object of string values',
+        });
+      }
+    };
     for (const [index, step] of scenario.steps.entries()) {
       if (stepIds.has(step.id))
         ctx.addIssue({
@@ -57,6 +97,10 @@ export const Scenario = z
           message: 'step ids must be unique',
         });
       stepIds.add(step.id);
+      validateHttpProbe(step, ['steps', index]);
+    }
+    for (const [index, step] of scenario.cleanup.entries()) {
+      validateHttpProbe(step, ['cleanup', index]);
     }
     for (const [index, oracle] of scenario.oracles.entries()) {
       if (oracle.probe_id && !stepIds.has(oracle.probe_id))
@@ -65,6 +109,39 @@ export const Scenario = z
           path: ['oracles', index, 'probe_id'],
           message: `oracle references unknown probe "${oracle.probe_id}"`,
         });
+      if (oracle.kind === 'http_status' && typeof oracle.with.expected !== 'number') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['oracles', index, 'with', 'expected'],
+          message: 'http_status expected must be a number',
+        });
+      }
+      if (oracle.kind === 'response_contains') {
+        const jsonpath = oracle.with.jsonpath;
+        const hasPath = typeof jsonpath === 'string';
+        const hasEquals = Object.prototype.hasOwnProperty.call(oracle.with, 'equals');
+        if (hasPath && !jsonpath.startsWith('$.')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['oracles', index, 'with', 'jsonpath'],
+            message: 'jsonpath must be a bounded path beginning with $.',
+          });
+        }
+        if (hasPath !== hasEquals) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['oracles', index, 'with'],
+            message: 'jsonpath and equals must be provided together',
+          });
+        }
+        if (!hasPath && typeof oracle.with.value !== 'string') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['oracles', index, 'with', 'value'],
+            message: 'response_contains requires a string value or jsonpath/equals',
+          });
+        }
+      }
     }
   });
 export type Scenario = z.infer<typeof Scenario>;

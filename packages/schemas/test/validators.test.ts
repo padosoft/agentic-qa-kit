@@ -256,4 +256,37 @@ describe('Scenario oracle probe references', () => {
     assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'oracles.0.probe_id'));
     assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'steps.1.id'));
   });
+
+  it('rejects ignored HTTP fields and malformed authentication references', () => {
+    const result = Scenario.Scenario.safeParse({
+      ...base,
+      steps: [
+        {
+          ...base.steps[0],
+          with: { url: '/me', auth: 'raw-token', ignored: true },
+        },
+      ],
+    });
+    assert.equal(result.success, false);
+    if (result.success) return;
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'steps.0.with.ignored'));
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'steps.0.with.auth'));
+  });
+
+  it('requires a complete typed response comparator', () => {
+    const result = Scenario.Scenario.safeParse({
+      ...base,
+      oracles: [
+        {
+          id: 'oracle-health',
+          kind: 'response_contains',
+          with: { jsonpath: '$.id' },
+          weight: 1,
+        },
+      ],
+    });
+    assert.equal(result.success, false);
+    if (result.success) return;
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'oracles.0.with'));
+  });
 });

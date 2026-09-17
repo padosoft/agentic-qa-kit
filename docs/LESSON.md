@@ -1749,3 +1749,16 @@ A correct coverage calculator is ineffective if no CLI or report invokes it.
 Wire declarations and persisted execution evidence together, distinguish
 invalid evidence from incomplete evidence, and return a non-zero gate for
 stale/gap coverage. “No findings” alone is never a passing proof.
+# 2026-09-17 — validate executable contracts at the schema boundary
+
+Runner fail-closed checks are necessary but too late for pack authors. Unknown
+HTTP fields, malformed host-secret references, and incomplete typed comparators
+must be rejected by the scenario validator before driver selection. Keep these
+cross-field invariants in the runtime source validator and retain runner checks
+as defense in depth; generated JSON Schema alone cannot express all of them.
+# 2026-09-17 — schema tightening must update API contract fixtures
+
+Making an oracle field mandatory can expose previously accepted but semantically
+invalid test fixtures at API boundaries. When the validator becomes stricter,
+update every schema-conforming fixture with an explicit contract value and let
+the hosted Bun/Node matrix prove the compatibility surface.
