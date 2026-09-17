@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { type OidcAdapter, OidcSessionManager, ScimTokenManager } from '@aqa/auth';
+import { MetricsRegistry } from '@aqa/observability';
 import { MemoryEventBus } from '@aqa/server';
 import { MemoryStore } from '@aqa/store';
 import { runAdmin } from '../dist/commands/admin.js';
@@ -170,6 +171,29 @@ describe('aqa admin — boot + smoke', () => {
     } finally {
       await boot.close();
     }
+  });
+
+  it('exposes bounded Prometheus metrics and protects non-loopback scrapes', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const metrics = new MetricsRegistry();
+    metrics.counter('aqa_test_runs_total', { outcome: 'ok' });
+    const local = await runAdmin({ root, port: 0, host: '127.0.0.1', adminDistDir, metrics });
+    assert.equal(local.ok, true);
+    if (!local.ok) return;
+    try {
+      const response = await fetchText(`${local.url}/metrics`);
+      assert.equal(response.status, 200);
+      assert.match(response.contentType, /text\/plain/);
+      assert.match(response.text, /aqa_test_runs_total\{outcome="ok"\} 1/);
+    } finally {
+      await local.close();
+    }
+    const rejected = await runAdmin({ root, port: 0, host: '0.0.0.0', adminDistDir, metrics });
+    assert.deepEqual(rejected, {
+      ok: false,
+      error: 'admin: metricsAuthorize is required when metrics are exposed off loopback',
+    });
   });
 
   it('serves index.html for unknown non-asset paths (SPA fallback)', async () => {

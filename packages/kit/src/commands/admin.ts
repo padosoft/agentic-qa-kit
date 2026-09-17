@@ -34,6 +34,7 @@ import {
   allows,
 } from '@aqa/auth';
 import { safeErrorMessage } from '@aqa/observability';
+import type { MetricsRegistry } from '@aqa/observability';
 import { Event, Finding, Run } from '@aqa/schemas';
 import { buildAsyncApiDocument, buildOpenApiDocument } from '@aqa/server';
 import type { ApiContext, ApiHandler, EventBus, EventReplayResult } from '@aqa/server';
@@ -83,6 +84,10 @@ export interface AdminOptions {
   idempotencyDsn?: string;
   /** Inject an API idempotency store (useful for host applications/tests). */
   idempotency?: ApiContext['idempotency'];
+  /** Optional bounded Prometheus registry exposed at GET /metrics. */
+  metrics?: MetricsRegistry;
+  /** Authorize Prometheus scrapes when metrics are exposed off loopback. */
+  metricsAuthorize?: (headers: Record<string, string>) => Promise<boolean> | boolean;
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -146,10 +151,16 @@ const CONTENT_TYPES: Record<string, string> = {
 export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? DEFAULT_HOST;
+  const loopbackHosts = new Set(['127.0.0.1', '::1', 'localhost']);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     return { ok: false, error: `admin: --port must be an integer 0..65535, got ${port}` };
   }
-  const loopbackHosts = new Set(['127.0.0.1', '::1', 'localhost']);
+  if (!loopbackHosts.has(host) && opts.metrics && !opts.metricsAuthorize) {
+    return {
+      ok: false,
+      error: 'admin: metricsAuthorize is required when metrics are exposed off loopback',
+    };
+  }
   if (!loopbackHosts.has(host) && !opts.authenticate && !opts.oidc) {
     return {
       ok: false,
@@ -335,6 +346,8 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       ...(opts.oidc ? { oidc: opts.oidc } : {}),
       ...(opts.oidc ? { oidcSecureCookie: opts.oidcSecureCookie ?? !loopbackHosts.has(host) } : {}),
       corsOrigins,
+      ...(opts.metrics ? { metrics: opts.metrics } : {}),
+      ...(opts.metricsAuthorize ? { metricsAuthorize: opts.metricsAuthorize } : {}),
     }).catch((err: unknown) => {
       try {
         res.statusCode = 500;
@@ -584,6 +597,8 @@ interface HandleCtx {
   oidc?: OidcSessionManager;
   oidcSecureCookie?: boolean;
   corsOrigins: ReadonlySet<string>;
+  metrics?: MetricsRegistry;
+  metricsAuthorize?: (headers: Record<string, string>) => Promise<boolean> | boolean;
 }
 
 async function handleRequest(
@@ -631,6 +646,28 @@ async function handleRequest(
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/metrics') {
+    if (!hctx.metrics) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers))
+      headers[key] = Array.isArray(value) ? value.join(',') : String(value ?? '');
+    if (hctx.metricsAuthorize && !(await hctx.metricsAuthorize(headers))) {
+      res.statusCode = 401;
+      res.setHeader('cache-control', 'no-store');
+      res.end();
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader('content-type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.setHeader('cache-control', 'no-store');
+    res.end(hctx.metrics.renderPrometheus());
     return;
   }
 

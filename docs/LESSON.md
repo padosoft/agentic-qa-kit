@@ -1506,3 +1506,10 @@ provider effect. Handlers therefore need idempotency/effect-ledger evidence.
 Adding a CronJob is not enough when the chart defaults to egress deny. In-cluster
 database selectors and managed-database CIDRs are different trust boundaries;
 the former can be rendered by Helm, while the latter must be operator-supplied.
+
+# 2026-09-17 — metrics exposure is a security boundary
+
+An in-process metrics registry is not operationally useful until the host
+exposes it, but an unauthenticated non-loopback scrape can leak tenant labels.
+Make exposure opt-in and fail closed at boot unless the host supplies an
+explicit scrape authorizer; keep payloads out of metric labels by construction.

@@ -1329,3 +1329,13 @@
   Kubernetes network identity.
 - Evidence: chart CI renders/lints the production-shaped deployment; live
   managed-Postgres connectivity remains deployment-specific.
+
+# 2026-09-17 — authenticated Prometheus scrape boundary
+
+- Wired the existing bounded `MetricsRegistry` into `aqa admin` through an
+  injected `GET /metrics` endpoint. The endpoint is opt-in, emits only the
+  registry's Prometheus-safe text, and requires `metricsAuthorize` before an
+  off-loopback bind is allowed. Added ADR-153 and a real HTTP admin test.
+- Evidence: kit typecheck, Biome and admin journey suite **140 passed / 2
+  platform skips**. Prometheus deployment, alert rules and host metric
+  instrumentation remain operator/application integration work.
