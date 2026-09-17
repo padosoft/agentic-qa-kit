@@ -7572,9 +7572,38 @@ function PageRuns({ onNavigate, onOpenRun }) {
 
 // ---------------- Run detail ----------------
 function PageRunDetail({ runId, onNavigate }) {
-  const run = runById(runId) || RUNS[0];
+  const [liveRun, setLiveRun] = React.useState(null);
+  const [liveFindings, setLiveFindings] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' };
+        const [runResponse, findingsResponse] = await Promise.all([
+          fetch(apiUrl(`/api/runs/${encodeURIComponent(runId)}`), { headers }),
+          fetch(apiUrl('/api/findings'), { headers }),
+        ]);
+        if (cancelled) return;
+        if (runResponse.ok) {
+          const body = await runResponse.json();
+          if (body?.run) setLiveRun(body.run);
+        }
+        if (findingsResponse.ok) {
+          const body = await findingsResponse.json();
+          if (Array.isArray(body?.findings)) setLiveFindings(body.findings);
+        }
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  const run = liveRun || runById(runId) || RUNS[0];
   const [tab, setTab] = React.useState('overview');
-  const findings = findingsByRun(run.id);
+  const findings = (liveFindings || FINDINGS).filter((finding) => finding.run_id === run.id);
   const dur = run.finished_at
     ? new Date(run.finished_at) - new Date(run.started_at)
     : NOW_REF - new Date(run.started_at);
@@ -7588,7 +7617,7 @@ function PageRunDetail({ runId, onNavigate }) {
             <StatusBadge status={run.state} />
           </span>
         }
-        sub={`profile=${run.profile} · ${fmtRelative(run.started_at)} · ${fmtDuration(dur)}`}
+        sub={`profile=${run.profile} · ${fmtRelative(run.started_at)} · ${fmtDuration(dur)} · ${liveRun ? 'live API' : 'local preview'}`}
         actions={
           <>
             <button className="btn sm">
@@ -8304,7 +8333,27 @@ function PageFindings({ onNavigate, onOpenFinding }) {
 
 // ---------------- Finding detail ----------------
 function PageFindingDetail({ findingId, onNavigate }) {
-  const f = findingById(findingId) || FINDINGS[0];
+  const [liveFinding, setLiveFinding] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/findings/${encodeURIComponent(findingId)}`), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (body?.finding) setLiveFinding(body.finding);
+      } catch {
+        /* Keep the explicit local preview when the server is unavailable. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [findingId]);
+
+  const f = liveFinding || findingById(findingId) || FINDINGS[0];
   const risk = riskById(f.risk_id);
   const run = runById(f.run_id);
   const [tab, setTab] = React.useState('overview');
