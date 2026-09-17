@@ -13,6 +13,7 @@ export interface BudgetState {
   tokens_out: number;
   calls: number;
   exhausted: boolean;
+  pricing_error?: string;
 }
 
 export interface BudgetTrackerOptions {
@@ -50,6 +51,17 @@ export class BudgetTracker {
    */
   charge(call: LlmCall): BudgetState {
     const price = this.pricing[call.model];
+    if (!price) {
+      this.state = {
+        ...this.state,
+        tokens_in: this.state.tokens_in + call.tokens_in,
+        tokens_out: this.state.tokens_out + call.tokens_out,
+        calls: this.state.calls + 1,
+        exhausted: true,
+        pricing_error: `no pricing configured for model "${call.model}"`,
+      };
+      return this.state;
+    }
     const usd = price
       ? (call.tokens_in / 1_000_000) * price.input_per_mtok +
         (call.tokens_out / 1_000_000) * price.output_per_mtok
@@ -73,9 +85,9 @@ export class BudgetTracker {
 
   /** Convenience: would the next call of (tokens_in, tokens_out, model) exhaust the budget? */
   wouldExhaust(call: LlmCall): boolean {
-    if (this.state.budget_usd === null) return false;
     const price = this.pricing[call.model];
-    if (!price) return false;
+    if (!price) return true;
+    if (this.state.budget_usd === null) return false;
     const next =
       (call.tokens_in / 1_000_000) * price.input_per_mtok +
       (call.tokens_out / 1_000_000) * price.output_per_mtok;

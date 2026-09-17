@@ -34,10 +34,13 @@ describe('BudgetTracker', () => {
     assert.equal(t.snapshot().calls, 0);
   });
 
-  it('unknown model contributes zero cost (and tracks tokens)', () => {
+  it('unknown model fails closed instead of silently contributing zero cost', () => {
     const t = new BudgetTracker({ budget_usd: 100 });
     const s = t.charge({ model: 'unknown-llm', tokens_in: 1000, tokens_out: 1000 });
     assert.equal(s.spent_usd, 0);
     assert.equal(s.tokens_in, 1000);
+    assert.equal(s.exhausted, true);
+    assert.match(s.pricing_error ?? '', /no pricing configured/);
+    assert.equal(t.wouldExhaust({ model: 'unknown-llm', tokens_in: 1, tokens_out: 1 }), true);
   });
 });
