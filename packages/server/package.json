@@ -18,6 +18,7 @@
   "dependencies": {
     "@aqa/auth": "workspace:*",
     "@aqa/pack-author": "workspace:*",
+    "@aqa/pack-scanner": "workspace:*",
     "@aqa/schemas": "workspace:*",
     "@aqa/store": "workspace:*",
     "yaml": "^2.9.0"

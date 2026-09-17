@@ -424,6 +424,18 @@ probes: []
       );
     });
 
+    it('rejects an unsigned shell pack at the import boundary', async () => {
+      const c = ctx();
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const yaml = VALID_YAML.replace('probes: []', 'probes: [probes/shell.yaml]');
+      const res = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
+      assert.equal(res?.status, 400);
+      const body = res?.body as { code: string; issues: Array<{ rule: string }> };
+      assert.equal(body.code, 'EPACKSCAN');
+      assert.ok(body.issues.some((issue) => issue.rule === 'unsigned-shell-pack'));
+      assert.equal(await c.store.loadPack('pack-imported'), null);
+    });
+
     it('returns 409 when a pack with that name already exists', async () => {
       const c = ctx();
       const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');

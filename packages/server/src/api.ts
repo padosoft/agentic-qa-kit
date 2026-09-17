@@ -3,6 +3,7 @@ import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
+import { scanPack, verifySignature } from '@aqa/pack-scanner';
 import {
   Finding as FindingSchema,
   PackManifest as PackManifestSchema,
@@ -584,6 +585,29 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const manifest = validated.data;
+        const scan = scanPack(manifest);
+        const blockingIssues = scan.issues.filter(
+          (issue) => issue.severity === 'critical' || issue.severity === 'high',
+        );
+        if (blockingIssues.length > 0) {
+          return asResponse(
+            {
+              error: 'pack rejected by supply-chain scanner',
+              code: 'EPACKSCAN',
+              issues: blockingIssues,
+            },
+            400,
+          );
+        }
+        if (manifest.signing) {
+          const signature = verifySignature(manifest, body.yaml);
+          if (!signature.ok) {
+            return asResponse(
+              { error: `pack signature invalid: ${signature.reason}`, code: 'ESIGNATURE' },
+              400,
+            );
+          }
+        }
         const existing = await ctx.store.loadPack(manifest.name);
         if (existing && body.force !== true) {
           return asResponse(
