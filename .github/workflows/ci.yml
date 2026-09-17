@@ -359,6 +359,11 @@ jobs:
       - name: Run CLI smoke checks
         run: bun run test:e2e-cli
 
+      - name: Run installed artifact journey
+        # The monorepo smoke uses the compiled workspace entrypoint. This
+        # journey creates and extracts the same tarball a consumer installs.
+        run: bun run test:e2e-installed-artifact
+
       - name: Run performance evidence threshold journey
         run: |
           set -euo pipefail
