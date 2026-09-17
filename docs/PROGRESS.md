@@ -807,3 +807,8 @@
 
 - Browser probe runners now accept the worker signal, reject pre-cancelled probes, close the active page on abort, re-check cancellation after browser awaits, and remove listeners in `finally`. Cancellation is reported as execution failure and cannot become an oracle finding.
 - Evidence: runner build/typecheck, **21 tests passed**, including active-page closure, and `git diff --check` passed. Native provider cancellation, browser context/process cleanup and hosted Chromium evidence remain open.
+
+# 2026-09-17 — SQL cooperative cancellation boundary
+
+- SQL runner adapters now receive the worker `AbortSignal`; pre-cancelled queries are rejected and cancellation is rechecked after adapter completion. PostgreSQL preserves its bounded read-only transaction and statement timeout, then reports cancellation if the signal arrived; the underlying driver has no claimed native abort primitive.
+- Evidence: runner build/typecheck, **22 tests passed**, including signal propagation to an injected adapter, and `git diff --check` passed. Native PostgreSQL query cancellation, live DSN evidence and resource cleanup remain open.

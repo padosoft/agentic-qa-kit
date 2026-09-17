@@ -1057,6 +1057,14 @@ a deployment token before boot, use a constant-time comparison boundary, and
 keep the token out of diagnostics. A static token is only a bootstrap fallback;
 enterprise deployments still need mTLS or short-lived identity with rotation.
 
+# 2026-09-17 — distinguish SQL observation from native query cancellation
+
+Passing an `AbortSignal` into an SQL adapter lets the host stop awaiting and
+prevents findings after cancellation, but it does not automatically cancel the
+database operation. Keep PostgreSQL statement timeouts and read-only
+transactions as bounded controls, and do not claim native query cancellation
+until the selected client and live database prove it.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the

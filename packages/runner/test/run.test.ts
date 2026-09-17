@@ -339,6 +339,27 @@ describe('runScenario', () => {
     assert.equal(calls, 1);
   });
 
+  it('makeSqlProbeRunner propagates cooperative cancellation to the adapter', async () => {
+    let received: AbortSignal | undefined;
+    const runner = makeSqlProbeRunner({
+      query: async (_sql, _params, signal) => {
+        received = signal;
+        return new Promise<readonly Record<string, unknown>[]>((resolve) => {
+          signal?.addEventListener('abort', () => resolve([]), { once: true });
+        });
+      },
+    });
+    const controller = new AbortController();
+    const pending = runner(
+      { id: 'cancelled-sql', kind: 'sql', with: { query: 'SELECT 1' }, timeout_ms: 5_000 },
+      controller.signal,
+    );
+    controller.abort();
+    const result = await pending;
+    assert.equal(received, controller.signal);
+    assert.match(result.error ?? '', /cancel/i);
+  });
+
   it('makePlaywrightProbeRunner applies structured actions and origin policy', async () => {
     const calls: string[] = [];
     const page = {

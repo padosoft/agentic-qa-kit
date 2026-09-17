@@ -4,7 +4,11 @@ export type SqlRow = Readonly<Record<string, unknown>>;
 
 export interface SqlProbeRunnerOptions {
   /** Adapter owned by the host; credentials and connection lifecycle stay outside packs. */
-  query: (sql: string, params: readonly unknown[]) => Promise<readonly SqlRow[]>;
+  query: (
+    sql: string,
+    params: readonly unknown[],
+    signal?: AbortSignal,
+  ) => Promise<readonly SqlRow[]>;
   maxRows?: number;
 }
 
@@ -45,7 +49,7 @@ export function makeSqlProbeRunner(opts: SqlProbeRunnerOptions): ProbeRunner {
   const maxRows = opts.maxRows ?? 1_000;
   if (!Number.isInteger(maxRows) || maxRows < 1)
     throw new Error('sql maxRows must be a positive integer');
-  return async (probe) => {
+  return async (probe, externalSignal) => {
     if (probe.kind !== 'sql') {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
     }
@@ -63,8 +67,15 @@ export function makeSqlProbeRunner(opts: SqlProbeRunnerOptions): ProbeRunner {
     if (params !== undefined && !Array.isArray(params)) {
       return { probe_id: probe.id, error: 'sql probe with.params must be an array' };
     }
+    if (externalSignal?.aborted)
+      return { probe_id: probe.id, error: 'sql probe cancelled before dispatch' };
     try {
-      const rows = await opts.query(sql, (params as readonly unknown[] | undefined) ?? []);
+      const rows = await opts.query(
+        sql,
+        (params as readonly unknown[] | undefined) ?? [],
+        externalSignal,
+      );
+      if (externalSignal?.aborted) return { probe_id: probe.id, error: 'sql probe cancelled' };
       if (rows.length > maxRows) {
         return { probe_id: probe.id, error: `sql result exceeds ${maxRows} rows` };
       }

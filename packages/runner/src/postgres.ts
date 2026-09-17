@@ -34,7 +34,7 @@ export function makePostgresSqlProbeRunner(
   });
   const runner = makeSqlProbeRunner({
     ...(opts.maxRows ? { maxRows: opts.maxRows } : {}),
-    query: async (query, params) => {
+    query: async (query, params, signal) => {
       const rows = await sql.begin(async (transaction) => {
         const unsafe = transaction.unsafe as unknown as (
           text: string,
@@ -46,6 +46,7 @@ export function makePostgresSqlProbeRunner(
         ]);
         return unsafe(query, [...params]);
       });
+      if (signal?.aborted) throw new Error('Postgres SQL probe cancelled');
       return rows;
     },
   } satisfies SqlProbeRunnerOptions);
