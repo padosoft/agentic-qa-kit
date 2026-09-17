@@ -1500,3 +1500,9 @@ outage can leave expired jobs stuck in `in_flight` until a new worker happens to
 dequeue. Keep an explicit, atomic queue reaper as a separately schedulable
 control, and treat requeue as a possible retry: it cannot undo an external
 provider effect. Handlers therefore need idempotency/effect-ledger evidence.
+
+# 2026-09-17 — recovery jobs need an explicit network path
+
+Adding a CronJob is not enough when the chart defaults to egress deny. In-cluster
+database selectors and managed-database CIDRs are different trust boundaries;
+the former can be rendered by Helm, while the latter must be operator-supplied.

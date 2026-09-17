@@ -1319,3 +1319,13 @@
   already-executed external side effect.
 - Evidence pending: local server typecheck/tests and Helm rendering; the live
   PostgreSQL crash/retry journey requires `AQA_TEST_POSTGRES_DSN`.
+
+# 2026-09-17 — runner recovery network policy
+
+- Extended the chart NetworkPolicy so in-cluster runners can reach the
+  PostgreSQL subchart on TCP/5432 and the lease-reaper CronJob has a dedicated
+  database-only egress policy. Managed PostgreSQL remains an operator input via
+  `networkPolicy.runnerExtraEgressCidrs`; a DSN Secret cannot safely imply a
+  Kubernetes network identity.
+- Evidence: chart CI renders/lints the production-shaped deployment; live
+  managed-Postgres connectivity remains deployment-specific.

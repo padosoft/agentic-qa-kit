@@ -73,7 +73,9 @@ ingress:
   annotations: {}
 
 networkPolicy:
-  # When enabled, locks down pod-to-pod traffic:
+  # When enabled, locks down pod-to-pod traffic. For managed PostgreSQL, add
+  # its CIDR to runnerExtraEgressCidrs; a DSN Secret cannot imply its network
+  # identity safely:
   #   - server: ingress only from ingress controller + runner pods
   #   - runner: egress to server + Postgres + DNS only (no internet by default)
   enabled: true
