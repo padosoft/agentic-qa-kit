@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added a machine-validatable DR backup inventory contract.**
+  `@aqa/compliance` now parses and canonicalizes a redacted recovery manifest
+  containing PITR target/LSN, schema version, artifact manifest digest/object
+  count, image digest, operator drill ID and RPO/RTO objectives. Invalid
+  identifiers, digests, timestamps and zero objectives fail closed. Evidence:
+  compliance tests **12 passed / 0 failed**, build/typecheck/Biome/diff-check
+  pass. This does not claim a live backup or restore drill.
+
 - **Added provider-neutral commerce settlement reconciliation.** The commerce
   contract now validates that captured payment, successful refunds and lost
   chargebacks are linked to the same payment and exactly reconstruct the

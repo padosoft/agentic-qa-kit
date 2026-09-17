@@ -4,8 +4,11 @@ import { describe, it } from 'node:test';
 import { verifyEventChainBrowser } from '../dist/audit-verify-browser.js';
 import {
   CONTROL_MAPPINGS,
+  backupInventorySha256,
+  canonicalBackupInventory,
   controlsCoverage,
   createAuditCheckpoint,
+  parseBackupInventory,
   parseEventLines,
   verifyAuditCheckpoint,
   verifyEventChain,
@@ -35,6 +38,28 @@ function makeCheckpointChain() {
   return [first, second];
 }
 
+const inventory = {
+  schema_version: '1' as const,
+  backup_id: 'backup-2026-09-17',
+  created_at: '2026-09-17T10:00:00Z',
+  database: {
+    pitr_target: '2026-09-17T09:59:00Z',
+    lsn: '0/16B6C50',
+    schema_version: '2026.09.17',
+  },
+  artifacts: {
+    snapshot_id: 'snapshot-2026-09-17',
+    manifest_sha256: 'a'.repeat(64),
+    object_count: 42,
+  },
+  application: {
+    image_digest: `sha256:${'b'.repeat(64)}`,
+    schema_version: '2026.09.17',
+  },
+  operator_run_id: 'drill-2026-09-17',
+  objectives: { rpo_minutes: 15, rto_minutes: 60 },
+};
+
 describe('controls catalog', () => {
   it('every mapping has at least one SOC2 OR ISO control', () => {
     for (const m of CONTROL_MAPPINGS) {
@@ -53,6 +78,46 @@ describe('controls catalog', () => {
     const cov = controlsCoverage();
     assert.ok(cov.iso27001_covered.includes('A.8.15'));
     assert.ok(cov.iso27001_covered.includes('A.5.15'));
+  });
+});
+
+describe('backup inventory contract', () => {
+  it('parses, canonicalizes and hashes a redacted recovery inventory', () => {
+    const parsed = parseBackupInventory(inventory);
+    assert.deepEqual(parsed, inventory);
+    assert.equal(canonicalBackupInventory(inventory).endsWith('\n'), true);
+    assert.equal(backupInventorySha256(inventory).length, 64);
+    assert.equal(
+      backupInventorySha256(inventory),
+      backupInventorySha256({ ...inventory, objectives: { ...inventory.objectives } }),
+    );
+  });
+
+  it('rejects unsafe or unverifiable recovery metadata', () => {
+    assert.throws(
+      () => parseBackupInventory({ ...inventory, backup_id: '../secrets' }),
+      /bounded identifier/,
+    );
+    assert.throws(
+      () =>
+        parseBackupInventory({
+          ...inventory,
+          artifacts: { ...inventory.artifacts, manifest_sha256: 'not-a-digest' },
+        }),
+      /SHA-256 digest/,
+    );
+    assert.throws(
+      () =>
+        parseBackupInventory({
+          ...inventory,
+          application: { ...inventory.application, image_digest: 'latest' },
+        }),
+      /image_digest/,
+    );
+    assert.throws(
+      () => parseBackupInventory({ ...inventory, objectives: { rpo_minutes: 0, rto_minutes: 60 } }),
+      /positive integer/,
+    );
   });
 });
 
