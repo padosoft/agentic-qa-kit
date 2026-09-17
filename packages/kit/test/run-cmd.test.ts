@@ -197,6 +197,7 @@ describe('aqa run', () => {
     assert.deepEqual(result.canonicalArtifacts, [
       'canonical/events.jsonl',
       'canonical/findings.jsonl',
+      'canonical/checkpoint.json',
       'canonical/manifest.json',
     ]);
     assert.equal(
@@ -208,6 +209,7 @@ describe('aqa run', () => {
       readFileSync(findingsPath, 'utf8'),
     );
     assert.ok(existsSync(join(result.runDir, 'canonical', 'manifest.json.meta.json')));
+    assert.ok(existsSync(join(result.runDir, 'canonical', 'checkpoint.json.meta.json')));
   });
 
   it('does not emit a finding when a scenario has no executable driver', async () => {

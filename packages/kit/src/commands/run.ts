@@ -35,6 +35,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import {
+  type AuditCheckpointSigner,
+  createAuditCheckpoint,
+  parseEventLines,
+} from '@aqa/compliance';
 import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { verifyPackContentDigest } from '@aqa/pack-scanner';
@@ -79,6 +84,8 @@ export interface RunOptions {
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ProbeRunner;
+  /** Optional operator key used to sign the final audit completeness checkpoint. */
+  auditCheckpointSigner?: AuditCheckpointSigner;
 }
 
 export interface RunResult {
@@ -663,6 +670,25 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       canonicalRefs[key] = { id: ref.id, sha256: ref.sha256, bytes: ref.bytes };
     } catch (e) {
       canonicalArtifactErrors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (canonicalArtifactErrors.length === 0) {
+    try {
+      const checkpoint = createAuditCheckpoint(
+        parseEventLines(readFileSync(eventsPath, 'utf8')),
+        opts.auditCheckpointSigner,
+      );
+      const checkpointRef = await artifactStore.putJson('canonical/checkpoint.json', checkpoint);
+      canonicalArtifacts.push(checkpointRef.key);
+      canonicalRefs['canonical/checkpoint.json'] = {
+        id: checkpointRef.id,
+        sha256: checkpointRef.sha256,
+        bytes: checkpointRef.bytes,
+      };
+    } catch (e) {
+      canonicalArtifactErrors.push(
+        `canonical/checkpoint.json: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
   if (canonicalArtifactErrors.length === 0) {

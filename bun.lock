@@ -113,6 +113,7 @@
         "@aqa/adapters": "workspace:*",
         "@aqa/artifacts": "workspace:*",
         "@aqa/auth": "workspace:*",
+        "@aqa/compliance": "workspace:*",
         "@aqa/ingest": "workspace:*",
         "@aqa/observability": "workspace:*",
         "@aqa/pack-author": "workspace:*",

@@ -23,5 +23,8 @@ authenticity. The trust key and retention domain remain operator-controlled.
 
 - Compliance tests cover full-chain acceptance, truncation, replacement,
   signature verification, and missing trusted-key rejection.
-- The contract is not yet automatically emitted by every run or persisted to a
-  WORM/Object-Lock domain; that integration remains the next slice.
+- `aqa run` now emits `canonical/checkpoint.json` beside the canonical event
+  and finding streams and includes its content reference in
+  `canonical/manifest.json`.
+- The checkpoint is not yet persisted to a WORM/Object-Lock domain; external
+  retention and independent checkpoint publication remain deployment work.

@@ -25,6 +25,12 @@
   canonical digest; sign it only with an explicitly trusted key and retain it
   outside the mutable run directory.
 
+- **Checkpointing belongs after `run_finished`.** Creating the checkpoint
+  before finalization attests an incomplete event set. Emit it only after the
+  terminal event, then reference it from the canonical manifest; this keeps
+  the run-local evidence internally discoverable while leaving WORM retention
+  as a separate trust boundary.
+
 ## 2026-09-17 — evidence-based enterprise review
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.
