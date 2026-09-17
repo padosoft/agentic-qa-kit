@@ -69,3 +69,6 @@ metadata-only evidence. Tenant scope is derived from `McpPrincipal`, starts
 require an idempotency key, and raw event/tool payloads are never returned.
 The host still owns MCP transport, authentication and the live queue/provider
 implementation; the included tests prove the JSON-RPC policy boundary only.
+For the built-in control-plane binding, `createMcpRunPort(ctx)` delegates to
+the existing `RunnerQueue` and `StoreProvider` with the same tenant fencing,
+profile validation, queue idempotency and bounded evidence counts used by REST.

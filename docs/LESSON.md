@@ -1800,3 +1800,11 @@ TypeScript parameter properties compile normally but fail when Node 22 loads
 test sources through its strip-only TypeScript support. New cross-runtime
 code must use explicit class fields and run the actual Node test entrypoint;
 typecheck alone cannot prove fallback-runtime compatibility.
+
+# 2026-09-17 — protocol adapters must bind authoritative state
+
+An MCP dispatcher backed only by callbacks can pass protocol tests while the
+real queue and store still disagree with REST. Add a concrete port that reuses
+the authoritative queue idempotency, lease fencing and tenant-scoped store,
+then test plan → start → status across that boundary. Live database,
+authentication and transport evidence remain separate.

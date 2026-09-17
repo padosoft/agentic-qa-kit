@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AqaMcpServer, type McpPrincipal, type McpRunPort } from '../src/mcp.ts';
+import { MemoryStore } from '@aqa/store';
+import { RunnerQueue } from '../dist/index.js';
+import {
+  AqaMcpServer,
+  type McpPrincipal,
+  type McpRunPort,
+  createMcpRunPort,
+} from '../dist/index.js';
 
 const principal: McpPrincipal = {
   id: 'user-1',
@@ -154,4 +161,83 @@ test('keeps evidence response metadata-only and rejects malformed arguments', as
   );
   assert.equal(invalid?.error?.code, -32004);
   assert.doesNotMatch(JSON.stringify(evidence), /secret|token|payload/i);
+});
+
+test('binds the MCP lifecycle to the real queue and tenant-scoped store', async () => {
+  const store = new MemoryStore();
+  await store.saveProfile(
+    {
+      schema_version: '1',
+      name: 'smoke',
+      execution_mode: 'orchestrator',
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    },
+    { org: principal.org, project: principal.project },
+  );
+  const queue = new RunnerQueue();
+  const server = new AqaMcpServer(
+    createMcpRunPort({
+      store,
+      queue,
+      authenticate: async () => null,
+    }),
+  );
+  await initialized(server);
+  const planned = await server.handle(
+    {
+      jsonrpc: '2.0',
+      id: 7,
+      method: 'tools/call',
+      params: { name: 'aqa_plan_run', arguments: { profile: 'smoke' } },
+    },
+    principal,
+  );
+  assert.equal(
+    (planned?.result as { structuredContent: { accepted: boolean; side_effects: string } })
+      .structuredContent.accepted,
+    true,
+  );
+  const started = await server.handle(
+    {
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'tools/call',
+      params: {
+        name: 'aqa_start_run',
+        arguments: { profile: 'smoke', idempotency_key: 'mcp-run-1' },
+      },
+    },
+    principal,
+  );
+  const runId = (started?.result as { structuredContent: { run_id: string } }).structuredContent
+    .run_id;
+  assert.equal(queue.snapshot()[0]?.payload.org, principal.org);
+  const status = await server.handle(
+    {
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'tools/call',
+      params: { name: 'aqa_get_run', arguments: { run_id: runId } },
+    },
+    principal,
+  );
+  assert.equal(
+    (status?.result as { structuredContent: { status: string } }).structuredContent.status,
+    'queued',
+  );
+  const crossTenant = await server.handle(
+    {
+      jsonrpc: '2.0',
+      id: 10,
+      method: 'tools/call',
+      params: { name: 'aqa_get_run', arguments: { run_id: runId } },
+    },
+    { ...principal, org: 'other-org' },
+  );
+  assert.equal((crossTenant?.result as { structuredContent: unknown }).structuredContent, null);
 });

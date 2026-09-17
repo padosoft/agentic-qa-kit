@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Bound MCP to the real queue/store.** `createMcpRunPort(ctx)` now uses the
+  authoritative `RunnerQueue` and `StoreProvider`: plan is read-only, start
+  validates the tenant profile and uses scoped idempotency, status/cancel are
+  tenant-fenced, and evidence returns bounded store-derived metadata. A real
+  MemoryStore + RunnerQueue MCP journey passes alongside the 136-test server
+  suite; PostgreSQL and authenticated streamable-HTTP deployment evidence
+  remain required.
+
 - **Fixed the Node 22 CI compatibility regression in the MCP slice.** The
   first hosted matrix caught a TypeScript parameter-property unsupported by
   Node's strip-only loader; the server class now uses explicit fields. This

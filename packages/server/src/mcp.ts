@@ -1,3 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import { RunRequest as RunRequestSchema } from '@aqa/schemas';
+import type { ApiContext } from './api.js';
+import { IdempotencyConflictError, ResourceQuotaExceededError } from './runner-queue.js';
+
 /**
  * Transport-neutral MCP control surface for AQA.
  *
@@ -59,6 +64,96 @@ export interface McpRunPort {
   status(input: McpRunSelector): Promise<McpRunStatus | null>;
   cancel(input: McpRunSelector & { reason: string }): Promise<boolean>;
   evidence(input: McpRunSelector): Promise<McpEvidenceSummary | null>;
+}
+
+function queuedStatus(status: string): McpRunStatus['status'] {
+  switch (status) {
+    case 'queued':
+    case 'in_flight':
+    case 'done':
+    case 'failed':
+    case 'cancelled':
+      return status;
+    default:
+      return 'unknown';
+  }
+}
+
+/**
+ * Bind MCP to the same queue/store used by the REST control plane.
+ * Authentication happens in the transport; this adapter receives only the
+ * already-authenticated principal-derived scope from `AqaMcpServer`.
+ */
+export function createMcpRunPort(ctx: ApiContext): McpRunPort {
+  return {
+    async plan(input) {
+      const profile = await ctx.store.loadProfile(input.profile, input);
+      if (!profile) {
+        return {
+          ...input,
+          accepted: false,
+          execution_mode: 'orchestrator',
+          side_effects: 'none',
+          warnings: ['profile not found in the requested tenant project'],
+        };
+      }
+      const warnings =
+        profile.execution_mode === 'agent'
+          ? ['agent execution requires a host-owned agent driver']
+          : [];
+      return {
+        ...input,
+        accepted: warnings.length === 0,
+        execution_mode: profile.execution_mode,
+        side_effects: 'none',
+        warnings,
+      };
+    },
+    async start(input) {
+      const plan = await this.plan(input);
+      if (!plan.accepted) throw new Error(plan.warnings[0] ?? 'run plan rejected');
+      const profileRequest = RunRequestSchema.RunRequest.safeParse({ profile: input.profile });
+      if (!profileRequest.success) throw new Error('run request failed schema validation');
+      try {
+        const job = await ctx.queue.enqueue({
+          id: randomUUID(),
+          payload: { ...profileRequest.data, org: input.org, project: input.project },
+          enqueued_at: new Date().toISOString(),
+          idempotency_key: `${input.org}/${input.project}:${input.idempotency_key}`,
+          idempotency_fingerprint: JSON.stringify(profileRequest.data),
+        });
+        return { run_id: job.id, status: queuedStatus(job.status) };
+      } catch (error) {
+        if (error instanceof IdempotencyConflictError) throw new Error('idempotency key conflict');
+        if (error instanceof ResourceQuotaExceededError) throw new Error('run quota exceeded');
+        throw error;
+      }
+    },
+    async status(input) {
+      const job = await ctx.queue.get(input.run_id);
+      if (!job || job.payload.org !== input.org || job.payload.project !== input.project)
+        return null;
+      return { run_id: job.id, status: queuedStatus(job.status) };
+    },
+    async cancel(input) {
+      return ctx.queue.cancel(input.run_id, input.reason, input);
+    },
+    async evidence(input) {
+      const run = await ctx.store.loadRun(input.run_id);
+      if (!run || run.org !== input.org || run.project !== input.project) return null;
+      const [events, findings] = await Promise.all([
+        ctx.store.listEvents(input.run_id),
+        ctx.store.listFindings({ run_id: input.run_id, limit: 100 }),
+      ]);
+      return {
+        run_id: input.run_id,
+        event_count: events.length,
+        finding_count: findings.length,
+        artifact_refs: ['events.jsonl'],
+        truncated: events.length > 100 || findings.length >= 100,
+      };
+    },
+  };
 }
 
 export interface McpJsonRpcRequest {

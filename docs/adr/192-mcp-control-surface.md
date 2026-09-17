@@ -20,8 +20,12 @@ The host creates one instance per authenticated connection and injects an
 - requires an idempotency key for starts and bounds all strings;
 - returns metadata-only evidence summaries, never raw payloads or credentials.
 
-The streamable HTTP/SSE transport, authentication middleware and provider
-execution remain host responsibilities. They must preserve this contract.
+`createMcpRunPort()` binds the contract to the existing `RunnerQueue` and
+`StoreProvider`: profile planning is read-only, start uses the queue's scoped
+idempotency contract, status/cancel are tenant-fenced, and evidence is counted
+from the scoped store with a bounded metadata response. The streamable
+HTTP/SSE transport, authentication middleware and provider execution remain
+host responsibilities. They must preserve this contract.
 
 ## Consequences
 
