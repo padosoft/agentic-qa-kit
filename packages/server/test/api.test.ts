@@ -223,6 +223,16 @@ describe('makeApi', () => {
     assert.equal((events[0] as { type: string }).type, 'run.requested');
   });
 
+  it('POST /api/runs rejects fields outside the worker request contract', async () => {
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const response = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke', root: 'C:/unsafe' } },
+      ctx(),
+    );
+    assert.equal(response?.status, 400);
+    assert.match(String((response?.body as { error?: string }).error), /Unrecognized key|root/i);
+  });
+
   it('POST /api/runs/:id/cancel is tenant-scoped and fences the queued job', async () => {
     const events: unknown[] = [];
     const c = ctx({ eventBus: { publish: async (event) => events.push(event) } });

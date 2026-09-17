@@ -848,3 +848,8 @@
 
 - Extended the shared budget settlement contract so each completed reservation can persist provider model, authoritative input/output token counts, actual USD and the applied pricing catalog version/hash. PostgreSQL migration is additive and safe for existing reservation rows; orphan reaping remains metadata-free by design because no provider call completed.
 - Evidence: cost build/typecheck with **12 tests passed** and LLM adapter build with **17 tests passed**, including catalog identity propagation at settlement. Live PostgreSQL schema migration/concurrency and an operator-facing usage query remain deployment/integration evidence.
+
+# 2026-09-17 — strict run request boundary
+
+- Added the shared `RunRequest` schema and applied it before queue insertion. The public API now accepts only the supported `profile` and bounded deterministic `seed`; tenant org/project are server-derived and arbitrary fields such as filesystem roots are rejected before durable queue persistence.
+- Evidence: schemas/server build, server **123 tests passed**, including an explicit rejection of an unsafe `root` field. The worker still resolves the project root from operator configuration, never from the request payload.

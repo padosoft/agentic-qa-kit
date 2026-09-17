@@ -19,6 +19,7 @@ import {
   PackManifest as PackManifestSchema,
   Profile as ProfileSchema,
   RiskMap as RiskMapSchema,
+  RunRequest as RunRequestSchema,
   Scenario as ScenarioSchema,
   SsoConfig as SsoConfigSchema,
 } from '@aqa/schemas';
@@ -391,8 +392,17 @@ export function makeApi(): ApiHandler[] {
         if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
           return { status: 400, body: { error: 'run request body must be an object' } };
         }
+        const parsedRequest = RunRequestSchema.RunRequest.safeParse(req.body);
+        if (!parsedRequest.success) {
+          return asResponse(
+            {
+              error: `run request failed schema validation: ${formatZodError(parsedRequest.error)}`,
+            },
+            400,
+          );
+        }
         const payload = {
-          ...(req.body as Record<string, unknown>),
+          ...parsedRequest.data,
           org: s.org,
           project: s.project,
         };

@@ -1128,3 +1128,11 @@ Budget totals alone are insufficient for reconciliation. Persist the model,
 authoritative provider token counts, actual charge and pricing catalog identity
 on settlement; expired reservations must release only the estimate and must not
 pretend that a provider usage event occurred.
+
+# 2026-09-17 — queue payloads are an API security boundary
+
+Never persist the raw run request into a worker queue. Validate a small strict
+contract first, derive tenant scope from authenticated headers and keep roots,
+credentials and execution controls operator-owned. This prevents a future
+worker from accidentally turning a harmless API extension into arbitrary path
+or runtime control.
