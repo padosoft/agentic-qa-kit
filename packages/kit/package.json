@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@aqa/artifacts": "workspace:*",
+    "@aqa/observability": "workspace:*",
     "@aqa/ingest": "workspace:*",
     "@aqa/adapters": "workspace:*",
     "@aqa/auth": "workspace:*",

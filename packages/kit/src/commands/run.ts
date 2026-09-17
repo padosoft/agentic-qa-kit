@@ -35,10 +35,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
-import { Profile, Project, Scenario } from '@aqa/schemas';
+import { type Event, Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
 
@@ -67,6 +68,8 @@ export interface RunOptions {
    * beats bundled).
    */
   packsRoot?: string[];
+  /** Optional OTLP/HTTP endpoint; defaults to AQA_OTLP_ENDPOINT when set. */
+  otlpEndpoint?: string;
 }
 
 export interface RunResult {
@@ -403,7 +406,22 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
 
   const eventsPath = join(runDir, 'events.jsonl');
   const findingsPath = join(runDir, 'findings.jsonl');
-  const events = new EventChainWriter(eventsPath);
+  let telemetryError: string | undefined;
+  let telemetry: OtlpHttpSpanExporter | undefined;
+  let onEvent: ((event: Event.Event) => void) | undefined;
+  const otlpEndpoint = opts.otlpEndpoint ?? process.env.AQA_OTLP_ENDPOINT;
+  if (otlpEndpoint) {
+    try {
+      telemetry = new OtlpHttpSpanExporter({
+        endpoint: otlpEndpoint,
+        service_name: process.env.AQA_OTLP_SERVICE_NAME ?? 'aqa-kit',
+      });
+      onEvent = makeEventSpanObserver(new Tracer((span) => telemetry?.export(span)));
+    } catch (error) {
+      telemetryError = `OTLP configuration rejected: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  const events = new EventChainWriter(eventsPath, onEvent ? { onEvent } : {});
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,
   // even when a clean run produces zero findings. Wrap in try/catch so a
@@ -643,6 +661,14 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  if (telemetry) {
+    try {
+      await telemetry.shutdown();
+    } catch (error) {
+      telemetryError = `OTLP delivery unavailable: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
   // Build a structured error message when something went wrong. Any of these
   // is a real coverage gap, not a benign skip: a broken pack, a malformed
   // scenario, a manifest-listed file that doesn't exist, an unsafe path
@@ -741,6 +767,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   if (packErrors.length > 0 && reasons.length === 0) {
     for (const e of cap(packErrors)) warnings.push(`pack: ${e}`);
   }
+  if (telemetryError) warnings.push(telemetryError);
 
   return {
     ok: reasons.length === 0,

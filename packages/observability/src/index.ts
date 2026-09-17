@@ -257,6 +257,31 @@ export class Span {
   }
 }
 
+/** Create a bounded, payload-free event observer for audit-to-trace wiring. */
+export function makeEventSpanObserver(tracer: Tracer): (event: {
+  kind: string;
+  run_id: string;
+  seq: number;
+  scenario_id?: string | undefined;
+  finding_id?: string | undefined;
+  actor: { type: string };
+}) => void {
+  return (event) => {
+    const span = tracer.startSpan(
+      `aqa.event.${event.kind}`,
+      {
+        'aqa.event.kind': event.kind,
+        'aqa.event.seq': event.seq,
+        'aqa.event.actor_type': event.actor.type,
+        ...(event.scenario_id ? { 'aqa.scenario_id': event.scenario_id } : {}),
+        ...(event.finding_id ? { 'aqa.finding_id': event.finding_id } : {}),
+      },
+      { trace_id: '1'.repeat(32), span_id: '1'.repeat(16), run_id: event.run_id },
+    );
+    span.end();
+  };
+}
+
 type LabelValues = Record<string, string>;
 interface MetricSeries {
   value: number;

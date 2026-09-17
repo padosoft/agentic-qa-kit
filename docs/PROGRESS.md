@@ -36,6 +36,14 @@
   lint and diff-check pass. The hosted PostgreSQL job must execute the new
   cross-instance contract before claiming live HA evidence.
 
+- **OTLP runtime wiring shipped.** `aqa run` accepts `--otlp-endpoint` (or
+  `AQA_OTLP_ENDPOINT`), maps redacted audit-event metadata to bounded spans,
+  and drains the exporter before returning. Collector failures become a
+  visible warning while the hash-chained audit remains authoritative. Evidence:
+  the real run journey sends spans to a local HTTP Collector fixture and
+  verifies delivery before process return; observability 12/12, kit 126
+  passed/2 platform skips, typecheck and lint pass.
+
 - **Formal risk coverage measurement shipped.** `@aqa/methodology` now
   computes the M2 weighted score (invariant mapping 35%, oracle-backed
   scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health

@@ -25,6 +25,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -241,6 +242,42 @@ describe('aqa run', () => {
       payload?: { replay_artifacts?: number };
     };
     assert.equal(finished.payload?.replay_artifacts, 2);
+  });
+
+  it('exports audit event spans to a configured OTLP endpoint and drains before return', async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        payloads.push(JSON.parse(body) as Record<string, unknown>);
+        res.writeHead(200).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    try {
+      const { root, packDir } = fixtureProject();
+      const result = await runRun({
+        root,
+        profile: 'smoke',
+        packsRoot: [packDir],
+        otlpEndpoint: `http://127.0.0.1:${address.port}/v1/traces`,
+      });
+      assert.equal(result.ok, true);
+      assert.ok(payloads.length >= 1, 'run must deliver at least one OTLP batch before return');
+      const spans =
+        (payloads[0]?.resourceSpans as Array<{ scopeSpans: Array<{ spans: unknown[] }> }>) ?? [];
+      assert.ok((spans[0]?.scopeSpans[0]?.spans.length ?? 0) >= 1);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it('rejects an unknown profile rather than silently running all scenarios', async () => {

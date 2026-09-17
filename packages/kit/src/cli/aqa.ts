@@ -48,6 +48,7 @@ const VALUE_FLAGS = new Set([
   'threshold-file',
   'method',
   'scope',
+  'otlp-endpoint',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -265,6 +266,8 @@ async function main(): Promise<number> {
       // silently falling back to the default profile.
       if (args.values.has('profile')) runOpts.profile = args.values.get('profile') ?? '';
       if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
+      if (args.values.has('otlp-endpoint'))
+        runOpts.otlpEndpoint = args.values.get('otlp-endpoint') ?? '';
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));

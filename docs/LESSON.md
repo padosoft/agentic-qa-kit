@@ -763,3 +763,11 @@ implementation serializes each tenant's window inside a PostgreSQL transaction
 and advisory lock, then wires the same DSN through the runtime and Helm. The
 unit fallback remains useful for development, but only the cross-instance
 database contract can support a multi-replica production claim.
+
+# 2026-09-17 — Telemetry wiring must be exercised through the real runner
+
+An exporter unit test only proves serialization. The CLI now attaches a
+payload-free span observer to the persisted event stream and drains it before
+`aqa run` returns. The complete-journey test uses a real local HTTP endpoint;
+Collector delivery failure remains a warning and can never mutate or replace
+the hash-chained audit source of truth.

@@ -7,6 +7,7 @@ import {
   Tracer,
   evaluateSlo,
   formatTraceParent,
+  makeEventSpanObserver,
   parseTraceParent,
 } from '../dist/index.js';
 
@@ -38,6 +39,27 @@ describe('@aqa/observability', () => {
     assert.equal(records.length, 2);
     assert.equal(records[0]?.context.trace_id, records[1]?.context.trace_id);
     assert.equal(records[0]?.parent_span_id, records[1]?.context.span_id);
+  });
+
+  it('maps audit events to payload-free spans with run correlation', () => {
+    const spans: Array<{
+      name: string;
+      context: { run_id?: string };
+      attributes: Record<string, unknown>;
+    }> = [];
+    const observer = makeEventSpanObserver(new Tracer((span) => spans.push(span)));
+    observer({
+      kind: 'finding_emitted',
+      run_id: 'run-42',
+      seq: 3,
+      actor: { type: 'agent' },
+      scenario_id: 'checkout',
+      finding_id: 'finding-1',
+    });
+    assert.equal(spans[0]?.name, 'aqa.event.finding_emitted');
+    assert.equal(spans[0]?.context.run_id, 'run-42');
+    assert.equal(spans[0]?.attributes['aqa.scenario_id'], 'checkout');
+    assert.equal('payload' in (spans[0]?.attributes ?? {}), false);
   });
 
   it('renders bounded counters, gauges and cumulative histogram buckets', () => {
