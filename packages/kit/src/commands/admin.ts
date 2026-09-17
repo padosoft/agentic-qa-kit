@@ -64,6 +64,8 @@ export interface AdminOptions {
   scimRateLimitDsn?: string;
   /** Operator-managed Ed25519 trust root for imported packs. */
   packTrustedKeys?: ApiContext['packTrustedKeys'];
+  /** Require signed packs at the admin import boundary. Defaults to true. */
+  packRequireSignature?: ApiContext['packRequireSignature'];
   /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
   scimTokenManager?: ScimTokenManager;
   /** PostgreSQL DSN for the built-in durable SCIM token store. */
@@ -349,6 +351,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
+    packRequireSignature: opts.packRequireSignature ?? true,
     ...(eventBus ? { eventBus } : {}),
     ...(idempotency ? { idempotency } : {}),
     ...(budgetControl ? { budgetControl } : {}),

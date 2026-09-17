@@ -11,6 +11,11 @@ export interface ScanResult {
   issues: readonly ScanIssue[];
 }
 
+export interface ScanOptions {
+  /** Enterprise import policy; development callers may explicitly opt out. */
+  requireSignature?: boolean;
+}
+
 const DESTRUCTIVE_PROBE_KINDS = new Set(['shell']);
 
 /**
@@ -25,14 +30,26 @@ const DESTRUCTIVE_PROBE_KINDS = new Set(['shell']);
  * - low: pack ships templates but no risks (templates-only packs are valid
  *   but uncommon; flag for visibility).
  *
- * This is intentionally narrow at v0.3; the full ruleset lands with v0.4
- * once the marketplace + community-pack story crystallises.
+ * Signature enforcement is opt-in at the pure scanner boundary so local
+ * authoring can inspect unsigned packs; enterprise import boundaries must
+ * enable `requireSignature`.
  */
-export function scanPack(manifest: PackManifest.PackManifest): ScanResult {
+export function scanPack(
+  manifest: PackManifest.PackManifest,
+  options: ScanOptions = {},
+): ScanResult {
   const issues: ScanIssue[] = [];
   const probesByName = new Set(manifest.probes);
   const hasShellProbe = manifest.probes.some((p) => /shell/i.test(p));
   const isAlwaysOn = Object.keys(manifest.applies_when).length === 0;
+
+  if (options.requireSignature && !manifest.signing?.sha256) {
+    issues.push({
+      severity: 'critical',
+      rule: 'unsigned-pack',
+      message: 'Pack signature is required by the active enterprise supply-chain policy.',
+    });
+  }
 
   if (hasShellProbe && !manifest.signing?.sha256) {
     issues.push({

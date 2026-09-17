@@ -29,6 +29,7 @@ function ctx(
     quota?: QueueQuota;
     scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
     packTrustedKeys?: Readonly<Record<string, string>>;
+    packRequireSignature?: boolean;
     packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
     budgetControl?: {
       halt: (key: string, reason: string) => Promise<void>;
@@ -48,6 +49,7 @@ function ctx(
     ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
     ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
+    packRequireSignature: opts.packRequireSignature ?? false,
     ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
     ...(opts.budgetControl ? { budgetControl: opts.budgetControl } : {}),
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
@@ -997,6 +999,15 @@ probes: []
       // And the store actually has it.
       const stored = await c.store.loadPack('pack-imported');
       assert.ok(stored);
+    });
+
+    it('rejects unsigned manifests when enterprise signature policy is enabled', async () => {
+      const c = ctx({ packRequireSignature: true });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const res = await route?.handle({ headers: {}, params: {}, body: { yaml: VALID_YAML } }, c);
+      assert.equal(res?.status, 400);
+      assert.equal((res?.body as { code: string }).code, 'EPACKSCAN');
+      assert.match((res?.body as { error: string }).error, /supply-chain/i);
     });
 
     it('returns 400 on missing body.yaml (with code=EINVAL)', async () => {

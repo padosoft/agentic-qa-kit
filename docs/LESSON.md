@@ -1904,3 +1904,11 @@ already used `description`, `template` and `inputs` metadata in resource files.
 The loader must preserve that authoring format while normalizing only the
 executable contract; rejecting valid legacy metadata breaks the shipped kit.
 The regression is covered by bundled discovery plus a real `aqa run` journey.
+
+# 2026-09-18 — signing policy belongs at the import boundary
+
+The pure scanner needs an explicit policy switch for local authoring, but an
+enterprise server must default to rejecting unsigned packs before persistence.
+Shell-only checks are insufficient: metadata-only or HTTP packs can still be
+malicious or untrusted. Keep trust-root verification and real key rotation as
+separate deployment evidence.

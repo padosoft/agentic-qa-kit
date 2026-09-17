@@ -74,6 +74,8 @@ export interface ApiContext {
   scimRateLimit?: (org: string) => Promise<boolean> | boolean;
   /** Trusted Ed25519 pack keys keyed by operator-managed key_id. */
   packTrustedKeys?: Readonly<Record<string, string>>;
+  /** Require every imported pack to declare a verifiable signature. Defaults true. */
+  packRequireSignature?: boolean;
   /** Required policy when a pack declares a Sigstore bundle. */
   packSigstorePolicy?: SigstoreVerificationPolicy;
   /**
@@ -246,6 +248,7 @@ function scimDirectory(ctx: ApiContext): ScimDirectory {
 
 function validatePackForInstall(
   input: unknown,
+  requireSignature: boolean,
 ): { ok: true; manifest: PackManifest.PackManifest } | { ok: false; response: ApiResponse } {
   const validated = PackManifestSchema.PackManifest.safeParse(input);
   if (!validated.success) {
@@ -261,7 +264,7 @@ function validatePackForInstall(
     };
   }
   const manifest = validated.data;
-  const blockingIssues = scanPack(manifest).issues.filter(
+  const blockingIssues = scanPack(manifest, { requireSignature }).issues.filter(
     (issue) => issue.severity === 'critical' || issue.severity === 'high',
   );
   if (blockingIssues.length > 0) {
@@ -668,7 +671,10 @@ export function makeApi(): ApiHandler[] {
             400,
           );
         }
-        const checked = validatePackForInstall(body.manifest ?? req.body);
+        const checked = validatePackForInstall(
+          body.manifest ?? req.body,
+          ctx.packRequireSignature ?? true,
+        );
         if (!checked.ok) return checked.response;
         const manifest = checked.manifest;
         if (manifest.signing) {
@@ -905,7 +911,7 @@ export function makeApi(): ApiHandler[] {
           );
         }
         const manifest = validated.data;
-        const scan = scanPack(manifest);
+        const scan = scanPack(manifest, { requireSignature: ctx.packRequireSignature ?? true });
         const blockingIssues = scan.issues.filter(
           (issue) => issue.severity === 'critical' || issue.severity === 'high',
         );

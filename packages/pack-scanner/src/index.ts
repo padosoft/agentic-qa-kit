@@ -1,4 +1,4 @@
-export { scanPack, type ScanIssue, type ScanResult } from './scan.js';
+export { scanPack, type ScanIssue, type ScanOptions, type ScanResult } from './scan.js';
 export {
   manifestDigest,
   packContentDigest,
