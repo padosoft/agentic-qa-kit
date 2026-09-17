@@ -1,4 +1,4 @@
-import { type RunOptions, type RunResult, runRun } from './commands/run.js';
+import { type RunOptions, runRun } from './commands/run.js';
 
 export interface RunJob {
   payload: Readonly<Record<string, unknown>>;
@@ -12,7 +12,7 @@ export interface RunJobHandlerOptions {
 
 /** Adapt the durable server job contract to the canonical kit orchestrator. */
 export function makeRunJobHandler(opts: RunJobHandlerOptions) {
-  return async (job: RunJob, signal: AbortSignal): Promise<RunResult> => {
+  return async (job: RunJob, signal: AbortSignal): Promise<void> => {
     const profile = job.payload.profile;
     const seed = job.payload.seed;
     if (profile !== undefined && typeof profile !== 'string')
@@ -28,6 +28,5 @@ export function makeRunJobHandler(opts: RunJobHandlerOptions) {
     };
     const result = await runRun(runOptions);
     if (!result.ok) throw new Error(result.error ?? 'aqa run failed');
-    return result;
   };
 }

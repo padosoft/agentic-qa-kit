@@ -792,3 +792,8 @@
 
 - Added `makeRunJobHandler` in `@aqa/kit`. It maps a validated queue payload to the fixed operator-configured project root and the canonical `runRun` implementation, forwards the worker `AbortSignal`, and rejects invalid profile/seed types. `RunOptions` now stops scheduling after cancellation and returns `ok: false` with explicit cancellation evidence.
 - Evidence: kit build/bundle, typecheck, **56 filtered tests passed**, and `git diff --check` passed. A live server-to-worker HTTP process journey, artifact publication through a remote store, runner identity enforcement and multi-process PostgreSQL evidence remain open.
+
+# 2026-09-17 — real queue-to-HTTP run journey
+
+- Added `makeKitWorker`, the official composition of `RunnerWorker` and the canonical kit handler. The integration journey now enqueues a real job, dequeues it through the worker, executes a local HTTP probe through `runRun`, writes the real `.aqa/runs` artifacts, and ACKs the queue job.
+- Evidence: kit build/bundle, typecheck, targeted journey tests **3/3 passed**, and `git diff --check` passed. This is in-process MemoryQueue evidence; a separate-process PostgreSQL/remote-artifact/runner-auth journey is still required for production sign-off.

@@ -33,4 +33,4 @@ than allowing a cancelled run to greenlight a gate.
 ## Verification
 
 `bun run --cwd packages/kit build`, `bun run --cwd packages/kit typecheck`, and
-the filtered kit suite pass with **56 tests and 0 failures** locally.
+the targeted kit journey suite passes with **3 tests and 0 failures** locally.

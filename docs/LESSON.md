@@ -1034,6 +1034,14 @@ payload would turn a legitimate run request into local file access. Only narrow
 execution selectors such as profile and seed are decoded from the job payload;
 deployment configuration owns filesystem and pack boundaries.
 
+# 2026-09-17 — prove queue execution through the real orchestrator
+
+Testing `RunnerWorker` with a fake handler proves only queue mechanics. The
+meaningful journey must enqueue a job, use the real kit handler, hit a real local
+HTTP target, write the canonical run artifacts and ACK only after completion.
+The in-process journey now proves that chain; separate processes, PostgreSQL,
+remote artifacts and authenticated runner identity remain distinct evidence.
+
 # 2026-09-17 — killing a shell child is not a full sandbox kill
 
 The shell driver can translate `AbortSignal` into `child.kill()` and report an

@@ -30,9 +30,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { FileArtifactStore } from '@aqa/artifacts';
+import { RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
+import { makeKitWorker } from '../dist/worker.js';
 
 /**
  * Re-walk the writer's hash chain. This mirrors `packages/runner/src/events.ts`
@@ -183,6 +185,40 @@ function runFixture(options: Parameters<typeof runRun>[0]): ReturnType<typeof ru
 }
 
 describe('aqa run', () => {
+  it('executes a queued job through the real worker and HTTP run lifecycle', async () => {
+    const { root, packDir } = fixtureProject();
+    const target = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const address = target.address();
+    assert.ok(address && typeof address === 'object');
+    const projectPath = join(root, '.aqa', 'project.yaml');
+    const project = yamlParse(readFileSync(projectPath, 'utf8')) as Record<string, unknown>;
+    project.sut = {
+      ...(project.sut as Record<string, unknown>),
+      base_url: `http://127.0.0.1:${address.port}`,
+    };
+    writeFileSync(projectPath, yamlStringify(project));
+    try {
+      const queue = new RunnerQueue({ lease_ms: 1_000 });
+      const job = queue.enqueue({
+        id: 'worker-http-journey',
+        payload: { profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      const worker = makeKitWorker({ queue, root, packsRoot: [packDir], poll_ms: 10 });
+      assert.deepEqual(await worker.runOnce(), { status: 'completed', job_id: job.id });
+      assert.equal(queue.get(job.id)?.status, 'done');
+      assert.ok(readdirSync(join(root, '.aqa', 'runs')).length > 0);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        target.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
     const { root, packDir } = fixtureProject();
     const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
