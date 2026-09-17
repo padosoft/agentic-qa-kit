@@ -1,5 +1,28 @@
 # Lessons
 
+# 2026-09-18 — CLI evidence must validate claimed timing against raw timestamps
+
+An RTO field that is merely below the approved objective can still be false.
+Restore evidence must derive elapsed time from trusted event timestamps and
+reject disagreement; CLI tests must exercise the bundled artifact and missing
+required flag values, while user-facing errors should use the central
+redaction-safe formatter.
+
+# 2026-09-18 — Signed envelopes need an unambiguous boundary
+
+When a permissive evidence parser ignores unknown fields, wrapper-shaped keys
+can silently change the interpretation of an unsigned document. Reserve the
+envelope keys in the inner schema (or use an explicit discriminator) and test
+both the parser and the shipped CLI boundary.
+
+# 2026-09-18 — DR evidence needs a CLI gate
+
+A validated library contract is easy to bypass operationally if the runbook has
+no executable command. Expose backup-inventory and restore-drill verification
+through the same shipped CLI, require an explicit trust root for signed
+inventories, and keep infrastructure PITR/KMS/WORM evidence separate from JSON
+consistency checks.
+
 # 2026-09-18 — unsafe injected clients must be explicit
 
 A custom PostgreSQL client that lacks a transaction primitive cannot provide

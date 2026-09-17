@@ -121,6 +121,10 @@ describe('backup inventory contract', () => {
       () => parseBackupInventory({ ...inventory, objectives: { rpo_minutes: 0, rto_minutes: 60 } }),
       /positive integer/,
     );
+    assert.throws(
+      () => parseBackupInventory({ ...inventory, signature: 'unsigned-metadata' }),
+      /envelope keys are reserved/,
+    );
   });
 
   it('signs and verifies the canonical inventory with an explicit trust root', () => {
@@ -196,8 +200,24 @@ describe('restore drill evidence contract', () => {
       /manifest changed/,
     );
     assert.throws(
-      () => assertRestoreDrillEvidence({ ...base, observed_rto_minutes: 61 }, inventory),
+      () =>
+        assertRestoreDrillEvidence(
+          { ...base, completed_at: '2026-09-17T11:01:00Z', observed_rto_minutes: 61 },
+          inventory,
+        ),
       /exceeded the approved RTO/,
+    );
+    assert.throws(
+      () =>
+        assertRestoreDrillEvidence(
+          {
+            ...base,
+            completed_at: '2026-09-17T10:30:00Z',
+            observed_rto_minutes: 20,
+          },
+          inventory,
+        ),
+      /observed RTO does not match/,
     );
     assert.throws(
       () =>

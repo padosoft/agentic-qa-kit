@@ -48,6 +48,10 @@ Commands
   doctor        Report kit health (runtime, .aqa, agent docs, validation)
   validate      Validate .aqa/* against @aqa/schemas
   risk coverage  Show fail-closed risk coverage from persisted run evidence
+  dr inventory <file> [--public-key <pem>]
+                Validate/hash a backup inventory; verify signed inventories
+  dr restore <inventory> <evidence> [--public-key <pem>]
+                Validate a restore drill against RPO/RTO and security checks
 
 Common options
   --force       (init) overwrite existing files
@@ -142,6 +146,19 @@ worker leases durable. Both clients are closed during graceful shutdown.
 
 The PostgreSQL service, credentials, TLS policy, migrations and backups remain
 operator responsibilities; the CLI does not print the DSN or credentials.
+
+## Disaster recovery evidence
+
+`aqa dr inventory <file>` validates the machine-readable backup inventory used
+by the DR runbook and prints only stable identifiers plus the canonical digest.
+Signed inventory envelopes require `--public-key`; the CLI will not treat a
+signature as trusted without an explicit Ed25519 trust root.
+
+`aqa dr restore <inventory> <evidence>` validates a restore-drill record
+against the selected inventory: backup identity, artifact manifest digest,
+RPO/RTO objectives and required security checks must all match. This is an
+operator evidence gate, not a substitute for actually running PostgreSQL PITR
+or object-store restore in an isolated environment.
 
 Host applications can inject a bounded `MetricsRegistry` into `runAdmin` to
 expose `GET /metrics` in Prometheus text format. Scraping is opt-in; a

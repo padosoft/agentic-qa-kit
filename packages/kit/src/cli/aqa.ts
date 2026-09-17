@@ -3,6 +3,7 @@ import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { createAuditCheckpointStore } from '../artifacts.js';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
+import { runDrInventory, runDrRestore } from '../commands/dr.js';
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
@@ -52,6 +53,7 @@ const VALUE_FLAGS = new Set([
   'method',
   'scope',
   'otlp-endpoint',
+  'public-key',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -116,6 +118,8 @@ ${bold('Commands')}
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
+  dr inventory <file> [--public-key <pem>] Validate/hash a backup inventory; verify signed inventories
+  dr restore <inventory> <evidence> [--public-key <pem>] Validate a restore drill against RPO/RTO
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
   risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
@@ -134,6 +138,7 @@ ${bold('Common options')}
   --run-id <id>          (report) target a specific run; default = latest
   --format <fmt>         (report) md | json | both (default: both)
   --threshold-file <f>   (ingest k6/locust) apply explicit performance policy JSON
+  --public-key <pem>     (dr) trusted Ed25519 public key for signed backup inventories
   --attempts <n>         (verify) attempts, 1..10 (default: 3)
   --base-url <url>       (verify) allowlisted HTTP SUT base URL
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
@@ -418,6 +423,59 @@ async function main(): Promise<number> {
         console.info(`    ${dim('threshold evidence: ')}${result.threshold_artifact_path}`);
       }
       return result.threshold_result?.passed === false ? 2 : 0;
+    }
+    case 'dr': {
+      printHeader('dr');
+      const subcommand = args.positionals[0];
+      const publicKeyFile = args.values.get('public-key');
+      if (args.flags.has('public-key') && !args.values.has('public-key')) {
+        console.error(red('aqa dr: --public-key requires a value'));
+        return 1;
+      }
+      if (subcommand === 'inventory') {
+        const inventoryFile = args.positionals[1];
+        if (!inventoryFile) {
+          console.error(red('aqa dr inventory: missing <file>'));
+          return 1;
+        }
+        const result = runDrInventory({
+          inventoryFile,
+          ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+        });
+        if (!result.ok) {
+          console.error(red(`aqa dr inventory: ${result.error ?? 'verification failed'}`));
+          return 1;
+        }
+        console.info(`  ${green('✓')} backup ${result.backup_id}`);
+        console.info(`  ${dim('sha256:')} ${result.inventory_sha256}`);
+        console.info(`  ${dim('signature:')} ${result.signature}`);
+        return 0;
+      }
+      if (subcommand === 'restore') {
+        const inventoryFile = args.positionals[1];
+        const evidenceFile = args.positionals[2];
+        if (!inventoryFile || !evidenceFile) {
+          console.error(red('aqa dr restore: missing <inventory> <evidence>'));
+          return 1;
+        }
+        const result = runDrRestore({
+          inventoryFile,
+          evidenceFile,
+          ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+        });
+        if (!result.ok) {
+          console.error(red(`aqa dr restore: ${result.error ?? 'verification failed'}`));
+          return 1;
+        }
+        console.info(`  ${green('✓')} restore drill ${result.drill_id}`);
+        console.info(`  ${dim('backup:')} ${result.backup_id}`);
+        console.info(
+          `  ${dim('observed:')} rpo=${result.observed_rpo_minutes}m rto=${result.observed_rto_minutes}m`,
+        );
+        return 0;
+      }
+      console.error(red(`aqa dr: unknown subcommand "${subcommand ?? ''}"`));
+      return 1;
     }
     case 'risk': {
       const subcommand = args.positionals[0];

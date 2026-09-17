@@ -87,6 +87,78 @@ describe('build-bundle — dist/cli.cjs (skipped if not built)', () => {
     assert.equal(admin.status, 0, `bundled admin failed: ${admin.stderr}`);
   });
 
+  it('executes DR inventory and restore from the bundled entrypoint', () => {
+    if (!existsSync(bundlePath)) return;
+    const dir = mkdtempSync(join(tmpdir(), 'aqa-bundled-dr-'));
+    const inventory = {
+      schema_version: '1',
+      backup_id: 'backup-2026-09-18',
+      created_at: '2026-09-18T10:00:00Z',
+      database: {
+        pitr_target: '2026-09-18T09:55:00Z',
+        lsn: '0/16B6C50',
+        schema_version: '2026.09.18',
+      },
+      artifacts: {
+        snapshot_id: 'snapshot-2026-09-18',
+        manifest_sha256: 'a'.repeat(64),
+        object_count: 42,
+      },
+      application: {
+        image_digest: `sha256:${'b'.repeat(64)}`,
+        schema_version: '2026.09.18',
+      },
+      operator_run_id: 'drill-2026-09-18',
+      objectives: { rpo_minutes: 15, rto_minutes: 60 },
+    };
+    const restore = {
+      schema_version: '1',
+      drill_id: 'drill-2026-09-18',
+      source_backup_id: inventory.backup_id,
+      source_manifest_sha256: inventory.artifacts.manifest_sha256,
+      restored_manifest_sha256: inventory.artifacts.manifest_sha256,
+      target_environment: 'recovery-cluster',
+      started_at: '2026-09-18T10:00:00Z',
+      completed_at: '2026-09-18T10:20:00Z',
+      observed_rpo_minutes: 5,
+      observed_rto_minutes: 20,
+      checks: {
+        tenant_isolation: true,
+        audit_chain: true,
+        queue_fencing: true,
+        secret_redaction: true,
+      },
+    };
+    const inventoryPath = join(dir, 'inventory.json');
+    const restorePath = join(dir, 'restore.json');
+    writeFileSync(inventoryPath, JSON.stringify(inventory), 'utf8');
+    writeFileSync(restorePath, JSON.stringify(restore), 'utf8');
+    const inventoryRun = spawnSync(
+      process.execPath,
+      [bundlePath, 'dr', 'inventory', inventoryPath],
+      {
+        cwd: kitRoot,
+        encoding: 'utf8',
+      },
+    );
+    assert.equal(inventoryRun.status, 0, `bundled dr inventory failed: ${inventoryRun.stderr}`);
+    assert.match(inventoryRun.stdout, /backup backup-2026-09-18/);
+    const restoreRun = spawnSync(
+      process.execPath,
+      [bundlePath, 'dr', 'restore', inventoryPath, restorePath],
+      { cwd: kitRoot, encoding: 'utf8' },
+    );
+    assert.equal(restoreRun.status, 0, `bundled dr restore failed: ${restoreRun.stderr}`);
+    assert.match(restoreRun.stdout, /restore drill drill-2026-09-18/);
+    const missingKeyValue = spawnSync(
+      process.execPath,
+      [bundlePath, 'dr', 'inventory', inventoryPath, '--public-key'],
+      { cwd: kitRoot, encoding: 'utf8' },
+    );
+    assert.equal(missingKeyValue.status, 1);
+    assert.match(missingKeyValue.stderr, /--public-key requires a value/);
+  });
+
   it('does not retain ESM-only import.meta path dependencies in the CJS artifact', () => {
     if (!existsSync(bundlePath)) return;
     const bundle = readFileSync(bundlePath, 'utf8');

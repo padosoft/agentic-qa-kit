@@ -13,6 +13,30 @@
 
 ## 2026-09-18
 
+- **Hardened the DR evidence CLI after automated review.** Restore evidence now
+  must reconcile `observed_rto_minutes` with the raw `started_at` and
+  `completed_at` timestamps, bundled-entrypoint tests cover both DR commands
+  and missing `--public-key` values, and CLI failures use the shared
+  redaction-safe error formatter. Targeted compliance/kit tests are green;
+  full repository gates are the next proof before pushing the PR update.
+
+- **Closed the DR envelope ambiguity found in the second review pass.** The
+  inventory parser now reserves top-level `inventory`/`signature` keys so an
+  unsigned document cannot be confused with a signed envelope; compliance and
+  CLI regression tests cover the boundary. The refreshed hosted run is still
+  required before merge.
+
+- **Added DR evidence CLI gates.** `aqa dr inventory` now validates and hashes a
+  machine-readable backup inventory, verifies signed inventory envelopes only
+  with an explicit Ed25519 public key, and `aqa dr restore` validates a restore
+  drill against the inventory's backup identity, artifact manifest digest,
+  RPO/RTO objectives and required security checks. The DR runbook now points to
+  these gates. Evidence: `@aqa/kit` suite **151 pass / 0 fail / 2 platform
+  skips**, repository typecheck/lint/build, installed CJS `aqa dr` smoke and
+  workspace tests **711 pass / 0 fail** pass locally. Hosted CI is still
+  required before merge; real PostgreSQL PITR, object-store restore, KMS and
+  WORM controls remain deployment evidence.
+
 - **Closed the PostgreSQL trajectory migration race in code.** Hosted CI showed
   that two trajectory-store instances could concurrently create the same
   PostgreSQL relation, despite `IF NOT EXISTS`, producing a `pg_type` duplicate
