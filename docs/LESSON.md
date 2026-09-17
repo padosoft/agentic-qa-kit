@@ -1605,3 +1605,11 @@ attested it. Sign the canonical manifest with Ed25519 and require the caller to
 provide the trusted public key during verification; never infer trust from the
 embedded key ID and never claim that repository code manages KMS/Vault key
 custody or rotation.
+
+# 2026-09-17 — AI drafts need provenance and valid fallbacks
+
+Schema validation alone is not enough for generated QA scenarios. The review
+queue must retain model/version and hashes of the invariant, exact prompt and
+raw response without persisting sensitive text. Also test the minimal valid
+model response: a fallback that omits required scenario identity fields can
+silently turn every generation into an empty queue.

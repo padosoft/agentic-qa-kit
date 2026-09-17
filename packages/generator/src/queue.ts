@@ -2,6 +2,16 @@ import type { Scenario } from '@aqa/schemas';
 
 export type ReviewState = 'pending' | 'approved' | 'rejected';
 
+export interface GenerationProvenance {
+  provider: string;
+  model: string;
+  model_version_hash?: string;
+  risk_id: string;
+  invariant_statement_sha256: string;
+  prompt_sha256: string;
+  response_sha256: string;
+}
+
 export interface ReviewItem {
   id: string;
   scenario: Scenario.Scenario;
@@ -10,6 +20,7 @@ export interface ReviewItem {
   reviewed_at?: string;
   reviewer?: string;
   rationale?: string;
+  provenance?: GenerationProvenance;
 }
 
 /**
@@ -21,12 +32,18 @@ export interface ReviewItem {
 export class ReviewQueue {
   private items: ReviewItem[] = [];
 
-  enqueue(scenario: Scenario.Scenario, id: string, now: Date = new Date()): ReviewItem {
+  enqueue(
+    scenario: Scenario.Scenario,
+    id: string,
+    now: Date = new Date(),
+    provenance?: GenerationProvenance,
+  ): ReviewItem {
     const item: ReviewItem = {
       id,
       scenario,
       state: 'pending',
       created_at: now.toISOString(),
+      ...(provenance ? { provenance } : {}),
     };
     this.items.push(item);
     return item;
