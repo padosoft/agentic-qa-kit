@@ -822,3 +822,4 @@
 
 - Added `BudgetLedger` with atomic Memory and PostgreSQL implementations. Reservations are keyed by org/project/run scope, account for in-flight estimated spend, and settle idempotently against actual usage. `BudgetedLlmAdapter` optionally uses the ledger, preventing concurrent workers from dispatching past a shared budget.
 - Evidence: cost build and **9 tests passed**, LLM adapter build and **16 tests passed**, including concurrent shared-ledger admission. PostgreSQL live concurrency/settlement evidence, durable budget configuration APIs, pricing version distribution and reconciliation remain open.
+- Hardening follow-up: PostgreSQL ledger migrations now use an advisory lock and existing keys reject changed budget limits, preventing replica configuration drift.

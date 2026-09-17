@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { BudgetDispatchBlockedError, BudgetTracker } from '../dist/budget.js';
+import { MemoryBudgetLedger } from '../dist/ledger.js';
 
 describe('BudgetTracker', () => {
   it('charges per-call cost based on input + output tokens', () => {
@@ -75,5 +76,20 @@ describe('BudgetTracker', () => {
       () => t.charge({ model: 'claude-sonnet-4-6', tokens_in: -1, tokens_out: 0 }),
       /token counts/,
     );
+  });
+});
+
+describe('MemoryBudgetLedger', () => {
+  it('reserves atomically and releases the estimate on settlement', async () => {
+    const ledger = new MemoryBudgetLedger();
+    const first = await ledger.reserve('org/project', 1, 0.6);
+    await assert.rejects(
+      () => ledger.reserve('org/project', 1, 0.5),
+      /distributed budget exhausted/,
+    );
+    await ledger.settle(first, 0.2);
+    const second = await ledger.reserve('org/project', 1, 0.7);
+    await ledger.settle(second, 0.7);
+    await ledger.settle(second, 0.7);
   });
 });

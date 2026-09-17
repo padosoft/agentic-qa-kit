@@ -9,7 +9,9 @@ Add a `BudgetLedger` boundary with `reserve(key, budget, estimate)` and
 idempotent `settle(reservation, actual)`. `MemoryBudgetLedger` supports local
 execution. `PostgresBudgetLedger` stores budget rows and reservations, locks the
 budget row during admission, rejects when spent plus reserved plus the new
-estimate reaches the limit, and settles each reservation once.
+estimate reaches the limit, and settles each reservation once. Its migration is
+advisory-locked, and an existing key rejects a changed budget configuration
+instead of silently adopting it.
 
 `BudgetedLlmAdapter` uses the ledger optionally in addition to its local
 `BudgetTracker`: reserve before provider dispatch, release on provider failure,

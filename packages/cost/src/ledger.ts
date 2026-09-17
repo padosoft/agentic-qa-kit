@@ -61,12 +61,17 @@ export class PostgresBudgetLedger implements BudgetLedger {
   }
 
   private async migrate(): Promise<void> {
-    await this.q(
-      'CREATE TABLE IF NOT EXISTS aqa_llm_budgets (key text PRIMARY KEY, budget_usd numeric NULL, reserved_usd numeric NOT NULL DEFAULT 0, spent_usd numeric NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())',
-    );
-    await this.q(
-      'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
-    );
+    await this.q("SELECT pg_advisory_lock(hashtext('aqa_llm_budget_ledger_migration'))");
+    try {
+      await this.q(
+        'CREATE TABLE IF NOT EXISTS aqa_llm_budgets (key text PRIMARY KEY, budget_usd numeric NULL, reserved_usd numeric NOT NULL DEFAULT 0, spent_usd numeric NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())',
+      );
+      await this.q(
+        'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
+      );
+    } finally {
+      await this.q("SELECT pg_advisory_unlock(hashtext('aqa_llm_budget_ledger_migration'))");
+    }
   }
 
   async reserve(key: string, budgetUsd: number | null, estimatedUsd: number): Promise<string> {
@@ -85,6 +90,8 @@ export class PostgresBudgetLedger implements BudgetLedger {
       )) as Array<{ budget_usd: number | null; reserved_usd: number; spent_usd: number }>;
       const row = current[0];
       if (!row) throw new Error('[cost] budget ledger row missing');
+      if (row.budget_usd !== budgetUsd)
+        throw new Error('[cost] budget configuration changed for active ledger key');
       if (
         row.budget_usd !== null &&
         row.spent_usd + row.reserved_usd + estimatedUsd >= row.budget_usd

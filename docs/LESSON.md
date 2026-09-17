@@ -1081,6 +1081,11 @@ once with provider usage, and release the estimate on provider failure. Keep the
 reservation key tenant-scoped and treat pricing/version configuration as an
 audited deployment input.
 
+The PostgreSQL ledger must serialize both migration and budget configuration:
+advisory-lock DDL and compare the requested limit with the locked row before
+reserving. Otherwise two replicas can silently use different limits for the
+same project.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the
