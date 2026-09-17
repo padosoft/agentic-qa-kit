@@ -1,4 +1,5 @@
 import { FixtureAdapter } from './fixture.js';
+import { OpenAiCompatibleAdapter, type OpenAiCompatibleOptions } from './openai-compatible.js';
 import type { LlmAdapter, LlmProvider } from './types.js';
 
 class ScaffoldAdapter implements LlmAdapter {
@@ -19,6 +20,7 @@ class ScaffoldAdapter implements LlmAdapter {
 export function adapterFor(
   provider: LlmProvider,
   opts?: {
+    live?: OpenAiCompatibleOptions;
     fixtures?: Parameters<typeof FixtureAdapter.prototype.call> extends never
       ? never
       : Array<{
@@ -34,6 +36,9 @@ export function adapterFor(
 ): LlmAdapter {
   if (provider === 'fixture') {
     return new FixtureAdapter(opts?.fixtures ?? []);
+  }
+  if (provider === 'openai' || provider === 'ollama' || provider === 'vllm') {
+    return new OpenAiCompatibleAdapter(provider, opts?.live);
   }
   return new ScaffoldAdapter(provider);
 }

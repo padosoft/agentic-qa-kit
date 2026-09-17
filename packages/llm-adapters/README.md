@@ -5,8 +5,12 @@ Unified LLM client surface for `agentic-qa-kit`. Providers:
 - `anthropic`, `openai`, `google`, `cohere`, `ollama`, `vllm`, `bedrock`,
   `fixture`.
 
-All live providers ship as **scaffold adapters at v0.3** — they throw on
-`call()` with an explicit message. The wire-protocol drivers land at v0.4.
+`openai`, `ollama` and `vllm` use an OpenAI-compatible HTTP adapter with
+timeouts, bounded output tokens and pre-request redaction. `anthropic`,
+`google`, `cohere` and `bedrock` remain explicit scaffolds until their
+provider-specific wire contracts and auth/region tests land. Set
+`AQA_LLM_API_KEY`/`AQA_LLM_BASE_URL` or pass `live` options; credentials are
+never included in errors.
 
 For tests and CI, use the **FixtureAdapter**: record once, replay
 deterministically by content hash. This is the canonical pattern for keeping

@@ -159,3 +159,9 @@
 - Evidence: `bun run --filter @aqa/artifacts test` (3 passed), typecheck and build passed.
 - Honest gap: existing runner/reporter/server paths still write directly to `.aqa/runs`; wiring them to this contract plus S3/MinIO/WORM/tenant authorization is the next acceptance slice.
 - Wired `aqa run` replay generation through `FileArtifactStore`; the real run journey now produces replay files plus content metadata sidecars through the redaction-aware boundary. The event/finding writers and `aqa report` remain direct-file paths and are intentionally the next migration surface.
+
+# 2026-09-17 — live LLM adapter baseline
+
+- Replaced the live-provider gap for OpenAI-compatible `openai`, `ollama` and `vllm` with a real HTTP adapter: injectable fetch for deterministic tests, timeout cancellation, bounded output tokens, model-version hash, usage extraction, redacted request/response/error content and BYOK endpoint/key options.
+- Anthropic/Google/Cohere/Bedrock remain explicit scaffolds until provider-specific contracts, auth, regional routing and replay/fixture tests are implemented; this is not a claim of complete multi-vendor production readiness.
+- Evidence: `bun run --filter @aqa/llm-adapters test` (8 passed), typecheck and Biome passed.
