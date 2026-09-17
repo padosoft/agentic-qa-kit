@@ -667,7 +667,7 @@ describe('@aqa/commerce contracts', () => {
     merchant.seedProduct({
       sku: 'suite-sku',
       price: { currency: 'EUR', amount_minor: '1299' },
-      on_hand: 4,
+      on_hand: 5,
     });
     const context = {
       schema_version: '1' as const,
@@ -711,10 +711,23 @@ describe('@aqa/commerce contracts', () => {
         quantity: 1,
         idempotencyKey: 'suite-settlement-checkout',
       },
+      postPurchase: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-post-customer' },
+        sku: 'suite-sku',
+        quantity: 1,
+        idempotencyKey: 'suite-post-checkout',
+        returnRequest: {
+          lines: [{ sku: 'suite-sku', quantity: 1 }],
+          amount: { currency: 'EUR', amount_minor: '1299' },
+          reason: 'damaged packaging',
+          idempotencyKey: 'suite-return',
+        },
+      },
     });
     assert.equal(result.outcome.status, 'pass', result.outcome.reason);
     assert.equal(result.outcome.evidence_complete, true);
-    assert.equal(Object.keys(result.journeys).length, 4);
+    assert.equal(Object.keys(result.journeys).length, 5);
     assert.ok(result.evidence.every((item) => item.step.includes('.')));
   });
 

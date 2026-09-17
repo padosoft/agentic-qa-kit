@@ -210,6 +210,8 @@ export const CommerceCapabilities = z.object({
   refunds: z.boolean(),
   cancellation: z.boolean().default(false),
   settlement_observer: z.boolean().default(false),
+  fulfillment_observer: z.boolean().default(false),
+  returns: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -554,6 +556,18 @@ export interface CommerceAdapter {
     idempotencyKey: string,
   ): Promise<CancellationResult>;
   observeSettlement?(identity: CommerceIdentity, orderId: string): Promise<SettlementObservation>;
+  observeFulfillments?(
+    identity: CommerceIdentity,
+    orderId: string,
+  ): Promise<readonly FulfillmentSnapshot[]>;
+  requestReturn?(
+    identity: CommerceIdentity,
+    orderId: string,
+    lines: readonly FulfillmentLine[],
+    amount: Money,
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<ReturnRequestSnapshot>;
   quoteTax?(identity: CommerceIdentity, cartId: string): Promise<TaxQuote>;
   quoteShipping?(
     identity: CommerceIdentity,
@@ -591,6 +605,14 @@ export type CancellationJourneyOptions = CheckoutJourneyOptions & {
   cancellationIdempotencyKey: string;
 };
 export type SettlementJourneyOptions = CheckoutJourneyOptions;
+export type PostPurchaseJourneyOptions = CheckoutJourneyOptions & {
+  returnRequest?: {
+    lines: readonly FulfillmentLine[];
+    amount: Money;
+    reason: string;
+    idempotencyKey: string;
+  };
+};
 
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
@@ -600,6 +622,7 @@ export type CommerceJourneySuiteOptions = {
   webhook?: CheckoutJourneyOptions;
   cancellation?: CancellationJourneyOptions;
   settlement?: SettlementJourneyOptions;
+  postPurchase?: PostPurchaseJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -1043,6 +1066,91 @@ export async function verifySettlementJourney(
   }
 }
 
+/** Verifies post-purchase fulfillment tracking and an optional idempotent RMA request. */
+export async function verifyPostPurchaseJourney(
+  adapter: CommerceAdapter,
+  opts: PostPurchaseJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (
+      !capabilities.checkout ||
+      !capabilities.fulfillment_observer ||
+      !adapter.observeFulfillments
+    ) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout or fulfillment observation capability',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    const fulfillments = (await adapter.observeFulfillments(opts.identity, checkout.order.id)).map(
+      (item) => FulfillmentSnapshot.parse(item),
+    );
+    if (fulfillments.length === 0) throw new Error('no fulfillment observed for paid order');
+    for (const item of fulfillments) assertFulfillmentIntegrity(checkout.order, item);
+    evidence.push({
+      step: 'fulfillment.observed',
+      ok: true,
+      detail: `order=${checkout.order.id}; records=${fulfillments.length}`,
+    });
+
+    if (opts.returnRequest) {
+      if (!capabilities.returns || !adapter.requestReturn)
+        throw new Error('return request was requested but adapter lacks returns capability');
+      const request = opts.returnRequest;
+      const first = ReturnRequestSnapshot.parse(
+        await adapter.requestReturn(
+          opts.identity,
+          checkout.order.id,
+          request.lines,
+          request.amount,
+          request.reason,
+          request.idempotencyKey,
+        ),
+      );
+      const retry = ReturnRequestSnapshot.parse(
+        await adapter.requestReturn(
+          opts.identity,
+          checkout.order.id,
+          request.lines,
+          request.amount,
+          request.reason,
+          request.idempotencyKey,
+        ),
+      );
+      if (JSON.stringify(first) !== JSON.stringify(retry))
+        throw new Error('idempotent return retry returned a different result');
+      assertReturnRequestIntegrity(checkout.order, first);
+      evidence.push({ step: 'return.requested', ok: true, detail: `return=${first.id}` });
+    }
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'post-purchase journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1063,6 +1171,8 @@ export async function verifyCommerceJourneySuite(
     journeys.cancellation = await verifyCancellationJourney(adapter, opts.cancellation);
   if (opts.settlement)
     journeys.settlement = await verifySettlementJourney(adapter, opts.settlement);
+  if (opts.postPurchase)
+    journeys.postPurchase = await verifyPostPurchaseJourney(adapter, opts.postPurchase);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1146,6 +1256,11 @@ export class InMemoryCommerceReference {
   >();
   private readonly inventory = new Map<string, InventorySnapshot>();
   private readonly webhooks = new Map<string, WebhookObservation[]>();
+  private readonly fulfillments = new Map<string, FulfillmentSnapshot[]>();
+  private readonly returnIdempotency = new Map<
+    string,
+    { fingerprint: string; result: ReturnRequestSnapshot }
+  >();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
 
@@ -1303,6 +1418,20 @@ export class InMemoryCommerceReference {
         observed_at: new Date().toISOString(),
       },
     ]);
+    const shippedAt = new Date().toISOString();
+    this.fulfillments.set(order.id, [
+      {
+        schema_version: '1',
+        id: this.nextId('fulfillment'),
+        order_id: order.id,
+        lines: order.lines.map(({ sku, quantity }) => ({ sku, quantity })),
+        status: 'delivered',
+        carrier: 'reference-carrier',
+        tracking_number: this.nextId('tracking'),
+        shipped_at: shippedAt,
+        delivered_at: shippedAt,
+      },
+    ]);
     return result;
   }
 
@@ -1449,6 +1578,54 @@ export class InMemoryCommerceReference {
     };
   }
 
+  observeFulfillments(identity: CommerceIdentity, orderId: string): readonly FulfillmentSnapshot[] {
+    this.getOrder(identity, orderId);
+    return this.fulfillments.get(orderId) ?? [];
+  }
+
+  requestReturn(
+    identity: CommerceIdentity,
+    orderId: string,
+    lines: readonly FulfillmentLine[],
+    amount: Money,
+    reason: string,
+    idempotencyKey: string,
+  ): ReturnRequestSnapshot {
+    const order = this.getOrder(identity, orderId);
+    if (!reason.trim() || !idempotencyKey.trim())
+      throw new Error('return reason and idempotency key are required');
+    assertReturnRequestIntegrity(order, {
+      schema_version: '1',
+      id: 'return-validation',
+      order_id: order.id,
+      lines: lines.map((line) => FulfillmentLine.parse(line)),
+      amount,
+      reason,
+      status: 'requested',
+      created_at: new Date().toISOString(),
+    });
+    const key = `${identity.tenant}:${idempotencyKey}`;
+    const fingerprint = JSON.stringify({ orderId, lines, amount, reason });
+    const previous = this.returnIdempotency.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint)
+        throw new Error('return idempotency key reused with a different payload');
+      return previous.result;
+    }
+    const result: ReturnRequestSnapshot = {
+      schema_version: '1',
+      id: this.nextId('return'),
+      order_id: order.id,
+      lines: lines.map((line) => FulfillmentLine.parse(line)),
+      amount: Money.parse(amount),
+      reason,
+      status: 'requested',
+      created_at: new Date().toISOString(),
+    };
+    this.returnIdempotency.set(key, { fingerprint, result });
+    return result;
+  }
+
   /** Exposes the reference merchant through the same async contract as real providers. */
   asAdapter(): CommerceAdapter {
     return {
@@ -1457,6 +1634,8 @@ export class InMemoryCommerceReference {
         refunds: true,
         cancellation: true,
         settlement_observer: true,
+        fulfillment_observer: true,
+        returns: true,
         inventory_observer: true,
         webhook_observer: true,
         idempotency: true,
@@ -1473,6 +1652,9 @@ export class InMemoryCommerceReference {
       refund: async (identity, orderId, amount, key) => this.refund(identity, orderId, amount, key),
       cancel: async (identity, orderId, reason, key) => this.cancel(identity, orderId, reason, key),
       observeSettlement: async (identity, orderId) => this.observeSettlement(identity, orderId),
+      observeFulfillments: async (identity, orderId) => this.observeFulfillments(identity, orderId),
+      requestReturn: async (identity, orderId, lines, amount, reason, key) =>
+        this.requestReturn(identity, orderId, lines, amount, reason, key),
       quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),

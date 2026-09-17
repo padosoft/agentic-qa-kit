@@ -8,12 +8,15 @@ import {
   CommerceCapabilities,
   type CommerceContext,
   type CommerceIdentity,
+  type FulfillmentLine,
+  FulfillmentSnapshot,
   InventorySnapshot,
   type Money,
   OrderSnapshot,
   PaymentSnapshot,
   type RefundResult,
   RefundSnapshot,
+  ReturnRequestSnapshot,
   type SettlementObservation,
   SettlementSnapshot,
   type ShippingAddress,
@@ -40,6 +43,8 @@ export interface HttpCommerceAdapterOptions {
     refund: string;
     cancellation: string;
     settlement: string;
+    fulfillments: string;
+    returns: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -81,6 +86,8 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       refund: '/orders/:order_id/refunds',
       cancellation: '/orders/:order_id/cancellation',
       settlement: '/orders/:order_id/settlement',
+      fulfillments: '/orders/:order_id/fulfillments',
+      returns: '/orders/:order_id/returns',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -226,6 +233,37 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       chargebacks: raw.chargebacks.map((item) => ChargebackSnapshot.parse(item)),
       settlement: SettlementSnapshot.parse(raw.settlement),
     };
+  }
+
+  async observeFulfillments(identity: CommerceIdentity, orderId: string) {
+    const raw = await this.request(
+      'GET',
+      pathTemplate(this.paths.fulfillments, { order_id: orderId }),
+      this.context(identity),
+      identity,
+    );
+    if (!Array.isArray(raw)) throw new Error('commerce fulfillment response must be an array');
+    return raw.map((item) => FulfillmentSnapshot.parse(item));
+  }
+
+  async requestReturn(
+    identity: CommerceIdentity,
+    orderId: string,
+    lines: readonly FulfillmentLine[],
+    amount: Money,
+    reason: string,
+    idempotencyKey: string,
+  ) {
+    return ReturnRequestSnapshot.parse(
+      await this.request(
+        'POST',
+        pathTemplate(this.paths.returns, { order_id: orderId }),
+        this.context(identity),
+        identity,
+        { lines, amount, reason, idempotency_key: idempotencyKey },
+        { 'Idempotency-Key': idempotencyKey },
+      ),
+    );
   }
 
   async quoteTax(identity: CommerceIdentity, cartId: string) {

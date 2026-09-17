@@ -1,5 +1,10 @@
 # Lessons
 
+- **Checkout is not delivery evidence.** Post-purchase coverage must observe
+  fulfillment records and require tracking metadata for shipped/delivered
+  states; RMA requests need their own idempotency and order/quantity/currency
+  boundary instead of being inferred from an order status.
+
 - **Payment success is not settlement proof.** A commerce QA gate must compare
   the authoritative payment with all successful refunds, lost chargebacks and
   provider net totals; a missing settlement observer is `unsupported`, never a
