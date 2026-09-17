@@ -21,6 +21,8 @@ export interface DoctorResult {
 
 export interface DoctorOptions {
   root: string;
+  /** Check production configuration prerequisites without contacting providers. */
+  production?: boolean;
 }
 
 const STATUS_RANK: Record<CheckStatus, number> = { pass: 0, warn: 1, fail: 2 };
@@ -99,7 +101,96 @@ export function runDoctor(opts: DoctorOptions): DoctorResult {
       : 'Run `aqa install-agent-files --targets claude,codex,gemini,copilot` to scaffold agent-specific instructions.',
   });
 
+  if (opts.production) addProductionChecks(checks);
+
   return { profile, checks, worst: worstOf(checks) };
+}
+
+function addProductionChecks(checks: DoctorCheck[]): void {
+  const hasStore = Boolean(process.env.AQA_STORE_DSN?.trim());
+  const hasQueue = Boolean(process.env.AQA_QUEUE_DSN?.trim());
+  const artifactBucket = Boolean(process.env.AQA_ARTIFACT_S3_BUCKET?.trim());
+  const retention = process.env.AQA_ARTIFACT_S3_REQUIRE_RETENTION === 'true';
+  const retentionConfigured = Boolean(
+    process.env.AQA_ARTIFACT_S3_RETAIN_UNTIL?.trim() &&
+      process.env.AQA_ARTIFACT_S3_RETENTION_MODE?.trim(),
+  );
+  const runnerJwt = Boolean(
+    process.env.AQA_RUNNER_JWT_PUBLIC_KEY?.trim() &&
+      process.env.AQA_RUNNER_JWT_ISSUER?.trim() &&
+      process.env.AQA_RUNNER_JWT_AUDIENCE?.trim(),
+  );
+  const runnerToken = Boolean(process.env.AQA_RUNNER_TOKEN?.trim());
+  const checkpoint = Boolean(
+    process.env.AQA_AUDIT_CHECKPOINT_KEY_ID?.trim() &&
+      process.env.AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM?.trim(),
+  );
+  const otlp = Boolean(process.env.AQA_OTLP_ENDPOINT?.trim());
+
+  checks.push({
+    id: 'production-store',
+    title: 'Durable control-plane store configured',
+    status: hasStore ? 'pass' : 'fail',
+    detail: hasStore ? 'PostgreSQL DSN present (value hidden)' : 'AQA_STORE_DSN is missing',
+    suggestion: hasStore
+      ? undefined
+      : 'Configure AQA_STORE_DSN for PostgreSQL; MemoryStore is development-only.',
+  });
+  checks.push({
+    id: 'production-queue',
+    title: 'Durable runner queue configured',
+    status: hasQueue ? 'pass' : 'fail',
+    detail: hasQueue ? 'PostgreSQL queue DSN present (value hidden)' : 'AQA_QUEUE_DSN is missing',
+    suggestion: hasQueue ? undefined : 'Configure AQA_QUEUE_DSN for a multi-worker deployment.',
+  });
+  checks.push({
+    id: 'production-artifacts',
+    title: 'Durable artifact retention configured',
+    status: artifactBucket && retention && retentionConfigured ? 'pass' : 'fail',
+    detail: artifactBucket
+      ? retention && retentionConfigured
+        ? 'S3-compatible bucket + retention policy configured (values hidden)'
+        : 'S3 bucket present but Object Lock retention is incomplete'
+      : 'AQA_ARTIFACT_S3_BUCKET is missing',
+    suggestion:
+      artifactBucket && retention && retentionConfigured
+        ? undefined
+        : 'Configure S3 bucket, AQA_ARTIFACT_S3_REQUIRE_RETENTION=true, retain-until and GOVERNANCE/COMPLIANCE mode.',
+  });
+  checks.push({
+    id: 'production-runner-auth',
+    title: 'Runner authentication configured',
+    status: hasQueue && (runnerJwt || runnerToken) ? 'pass' : 'fail',
+    detail: runnerJwt
+      ? 'scoped JWT verifier configured'
+      : runnerToken
+        ? 'bootstrap bearer token configured'
+        : 'runner credential is missing or incomplete',
+    suggestion:
+      hasQueue && (runnerJwt || runnerToken)
+        ? undefined
+        : 'Configure the complete AQA_RUNNER_JWT_* set (preferred) or an explicit AQA_RUNNER_TOKEN.',
+  });
+  checks.push({
+    id: 'production-audit-checkpoint',
+    title: 'Audit completeness checkpoint configured',
+    status: checkpoint && artifactBucket ? 'pass' : 'warn',
+    detail:
+      checkpoint && artifactBucket
+        ? 'signer and durable artifact target configured (values hidden)'
+        : 'checkpoint signer or durable target is not configured',
+    suggestion:
+      checkpoint && artifactBucket
+        ? undefined
+        : 'Configure AQA_AUDIT_CHECKPOINT_KEY_ID/private key and a durable artifact backend.',
+  });
+  checks.push({
+    id: 'production-observability',
+    title: 'OTLP observability endpoint configured',
+    status: otlp ? 'pass' : 'warn',
+    detail: otlp ? 'OTLP endpoint present (value hidden)' : 'AQA_OTLP_ENDPOINT is not configured',
+    suggestion: otlp ? undefined : 'Configure OTLP export before claiming production SLO evidence.',
+  });
 }
 
 function agentFilesPresent(root: string): boolean {
