@@ -200,9 +200,9 @@ export interface StoreProvider {
   // (SSO/OIDC) — read-only from the store. A future slice can add
   // invite/role-change flows; for now `listUsers` is all the page
   // needs.
-  listUsers(): Promise<StoreUserDirectoryEntry[]>;
+  listUsers(scope?: StoreScope): Promise<StoreUserDirectoryEntry[]>;
   /** Persist the latest IdP directory snapshot for an authenticated user. */
-  upsertUser(user: StoreUserDirectoryEntry): Promise<void>;
+  upsertUser(user: StoreUserDirectoryEntry, scope?: StoreScope): Promise<void>;
 
   // ----- SSO config (slice 4h) -----
   // Backing config for the Admin SSO page. The secret is intentionally

@@ -353,11 +353,18 @@ export class MemoryStore implements StoreProvider {
   }
 
   // ----- Users (v1.7 slice 4g) -----
-  async listUsers(): Promise<StoreUserDirectoryEntry[]> {
-    return [...this.users.values()];
+  async listUsers(scope?: { org?: string; project?: string }): Promise<StoreUserDirectoryEntry[]> {
+    if (!scope?.org && !scope?.project) return [...this.users.values()];
+    const prefix = scopedRecordKey('', scope);
+    return [...this.users.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, user]) => user);
   }
-  async upsertUser(user: StoreUserDirectoryEntry): Promise<void> {
-    this.users.set(user.id, user);
+  async upsertUser(
+    user: StoreUserDirectoryEntry,
+    scope?: { org?: string; project?: string },
+  ): Promise<void> {
+    this.users.set(scopedRecordKey(user.id, scope), user);
   }
 
   // ----- SSO config (v1.7 slice 4h) -----

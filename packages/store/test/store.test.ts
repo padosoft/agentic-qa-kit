@@ -227,6 +227,28 @@ describe('MemoryStore', () => {
     await s.saveSsoConfig(sampleConfig);
     assert.deepEqual(await s.loadSsoConfig(), sampleConfig);
   });
+
+  it('isolates directory users by organization and project scope', async () => {
+    const s = new MemoryStore();
+    const user = {
+      id: 'same-id',
+      email: 'same@example.com',
+      display_name: 'Same User',
+      roles: ['viewer'] as const,
+      status: 'active' as const,
+    };
+    await s.upsertUser(user, { org: 'org-a', project: 'shop' });
+    await s.upsertUser({ ...user, display_name: 'Other User' }, { org: 'org-b', project: 'shop' });
+    assert.equal(
+      (await s.listUsers({ org: 'org-a', project: 'shop' }))[0]?.display_name,
+      'Same User',
+    );
+    assert.equal(
+      (await s.listUsers({ org: 'org-b', project: 'shop' }))[0]?.display_name,
+      'Other User',
+    );
+    assert.equal((await s.listUsers({ org: 'org-a', project: 'other' })).length, 0);
+  });
 });
 
 describe('PostgresStore', () => {

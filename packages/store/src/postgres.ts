@@ -436,11 +436,11 @@ export class PostgresStore implements StoreProvider {
     await this.put('agent', id, updated);
     return updated;
   }
-  async listUsers(): Promise<StoreUserDirectoryEntry[]> {
-    return this.values<StoreUserDirectoryEntry>(await this.many('user'));
+  async listUsers(scope?: StoreScope): Promise<StoreUserDirectoryEntry[]> {
+    return this.values<StoreUserDirectoryEntry>(await this.many('user', scope));
   }
-  async upsertUser(user: StoreUserDirectoryEntry): Promise<void> {
-    await this.put('user', user.id, user);
+  async upsertUser(user: StoreUserDirectoryEntry, scope?: StoreScope): Promise<void> {
+    await this.put('user', user.id, user, undefined, undefined, scope);
   }
   async loadSsoConfig(): Promise<SsoConfig.SsoConfig | null> {
     return this.payload(await this.one('sso', 'singleton'));

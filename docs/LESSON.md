@@ -585,3 +585,10 @@ SCIM is a tenant-facing write protocol. Keep the tenant in the provisioner and
 directory contract, reject cross-tenant IDs, validate role mapping and default
 to least privilege; exposing endpoints before the durable store and bearer-token
 boundary are ready would create a provisioning isolation bug.
+
+# 2026-09-17 — directory identity needs the same namespace contract
+
+Users are data too: a shared `id` or project slug cannot identify the tenant.
+Use the existing scoped record-key/columns for directory writes and reads, keep
+unscoped access explicit for migration/admin-only paths, and test two tenants
+with the same external user ID.

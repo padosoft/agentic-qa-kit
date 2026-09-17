@@ -1101,8 +1101,11 @@ export function makeApi(): ApiHandler[] {
       method: 'GET',
       path: '/api/users',
       requires: 'settings:read',
-      async handle(_req, ctx) {
-        const users = await ctx.store.listUsers();
+      async handle(req, ctx) {
+        const requested = scope(req);
+        const users = await ctx.store.listUsers(
+          requested.org || requested.project ? requested : undefined,
+        );
         return asResponse({ users });
       },
     },

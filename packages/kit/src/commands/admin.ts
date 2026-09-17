@@ -580,16 +580,19 @@ async function delegateToApi(args: {
       res.end(JSON.stringify({ error: `forbidden: requires ${matched.route.requires}` }));
       return;
     }
-    await hctx.ctx.store.upsertUser({
-      id: user.id,
-      email: user.email,
-      display_name: user.display_name,
-      roles: user.roles,
-      status: 'active',
-      last_active_at: new Date().toISOString(),
-    });
     const org = headers['x-aqa-org'] ?? headers['X-Aqa-Org'];
     const project = headers['x-aqa-project'] ?? headers['X-Aqa-Project'];
+    await hctx.ctx.store.upsertUser(
+      {
+        id: user.id,
+        email: user.email,
+        display_name: user.display_name,
+        roles: user.roles,
+        status: 'active',
+        last_active_at: new Date().toISOString(),
+      },
+      org ? { org, ...(project ? { project } : {}) } : undefined,
+    );
     if (hctx.ctx.authorizeScope && typeof org === 'string') {
       const requestedScope = project ? { org, project } : { org };
       if (!(await hctx.ctx.authorizeScope(user, requestedScope))) {
