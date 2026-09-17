@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added human-gated AI risk hypotheses.** `@aqa/generator` now exposes
+  `proposeRisks` and a separate `RiskReviewQueue`: model candidates are
+  DLP-redacted, schema-validated, provenance-hashed and kept pending until a
+  named reviewer approves them; no active `RiskMap` is mutated by generation.
+  Evidence: generator tests cover valid/invalid output, redaction, provenance,
+  approval and anonymous-review rejection. Remote identity, LLM quality and
+  production persistence remain open evidence layers.
+
 - **Added bounded source-aware risk discovery.** `aqa risk discover
   --method source` scans up to 200 safe, bounded source/manifest files and
   emits only deterministic risks whose authentication, interpreter, outbound

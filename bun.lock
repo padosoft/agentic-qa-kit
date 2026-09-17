@@ -98,6 +98,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@aqa/llm-adapters": "workspace:*",
+        "@aqa/observability": "workspace:*",
         "@aqa/schemas": "workspace:*",
       },
     },
