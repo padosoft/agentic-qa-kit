@@ -522,3 +522,11 @@ Filtering a run/finding by project alone is unsafe when multiple organizations
 can reuse the same slug. Persist the org on Run, filter it in the store and
 check both dimensions at every scoped API read; legacy unscoped records must
 fail closed until explicitly migrated.
+
+# 2026-09-17 — admission quotas need atomic shared state
+
+Per-tenant queue quotas are useful as an immediate backpressure contract, but a
+PostgreSQL snapshot followed by an insert can oversubscribe under concurrent
+replicas. Keep the `429` behavior and bounded error shape, but do not call the
+distributed guarantee complete until admission is serialized with a transaction
+and durable counters (or an equivalent advisory-lock protocol).

@@ -8,6 +8,11 @@ export interface RunnerJob {
   idempotency_fingerprint?: string;
 }
 
+export interface QueueQuota {
+  concurrent_runs_max?: number;
+  concurrent_scenarios_max?: number;
+}
+
 export interface EnqueuedJob extends RunnerJob {
   status: 'queued' | 'in_flight' | 'done' | 'failed';
   attempts: number;
@@ -32,6 +37,62 @@ export class IdempotencyConflictError extends Error {
   }
 }
 
+export class ResourceQuotaExceededError extends Error {
+  constructor(
+    readonly quota: keyof QueueQuota,
+    readonly limit: number,
+    readonly current: number,
+    readonly requested: number,
+  ) {
+    super(`[server/queue] resource quota exceeded: ${quota}`);
+    this.name = 'ResourceQuotaExceededError';
+  }
+}
+
+export function validateQueueQuota(quota: QueueQuota): QueueQuota {
+  for (const [key, value] of Object.entries(quota)) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 1))
+      throw new Error(`[server/queue] ${key} must be a positive integer`);
+  }
+  return { ...quota };
+}
+
+export function assertQueueQuota(
+  active: ReadonlyArray<Pick<EnqueuedJob, 'status' | 'payload'>>,
+  job: RunnerJob,
+  quota: QueueQuota,
+): void {
+  const scope = scopeOf(job.payload);
+  if (!scope) return;
+  const scoped = active.filter(
+    (candidate) =>
+      (candidate.status === 'queued' || candidate.status === 'in_flight') &&
+      scopeOf(candidate.payload) === scope,
+  );
+  if (quota.concurrent_runs_max !== undefined && scoped.length >= quota.concurrent_runs_max)
+    throw new ResourceQuotaExceededError(
+      'concurrent_runs_max',
+      quota.concurrent_runs_max,
+      scoped.length,
+      1,
+    );
+  const requestedScenarios = scenarioCount(job.payload);
+  const activeScenarios = scoped.reduce(
+    (sum, candidate) => sum + scenarioCount(candidate.payload),
+    0,
+  );
+  if (
+    quota.concurrent_scenarios_max !== undefined &&
+    activeScenarios + requestedScenarios > quota.concurrent_scenarios_max
+  )
+    throw new ResourceQuotaExceededError(
+      'concurrent_scenarios_max',
+      quota.concurrent_scenarios_max,
+      activeScenarios,
+      requestedScenarios,
+    );
+}
+
 /**
  * In-memory FIFO queue with visibility-timeout leases. Runner workers poll
  * `GET /api/runner/jobs/next` which calls `dequeue()`; if the worker dies
@@ -51,9 +112,12 @@ export class RunnerQueue {
     { fingerprint: string | undefined; jobId: string }
   >();
 
-  constructor(opts: { lease_ms?: number; max_attempts?: number } = {}) {
+  private readonly quota: QueueQuota;
+
+  constructor(opts: { lease_ms?: number; max_attempts?: number; quota?: QueueQuota } = {}) {
     this.leaseMs = opts.lease_ms ?? 30_000;
     this.maxAttempts = Math.max(1, opts.max_attempts ?? 5);
+    this.quota = validateQueueQuota(opts.quota ?? {});
   }
 
   enqueue(job: RunnerJob): EnqueuedJob {
@@ -66,6 +130,7 @@ export class RunnerQueue {
         if (existing) return { ...existing };
       }
     }
+    assertQueueQuota(this.jobs, job, this.quota);
     const enq: EnqueuedJob = {
       ...job,
       status: 'queued',
@@ -159,5 +224,19 @@ export class RunnerQueue {
     job.lease_token = undefined;
     return true;
   }
+}
+
+function scopeOf(payload: Record<string, unknown>): string | undefined {
+  return typeof payload.org === 'string' && typeof payload.project === 'string'
+    ? `${payload.org}/${payload.project}`
+    : undefined;
+}
+
+function scenarioCount(payload: Record<string, unknown>): number {
+  return typeof payload.scenario_count === 'number' &&
+    Number.isInteger(payload.scenario_count) &&
+    payload.scenario_count > 0
+    ? payload.scenario_count
+    : 1;
 }
 import { randomUUID } from 'node:crypto';

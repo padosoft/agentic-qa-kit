@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { IdempotencyConflictError, RunnerQueue } from '../dist/runner-queue.js';
+import {
+  IdempotencyConflictError,
+  ResourceQuotaExceededError,
+  RunnerQueue,
+} from '../dist/runner-queue.js';
 
 const JOB = { id: 'job-1', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' };
 
@@ -97,6 +101,39 @@ describe('RunnerQueue', () => {
           idempotency_fingerprint: 'fingerprint-b',
         }),
       IdempotencyConflictError,
+    );
+  });
+
+  it('enforces per-tenant concurrent run and scenario quotas', () => {
+    const q = new RunnerQueue({ quota: { concurrent_runs_max: 1, concurrent_scenarios_max: 3 } });
+    q.enqueue({ ...JOB, id: 'quota-1', payload: { org: 'o', project: 'p', scenario_count: 2 } });
+    assert.throws(
+      () =>
+        q.enqueue({
+          ...JOB,
+          id: 'quota-2',
+          payload: { org: 'o', project: 'p', scenario_count: 1 },
+        }),
+      (error: unknown) =>
+        error instanceof ResourceQuotaExceededError && error.quota === 'concurrent_runs_max',
+    );
+    q.ack(q.dequeue()?.id ?? '', q.snapshot().find((job) => job.id === 'quota-1')?.lease_token);
+    const scenarioQueue = new RunnerQueue({
+      quota: { concurrent_runs_max: 5, concurrent_scenarios_max: 3 },
+    });
+    scenarioQueue.enqueue({
+      ...JOB,
+      id: 'quota-3',
+      payload: { org: 'o', project: 'p', scenario_count: 3 },
+    });
+    assert.throws(
+      () =>
+        scenarioQueue.enqueue({
+          ...JOB,
+          id: 'quota-4',
+          payload: { org: 'o', project: 'p', scenario_count: 1 },
+        }),
+      /scenario/i,
     );
   });
 });

@@ -341,3 +341,9 @@
 
 - Added optional `org` to the Run schema and generated JSON Schema, propagated org filtering through Memory/Postgres stores and all scoped run/finding API checks. Scoped reads now fail closed for legacy runs without an org and prevent same-project-slug cross-org leakage.
 - Evidence: schema suite 59/59, store build, server typecheck, server suite 108 (107 passed, 1 PostgreSQL EventBus skip), repository lint. Worker persistence must populate `Run.org` from the authenticated queue scope; unscoped local CLI runs remain intentionally local-only.
+
+# 2026-09-17 — tenant quota admission slice
+
+- Added validated per-organization/project admission limits for concurrent runs and declared scenario units to both the memory queue and the PostgreSQL queue. Idempotent retries return the existing job before quota evaluation; API callers receive a bounded `429 RESOURCE_QUOTA_EXCEEDED` response with no secret or payload echo.
+- PostgreSQL currently evaluates the shared snapshot before insert, so it is safe as a local guard but is not yet a distributed atomic quota guarantee across simultaneous replicas. The remaining production step is a transaction/advisory-lock counter table plus kill-switch/config propagation and operational metrics.
+- Evidence: server typecheck, server suite (108 passed plus one PostgreSQL EventBus platform skip before this adapter-only change), repository lint. Live PostgreSQL quota contention remains CI evidence, not locally verified.

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { MemoryStore } from '@aqa/store';
-import { RunnerQueue, makeApi } from '../dist/index.js';
+import { type QueueQuota, RunnerQueue, makeApi } from '../dist/index.js';
 
 const FAKE_USER = {
   id: '1',
@@ -14,11 +14,15 @@ const FAKE_USER = {
 };
 
 function ctx(
-  opts: { projectRoot?: string; eventBus?: { publish: (event: unknown) => Promise<void> } } = {},
+  opts: {
+    projectRoot?: string;
+    eventBus?: { publish: (event: unknown) => Promise<void> };
+    quota?: QueueQuota;
+  } = {},
 ) {
   return {
     store: new MemoryStore(),
-    queue: new RunnerQueue(),
+    queue: new RunnerQueue({ quota: opts.quota }),
     authenticate: async () => FAKE_USER,
     ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
     // The server is configured at boot with the on-disk project root
@@ -234,6 +238,29 @@ describe('makeApi', () => {
       c,
     );
     assert.equal(conflict?.status, 409);
+  });
+
+  it('POST /api/runs returns a bounded 429 when tenant admission is full', async () => {
+    const c = ctx({ quota: { concurrent_runs_max: 1 } });
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const first = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    const second = await route?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { profile: 'release' } },
+      c,
+    );
+    assert.equal(first?.status, 202);
+    assert.equal(second?.status, 429);
+    assert.deepEqual(second?.body, {
+      error: '[server/queue] resource quota exceeded: concurrent_runs_max',
+      code: 'RESOURCE_QUOTA_EXCEEDED',
+      quota: 'concurrent_runs_max',
+      limit: 1,
+      current: 1,
+      requested: 1,
+    });
   });
 
   it('GET /api/runner/jobs/next pops from the queue', async () => {

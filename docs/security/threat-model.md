@@ -80,7 +80,7 @@ Boundaries (anywhere a security decision must be enforced):
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
 | D-01 | Runaway LLM cost (intentional or accidental) | Critical | `@aqa/cost` ships `BudgetTracker` + `defaultPricing`. The tracker accumulates spend; callers are expected to stop dispatching when the cap is hit. The server-side enforcement gate inside `makeApi()` is roadmap. | **Partial — tracker shipped, server gate not yet wired.** |
-| D-02 | Runner pool overwhelmed | Medium | `RunnerQueue` FIFO with visibility leases; backpressure via 429. | Mitigated |
+| D-02 | Runner pool overwhelmed | Medium | FIFO/lease queue plus scoped `429` quota admission; PostgreSQL multi-replica admission is currently advisory until serialized counters land. | Partially mitigated |
 | D-03 | SUT DoS by misconfigured probe | Medium | Per-scenario probe rate documented in pack manifest; profile `release-gate` enforces conservative defaults. | Advisory — enforcement is per-pack. |
 | D-04 | Adversarial pack publishes infinite-loop probe | High | Container sandbox CPU/memory limits via cgroups; wallclock cap per probe. | Mitigated via `@aqa/sandbox` (process default; container default with `selectSandbox`). |
 

@@ -8,7 +8,11 @@ export {
 } from './api.js';
 export {
   RunnerQueue,
+  assertQueueQuota,
   IdempotencyConflictError,
+  ResourceQuotaExceededError,
+  validateQueueQuota,
+  type QueueQuota,
   type EnqueuedJob,
   type RunnerJob,
   type RunnerQueueLike,

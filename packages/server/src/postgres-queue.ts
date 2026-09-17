@@ -4,8 +4,11 @@ import type { Sql } from 'postgres';
 import {
   type EnqueuedJob,
   IdempotencyConflictError,
+  type QueueQuota,
   type RunnerJob,
   type RunnerQueueLike,
+  assertQueueQuota,
+  validateQueueQuota,
 } from './runner-queue.js';
 
 type StoredJob = {
@@ -27,13 +30,18 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   private readonly sql: Sql;
   private readonly leaseMs: number;
   private readonly maxAttempts: number;
+  private readonly quota: QueueQuota;
   private readonly ready: Promise<void>;
 
-  constructor(dsn: string, opts: { lease_ms?: number; max_attempts?: number } = {}) {
+  constructor(
+    dsn: string,
+    opts: { lease_ms?: number; max_attempts?: number; quota?: QueueQuota } = {},
+  ) {
     if (!dsn.trim()) throw new Error('[server/queue] DSN is empty');
     this.sql = postgres(dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
     this.leaseMs = opts.lease_ms ?? 30_000;
     this.maxAttempts = Math.max(1, opts.max_attempts ?? 5);
+    this.quota = validateQueueQuota(opts.quota ?? {});
     this.ready = this.migrate();
   }
 
@@ -105,6 +113,23 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
 
   async enqueue(job: RunnerJob): Promise<EnqueuedJob> {
     await this.wait();
+    if (job.idempotency_key) {
+      const existing = await this.q<StoredJob>(
+        'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE idempotency_key = $1',
+        [job.idempotency_key],
+      );
+      const prior = existing[0];
+      if (prior) {
+        if (prior.idempotency_fingerprint !== job.idempotency_fingerprint)
+          throw new IdempotencyConflictError();
+        return this.map(prior);
+      }
+    }
+    if (
+      this.quota.concurrent_runs_max !== undefined ||
+      this.quota.concurrent_scenarios_max !== undefined
+    )
+      assertQueueQuota(await this.snapshot(), job, this.quota);
     const rows = await this.q<StoredJob>(
       "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint) VALUES ($1, $2::jsonb, $3, 'queued', $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint",
       [

@@ -32,7 +32,7 @@ import type {
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
 import type { EventBus } from './event-bus.js';
-import { IdempotencyConflictError } from './runner-queue.js';
+import { IdempotencyConflictError, ResourceQuotaExceededError } from './runner-queue.js';
 import type { RunnerQueueLike } from './runner-queue.js';
 
 export interface ApiContext {
@@ -310,6 +310,19 @@ export function makeApi(): ApiHandler[] {
         } catch (error) {
           if (error instanceof IdempotencyConflictError) {
             return { status: 409, body: { error: error.message, code: 'IDEMPOTENCY_CONFLICT' } };
+          }
+          if (error instanceof ResourceQuotaExceededError) {
+            return {
+              status: 429,
+              body: {
+                error: error.message,
+                code: 'RESOURCE_QUOTA_EXCEEDED',
+                quota: error.quota,
+                limit: error.limit,
+                current: error.current,
+                requested: error.requested,
+              },
+            };
           }
           throw error;
         }
