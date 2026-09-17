@@ -88,6 +88,28 @@ describe('runScenario', () => {
     assert.equal(result.finding?.severity, 'critical');
   });
 
+  it('weights finding confidence by the declared oracle weights', async () => {
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        oracles: [
+          { id: 'o-failed', kind: 'http_status' as const, with: { expected: 401 }, weight: 1 },
+          {
+            id: 'o-passed',
+            kind: 'response_not_contains' as const,
+            with: { value: 'PWNED' },
+            weight: 3,
+          },
+        ],
+      },
+      run_id: 'run-weighted-confidence',
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200, body: { message: 'safe' } }),
+    });
+    assert.equal(result.outcome, 'fail');
+    assert.equal(result.finding?.confidence, 0.75);
+    assert.equal(result.finding?.confidence_components.oracle_agreement, 0.75);
+  });
+
   it('does not turn a missing probe runner into a security finding', async () => {
     const result = await runScenario({
       scenario: {

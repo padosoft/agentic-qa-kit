@@ -1656,3 +1656,9 @@ result explicitly heuristic rather than claiming complete reachability.
 An adapter that tells an agent to read a canonical bootstrap must generate
 that bootstrap even when installed alone. Test each target in isolation and
 keep host discovery evidence separate from file-shape validation.
+# 2026-09-17 — declared oracle weights must reach the verdict
+
+If a scenario carries oracle weights but the runner averages assertions
+equally, the configuration is misleading and confidence can be distorted.
+Aggregate only after evaluating each oracle, use a zero-safe denominator, and
+keep deterministic agreement distinct from calibrated probability.
