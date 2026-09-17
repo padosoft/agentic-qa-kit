@@ -1,4 +1,5 @@
 export { User, Role, Permission, AuthSession } from './types.js';
+export { enforceMfa, mfaRequired, type MfaPolicy } from './mfa.js';
 export { rolePermissions, allows, type PermissionName, type RoleName } from './rbac.js';
 export { OidcAdapter } from './oidc.js';
 export {

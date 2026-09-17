@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { type MfaPolicy, enforceMfa } from './mfa.js';
 import type { OidcAdapter } from './oidc.js';
 import type { AuthSession, User } from './types.js';
 
@@ -50,6 +51,7 @@ export class OidcSessionManager {
       loginTtlMs?: number;
       sessionTtlMs?: number;
       store?: OidcSessionStore;
+      mfaPolicy?: MfaPolicy;
     } = {},
   ) {}
 
@@ -78,6 +80,7 @@ export class OidcSessionManager {
       throw new Error('[auth/oidc] invalid or expired login state');
     }
     const session = await this.adapter.exchangeCode(code, pending.verifier);
+    enforceMfa(session.user, this.opts.mfaPolicy);
     const token = randomToken(32);
     const configuredTtl = this.opts.sessionTtlMs;
     const stored: StoredSession = {

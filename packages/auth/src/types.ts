@@ -36,6 +36,8 @@ export const User = z.object({
   email: z.string().email(),
   display_name: z.string().min(1),
   roles: z.array(Role).min(1),
+  /** True only when the IdP asserted an accepted MFA authentication method. */
+  mfa_verified: z.boolean().optional(),
 });
 export type User = z.infer<typeof User>;
 

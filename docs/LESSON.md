@@ -571,3 +571,10 @@ An attack-tree feature must define AND/OR evaluation and reject cycles-by-ID,
 duplicate nodes, excessive depth and oversized fan-out before persistence. A
 risk-derived tree is only a reviewable skeleton until evidence marks leaves as
 observed or compromised.
+
+# 2026-09-17 — MFA must be enforced before session persistence
+
+An IdP claim is useful only if the policy boundary consumes it before issuing a
+session. Map accepted authentication methods explicitly, fail closed when the
+claim is absent, and keep enrollment/recovery as separate evidence-bearing
+flows rather than treating a boolean policy flag as complete MFA.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { OidcAdapter, allows } from '../dist/index.js';
+import { OidcAdapter, allows, enforceMfa, mfaRequired } from '../dist/index.js';
 
 const viewer = { id: '1', email: 'v@x.test', display_name: 'V', roles: ['viewer' as const] };
 const dev = { id: '2', email: 'd@x.test', display_name: 'D', roles: ['developer' as const] };
@@ -20,6 +20,17 @@ describe('allows', () => {
     assert.equal(allows(admin, 'settings:edit'), true);
     assert.equal(allows(admin, 'packs:install'), true);
     assert.equal(allows(admin, 'audit:read'), true);
+  });
+});
+
+describe('MFA policy', () => {
+  it('requires an asserted factor only for configured roles', () => {
+    assert.equal(mfaRequired(viewer, { enabled: true, required_roles: ['admin'] }), false);
+    assert.throws(() => enforceMfa(admin, { enabled: true }), /multi-factor/);
+    assert.deepEqual(enforceMfa({ ...admin, mfa_verified: true }, { enabled: true }), {
+      ...admin,
+      mfa_verified: true,
+    });
   });
 });
 

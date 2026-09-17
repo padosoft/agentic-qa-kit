@@ -377,3 +377,8 @@
 
 - Added bounded AND/OR attack-tree contracts to `@aqa/methodology`: validation rejects duplicate IDs, malformed leaves, excessive depth and node counts; evaluation consumes only an explicit compromised-leaf set; `attackTreeForRisk()` creates an invariant-linked skeleton.
 - Evidence: methodology typecheck and 12/12 tests; repository lint. Persistence/schema integration, graph visualization, source-aware derivation and human-reviewed attack paths remain open.
+
+# 2026-09-17 — MFA enforcement slice
+
+- Added `MfaPolicy`/`enforceMfa()` to `@aqa/auth`, optional `User.mfa_verified`, OIDC `amr` claim mapping (`mfa`, `otp`, `webauthn`, `hwk`) and session-manager enforcement before persistence. Policies can target all users or selected roles; missing proof fails closed.
+- Evidence: auth typecheck and 12 tests (11 passed, one PostgreSQL session skip); repository lint. TOTP/WebAuthn enrollment, recovery codes, admin policy persistence and an external-IdP complete journey remain open.

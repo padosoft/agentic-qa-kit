@@ -10,6 +10,8 @@ export interface OidcConfig {
   roles_claim?: string;
   /** Allows deterministic tests without replacing the global fetch. */
   fetch?: typeof fetch;
+  /** UserInfo claim containing authentication methods; defaults to `amr`. */
+  mfa_claim?: string;
 }
 
 type Discovery = {
@@ -24,6 +26,7 @@ type UserInfo = {
   name?: string;
   preferred_username?: string;
   roles?: unknown;
+  amr?: unknown;
   [key: string]: unknown;
 };
 
@@ -94,12 +97,18 @@ export class OidcAdapter {
     );
     if (roles.length === 0) throw new Error('[auth/oidc] no supported AQA role in provider claims');
     const now = Date.now();
+    const rawAmr = info[this.config.mfa_claim ?? 'amr'];
+    const amr = Array.isArray(rawAmr) ? rawAmr : [rawAmr];
+    const mfaVerified = amr.some(
+      (method) => method === 'mfa' || method === 'otp' || method === 'webauthn' || method === 'hwk',
+    );
     const session = {
       user: User.parse({
         id,
         email,
         display_name: info.name ?? info.preferred_username ?? email,
         roles,
+        mfa_verified: mfaVerified,
       }),
       issued_at: new Date(now).toISOString(),
       expires_at: new Date(now + Math.max(1, token.expires_in ?? 3600) * 1000).toISOString(),

@@ -96,6 +96,20 @@ describe('OidcSessionManager', () => {
     );
   });
 
+  it('fails the login before session persistence when MFA is required', async () => {
+    const adapter = {
+      authorizeUrl: async (state: string) => `https://idp.test/auth?state=${state}`,
+      exchangeCode: async () => ({
+        user,
+        issued_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    } as unknown as OidcAdapter;
+    const manager = new OidcSessionManager(adapter, { mfaPolicy: { enabled: true } });
+    const login = await manager.begin();
+    await assert.rejects(() => manager.complete(login.state, 'code'), /multi-factor/);
+  });
+
   it('persists PKCE and sessions across managers with PostgreSQL when configured', async (t) => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {
