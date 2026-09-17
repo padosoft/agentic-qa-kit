@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/lifecycle.test.ts test/events.test.ts test/oracles.test.ts test/run.test.ts test/replay.test.ts test/agent-evaluation.test.ts test/trajectory.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/lifecycle.test.ts test/events.test.ts test/oracles.test.ts test/run.test.ts test/replay.test.ts test/agent-evaluation.test.ts test/trajectory.test.ts test/postgres-trajectory.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
