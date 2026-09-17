@@ -96,8 +96,13 @@
 
 ## What changed in v0.2 → v1.2
 
-The 24-task roadmap is closed (v1.0 GA). The component map above stayed
-stable; each new package landed behind a clear seam:
+The original 24-task v1.x roadmap is historical, not a production-readiness
+attestation. The active v2.0 enterprise truth/safety roadmap remains in
+progress; current readiness boundaries and evidence gaps are maintained in
+[`docs/internal/enterprise-review-2026-09-17.md`](../internal/enterprise-review-2026-09-17.md)
+and [`docs/PROGRESS.md`](../PROGRESS.md). The component map above stayed
+stable; each new package landed behind a clear seam, but capabilities must
+still be distinguished as implemented, integrated, or production-verified:
 
 - **v0.2** — `@aqa/cost` (budget cap), `@aqa/sandbox` (process + container),
   determinism contract refinements + `aqa verify <finding-id>`.

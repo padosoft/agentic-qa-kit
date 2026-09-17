@@ -38,6 +38,11 @@
   generic provider errors (ADR-148). The queue persists only `secret_ref`; no
   real credentials or external calls are used in tests.
 
+- **Corrected a stale architecture claim.** `docs/architecture/reference.md`
+  no longer presents the historical v1.x task list as proof of GA or production
+  readiness; it now points to the active v2.0 evidence matrix and distinguishes
+  implemented, integrated and production-verified capabilities.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.
