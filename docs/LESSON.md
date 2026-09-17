@@ -1579,3 +1579,12 @@ refund. Validate the state machine explicitly and compare successful refund
 amounts with the cumulative amount observed on the payment. This is still
 provider-neutral evidence; a live provider settlement/reconciliation journey
 is required before production claims.
+
+# 2026-09-17 — settlement needs a closed financial equation
+
+Validating an order and a payment independently does not detect provider
+settlement drift. A settlement contract must link every refund and chargeback
+to the exact payment, distinguish successful/lost effects from unresolved
+ones, and prove `captured - refunds - lost_chargebacks = net`. Provider
+adapters still need live reconciliation evidence; deterministic fixtures only
+prove the equation and linkage rules.

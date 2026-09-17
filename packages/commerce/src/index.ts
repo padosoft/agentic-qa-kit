@@ -116,6 +116,20 @@ export const ChargebackSnapshot = z.object({
 });
 export type ChargebackSnapshot = z.infer<typeof ChargebackSnapshot>;
 
+/** Provider-reported financial totals used to reconcile a captured payment. */
+export const SettlementSnapshot = z.object({
+  schema_version: z.literal('1'),
+  provider: z.string().min(1),
+  order_id: z.string().min(1),
+  payment_id: z.string().min(1),
+  captured: Money,
+  refunded: Money,
+  chargeback: Money,
+  net: Money,
+  observed_at: z.string().datetime({ offset: true }),
+});
+export type SettlementSnapshot = z.infer<typeof SettlementSnapshot>;
+
 export const CancellationSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -354,6 +368,72 @@ export function assertChargebackIntegrity(
     throw new Error('chargeback exceeds captured payment');
   if (item.status === 'opened' && !item.evidence_due_at)
     throw new Error('opened chargeback requires evidence_due_at');
+}
+
+/**
+ * Reconcile provider settlement totals with the authoritative payment,
+ * successful refunds and lost chargebacks observed for the same order.
+ * Pending/open or failed effects must not be silently counted as settled.
+ */
+export function assertSettlementIntegrity(
+  payment: PaymentSnapshot,
+  refunds: readonly RefundSnapshot[],
+  chargebacks: readonly ChargebackSnapshot[],
+  settlement: SettlementSnapshot,
+): void {
+  const paymentItem = PaymentSnapshot.parse(payment);
+  const settlementItem = SettlementSnapshot.parse(settlement);
+  if (settlementItem.order_id !== paymentItem.order_id) {
+    throw new Error('settlement does not belong to the payment order');
+  }
+  if (settlementItem.payment_id !== paymentItem.payment_id) {
+    throw new Error('settlement does not belong to the payment');
+  }
+  assertSameCurrency(
+    paymentItem.amount,
+    paymentItem.refunded_amount,
+    settlementItem.captured,
+    settlementItem.refunded,
+    settlementItem.chargeback,
+    settlementItem.net,
+  );
+  const captured = BigInt(paymentItem.amount.amount_minor);
+  let refunded = 0n;
+  for (const refund of refunds) {
+    const item = RefundSnapshot.parse(refund);
+    if (item.order_id !== paymentItem.order_id)
+      throw new Error('refund is not linked to the payment order');
+    if (item.status !== 'succeeded') throw new Error('settlement contains a non-successful refund');
+    assertSameCurrency(item.amount, paymentItem.amount);
+    refunded += BigInt(item.amount.amount_minor);
+  }
+  if (refunded !== BigInt(paymentItem.refunded_amount.amount_minor)) {
+    throw new Error('refund ledger does not reconcile to the payment');
+  }
+  let chargeback = 0n;
+  for (const entry of chargebacks) {
+    const item = ChargebackSnapshot.parse(entry);
+    if (item.order_id !== paymentItem.order_id || item.payment_id !== paymentItem.payment_id)
+      throw new Error('chargeback is not linked to the payment');
+    assertSameCurrency(item.amount, paymentItem.amount);
+    if (BigInt(item.amount.amount_minor) <= 0n)
+      throw new Error('chargeback amount must be positive');
+    if (BigInt(item.amount.amount_minor) > captured)
+      throw new Error('chargeback exceeds captured payment');
+    if (item.status !== 'lost') throw new Error('settlement contains an unresolved chargeback');
+    chargeback += BigInt(item.amount.amount_minor);
+  }
+  if (refunded + chargeback > captured)
+    throw new Error('settlement effects exceed captured payment');
+  const net = captured - refunded - chargeback;
+  if (
+    BigInt(settlementItem.captured.amount_minor) !== captured ||
+    BigInt(settlementItem.refunded.amount_minor) !== refunded ||
+    BigInt(settlementItem.chargeback.amount_minor) !== chargeback ||
+    BigInt(settlementItem.net.amount_minor) !== net
+  ) {
+    throw new Error('settlement totals do not reconcile to payment effects');
+  }
 }
 
 export function assertCancellationIntegrity(
