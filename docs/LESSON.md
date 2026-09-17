@@ -35,6 +35,12 @@
   run event, then make UI/report consumers read that source rather than infer
   state from human error strings.
 
+- **Browser automation needs a constrained action language.** A Playwright
+  session is valuable for checkout state, but arbitrary agent JavaScript and
+  unrestricted origins turn the QA driver into an exfiltration tool. Keep
+  actions structured, origins allowlisted, evidence bounded/redacted and close
+  the context explicitly; reconcile UI claims with authoritative state.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

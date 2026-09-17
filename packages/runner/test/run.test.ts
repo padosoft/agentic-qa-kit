@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
 import { FindingsWriter } from '../dist/findings.js';
+import { makePlaywrightProbeRunner } from '../dist/playwright.js';
 import { makeHttpProbeRunner, runScenario } from '../dist/run.js';
 import { makeShellProbeRunner } from '../dist/shell.js';
 import { makeSqlProbeRunner } from '../dist/sql.js';
@@ -294,6 +295,71 @@ describe('runScenario', () => {
     assert.match(multi.error ?? '', /read-only/);
     assert.match(tooMany.error ?? '', /exceeds 1 rows/);
     assert.equal(calls, 1);
+  });
+
+  it('makePlaywrightProbeRunner applies structured actions and origin policy', async () => {
+    const calls: string[] = [];
+    const page = {
+      async goto(url: string) {
+        calls.push(`goto:${url}`);
+      },
+      async click(selector: string) {
+        calls.push(`click:${selector}`);
+      },
+      async fill(selector: string, value: string) {
+        calls.push(`fill:${selector}:${value}`);
+      },
+      async press(selector: string, key: string) {
+        calls.push(`press:${selector}:${key}`);
+      },
+      locator: (selector: string) => ({
+        waitFor: async () => {
+          calls.push(`wait:${selector}`);
+        },
+      }),
+      async title() {
+        return 'Checkout';
+      },
+      url: () => 'http://shop.test/checkout',
+      async innerText() {
+        return 'Order confirmation customer@example.test';
+      },
+    };
+    const fakeBrowser = {
+      async newContext() {
+        return { newPage: async () => page, close: async () => calls.push('context-close') };
+      },
+      async close() {
+        calls.push('browser-close');
+      },
+    };
+    const runner = makePlaywrightProbeRunner({
+      baseUrl: 'http://shop.test',
+      browserFactory: { launch: async () => fakeBrowser as never },
+    });
+    const result = await runner({
+      id: 'probe-browser',
+      kind: 'playwright',
+      with: {
+        url: '/checkout',
+        actions: [
+          { type: 'fill', selector: '#email', value: 'customer@example.test' },
+          { type: 'click', selector: '#pay' },
+          { type: 'wait_for', selector: '#confirmation' },
+        ],
+      },
+      timeout_ms: 1_000,
+    });
+    assert.equal((result.body as { title: string }).title, 'Checkout');
+    assert.match((result.body as { text: string }).text, /\[REDACTED-EMAIL\]/);
+    assert.deepEqual(calls.slice(0, 4), [
+      'goto:http://shop.test/checkout',
+      'fill:#email:customer@example.test',
+      'click:#pay',
+      'wait:#confirmation',
+    ]);
+    await runner.close();
+    assert.equal(calls.at(-1), 'context-close');
   });
 
   it('makeHttpProbeRunner rejects unsupported probe kinds', async () => {

@@ -17,4 +17,9 @@ export {
 } from './run.js';
 export { makeShellProbeRunner, type ShellProbeRunnerOptions } from './shell.js';
 export { makeSqlProbeRunner, type SqlProbeRunnerOptions, type SqlRow } from './sql.js';
+export {
+  makePlaywrightProbeRunner,
+  type PlaywrightProbeRunner,
+  type PlaywrightProbeRunnerOptions,
+} from './playwright.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

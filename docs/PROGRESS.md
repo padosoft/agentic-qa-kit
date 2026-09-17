@@ -54,6 +54,12 @@
   Admin live rendering and persisted server projections remain separate UI/API
   integration work.
 
+- **Real Playwright driver added.** Runner now supports a persistent browser
+  context through structured, origin-scoped actions with bounded/redacted text
+  evidence and explicit close lifecycle. The fake-browser contract test is
+  green; installed Chromium, live checkout journey and SUT/provider
+  reconciliation remain required evidence.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

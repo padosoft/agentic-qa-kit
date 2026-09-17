@@ -25,6 +25,10 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **Canonical outcomes** — scenario results distinguish `pass`, `fail`,
   `error`, `blocked` and reserved `not_run`; missing capabilities never look
   like a passing assertion.
+- **Controlled Playwright driver** — `makePlaywrightProbeRunner()` provides a
+  persistent browser context with origin allowlisting, structured actions,
+  bounded/redacted text evidence and explicit `close()`. It does not permit
+  arbitrary JavaScript or unrestricted navigation.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full
