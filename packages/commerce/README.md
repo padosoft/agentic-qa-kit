@@ -35,6 +35,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `CommerceToolPolicy` for agentic commerce: read tools are explicitly
   allowlisted; writes/financial actions require a single-use human approval
   bound to tenant, customer, cart revision, exact currency/amount and expiry.
+- `InMemoryCommerceApprovalLedger` and `PostgresCommerceApprovalLedger` provide
+  atomic approval consumption; production uses `authorizeAsync()` when a
+  durable ledger is configured.
 
 ## Setup
 

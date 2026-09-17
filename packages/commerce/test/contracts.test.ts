@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
   CommerceToolPolicy,
   HttpCommerceAdapter,
+  InMemoryCommerceApprovalLedger,
   InMemoryCommerceReference,
   InMemoryWebhookEffectLedger,
   InventorySnapshot,
@@ -95,6 +96,50 @@ describe('@aqa/commerce contracts', () => {
       ),
       { allowed: false, reason: 'approval_expired' },
     );
+  });
+
+  it('uses an atomic approval ledger for async multi-replica-style authorization', async () => {
+    const ledger = new InMemoryCommerceApprovalLedger();
+    const policy = new CommerceToolPolicy({
+      read_tools: ['catalog.search'],
+      approval_ledger: ledger,
+    });
+    const call = {
+      schema_version: '1' as const,
+      id: 'call-ledger',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      tool: 'checkout.submit',
+      operation: 'financial' as const,
+      target: { tenant: 'tenant-a', customer_id: 'customer-a' },
+      cart_revision: 1,
+      total: { currency: 'EUR', amount_minor: '1000' },
+      requested_at: new Date('2026-09-17T10:00:00Z').toISOString(),
+    };
+    const approval = {
+      schema_version: '1' as const,
+      approval_id: 'approval-ledger',
+      call_id: 'call-ledger',
+      tenant: 'tenant-a',
+      customer_id: 'customer-a',
+      cart_revision: 1,
+      total: { currency: 'EUR', amount_minor: '1000' },
+      approved_by: 'operator@example.test',
+      source: 'human' as const,
+      expires_at: '2026-09-17T10:05:00Z',
+    };
+    assert.deepEqual(await policy.authorizeAsync(call, approval), {
+      allowed: true,
+      reason: 'human_approval_allowed',
+    });
+    assert.deepEqual(await policy.authorizeAsync(call, approval), {
+      allowed: false,
+      reason: 'approval_already_consumed',
+    });
+    assert.deepEqual(policy.authorize(call, approval), {
+      allowed: false,
+      reason: 'durable_approval_requires_async_authorize',
+    });
   });
 
   it('HttpCommerceAdapter performs bounded, tenant-scoped checkout calls', async () => {

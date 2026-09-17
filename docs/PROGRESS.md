@@ -878,3 +878,8 @@
 
 - Added `CommerceToolPolicy` for EC-10: read tools require an allowlist and same-tenant/customer target; write/financial tools require a single-use human approval bound to call ID, tenant, customer, cart revision, exact minor-unit total/currency and expiry. Prompt text or agent output cannot self-approve a mutation.
 - Evidence: commerce build/typecheck and **21 tests passed**, including cross-tenant denial, missing approval, stale/expired approval and replay rejection. Durable approval storage, provider atomicity and a live merchant tool gateway remain required integration evidence.
+
+# 2026-09-17 — durable commerce approval consumption
+
+- Added `CommerceApprovalLedger` with in-memory and atomic PostgreSQL implementations. `CommerceToolPolicy.authorizeAsync()` claims an approval exactly once; when a durable ledger is configured, synchronous authorization fails closed instead of using process-local replay state.
+- Evidence: commerce build/typecheck and **22 tests passed**, including duplicate approval consumption. Live PostgreSQL concurrency, approval issuance/audit and atomic merchant mutation still remain deployment evidence.

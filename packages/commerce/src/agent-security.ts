@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CommerceApprovalLedger } from './approval-ledger.js';
 
 const ToolMoney = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/),
@@ -40,6 +41,7 @@ export type CommerceAuthorization =
 export type CommerceToolPolicyOptions = {
   read_tools: readonly string[];
   now?: () => Date;
+  approval_ledger?: CommerceApprovalLedger;
 };
 
 /**
@@ -51,31 +53,64 @@ export type CommerceToolPolicyOptions = {
 export class CommerceToolPolicy {
   private readonly readTools: ReadonlySet<string>;
   private readonly now: () => Date;
+  private readonly approvalLedger: CommerceApprovalLedger | undefined;
   private readonly consumedApprovals = new Set<string>();
 
   constructor(options: CommerceToolPolicyOptions) {
     if (options.read_tools.length === 0) throw new Error('read_tools must not be empty');
     this.readTools = new Set(options.read_tools);
     this.now = options.now ?? (() => new Date());
+    this.approvalLedger = options.approval_ledger;
   }
 
   authorize(call: CommerceToolCall, approval?: HumanCommerceApproval): CommerceAuthorization {
+    const prepared = this.prepare(call, approval);
+    if (!prepared.allowed) return prepared;
+    if (prepared.kind === 'read') return { allowed: true, reason: 'read_allowed' };
+    if (this.approvalLedger)
+      return { allowed: false, reason: 'durable_approval_requires_async_authorize' };
+    if (this.consumedApprovals.has(prepared.approval.approval_id))
+      return { allowed: false, reason: 'approval_already_consumed' };
+    this.consumedApprovals.add(prepared.approval.approval_id);
+    return { allowed: true, reason: 'human_approval_allowed' };
+  }
+
+  async authorizeAsync(
+    call: CommerceToolCall,
+    approval?: HumanCommerceApproval,
+  ): Promise<CommerceAuthorization> {
+    const prepared = this.prepare(call, approval);
+    if (!prepared.allowed) return prepared;
+    if (prepared.kind === 'read') return { allowed: true, reason: 'read_allowed' };
+    if (!this.approvalLedger) return this.authorize(call, approval);
+    const claim = await this.approvalLedger.claim(prepared.approval.approval_id, prepared.item.id);
+    if (claim === 'claimed') return { allowed: true, reason: 'human_approval_allowed' };
+    return {
+      allowed: false,
+      reason: claim === 'duplicate' ? 'approval_already_consumed' : 'approval_claim_conflict',
+    };
+  }
+
+  private prepare(
+    call: CommerceToolCall,
+    approval?: HumanCommerceApproval,
+  ):
+    | { allowed: false; reason: string }
+    | { allowed: true; kind: 'read'; item: CommerceToolCall }
+    | { allowed: true; kind: 'write'; item: CommerceToolCall; approval: HumanCommerceApproval } {
     const parsedCall = CommerceToolCall.safeParse(call);
     if (!parsedCall.success) return { allowed: false, reason: 'invalid_tool_call' };
     const item = parsedCall.data;
     if (item.target.tenant !== item.tenant || item.target.customer_id !== item.customer_id)
       return { allowed: false, reason: 'cross_customer_or_tenant_target' };
-    if (item.operation === 'read') {
+    if (item.operation === 'read')
       return this.readTools.has(item.tool)
-        ? { allowed: true, reason: 'read_allowed' }
+        ? { allowed: true, kind: 'read', item }
         : { allowed: false, reason: 'read_tool_not_allowlisted' };
-    }
     if (!approval) return { allowed: false, reason: 'human_approval_required' };
     const parsedApproval = HumanCommerceApproval.safeParse(approval);
     if (!parsedApproval.success) return { allowed: false, reason: 'invalid_human_approval' };
     const grant = parsedApproval.data;
-    if (this.consumedApprovals.has(grant.approval_id))
-      return { allowed: false, reason: 'approval_already_consumed' };
     if (
       grant.call_id !== item.id ||
       grant.tenant !== item.tenant ||
@@ -88,8 +123,7 @@ export class CommerceToolPolicy {
       return { allowed: false, reason: 'cart_revision_and_total_required' };
     if (grant.cart_revision !== item.cart_revision || !sameMoney(grant.total, item.total))
       return { allowed: false, reason: 'approval_stale_or_total_mismatch' };
-    this.consumedApprovals.add(grant.approval_id);
-    return { allowed: true, reason: 'human_approval_allowed' };
+    return { allowed: true, kind: 'write', item, approval: grant };
   }
 }
 

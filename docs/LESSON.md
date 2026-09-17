@@ -1168,3 +1168,9 @@ must fail before a worker connects to the durable queue.
 An agent saying “approved” is not an authorization event. Bind human approval
 to the exact tool call, customer, cart revision and total, consume it once, and
 re-check those values atomically at the merchant mutation boundary.
+
+# 2026-09-17 — durable approval replay protection
+
+An in-memory consumed-approval set is useful for unit tests but is not a
+multi-replica security boundary. Make production authorization asynchronous and
+claim the approval in a shared unique-key ledger before allowing the mutation.

@@ -7,6 +7,12 @@ export {
   type CommerceAuthorization,
   type CommerceToolPolicyOptions,
 } from './agent-security.js';
+export {
+  InMemoryCommerceApprovalLedger,
+  PostgresCommerceApprovalLedger,
+  type ApprovalClaim,
+  type CommerceApprovalLedger,
+} from './approval-ledger.js';
 
 export {
   verifyStripeWebhookSignature,
