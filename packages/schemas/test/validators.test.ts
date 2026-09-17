@@ -197,3 +197,42 @@ describe('Finding.status=verified gating', () => {
     assert.equal(f.success, true);
   });
 });
+
+describe('Scenario oracle probe references', () => {
+  const base = {
+    schema_version: '1' as const,
+    id: 'scn-probe-ref',
+    title: 'Scenario with typed output references',
+    risk_refs: ['risk-ref'],
+    invariant_refs: [],
+    preconditions: [],
+    steps: [{ id: 'probe-health', kind: 'http' as const, with: {}, timeout_ms: 1000 }],
+    oracles: [
+      {
+        id: 'oracle-health',
+        kind: 'http_status' as const,
+        probe_id: 'probe-health',
+        with: { expected: 200 },
+        weight: 1,
+      },
+    ],
+    cleanup: [],
+    tags: [],
+  };
+
+  it('accepts an oracle that references an existing step', () => {
+    assert.equal(Scenario.Scenario.safeParse(base).success, true);
+  });
+
+  it('rejects duplicate steps and references to missing steps', () => {
+    const result = Scenario.Scenario.safeParse({
+      ...base,
+      steps: [base.steps[0], base.steps[0]],
+      oracles: [{ ...base.oracles[0], probe_id: 'missing-step' }],
+    });
+    assert.equal(result.success, false);
+    if (result.success) return;
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'oracles.0.probe_id'));
+    assert.ok(result.error.issues.some((issue) => issue.path.join('.') === 'steps.1.id'));
+  });
+});

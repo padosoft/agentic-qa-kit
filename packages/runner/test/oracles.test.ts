@@ -19,6 +19,33 @@ describe('builtInOracles', () => {
     assert.equal(r.passed, false);
     assert.equal(r.agreement, 0);
   });
+  it('scopes an oracle to its declared probe instead of the last response', () => {
+    const r = evaluateOracle(
+      { id: 'o-target', kind: 'http_status', probe_id: 'p1', with: { expected: 201 }, weight: 1 },
+      {
+        probes: [
+          { probe_id: 'p1', status: 201 },
+          { probe_id: 'p2', status: 500 },
+        ],
+      },
+    );
+    assert.equal(r.passed, true);
+  });
+
+  it('fails closed when an oracle references a missing probe', () => {
+    const r = evaluateOracle(
+      {
+        id: 'o-missing',
+        kind: 'response_contains',
+        probe_id: 'p-missing',
+        with: { value: 'ok' },
+        weight: 1,
+      },
+      { probes: [{ probe_id: 'p1', body: 'ok' }] },
+    );
+    assert.equal(r.passed, false);
+    assert.match(r.reason, /missing probe/);
+  });
   it('response_not_contains rejects forbidden string', () => {
     const r = evaluateOracle(
       { id: 'o-no-pwned', kind: 'response_not_contains', with: { value: 'PWNED' }, weight: 1 },

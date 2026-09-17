@@ -803,3 +803,6 @@ An oracle receiving no observation must not manufacture evidence of a SUT vulner
 # 2026-09-17 — browser audit verification must share canonicalization
 
 Duplicating hash-chain logic in a UI invites drift in canonical JSON, especially when the API record contains nested actor/payload objects. Keep canonicalization in a runtime-neutral module and expose a browser WebCrypto entrypoint; a Node verifier and a browser verifier can differ in crypto API without differing in the signed bytes.
+# 2026-09-17 — oracle output scope must be explicit
+
+Aggregating every probe response makes a scenario oracle non-local: a success from one step can mask a failure in another. Add a typed `probe_id` reference, validate it against unique scenario steps, and fail closed when the referenced observation is absent. Keep legacy fallback behavior explicit and temporary rather than silently treating all outputs as interchangeable.

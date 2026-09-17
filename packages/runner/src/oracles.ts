@@ -96,5 +96,15 @@ export function evaluateOracle(
       agreement: 0,
     };
   }
-  return ev(oracle, ctx);
+  if (!oracle.probe_id) return ev(oracle, ctx);
+  const probe = ctx.probes.find((candidate) => candidate.probe_id === oracle.probe_id);
+  if (!probe) {
+    return {
+      oracle_id: oracle.id,
+      passed: false,
+      reason: `oracle references missing probe "${oracle.probe_id}"`,
+      agreement: 0,
+    };
+  }
+  return ev(oracle, { probes: [probe] });
 }

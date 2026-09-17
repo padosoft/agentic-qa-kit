@@ -583,3 +583,7 @@
 
 - Added a runtime-neutral canonical JSON implementation and a WebCrypto-only `@aqa/compliance/browser` verifier. The admin audit viewer now consumes that package boundary instead of carrying a second hash implementation; prefix verification supports animated progress while rejecting tampered, reordered or partial chains.
 - Evidence: compliance browser/node contract 8/8, full workspace typecheck and lint, admin production build passed. The admin bundle still reports the existing non-fatal chunk-size warning; WORM storage, signed checkpoints and completeness attestations remain separate operational controls.
+# 2026-09-17 — typed oracle-to-probe references
+
+- Added optional `oracle.probe_id` with Scenario cross-field validation for unique step IDs and existing referenced steps. Runtime evaluation scopes the oracle to that observation and fails closed when the reference is missing; legacy scenarios without the field remain compatible.
+- Evidence: schema/runner targeted tests 41/41 after the new contracts, typecheck and lint pass. Existing legacy scenarios still use fallback semantics until packs are migrated to explicit references.
