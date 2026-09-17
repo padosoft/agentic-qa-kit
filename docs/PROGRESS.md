@@ -868,3 +868,8 @@
 
 - Added the real `aqa worker` entrypoint: it requires a PostgreSQL queue DSN, operator-owned project root and explicit runner scopes, composes `RunnerWorker` with the canonical kit handler, handles SIGTERM/SIGINT and closes the queue cleanly. Helm can now enable the worker StatefulSet with Secret-backed DSN and scoped environment configuration; default scaffold remains disabled until configured.
 - Evidence: server/kit builds and worker configuration tests **3/3 passed**. Helm is not installed in this Windows workspace; CI render/lint is authoritative for the chart path.
+
+# 2026-09-17 — runner scope parser fail-closed hardening
+
+- Rejected malformed `org/` scope entries; only `org/project` and explicit `org/*` are accepted, preventing an incomplete deployment value from becoming an unintended organization-wide permission.
+- Evidence: kit build/typecheck and worker configuration tests **3/3 passed**.

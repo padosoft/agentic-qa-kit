@@ -20,6 +20,7 @@ describe('runner worker deployment configuration', () => {
       /AQA_RUNNER_SCOPES is required/,
     );
     assert.throws(() => parseRunnerScopes('padosoft'), /org\/project/);
+    assert.throws(() => parseRunnerScopes('padosoft/'), /project or \*/);
   });
 
   it('bounds the worker polling interval', () => {

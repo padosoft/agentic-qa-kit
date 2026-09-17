@@ -1156,3 +1156,9 @@ A Kubernetes StatefulSet that only has an image and environment is not a
 worker journey. The entrypoint must compose the durable queue, canonical run
 handler, scoped lease acquisition and graceful shutdown; otherwise rendered
 YAML creates a process that may never consume work.
+
+# 2026-09-17 — wildcard permissions must be explicit
+
+Configuration parsers should never infer a wildcard from a missing segment.
+Require `org/project` or the visibly intentional `org/*`; malformed values
+must fail before a worker connects to the durable queue.

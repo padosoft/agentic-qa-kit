@@ -21,7 +21,8 @@ export function parseRunnerScopes(raw: string): RunnerWorkerConfig['scopes'] {
         throw new Error('[worker] scopes must use org/project or org/* entries');
       const org = value.slice(0, slash);
       const project = value.slice(slash + 1);
-      if (!org || !project || project === '*') return { org };
+      if (!org || !project) throw new Error('[worker] runner scope must include a project or *');
+      if (project === '*') return { org };
       return { org, project };
     });
   if (scopes.length === 0) throw new Error('[worker] AQA_RUNNER_SCOPES must not be empty');
