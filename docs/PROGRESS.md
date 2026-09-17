@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Post-OIDC acceptance gates green.** `bun run lint`, workspace typecheck,
+  full Bun test suite (444 pass, 1 skip), workspace/docs build and
+  `bun audit --json` all pass locally. The one skip is deliberate: the live
+  `PostgresOidcSessionStore` contract requires `AQA_TEST_POSTGRES_DSN` and is
+  executed by the PostgreSQL CI service job; no local database was available.
+  Build warnings remain limited to the known CJS `import.meta` bundle warning
+  and the admin chunk-size warning.
 - **Shared OIDC session backend shipped.** `OidcSessionManager` now supports
   an async shared store, and `PostgresOidcSessionStore` provides advisory-locked
   tables, atomic one-time PKCE state consumption, durable session lookup and
