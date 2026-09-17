@@ -1553,3 +1553,11 @@ queue can dispatch through multiple workers. Persist the halt beside the
 shared reservation ledger, check it before every reservation, bound the
 operator reason, and make reset explicit rather than allowing a retry to
 silently re-enable dispatch.
+
+# 2026-09-17 — validate-and-commit is not redemption atomicity
+
+A promotion snapshot can be valid for two concurrent checkout requests and
+still exceed its usage cap if validation and increment are separate. Keep
+redemption idempotency and cap enforcement in one shared ledger transaction,
+serialize by promotion code, and expose exhaustion as an explicit outcome
+rather than a generic provider error.

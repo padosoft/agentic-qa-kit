@@ -1254,3 +1254,10 @@ export function assertNoOversell(snapshot: InventorySnapshot): void {
     throw new Error(`inventory oversell: ${snapshot.sku} exceeds on_hand`);
   }
 }
+
+export {
+  InMemoryPromotionRedemptionLedger,
+  PostgresPromotionRedemptionLedger,
+  type PromotionRedemptionClaim,
+  type PromotionRedemptionLedger,
+} from './promotion-ledger.js';
