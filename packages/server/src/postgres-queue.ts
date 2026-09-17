@@ -264,6 +264,15 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     return rows.length === 1;
   }
 
+  async get(id: string): Promise<EnqueuedJob | null> {
+    await this.wait();
+    const rows = await this.q<StoredJob>(
+      'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE id = $1',
+      [id],
+    );
+    return rows[0] ? this.map(rows[0]) : null;
+  }
+
   async fail(id: string, leaseToken: string | undefined, reason: string): Promise<boolean> {
     await this.wait();
     if (!leaseToken || !reason.trim()) return false;

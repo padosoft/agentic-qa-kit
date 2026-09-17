@@ -1009,3 +1009,11 @@ translate it into the provider's cancellation primitive. The HTTP implementation
 now aborts `fetch` and returns an execution failure, which prevents findings from
 being emitted. Until the worker runtime and the remaining drivers consume the
 signal, cancellation is only partially implemented.
+
+# 2026-09-17 — normalize queue adapter sync/async boundaries
+
+The memory queue is synchronous while the PostgreSQL queue is asynchronous. A
+worker that calls `.then()` directly on a queue result works in only one mode and
+fails in the other. Normalize every adapter call with `Promise.resolve(...)` at
+the worker boundary, then test cancellation against the in-memory implementation
+and compile the PostgreSQL implementation as part of the same contract.

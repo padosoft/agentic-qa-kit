@@ -25,6 +25,7 @@ export interface EnqueuedJob extends RunnerJob {
 export interface RunnerQueueLike {
   enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
   dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
+  get(id: string): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
   ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
   fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
@@ -184,6 +185,11 @@ export class RunnerQueue {
     job.status = 'done';
     job.lease_token = undefined;
     return true;
+  }
+
+  get(id: string): EnqueuedJob | null {
+    const job = this.jobs.find((candidate) => candidate.id === id);
+    return job ? { ...job } : null;
   }
 
   fail(id: string, leaseToken: string | undefined, reason: string): boolean {

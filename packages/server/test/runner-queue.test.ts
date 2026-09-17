@@ -5,6 +5,7 @@ import {
   ResourceQuotaExceededError,
   RunnerQueue,
 } from '../dist/runner-queue.js';
+import { RunnerWorker } from '../dist/worker.js';
 
 const JOB = { id: 'job-1', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' };
 
@@ -119,6 +120,45 @@ describe('RunnerQueue', () => {
     assert.equal(q.ack(job.id, lease?.lease_token), false);
     assert.equal(q.snapshot().find((candidate) => candidate.id === job.id)?.status, 'cancelled');
     assert.equal(q.cancel(job.id, 'again', { org: 'acme', project: 'shop' }), false);
+  });
+
+  it('aborts an in-flight handler when the leased job is cancelled', async () => {
+    const q = new RunnerQueue();
+    const job = q.enqueue({ ...JOB, id: 'worker-cancel-1' });
+    let aborted = false;
+    const worker = new RunnerWorker(
+      q,
+      async (_job, signal) =>
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              aborted = true;
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+      { poll_ms: 10 },
+    );
+    const run = worker.runOnce();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(q.cancel(job.id, 'operator stop'), true);
+    assert.deepEqual(await run, { status: 'cancelled', job_id: job.id });
+    assert.equal(aborted, true);
+  });
+
+  it('fails handler errors without exposing unbounded or multiline reasons', async () => {
+    const q = new RunnerQueue();
+    const job = q.enqueue({ ...JOB, id: 'worker-fail-1' });
+    const worker = new RunnerWorker(q, async () => {
+      throw new Error(`provider failed\n${'x'.repeat(2_000)}`);
+    });
+    assert.deepEqual(await worker.runOnce(), { status: 'failed', job_id: job.id });
+    const stored = q.get(job.id);
+    assert.equal(stored?.status, 'failed');
+    assert.ok((stored?.failure_reason?.length ?? 0) <= 1_000);
+    assert.equal(stored?.failure_reason?.includes('\n'), false);
   });
 
   it('enforces per-tenant concurrent run and scenario quotas', () => {

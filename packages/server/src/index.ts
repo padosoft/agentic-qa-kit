@@ -20,6 +20,12 @@ export {
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
 export {
+  RunnerWorker,
+  type RunnerJobHandler,
+  type RunnerWorkerOptions,
+  type WorkerRunResult,
+} from './worker.js';
+export {
   MemoryEventBus,
   PostgresEventBus,
   type BusEvent,

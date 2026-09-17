@@ -772,3 +772,8 @@
 
 - Extended the runner driver contract with an optional `AbortSignal`. `runScenario` forwards the worker/orchestrator signal to the selected probe runner, and the HTTP driver propagates it to `fetch` while removing its listener on completion. An aborted request is an execution failure, therefore it cannot produce a security finding.
 - Evidence: runner build, runner typecheck, **19 tests passed**, and `git diff --check` passed. Shell, SQL, PostgreSQL and Playwright drivers still need signal-aware cancellation; there is still no executable server worker that observes queue cancellation and interrupts an in-flight job.
+
+# 2026-09-17 — cooperative queue worker runtime
+
+- Added `RunnerWorker`, a provider-neutral worker loop that dequeues a leased job, polls the queue for cancellation, propagates an `AbortSignal` to the handler, ACKs only successful non-cancelled work, and records bounded single-line failure reasons. Added `get(id)` to both queue adapters so cancellation observation works with memory and PostgreSQL implementations.
+- Evidence: server build, **120 tests passed**, including in-flight cancellation and bounded failure tests, and `git diff --check` passed. The worker handler is intentionally injected: real payload-to-`aqa run` orchestration, lease heartbeats for long jobs, runner authentication/identity, and live PostgreSQL worker evidence remain open.

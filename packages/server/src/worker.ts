@@ -1,0 +1,89 @@
+import type { EnqueuedJob, RunnerQueueLike } from './runner-queue.js';
+
+export type RunnerJobHandler = (job: EnqueuedJob, signal: AbortSignal) => Promise<void>;
+
+export interface RunnerWorkerOptions {
+  /** Poll interval for both queue acquisition and cancellation observation. */
+  poll_ms?: number;
+  /** Optional callback for bounded worker diagnostics. */
+  on_error?: (error: unknown, job: EnqueuedJob) => void;
+}
+
+export interface WorkerRunResult {
+  status: 'idle' | 'completed' | 'failed' | 'cancelled';
+  job_id?: string;
+}
+
+/**
+ * Cooperative queue worker. The queue remains the source of truth: a cancelled
+ * job aborts the handler and fences the eventual ACK. This class intentionally
+ * accepts a handler instead of hiding scenario loading/provider policy inside
+ * the server package.
+ */
+export class RunnerWorker {
+  private readonly pollMs: number;
+  private stopped = false;
+
+  constructor(
+    private readonly queue: RunnerQueueLike,
+    private readonly handle: RunnerJobHandler,
+    opts: RunnerWorkerOptions = {},
+  ) {
+    this.pollMs = Math.max(10, opts.poll_ms ?? 250);
+    this.onError = opts.on_error;
+  }
+
+  private readonly onError: RunnerWorkerOptions['on_error'];
+
+  stop(): void {
+    this.stopped = true;
+  }
+
+  async runOnce(): Promise<WorkerRunResult> {
+    const job = await this.queue.dequeue();
+    if (!job) return { status: 'idle' };
+    const controller = new AbortController();
+    let cancelled = false;
+    const watcher = setInterval(() => {
+      void Promise.resolve(this.queue.get(job.id)).then((current) => {
+        if (current?.status === 'cancelled') {
+          cancelled = true;
+          controller.abort();
+        }
+      });
+    }, this.pollMs);
+    try {
+      await this.handle(job, controller.signal);
+      const current = await this.queue.get(job.id);
+      if (cancelled || current?.status === 'cancelled')
+        return { status: 'cancelled', job_id: job.id };
+      const acknowledged = await this.queue.ack(job.id, job.lease_token);
+      return { status: acknowledged ? 'completed' : 'cancelled', job_id: job.id };
+    } catch (error) {
+      const current = await this.queue.get(job.id);
+      if (cancelled || current?.status === 'cancelled')
+        return { status: 'cancelled', job_id: job.id };
+      this.onError?.(error, job);
+      await this.queue.fail(job.id, job.lease_token, boundedError(error));
+      return { status: 'failed', job_id: job.id };
+    } finally {
+      clearInterval(watcher);
+    }
+  }
+
+  async runUntilStopped(): Promise<void> {
+    while (!this.stopped) {
+      const result = await this.runOnce();
+      if (result.status === 'idle') await delay(this.pollMs);
+    }
+  }
+}
+
+function boundedError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/[\r\n\t]+/g, ' ').slice(0, 1000) || 'worker handler failed';
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
