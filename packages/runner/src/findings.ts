@@ -2,6 +2,12 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Finding } from '@aqa/schemas';
 
+function redactText(value: string): string {
+  return value
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b\d{13,19}\b/g, '[REDACTED-PAN]');
+}
+
 export class FindingsWriter {
   private readonly path: string;
   private readonly seen = new Set<string>();
@@ -24,10 +30,16 @@ export class FindingsWriter {
     const dedupKey = `${finding.run_id}|${finding.scenario_id}|${finding.risk_id}|${finding.severity}`;
     if (this.seen.has(dedupKey)) return null;
     this.seen.add(dedupKey);
-    Finding.Finding.parse(finding); // re-validate; throws on illegal state
-    this.findings.push(finding);
-    if (this.persist) appendFileSync(this.path, `${JSON.stringify(finding)}\n`, 'utf8');
-    return finding;
+    const safeFinding = Finding.Finding.parse({
+      ...finding,
+      title: redactText(finding.title),
+      summary: redactText(finding.summary),
+      evidence: finding.evidence.map(redactText),
+      tags: finding.tags.map(redactText),
+    });
+    this.findings.push(safeFinding);
+    if (this.persist) appendFileSync(this.path, `${JSON.stringify(safeFinding)}\n`, 'utf8');
+    return safeFinding;
   }
 
   snapshot(): readonly Finding.Finding[] {

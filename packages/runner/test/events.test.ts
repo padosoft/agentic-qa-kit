@@ -80,4 +80,23 @@ describe('EventChainWriter', () => {
       prev = ev.hash;
     }
   });
+
+  it('redacts sensitive payload values before hashing and persistence', () => {
+    const writer = new EventChainWriter('/tmp/_ignore', { persist: false });
+    const event = writer.append({
+      ts: '2026-05-17T10:00:00Z',
+      run_id: 'run-redact',
+      kind: 'info',
+      actor: { type: 'system', id: 'test' },
+      payload: {
+        authorization: 'Bearer super-secret',
+        nested: { api_key: 'key-value' },
+        card: '4111111111111111',
+      },
+    });
+    assert.equal(event.payload.authorization, '[REDACTED]');
+    assert.equal((event.payload.nested as Record<string, unknown>).api_key, '[REDACTED]');
+    assert.equal(event.payload.card, '[REDACTED-PAN]');
+    assert.doesNotMatch(JSON.stringify(event), /super-secret|key-value|4111111111111111/);
+  });
 });
