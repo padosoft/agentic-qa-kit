@@ -25,6 +25,12 @@ test('ecosystem live: runs and findings pages consume the live API', async ({ pa
   await page.goto('/');
   await nav(page, 'Runs').click();
   await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('tbody tr').first().click();
+  await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
   await nav(page, 'Findings').click();
   await expect(page.getByText(/live API/i).first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.cluster-card').first().click();
+  await expect(page.getByText(/Cross-tenant|ecosystem smoke/i).first()).toBeVisible({
+    timeout: 15_000,
+  });
 });

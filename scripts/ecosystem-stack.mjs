@@ -215,6 +215,7 @@ const runSummary = {
   started_at: runStarted?.ts ?? new Date().toISOString(),
   finished_at: runFinished?.ts ?? new Date().toISOString(),
   state: 'succeeded',
+  org: 'padosoft',
   project: 'gescat',
   profile: 'smoke',
   execution_mode: 'orchestrator',

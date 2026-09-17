@@ -25,7 +25,9 @@
   its referenced risk/invariant, fixing a real scenario-parse failure.
 - Evidence: rebuilt kit/admin and ran the complete ecosystem journey through a
   real SUT, CLI run, API server and Chromium: **2/2 Playwright tests passed**
-  (live audit chain plus live Runs/Findings). Detail/restart/Postgres/tenant
+  (live audit chain plus live Runs/Findings and detail navigation). The run
+  fixture now carries its tenant org and live finding normalization tolerates
+  valid sparse evidence without crashing the UI. Restart/Postgres/tenant
   switching journeys remain open. ADR-128 records the boundary.
 
 - **Documentation supply-chain audit remediated.** The independent `docs-site`

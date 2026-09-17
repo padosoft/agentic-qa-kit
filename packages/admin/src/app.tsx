@@ -2968,6 +2968,25 @@ function runById(id) {
 function findingById(id) {
   return FINDINGS.find((f) => f.id === id);
 }
+function normalizeFindingForAdmin(finding) {
+  const reproducibility = finding?.reproducibility || {};
+  const floor = (level) =>
+    reproducibility[level] || { deterministic: false, attempts: 0, successes: 0 };
+  return {
+    ...finding,
+    owners: Array.isArray(finding?.owners) ? finding.owners : [],
+    tags: Array.isArray(finding?.tags) ? finding.tags : [],
+    verification_floor:
+      typeof finding?.verification_floor === 'string'
+        ? finding.verification_floor
+        : 'scenario_level',
+    reproducibility: {
+      bug_level: floor('bug_level'),
+      scenario_level: floor('scenario_level'),
+      agent_level: floor('agent_level'),
+    },
+  };
+}
 function riskById(id) {
   return RISKS.find((r) => r.id === id);
 }
@@ -8116,7 +8135,9 @@ function PageFindings({ onNavigate, onOpenFinding }) {
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
-        if (!cancelled && Array.isArray(body?.findings)) setLiveFindings(body.findings);
+        if (!cancelled && Array.isArray(body?.findings)) {
+          setLiveFindings(body.findings.map(normalizeFindingForAdmin));
+        }
       } catch {
         /* Keep the explicit local preview when the server is unavailable. */
       }
@@ -8353,7 +8374,7 @@ function PageFindingDetail({ findingId, onNavigate }) {
     };
   }, [findingId]);
 
-  const f = liveFinding || findingById(findingId) || FINDINGS[0];
+  const f = normalizeFindingForAdmin(liveFinding || findingById(findingId) || FINDINGS[0]);
   const risk = riskById(f.risk_id);
   const run = runById(f.run_id);
   const [tab, setTab] = React.useState('overview');

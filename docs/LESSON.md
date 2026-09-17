@@ -1278,3 +1278,10 @@ An optimistic-editor helper cannot prevent lost updates while the API still
 accepts unconditional last-write-wins PUTs. Version/content identity must be
 returned by reads and enforced before persistence; a stale write must return a
 machine-readable 412 and leave the newer server value untouched.
+
+# 2026-09-17 — live schema-valid evidence may be sparse
+
+The live Finding schema permits evidence such as empty owners/tags or missing
+reproducibility floors. A UI that only survives its rich demo fixture is not a
+live integration: normalize optional collections and reserved evidence states
+at the rendering boundary, then prove the sparse record through the browser.
