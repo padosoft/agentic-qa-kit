@@ -663,12 +663,94 @@ async function handleRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/api/events/stream') {
+    await handleEventStream({ req, res, url, hctx });
+    return;
+  }
+
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/scim/')) {
     await delegateToApi({ req, res, url, method, hctx });
     return;
   }
 
   serveStatic({ req, res, url, hctx });
+}
+
+async function handleEventStream(args: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  url: URL;
+  hctx: HandleCtx;
+}): Promise<void> {
+  const { req, res, url, hctx } = args;
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(req.headers)) {
+    headers[key] = Array.isArray(value) ? value.join(',') : String(value ?? '');
+  }
+  const user = await hctx.ctx.authenticate(headers);
+  if (!user) {
+    res.statusCode = 401;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'unauthorized' }));
+    return;
+  }
+  if (!allows(user, 'runs:read')) {
+    res.statusCode = 403;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'forbidden: requires runs:read' }));
+    return;
+  }
+  const org = headers['x-aqa-org'] ?? headers['X-Aqa-Org'] ?? url.searchParams.get('org') ?? '';
+  const project =
+    headers['x-aqa-project'] ?? headers['X-Aqa-Project'] ?? url.searchParams.get('project') ?? '';
+  if (!org.trim()) {
+    res.statusCode = 400;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'event stream requires an org scope' }));
+    return;
+  }
+  if (
+    hctx.ctx.authorizeScope &&
+    !(await hctx.ctx.authorizeScope(user, { org, ...(project ? { project } : {}) }))
+  ) {
+    res.statusCode = 403;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'forbidden: user is not a member of the requested scope' }));
+    return;
+  }
+  if (!hctx.ctx.eventBus) {
+    res.statusCode = 503;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'live event streaming is not configured' }));
+    return;
+  }
+
+  res.statusCode = 200;
+  res.setHeader('content-type', 'text/event-stream; charset=utf-8');
+  res.setHeader('cache-control', 'no-cache, no-transform');
+  res.setHeader('connection', 'keep-alive');
+  res.setHeader('x-accel-buffering', 'no');
+  res.flushHeaders();
+  res.write('retry: 3000\n\n');
+
+  let closed = false;
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(': heartbeat\n\n');
+  }, 15_000);
+  heartbeat.unref?.();
+  const unsubscribe = await hctx.ctx.eventBus.subscribe((event) => {
+    if (closed || event.org !== org || (project && event.project !== project)) return;
+    const payload = JSON.stringify(event);
+    res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${payload}\n\n`);
+  });
+  const cleanup = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    await unsubscribe();
+  };
+  req.once('aborted', () => void cleanup());
+  res.once('close', () => void cleanup());
 }
 
 async function delegateToApi(args: {

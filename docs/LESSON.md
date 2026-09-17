@@ -1335,3 +1335,12 @@ same concrete route table catches omission and method/path drift immediately.
 Keep the transport generator separate from domain schemas: generic JSON
 placeholders are useful for discovery, but they must not be mistaken for a
 complete versioned payload contract or SDK-generation proof.
+
+# 2026-09-17 — SSE is a transport boundary, not a durable event source
+
+An event bus can make the admin UI responsive, but LISTEN/NOTIFY and in-process
+fan-out do not provide replay after a disconnect. The SSE adapter therefore
+filters by authenticated tenant before writing, emits bounded heartbeats and
+cleans up subscriptions on both request abort and response close. The UI must
+reconcile the durable store after reconnect; a live notification alone is never
+proof of complete run state.

@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { type OidcAdapter, OidcSessionManager, ScimTokenManager } from '@aqa/auth';
+import { MemoryEventBus } from '@aqa/server';
 import { MemoryStore } from '@aqa/store';
 import { runAdmin } from '../dist/commands/admin.js';
 
@@ -204,6 +205,59 @@ describe('aqa admin — boot + smoke', () => {
       // (empty list) or 401/403 depending on auth wiring — we accept
       // any non-404 here because the goal is "route is reachable".
       assert.notEqual(res.status, 404, `/api/orgs should be reachable, got ${res.status}`);
+    } finally {
+      await boot.close();
+    }
+  });
+
+  it('serves a tenant-filtered SSE stream and cleans up on disconnect', async () => {
+    const root = makeTempRoot();
+    const adminDistDir = makeFakeAdminDist();
+    const eventBus = new MemoryEventBus();
+    const boot = await runAdmin({
+      root,
+      port: 0,
+      host: '127.0.0.1',
+      adminDistDir,
+      eventBus,
+      authenticate: async () => ({
+        id: 'stream-user',
+        email: 'stream@example.test',
+        display_name: 'Stream User',
+        roles: ['admin'],
+      }),
+    });
+    assert.equal(boot.ok, true);
+    if (!boot.ok) return;
+    try {
+      const stream = await fetch(`${boot.url}/api/events/stream?org=acme&project=shop`);
+      assert.equal(stream.status, 200);
+      assert.match(stream.headers.get('content-type') ?? '', /text\/event-stream/);
+      const reader = stream.body?.getReader();
+      assert.ok(reader);
+      const first = await reader.read();
+      assert.match(new TextDecoder().decode(first.value), /retry: 3000/);
+      await eventBus.publish({
+        id: 'evt-tenant',
+        type: 'run.updated',
+        occurred_at: new Date().toISOString(),
+        org: 'acme',
+        project: 'shop',
+        data: { status: 'running' },
+      });
+      await eventBus.publish({
+        id: 'evt-other',
+        type: 'run.updated',
+        occurred_at: new Date().toISOString(),
+        org: 'other',
+        project: 'shop',
+        data: { status: 'running' },
+      });
+      const next = await reader.read();
+      const text = new TextDecoder().decode(next.value);
+      assert.match(text, /evt-tenant/);
+      assert.doesNotMatch(text, /evt-other/);
+      await reader.cancel();
     } finally {
       await boot.close();
     }

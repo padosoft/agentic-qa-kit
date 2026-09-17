@@ -1044,6 +1044,21 @@
   passed locally. Generic transport schemas remain intentionally provisional;
   domain payloads must be connected to the versioned schemas package before
   declaring SDK-generation readiness.
-- Next: add a production-safe tenant-scoped SSE stream backed by the existing
-  event bus, with heartbeat, unsubscribe, bounded event payloads and browser
-  journey evidence.
+- Next: wire the admin SPA to the stream and add reconnect/cursor semantics for
+  multi-replica gaps.
+
+# 2026-09-17 — tenant-scoped live event stream
+
+- Implemented `GET /api/events/stream` in the admin Node adapter. It requires
+  authenticated `runs:read`, an org scope, optional project scope, server-side
+  event filtering, SSE reconnect hints, heartbeat comments, and cleanup on
+  client disconnect. The framework-neutral route table exposes the same
+  permission metadata and returns an explicit 501 in adapters without stream
+  support.
+- Evidence: real HTTP admin test passed with tenant-positive and tenant-negative
+  events, initial SSE framing and reader cancellation; kit suite **141 total / 
+  139 passed / 2 expected platform skips**, typecheck, Biome lint and diff
+  checks passed locally.
+- Remaining: wire the admin SPA to this endpoint, validate a real browser
+  EventSource journey through the deployed reverse proxy, and add replay/cursor
+  semantics for reconnect gaps in multi-replica deployments.

@@ -374,6 +374,19 @@ export function makeApi(): ApiHandler[] {
     // ============ Runs ============
     {
       method: 'GET',
+      path: '/api/events/stream',
+      requires: 'runs:read',
+      async handle() {
+        // The Node adapter upgrades this route to a real SSE response. Other
+        // adapters must implement the same authenticated stream contract.
+        return {
+          status: 501,
+          body: { error: 'live event streaming is not supported by this adapter' },
+        };
+      },
+    },
+    {
+      method: 'GET',
       path: '/api/runs',
       requires: 'runs:read',
       async handle(req, ctx) {
