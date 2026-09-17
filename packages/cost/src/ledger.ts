@@ -10,13 +10,29 @@ export interface BudgetLedger {
     estimatedUsd: number,
     ttlMs?: number,
   ): Promise<string>;
-  settle(reservationId: string, actualUsd: number): Promise<void>;
+  settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void>;
   reapExpired(now?: Date): Promise<number>;
   close?(): Promise<void>;
 }
 
+/** Auditable provider usage attached to a settled reservation. */
+export interface BudgetUsage {
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  pricing_version?: string;
+  pricing_sha256?: string;
+}
+
 type MemoryBudget = { budgetUsd: number | null; reservedUsd: number; spentUsd: number };
-type MemoryReservation = { key: string; estimatedUsd: number; expiresAt: number; settled: boolean };
+type MemoryReservation = {
+  key: string;
+  estimatedUsd: number;
+  expiresAt: number;
+  settled: boolean;
+  actualUsd?: number;
+  usage?: BudgetUsage;
+};
 
 export class MemoryBudgetLedger implements BudgetLedger {
   private readonly budgets = new Map<string, MemoryBudget>();
@@ -43,7 +59,7 @@ export class MemoryBudgetLedger implements BudgetLedger {
     return id;
   }
 
-  async settle(reservationId: string, actualUsd: number): Promise<void> {
+  async settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void> {
     validateAmount(actualUsd);
     const reservation = this.reservations.get(reservationId);
     if (!reservation || reservation.settled) return;
@@ -52,6 +68,8 @@ export class MemoryBudgetLedger implements BudgetLedger {
     budget.reservedUsd = Math.max(0, budget.reservedUsd - reservation.estimatedUsd);
     budget.spentUsd += actualUsd;
     reservation.settled = true;
+    reservation.actualUsd = actualUsd;
+    if (usage) reservation.usage = usage;
   }
 
   async reapExpired(now = new Date()): Promise<number> {
@@ -90,7 +108,10 @@ export class PostgresBudgetLedger implements BudgetLedger {
         'CREATE TABLE IF NOT EXISTS aqa_llm_budgets (key text PRIMARY KEY, budget_usd numeric NULL, reserved_usd numeric NOT NULL DEFAULT 0, spent_usd numeric NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())',
       );
       await this.q(
-        'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
+        'CREATE TABLE IF NOT EXISTS aqa_llm_budget_reservations (id uuid PRIMARY KEY, budget_key text NOT NULL REFERENCES aqa_llm_budgets(key), estimated_usd numeric NOT NULL, actual_usd numeric NULL, model text NULL, tokens_in bigint NULL, tokens_out bigint NULL, pricing_version text NULL, pricing_sha256 text NULL, settled boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())',
+      );
+      await this.q(
+        'ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS actual_usd numeric NULL, ADD COLUMN IF NOT EXISTS model text NULL, ADD COLUMN IF NOT EXISTS tokens_in bigint NULL, ADD COLUMN IF NOT EXISTS tokens_out bigint NULL, ADD COLUMN IF NOT EXISTS pricing_version text NULL, ADD COLUMN IF NOT EXISTS pricing_sha256 text NULL',
       );
       await this.q(
         "ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS expires_at timestamptz NOT NULL DEFAULT (now() + interval '5 minutes')",
@@ -163,7 +184,7 @@ export class PostgresBudgetLedger implements BudgetLedger {
     });
   }
 
-  async settle(reservationId: string, actualUsd: number): Promise<void> {
+  async settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void> {
     validateAmount(actualUsd);
     await this.ready;
     await this.sql.begin(async (tx) => {
@@ -178,9 +199,18 @@ export class PostgresBudgetLedger implements BudgetLedger {
         'UPDATE aqa_llm_budgets SET reserved_usd = GREATEST(0, reserved_usd - $2), spent_usd = spent_usd + $3, updated_at = now() WHERE key = $1',
         [row.budget_key, row.estimated_usd, actualUsd],
       );
-      await query('UPDATE aqa_llm_budget_reservations SET settled = true WHERE id = $1', [
-        reservationId,
-      ]);
+      await query(
+        'UPDATE aqa_llm_budget_reservations SET settled = true, actual_usd = $2, model = $3, tokens_in = $4, tokens_out = $5, pricing_version = $6, pricing_sha256 = $7 WHERE id = $1',
+        [
+          reservationId,
+          actualUsd,
+          usage?.model ?? null,
+          usage?.tokens_in ?? null,
+          usage?.tokens_out ?? null,
+          usage?.pricing_version ?? null,
+          usage?.pricing_sha256 ?? null,
+        ],
+      );
     });
   }
 

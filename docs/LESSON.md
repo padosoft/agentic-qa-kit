@@ -1121,3 +1121,10 @@ Token counts without the applied pricing version are not reproducible financial
 evidence. Canonicalize model ordering, hash the catalog and carry version/hash
 with the tracker snapshot. Signature, distribution and rotation are separate
 trust controls; a local digest alone does not prove operator-approved pricing.
+
+# 2026-09-17 — settle usage with pricing provenance
+
+Budget totals alone are insufficient for reconciliation. Persist the model,
+authoritative provider token counts, actual charge and pricing catalog identity
+on settlement; expired reservations must release only the estimate and must not
+pretend that a provider usage event occurred.

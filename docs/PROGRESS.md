@@ -843,3 +843,8 @@
 
 - Added `PricingCatalog` parsing with schema/version/effective timestamp validation, deterministic model ordering and SHA-256 identity. `BudgetTracker` can consume the catalog and exposes `pricing_version`/`pricing_sha256` in every snapshot, making cost evidence attributable to a precise listino.
 - Evidence: cost build/typecheck and **12 tests passed**, including digest mismatch rejection. Signed catalog distribution, admin configuration/rotation and durable usage records carrying the catalog identity remain open.
+
+# 2026-09-17 — durable LLM usage attribution
+
+- Extended the shared budget settlement contract so each completed reservation can persist provider model, authoritative input/output token counts, actual USD and the applied pricing catalog version/hash. PostgreSQL migration is additive and safe for existing reservation rows; orphan reaping remains metadata-free by design because no provider call completed.
+- Evidence: cost build/typecheck with **12 tests passed** and LLM adapter build with **17 tests passed**, including catalog identity propagation at settlement. Live PostgreSQL schema migration/concurrency and an operator-facing usage query remain deployment/integration evidence.

@@ -102,7 +102,13 @@ describe('MemoryBudgetLedger', () => {
       () => ledger.reserve('org/project', 1, 0.5),
       /distributed budget exhausted/,
     );
-    await ledger.settle(first, 0.2);
+    await ledger.settle(first, 0.2, {
+      model: 'test-model',
+      tokens_in: 10,
+      tokens_out: 4,
+      pricing_version: '2026-q3',
+      pricing_sha256: 'a'.repeat(64),
+    });
     const second = await ledger.reserve('org/project', 1, 0.7);
     await ledger.settle(second, 0.7);
     await ledger.settle(second, 0.7);

@@ -71,4 +71,37 @@ describe('BudgetedLlmAdapter', () => {
     assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
     assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
   });
+
+  it('attaches provider usage and pricing identity when settling a reservation', async () => {
+    const input = {
+      provider: 'fixture' as const,
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user' as const, content: 'hello' }],
+    };
+    const ledger = new MemoryBudgetLedger();
+    const catalog = {
+      schema_version: '1' as const,
+      version: '2026-q3',
+      effective_at: '2026-07-01T00:00:00Z',
+      models: { 'claude-sonnet-4-6': { input_per_mtok: 3, output_per_mtok: 15 } },
+      sha256: 'b'.repeat(64),
+    };
+    const adapter = new BudgetedLlmAdapter(
+      new FixtureAdapter([
+        {
+          key: makeFixtureKey(input),
+          output: { text: 'ok', tokens_in: 7, tokens_out: 3, finish_reason: 'stop' },
+        },
+      ]),
+      new BudgetTracker({ budget_usd: 1, pricing_catalog: catalog }),
+      {
+        ledger,
+        ledger_key: 'org/audit',
+        budget_usd: 1,
+        estimate: () => ({ model: input.model, tokens_in: 7, tokens_out: 3 }),
+      },
+    );
+    await adapter.call(input);
+    assert.equal(adapter.snapshot().pricing_version, '2026-q3');
+  });
 });

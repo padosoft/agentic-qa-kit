@@ -69,6 +69,13 @@ export class BudgetedLlmAdapter implements LlmAdapter {
           tokens_in: output.tokens_in,
           tokens_out: output.tokens_out,
         }),
+        {
+          model: input.model,
+          tokens_in: output.tokens_in,
+          tokens_out: output.tokens_out,
+          ...(state.pricing_version ? { pricing_version: state.pricing_version } : {}),
+          ...(state.pricing_sha256 ? { pricing_sha256: state.pricing_sha256 } : {}),
+        },
       );
     }
     if (state.exhausted)
