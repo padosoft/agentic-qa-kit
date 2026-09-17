@@ -20,6 +20,12 @@
   Biome/diff-check pass. This is an explainable heuristic baseline, not an
   autonomous LLM/security review.
 
+- **Source-aware risk discovery merged to `main`.** PR #70 was squash-merged
+  as `833d949` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The deterministic heuristic is
+  now released; AST/dependency reachability, LLM-assisted hypotheses and
+  human/security review remain separate evidence layers.
+
 - **Added W3C trace propagation across HTTP probe boundaries.**
   `makeHttpProbeRunner` now accepts an explicit trusted trace context and
   propagates `traceparent` to the target, overriding any scenario-supplied
