@@ -68,6 +68,13 @@
   scenario. A regression proves the remaining step is skipped and cleanup is
   still attempted.
 
+- **Bounded cooperative probe execution.** Every probe now receives a derived
+  abort signal with its declared `timeout_ms`; the runner converts a timeout or
+  caller cancellation into an execution failure even if a cooperative driver
+  returns a nominal response after abort. Runner tests now cover the timeout
+  contract (**47/47**). Hard-killing an uncooperative third-party process still
+  belongs to the OCI/container isolation boundary and is not claimed here.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.

@@ -225,15 +225,41 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   const runner = opts.probeRunner ?? MISSING_PROBE_RUNNER;
   const probeResults: ProbeRunResult[] = [];
   const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
+    const controller = new AbortController();
+    let timedOut = false;
+    const abortFromCaller = () => controller.abort();
+    if (opts.signal?.aborted) controller.abort();
+    opts.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, probe.timeout_ms);
     try {
-      const result = await runner(probe, opts.signal);
+      const result = await runner(probe, controller.signal);
+      if (timedOut) {
+        return {
+          probe_id: probe.id,
+          execution_status: 'failed',
+          error: `probe timed out after ${probe.timeout_ms}ms`,
+        };
+      }
+      if (opts.signal?.aborted) {
+        return { probe_id: probe.id, execution_status: 'failed', error: 'probe cancelled' };
+      }
       return { ...result, execution_status: result.error ? 'failed' : 'completed' };
     } catch (error) {
       return {
         probe_id: probe.id,
         execution_status: 'failed',
-        error: error instanceof Error ? error.message : String(error),
+        error: timedOut
+          ? `probe timed out after ${probe.timeout_ms}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error),
       };
+    } finally {
+      clearTimeout(timeout);
+      opts.signal?.removeEventListener('abort', abortFromCaller);
     }
   };
   const recordProbe = (probe: Scenario.Probe, r: ProbeRunResult, cleanup: boolean) => {

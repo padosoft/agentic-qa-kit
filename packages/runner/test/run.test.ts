@@ -190,6 +190,26 @@ describe('runScenario', () => {
     assert.equal(result.cleanup.length, 1);
   });
 
+  it('bounds cooperative probe runners by the declared timeout', async () => {
+    const timeoutStep = SCENARIO.steps[0];
+    assert.ok(timeoutStep);
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        steps: [{ ...timeoutStep, id: 'slow', timeout_ms: 10 }],
+        oracles: [],
+      },
+      run_id: 'run-timeout',
+      probeRunner: async (_probe, signal) =>
+        new Promise((resolve) => {
+          signal?.addEventListener('abort', () => resolve({ probe_id: 'slow' }), { once: true });
+        }),
+    });
+    assert.equal(result.outcome, 'error');
+    assert.equal(result.execution_status, 'failed');
+    assert.match(result.execution_error ?? '', /timed out/);
+  });
+
   it('dedups identical findings within the same run', async () => {
     const findings = new FindingsWriter('/tmp/_ignore', { persist: false });
     await runScenario({

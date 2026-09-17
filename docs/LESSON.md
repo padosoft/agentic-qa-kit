@@ -39,6 +39,11 @@
   blocked/failed result even when no oracle exists. Otherwise an operator stop
   can be reconstructed as a successful scenario.
 
+- **A timeout signal is not a hard kill.** Propagate a per-probe deadline and
+  classify late nominal responses as failures, but never claim containment for
+  an uncooperative custom driver. Hard process termination requires the
+  sandbox/OCI boundary and an independent integration test.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must
