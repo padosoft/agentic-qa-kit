@@ -11,6 +11,16 @@
 
 ## 2026-09-17
 
+- **Fixed a real PostgreSQL bootstrap race.** Concurrent `PostgresEventBus`
+  replicas could both pass `CREATE TABLE IF NOT EXISTS` but collide while
+  PostgreSQL created the implicit identity sequence, failing CI with
+  `duplicate key ... aqa_live_events_sequence_seq`. The schema and index DDL
+  now run under a stable transaction-scoped advisory lock (ADR-147).
+- Evidence: repository typecheck passed; the failing CI job was isolated to
+  the concurrent PostgreSQL EventBus contract, while the other PostgreSQL
+  contracts passed. The corrected branch still needs a fresh CI run to prove
+  the fix in PostgreSQL 16.
+
 - **Commerce assurance pack.** Added the opt-in `pack-commerce-core`, selected
   only for ecommerce/commerce/shop/storefront project tags. It defines five
   release-gate journeys (checkout idempotency, inventory oversell, tax/shipping

@@ -123,20 +123,27 @@ export class PostgresEventBus implements EventBus {
   }
 
   private async startListener(): Promise<void> {
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS aqa_live_events (
-        sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        event_id text NOT NULL UNIQUE,
-        org text NOT NULL,
-        project text,
-        type text NOT NULL,
-        occurred_at timestamptz NOT NULL,
-        data jsonb NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now()
-      )
-    `;
-    await this
-      .sql`CREATE INDEX IF NOT EXISTS aqa_live_events_scope_sequence ON aqa_live_events (org, project, sequence)`;
+    // `CREATE TABLE IF NOT EXISTS` is not sufficient when two replicas boot
+    // concurrently: PostgreSQL can race while creating the implicit identity
+    // sequence, before either statement has committed the relation. Serialize
+    // only this short, transactional bootstrap section with a stable advisory
+    // lock; the lock is released automatically on commit/rollback.
+    await this.sql.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext('aqa_live_events_schema'))`;
+      await tx`
+        CREATE TABLE IF NOT EXISTS aqa_live_events (
+          sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          event_id text NOT NULL UNIQUE,
+          org text NOT NULL,
+          project text,
+          type text NOT NULL,
+          occurred_at timestamptz NOT NULL,
+          data jsonb NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now()
+        )
+      `;
+      await tx`CREATE INDEX IF NOT EXISTS aqa_live_events_scope_sequence ON aqa_live_events (org, project, sequence)`;
+    });
     this.listener = await this.sql.listen(this.channel, (raw) => {
       let event: BusEvent;
       try {

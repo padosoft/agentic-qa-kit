@@ -1,5 +1,11 @@
 # Lessons
 
+- **PostgreSQL `IF NOT EXISTS` does not serialize identity DDL.** Concurrent
+  first boots can race on the implicit sequence and fail with a duplicate
+  relation error. PostgreSQL adapter bootstrap migrations must use a stable,
+  transaction-scoped advisory lock when multiple replicas may initialize the
+  same schema.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must
