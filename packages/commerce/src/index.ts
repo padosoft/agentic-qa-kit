@@ -64,6 +64,19 @@ export const RefundSnapshot = z.object({
 });
 export type RefundSnapshot = z.infer<typeof RefundSnapshot>;
 
+export const WebhookObservation = z.object({
+  schema_version: z.literal('1'),
+  event_id: z.string().min(1),
+  event_type: z.string().min(1),
+  order_id: z.string().min(1),
+  delivery_id: z.string().min(1),
+  status: z.enum(['delivered', 'failed']),
+  attempts: z.number().int().positive(),
+  signature_valid: z.boolean(),
+  observed_at: z.string().datetime({ offset: true }),
+});
+export type WebhookObservation = z.infer<typeof WebhookObservation>;
+
 export const InventorySnapshot = z.object({
   schema_version: z.literal('1'),
   sku: z.string().min(1),
@@ -178,6 +191,7 @@ export interface CommerceAdapter {
     cartId: string,
     destination: ShippingAddress,
   ): Promise<ShippingQuote>;
+  observeWebhooks?(orderId: string): Promise<readonly WebhookObservation[]>;
 }
 
 export type CommerceJourneyEvidence = {
@@ -203,6 +217,63 @@ export type TaxJourneyOptions = CheckoutJourneyOptions;
 export type ShippingJourneyOptions = CheckoutJourneyOptions & {
   destination: ShippingAddress;
 };
+
+/** Verifies a signed, delivered webhook is linked to the exact checkout order. */
+export async function verifyWebhookJourney(
+  adapter: CommerceAdapter,
+  opts: CheckoutJourneyOptions,
+): Promise<{ outcome: JourneyOutcome; evidence: readonly CommerceJourneyEvidence[] }> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.webhook_observer || !adapter.observeWebhooks) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks webhook observation',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updated = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updated.id, opts.idempotencyKey),
+    );
+    const observations = (await adapter.observeWebhooks(checkout.order.id)).map((item) =>
+      WebhookObservation.parse(item),
+    );
+    const matching = observations.filter(
+      (item) => item.order_id === checkout.order.id && item.status === 'delivered',
+    );
+    if (matching.length === 0) throw new Error('no delivered webhook observed for order');
+    if (matching.some((item) => !item.signature_valid))
+      throw new Error('webhook signature verification failed');
+    if (matching.some((item) => item.attempts > 10))
+      throw new Error('webhook delivery attempts exceed bounded retry policy');
+    evidence.push({
+      step: 'webhook.delivered',
+      ok: true,
+      detail: `order=${checkout.order.id}; deliveries=${matching.length}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'webhook journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
 
 /** Verifies a tax quote is observable, non-negative and currency-consistent. */
 export async function verifyTaxJourney(
@@ -481,6 +552,7 @@ export class InMemoryCommerceReference {
     { fingerprint: string; result: RefundResult }
   >();
   private readonly inventory = new Map<string, InventorySnapshot>();
+  private readonly webhooks = new Map<string, WebhookObservation[]>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
 
@@ -625,6 +697,19 @@ export class InMemoryCommerceReference {
     this.carts.set(cart.id, { ...cart, status: 'checked_out', revision: cart.revision + 1 });
     const result = { order, payment, inventory: snapshots };
     this.idempotency.set(key, { fingerprint, result });
+    this.webhooks.set(order.id, [
+      {
+        schema_version: '1',
+        event_id: this.nextId('event'),
+        event_type: 'order.created',
+        order_id: order.id,
+        delivery_id: this.nextId('delivery'),
+        status: 'delivered',
+        attempts: 1,
+        signature_valid: true,
+        observed_at: new Date().toISOString(),
+      },
+    ]);
     return result;
   }
 
@@ -706,7 +791,7 @@ export class InMemoryCommerceReference {
         checkout: true,
         refunds: true,
         inventory_observer: true,
-        webhook_observer: false,
+        webhook_observer: true,
         idempotency: true,
         tax_quote: true,
         shipping_quote: true,
@@ -722,6 +807,7 @@ export class InMemoryCommerceReference {
       quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),
+      observeWebhooks: async (orderId) => this.observeWebhooks(orderId),
     };
   }
 
@@ -735,6 +821,10 @@ export class InMemoryCommerceReference {
       amount: { currency, amount_minor: '0' },
       observed_at: new Date().toISOString(),
     };
+  }
+
+  observeWebhooks(orderId: string): readonly WebhookObservation[] {
+    return this.webhooks.get(orderId) ?? [];
   }
 
   quoteShipping(

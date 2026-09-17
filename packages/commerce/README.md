@@ -19,6 +19,9 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyTaxJourney()` and `verifyShippingJourney()` validate observable,
   currency-safe tax quotes and unique bounded shipping rates, returning
   `unsupported` when a real provider cannot expose the required evidence.
+- `verifyWebhookJourney()` checks order linkage, delivered state, valid
+  signatures and bounded delivery attempts; it never treats an absent webhook
+  observer as a pass.
 - Deterministic `InMemoryCommerceReference` for synthetic checkout, idempotency,
   inventory race and tenant-isolation journeys. It has no real payment side effect.
 

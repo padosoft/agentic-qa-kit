@@ -36,5 +36,7 @@ their transport implementation private. A journey can prove business effects
 instead of merely matching response shapes. Optional tax-quote and
 shipping-rate journeys now validate currency-safe non-negative amounts, unique
 rate identifiers and positive delivery estimates, returning `unsupported`
-when observations are unavailable. Promotion, webhooks, fulfillment and
-durable reconciliation still require additional capabilities and journeys.
+when observations are unavailable. A webhook journey additionally requires
+exact order linkage, delivered status, valid signature and bounded attempts.
+Promotion, fulfillment and durable reconciliation still require additional
+capabilities and journeys.

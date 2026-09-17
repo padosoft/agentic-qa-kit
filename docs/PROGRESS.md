@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Commerce webhook assurance expanded.** The adapter now supports optional
+  signed-delivery observations and `verifyWebhookJourney()` validates exact
+  order linkage, delivered state, signature validity and bounded retries. The
+  reference merchant emits one deterministic `order.created` observation per
+  idempotent checkout; real provider webhook ingress, signature keys and
+  durable reconciliation remain explicitly open.
 - **Commerce tax/shipping assurance expanded.** `@aqa/commerce` now defines
   versioned address, tax quote and shipping rate contracts plus
   `verifyTaxJourney()` / `verifyShippingJourney()`. The reference merchant

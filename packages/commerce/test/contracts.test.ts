@@ -12,6 +12,7 @@ import {
   verifyRefundJourney,
   verifyShippingJourney,
   verifyTaxJourney,
+  verifyWebhookJourney,
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
@@ -87,6 +88,9 @@ describe('@aqa/commerce contracts', () => {
     });
     assert.equal(shipping.outcome.status, 'pass');
     assert.match(shipping.evidence[0]?.detail ?? '', /rates=1/);
+    const webhook = await verifyWebhookJourney(merchant.asAdapter(), common);
+    assert.equal(webhook.outcome.status, 'pass');
+    assert.equal(webhook.outcome.evidence_complete, true);
   });
 
   it('executes an isolated checkout exactly once and preserves minor-unit totals', () => {
