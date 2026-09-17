@@ -972,3 +972,10 @@ the same severity. Resolve the project and selected-pack risk catalogs before
 execution, fail closed on missing references, and pass the typed risk into the
 finding builder. This keeps coverage gaps visible and makes severity traceable
 to an auditable declaration.
+
+# 2026-09-17 — every executable pack resource needs realpath containment
+
+Checking `resolve(root, relativePath)` is insufficient when a manifest points
+to a symlink. Apply realpath containment to risk catalogs as well as scenarios;
+otherwise a signed/approved pack can still cause the runner to parse external
+files at execution time.

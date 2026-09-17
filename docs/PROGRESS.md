@@ -747,3 +747,8 @@
 
 - `aqa run` now loads `.aqa/risk-map.yaml`, ingests validated risk catalogs declared by selected packs, rejects scenarios with unresolved `risk_refs` as coverage errors, and passes the resolved risk into the runner. Findings derive `risk_id` and severity from that declaration instead of hard-coding `high`.
 - Evidence: runner + kit build/bundle/typecheck, **47 targeted tests passed** with one explicit symlink-capability skip. The default scaffold remains intentionally minimal; projects must add risks for custom scenarios, while first-party packs provide their own risk catalog files.
+
+# 2026-09-17 — risk catalog path hardening
+
+- Applied the same realpath containment rule used for scenario files to pack-declared risk catalogs, rejecting symlinks that escape the pack root before parsing or execution.
+- Evidence: kit build/bundle and `run-cmd` suite **30 passed**, with the existing explicit platform symlink skip.
