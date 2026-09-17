@@ -1569,3 +1569,13 @@ API must derive its key from authenticated tenant scope, use a dedicated write
 permission, bound the reason, and return an explicit unavailable response when
 the durable controller is not configured. Never accept a budget key directly
 from an admin request body.
+
+# 2026-09-17 — payment status must reconcile, not merely parse
+
+Commerce payment snapshots can be schema-valid while still being financially
+impossible. A validator that only checks `refunded_amount <= amount` allows
+`partially_refunded` with zero refund or a non-refunded status with a positive
+refund. Validate the state machine explicitly and compare successful refund
+amounts with the cumulative amount observed on the payment. This is still
+provider-neutral evidence; a live provider settlement/reconciliation journey
+is required before production claims.

@@ -20,6 +20,7 @@ import {
   assertLoyaltyLedgerIntegrity,
   assertNoOversell,
   assertOrderIntegrity,
+  assertPaymentIntegrity,
   assertPromotionRedeemable,
   assertReturnRequestIntegrity,
   assertSameCurrency,
@@ -596,6 +597,39 @@ describe('@aqa/commerce contracts', () => {
           'refund-2',
         ),
       /exceeds captured/,
+    );
+  });
+
+  it('rejects payment refund states that do not reconcile', () => {
+    const payment = {
+      schema_version: '1' as const,
+      order_id: 'order-1',
+      provider: 'reference',
+      payment_id: 'payment-1',
+      amount: { currency: 'EUR', amount_minor: '1000' },
+      refunded_amount: { currency: 'EUR', amount_minor: '0' },
+      status: 'partially_refunded' as const,
+      observed_at: '2026-09-17T10:00:00Z',
+    };
+    assert.throws(
+      () => assertPaymentIntegrity(payment),
+      /partially refunded payment must have a positive partial amount/,
+    );
+    assert.throws(
+      () =>
+        assertPaymentIntegrity({
+          ...payment,
+          status: 'captured',
+          refunded_amount: { currency: 'EUR', amount_minor: '100' },
+        }),
+      /payment refund status does not match refunded amount/,
+    );
+    assert.doesNotThrow(() =>
+      assertPaymentIntegrity({
+        ...payment,
+        status: 'partially_refunded',
+        refunded_amount: { currency: 'EUR', amount_minor: '100' },
+      }),
     );
   });
 

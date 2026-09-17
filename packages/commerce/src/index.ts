@@ -1204,13 +1204,24 @@ export function assertOrderIntegrity(order: OrderSnapshot): void {
 }
 
 export function assertPaymentIntegrity(payment: PaymentSnapshot): void {
-  assertSameCurrency(payment.amount, payment.refunded_amount);
-  if (BigInt(payment.refunded_amount.amount_minor) > BigInt(payment.amount.amount_minor)) {
+  const item = PaymentSnapshot.parse(payment);
+  assertSameCurrency(item.amount, item.refunded_amount);
+  const captured = BigInt(item.amount.amount_minor);
+  const refunded = BigInt(item.refunded_amount.amount_minor);
+  if (refunded > captured) {
     throw new Error('payment refunded amount exceeds captured amount');
   }
-  const fullyRefunded =
-    BigInt(payment.refunded_amount.amount_minor) === BigInt(payment.amount.amount_minor);
-  if (fullyRefunded !== (payment.status === 'refunded')) {
+  const fullyRefunded = refunded === captured;
+  const partiallyRefunded = refunded > 0n && refunded < captured;
+  const expectedStatus = fullyRefunded
+    ? 'refunded'
+    : partiallyRefunded
+      ? 'partially_refunded'
+      : null;
+  if (expectedStatus === null && item.status === 'partially_refunded') {
+    throw new Error('partially refunded payment must have a positive partial amount');
+  }
+  if (expectedStatus !== null && item.status !== expectedStatus) {
     throw new Error('payment refund status does not match refunded amount');
   }
 }
@@ -1246,6 +1257,10 @@ function validateRefundResult(result: RefundResult): RefundResult {
     throw new Error('refund does not belong to the returned order');
   }
   if (refund.status !== 'succeeded') throw new Error('refund was not successful');
+  if (BigInt(refund.amount.amount_minor) <= 0n) throw new Error('refund amount must be positive');
+  if (BigInt(refund.amount.amount_minor) > BigInt(payment.refunded_amount.amount_minor)) {
+    throw new Error('refund amount exceeds the payment refunded amount');
+  }
   return { refund, payment, order };
 }
 
