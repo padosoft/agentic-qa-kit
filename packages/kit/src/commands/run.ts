@@ -19,9 +19,10 @@
  * errors. The check re-engages automatically once findings reflect
  * actual SUT behavior.
  *
- * The default probe runner is the no-network stub from `@aqa/runner`. Wiring
- * real HTTP / browser probes against a live target is intentionally a
- * follow-up; this command owns the orchestration and the audit trail.
+ * When `.aqa/project.yaml` declares `sut.base_url`, the default probe runner
+ * is the origin-scoped HTTP driver from `@aqa/runner`. Browser, shell, SQL and
+ * provider-specific drivers remain explicit host integrations; this command
+ * owns orchestration and the audit trail.
  */
 
 import { createHash } from 'node:crypto';
@@ -60,6 +61,8 @@ type ClosableProbeRunner = ProbeRunner & { close?: () => Promise<void> };
 
 export interface RunOptions {
   root: string;
+  /** Cooperative cancellation owned by a queue worker or embedding host. */
+  signal?: AbortSignal;
   /**
    * Profile key from .aqa/profiles.yaml. When omitted, prefers "smoke" if
    * present; otherwise falls back to the first key in the file (insertion
@@ -552,6 +555,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const budgetDeadline =
     profile.budget_minutes === undefined ? undefined : now() + profile.budget_minutes * 60 * 1000;
   let budgetExceeded = false;
+  let cancelled = false;
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
@@ -624,6 +628,19 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       const resolvedRisk = riskCatalog.get(scenario.risk_refs[0] ?? '');
+      if (opts.signal?.aborted) {
+        cancelled = true;
+        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+        events.append({
+          ts: new Date().toISOString(),
+          run_id: runId,
+          kind: 'scenario_finished',
+          actor: { type: 'orchestrator', id: 'aqa-cli' },
+          scenario_id: scenario.id,
+          payload: { outcome: 'not_run', execution_status: 'not_started', reason: 'cancelled' },
+        });
+        continue;
+      }
       scenariosRun += 1;
       executedScenarios.push(scenario);
       // runScenario itself appends `finding_emitted` to events and pushes the
@@ -666,6 +683,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
           findingIdSeed: scenariosRun,
           ...(resolvedRisk ? { risk: resolvedRisk } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
         });
         scenarioOutcomes.push({ scenario_id: scenario.id, outcome: scenarioResult.outcome });
         events.append({
@@ -697,6 +715,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         });
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
+      if (opts.signal?.aborted) cancelled = true;
     }
   }
 
@@ -932,6 +951,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       `profile "${profileKey}" exceeded budget_minutes=${profile.budget_minutes}; remaining scenarios were not run`,
     );
   }
+  if (cancelled) reasons.push('run cancelled by worker or operator');
   if (replayErrors.length > 0)
     reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
   if (canonicalArtifactErrors.length > 0)

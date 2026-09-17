@@ -6,6 +6,7 @@ export { runValidate } from './commands/validate.js';
 export { runVerify } from './commands/verify.js';
 export { runIngest } from './commands/ingest.js';
 export { runRiskDiscover } from './commands/risk-discover.js';
+export { makeRunJobHandler, type RunJob, type RunJobHandlerOptions } from './worker-handler.js';
 export { runPackNew } from './commands/pack-new.js';
 export type {
   PackNewErrorCode,

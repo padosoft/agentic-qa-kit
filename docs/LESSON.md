@@ -1026,6 +1026,14 @@ token while the handler runs; if renewal fails, abort the handler and report
 `lease_lost` without calling `ack` or `fail`. A lost lease is ownership loss, not
 an ordinary provider failure.
 
+# 2026-09-17 — never let queue payloads choose the worker filesystem root
+
+The queue-to-kit adapter must bind execution to an operator-configured project
+root. Accepting `root`, pack paths or arbitrary filesystem options from a tenant
+payload would turn a legitimate run request into local file access. Only narrow
+execution selectors such as profile and seed are decoded from the job payload;
+deployment configuration owns filesystem and pack boundaries.
+
 # 2026-09-17 — killing a shell child is not a full sandbox kill
 
 The shell driver can translate `AbortSignal` into `child.kill()` and report an

@@ -787,3 +787,8 @@
 
 - The controlled shell driver now accepts the runner `AbortSignal`, rejects an already-cancelled probe before spawn, kills the child process on cancellation, removes its listener, and reports cancellation as execution error. This preserves the no-finding rule for interrupted execution.
 - Evidence: runner build, **20 tests passed**, including an actual long-running child cancellation, and `git diff --check` passed. SQL cancellation depends on the injected adapter contract; Playwright/provider-specific cancellation and live sandbox process-tree cleanup remain open.
+
+# 2026-09-17 — queue worker wired to the real kit orchestrator
+
+- Added `makeRunJobHandler` in `@aqa/kit`. It maps a validated queue payload to the fixed operator-configured project root and the canonical `runRun` implementation, forwards the worker `AbortSignal`, and rejects invalid profile/seed types. `RunOptions` now stops scheduling after cancellation and returns `ok: false` with explicit cancellation evidence.
+- Evidence: kit build/bundle, typecheck, **56 filtered tests passed**, and `git diff --check` passed. A live server-to-worker HTTP process journey, artifact publication through a remote store, runner identity enforcement and multi-process PostgreSQL evidence remain open.
