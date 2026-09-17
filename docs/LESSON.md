@@ -942,3 +942,11 @@ browser package as a runtime dependency and load it only when the browser
 driver is selected; retain an injected factory for unit tests and controlled
 hosting. This fixes packaging, but it does not replace live Chromium and
 browser-sandbox evidence.
+
+# 2026-09-17 — a declared budget must affect scheduling and release state
+
+Schema-only budgets create false confidence. Enforce the wall-clock budget
+before starting each scenario, emit an explicit `not_run` outcome for the
+remaining coverage and fail the run. This is a scheduler gate, not a hard
+interrupt: a provider or browser operation already in flight still needs
+bounded driver timeouts and cancellation as a separate control.

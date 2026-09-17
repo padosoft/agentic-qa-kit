@@ -217,6 +217,57 @@ describe('aqa run', () => {
     assert.ok(existsSync(join(result.runDir, 'canonical', 'checkpoint.json.meta.json')));
   });
 
+  it('fails closed and records remaining scenarios when the profile wall-clock budget is exceeded', async () => {
+    const { root, packDir } = fixtureProject();
+    const secondScenario = SMOKE_SCENARIO.replace('scn-smoke-noop', 'scn-smoke-second');
+    writeFileSync(join(packDir, 'scenarios', 'second.yaml'), secondScenario, 'utf8');
+    writeFileSync(
+      join(packDir, 'pack.yaml'),
+      SMOKE_PACK_MANIFEST.replace(
+        '  - scenarios/smoke-noop.yaml',
+        '  - scenarios/smoke-noop.yaml\n  - scenarios/second.yaml',
+      ),
+      'utf8',
+    );
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, Record<string, unknown>>;
+    };
+    profiles.profiles.smoke = { ...profiles.profiles.smoke, budget_minutes: 1 };
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    let clockRead = 0;
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      now: () => {
+        const value = clockRead === 0 ? 0 : clockRead === 1 ? 0 : 60_001;
+        clockRead += 1;
+        return value;
+      },
+    });
+    assert.equal(result.ok, false, 'budget exhaustion must never greenlight partial coverage');
+    assert.match(result.error ?? '', /budget_minutes=1/);
+    assert.ok(result.runDir);
+    const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            kind: string;
+            scenario_id?: string;
+            payload?: Record<string, unknown>;
+          },
+      );
+    const secondFinished = events.find(
+      (event) => event.kind === 'scenario_finished' && event.scenario_id === 'scn-smoke-second',
+    );
+    assert.equal(secondFinished?.payload?.outcome, 'not_run');
+    assert.equal(secondFinished?.payload?.reason, 'budget_exceeded');
+  });
+
   it('publishes the signed completeness checkpoint to an independent store', async () => {
     const { root, packDir } = fixtureProject();
     const externalRoot = mkdtempSync(join(tmpdir(), 'aqa-checkpoint-'));

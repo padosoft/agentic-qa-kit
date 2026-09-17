@@ -93,6 +93,11 @@ export interface RunOptions {
   auditCheckpointSigner?: AuditCheckpointSigner;
   /** Independent store for the final checkpoint; failure blocks the run. */
   auditCheckpointStore?: ArtifactStore;
+  /**
+   * Wall-clock source for the scheduler budget. Production uses Date.now;
+   * embedders/tests may inject a deterministic source.
+   */
+  now?: () => number;
 }
 
 export interface RunResult {
@@ -532,6 +537,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const executionErrors: string[] = [];
   const scenarioOutcomes: Array<{ scenario_id: string; outcome: string }> = [];
   const executedScenarios: Scenario.Scenario[] = [];
+  const now = opts.now ?? Date.now;
+  const budgetDeadline =
+    profile.budget_minutes === undefined ? undefined : now() + profile.budget_minutes * 60 * 1000;
+  let budgetExceeded = false;
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
     try {
@@ -586,6 +595,23 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           scenario_id: scenario.id,
           payload: {},
         });
+        if (budgetDeadline !== undefined && now() >= budgetDeadline) {
+          budgetExceeded = true;
+          scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+          events.append({
+            ts: new Date().toISOString(),
+            run_id: runId,
+            kind: 'scenario_finished',
+            actor: { type: 'orchestrator', id: 'aqa-cli' },
+            scenario_id: scenario.id,
+            payload: {
+              outcome: 'not_run',
+              execution_status: 'not_started',
+              reason: 'budget_exceeded',
+            },
+          });
+          continue;
+        }
         const scenarioResult = await runScenario({
           scenario,
           run_id: runId,
@@ -682,6 +708,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         unsafe_paths: unsafeScenarioPaths.length,
         runtime_errors: runtimeErrors.length,
         execution_errors: executionErrors.length,
+        budget_exceeded: budgetExceeded,
+        budget_minutes: profile.budget_minutes ?? null,
         replay_artifacts: replayArtifacts.length,
         replay_errors: replayErrors.length,
         release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
@@ -853,6 +881,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     reasons.push(
       `${executionErrors.length} scenario(s) could not execute: ${fmtList(executionErrors)}`,
     );
+  if (budgetExceeded) {
+    reasons.push(
+      `profile "${profileKey}" exceeded budget_minutes=${profile.budget_minutes}; remaining scenarios were not run`,
+    );
+  }
   if (replayErrors.length > 0)
     reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
   if (canonicalArtifactErrors.length > 0)

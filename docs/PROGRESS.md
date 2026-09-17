@@ -727,3 +727,8 @@
 
 - Hosted CI exposed a real packaging regression: the static Playwright import made the CLI bundle resolve optional browser internals (`chromium-bidi`) even for HTTP-only runs. The driver now loads Playwright dynamically only when a browser journey is instantiated; injected browser factories remain available for deterministic tests.
 - Evidence: runner build/typecheck, runner tests **38/38**, kit build (including CLI bundle) and kit typecheck pass locally; `git diff --check` passes. Live Chromium installation and a hosted browser journey remain open deployment evidence.
+
+# 2026-09-17 — profile wall-clock budget enforcement
+
+- `aqa run` now enforces `profile.budget_minutes` at the scenario scheduler boundary. Once the deadline is reached, remaining scenarios are recorded as `not_run` with `reason: budget_exceeded`, the run emits bounded budget metadata and returns `ok: false`; partial coverage can no longer greenlight a gate. The clock is injectable only for deterministic embedding/tests and defaults to `Date.now`.
+- Evidence: kit build/bundle, typecheck and `run-cmd` suite **30 passed, 1 explicit platform skip**. Hard cancellation of an already-running provider/browser request and LLM dollar/token budgets remain separate work.
