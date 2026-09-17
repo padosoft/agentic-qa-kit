@@ -10,6 +10,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   persisted audit chain.
 - **`FindingsWriter`** — append-only `findings.jsonl` with in-run dedup on `(run_id, scenario_id, risk_id, severity)`.
 - **`evaluateOracle`** + built-in `http_status` / `response_contains` / `response_not_contains` oracles.
+- `response_contains` supports bounded JSONPath equality against a previous
+  probe output (for example `@probe-1.body.id`) and fails closed when that
+  reference is missing or malformed.
 - **`runScenario`** — orchestrates one scenario: run probes, evaluate oracles, emit a Finding when oracles fail.
 - **Capability preflight** — optionally reject unsupported probe kinds before
   executing steps or cleanup, preserving an explicit execution gap instead of
@@ -33,10 +36,15 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   read-only SQL contract in a `READ ONLY` transaction with statement timeout,
   bounded rows and explicit shutdown. Use a least-privilege role and secret
   manager in production; the DSN never belongs in a pack.
+- **HTTP driver secret boundary** — an HTTP probe may declare
+  `auth: "${SECRET_NAME}"`, but the host must inject the value through
+  `HttpProbeRunnerOptions.secrets`. Missing or malformed references fail
+  closed and secret values never become pack data or diagnostic output.
 
-The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
-shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full
-loop with a deterministic in-memory stub.
+The probe runner is injected as a function so the runner has no ambient network
+surface; production hosts choose and configure the HTTP/shell/Playwright/SQL
+drivers explicitly. Tests can therefore exercise the full loop with a
+deterministic in-memory stub.
 
 ```ts
 import { runScenario, EventChainWriter, FindingsWriter } from '@aqa/runner';

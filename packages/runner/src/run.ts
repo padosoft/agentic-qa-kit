@@ -53,6 +53,8 @@ export interface HttpProbeRunnerOptions {
   max_response_bytes?: number;
   /** Optional W3C context propagated to the target as `traceparent`. */
   trace_context?: TraceContext;
+  /** Secret values injected by the host; never read from pack content or logged. */
+  secrets?: Readonly<Record<string, string>>;
 }
 
 function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
@@ -97,6 +99,14 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
     }
     const withCfg = asRecord(probe.with);
+    const supportedFields = new Set(['method', 'url', 'headers', 'body', 'auth']);
+    const unsupportedField = Object.keys(withCfg).find((key) => !supportedFields.has(key));
+    if (unsupportedField) {
+      return {
+        probe_id: probe.id,
+        error: `unsupported HTTP probe field "${unsupportedField}"; use an explicit supported driver contract`,
+      };
+    }
     const rawUrl = typeof withCfg.url === 'string' ? withCfg.url : '';
     if (!rawUrl) return { probe_id: probe.id, error: 'http probe missing with.url' };
     const method = typeof withCfg.method === 'string' ? withCfg.method.toUpperCase() : 'GET';
@@ -104,10 +114,24 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
       withCfg.headers && typeof withCfg.headers === 'object'
         ? (withCfg.headers as Record<string, string>)
         : {};
-    const headers = {
+    const headers: Record<string, string> = {
       ...probeHeaders,
       ...(traceparent ? { traceparent } : {}),
     };
+    if (withCfg.auth !== undefined) {
+      if (
+        typeof withCfg.auth !== 'string' ||
+        !/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/u.test(withCfg.auth)
+      ) {
+        return { probe_id: probe.id, error: 'http probe auth must be a named secret reference' };
+      }
+      const secretName = withCfg.auth.slice(2, -1);
+      const token = opts.secrets?.[secretName];
+      if (!token) {
+        return { probe_id: probe.id, error: `http probe secret "${secretName}" is unavailable` };
+      }
+      headers.authorization = `Bearer ${token}`;
+    }
     const body =
       withCfg.body === undefined
         ? undefined

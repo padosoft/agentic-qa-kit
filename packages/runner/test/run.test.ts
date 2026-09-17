@@ -603,6 +603,42 @@ describe('runScenario', () => {
     assert.match(result.error ?? '', /unsupported probe kind/i);
   });
 
+  it('makeHttpProbeRunner fails closed when an HTTP auth secret is unavailable', async () => {
+    const runner = makeHttpProbeRunner({ baseUrl: 'http://localhost:3000' });
+    const result = await runner({
+      id: 'probe-auth',
+      kind: 'http',
+      with: { method: 'GET', url: '/me', auth: '${OLD_TOKEN}' },
+      timeout_ms: 1000,
+    });
+    assert.match(result.error ?? '', /secret "OLD_TOKEN" is unavailable/i);
+  });
+
+  it('makeHttpProbeRunner injects named auth secrets without exposing the value', async () => {
+    const originalFetch = globalThis.fetch;
+    let authorization = '';
+    globalThis.fetch = (async (_url, init) => {
+      authorization = new Headers(init?.headers).get('authorization') ?? '';
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const runner = makeHttpProbeRunner({
+        baseUrl: 'https://shop.example',
+        secrets: { OLD_TOKEN: 'secret-value' },
+      });
+      const result = await runner({
+        id: 'probe-auth',
+        kind: 'http',
+        with: { method: 'GET', url: '/me', auth: '${OLD_TOKEN}' },
+        timeout_ms: 1000,
+      });
+      assert.equal(result.status, 200);
+      assert.equal(authorization, 'Bearer secret-value');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('makeHttpProbeRunner blocks non-allowlisted origins and oversized responses', async () => {
     const originalFetch = globalThis.fetch;
     let calls = 0;
