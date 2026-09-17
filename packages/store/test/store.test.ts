@@ -144,5 +144,33 @@ describe('PostgresStore', () => {
     } finally {
       await s.close();
     }
+
+    const reopened = new PostgresStore(dsn);
+    try {
+      assert.deepEqual(
+        await reopened.loadRun(RUN.id),
+        RUN,
+        'a fresh store instance must read state written by the previous process',
+      );
+
+      const profile = {
+        schema_version: '1' as const,
+        name: 'ci-concurrency',
+        execution_mode: 'orchestrator' as const,
+        llm_usage: [],
+        llm_budget_usd: null,
+        parallelism: 1,
+        require_deterministic_replay: false,
+        packs: [],
+        tags: [],
+      };
+      const creates = await Promise.all(
+        Array.from({ length: 8 }, () => reopened.createProfile(profile)),
+      );
+      assert.equal(creates.filter((result) => result.created).length, 1);
+      assert.deepEqual(await reopened.loadProfile(profile.name), profile);
+    } finally {
+      await reopened.close();
+    }
   });
 });
