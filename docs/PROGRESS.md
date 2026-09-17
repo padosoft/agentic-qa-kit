@@ -11,6 +11,11 @@
 
 ## 2026-09-17
 
+- **LLM registry truthfulness corrected.** The registry no longer contains a
+  stale “live adapter not implemented” scaffold after native OpenAI-compatible,
+  Anthropic, Google, Cohere and Bedrock adapters shipped; invalid runtime
+  provider values now fail explicitly and the threat model reflects the real
+  vLLM/Ollama boundary.
 - **Server identifier hardening.** API job/event IDs now use Node
   `crypto.randomUUID()` instead of a hand-rolled `Math.random()` generator;
   this removes predictable identifiers from queue and notification boundaries.
