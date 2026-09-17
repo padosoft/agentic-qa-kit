@@ -461,3 +461,8 @@
 # 2026-09-17 — consolidated regression gate after enterprise slices
 
 - Workspace typecheck, test and lint completed after SAML, k6, DR, sandbox and Helm changes: 498 tests passed, 4 PostgreSQL integration tests skipped because no DSN was configured, and 0 failures. Helm render was not available locally because the `helm` executable is not installed; this remains an explicit deployment gate.
+
+# 2026-09-17 — admin risk coverage projection
+
+- Added the `Risk coverage` admin screen and navigation entry. Mock mode renders explicit covered/partial/stale evidence states; live mode reads the tenant-scoped `/api/risk-coverage` projection, exposes drift alerts, and links each row back to the risk editor.
+- Added a Playwright journey covering navigation, table rendering and representative coverage states. Admin typecheck and the focused Playwright test passed (1/1). Full workspace regression remains the next gate; the page does not claim live authenticated browser coverage without a configured server/identity provider.

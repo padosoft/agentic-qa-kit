@@ -6544,6 +6544,7 @@ const NAV_TREE = [
       { key: 'runs', label: 'Runs', icon: 'Runs', route: '/runs' },
       { key: 'findings', label: 'Findings', icon: 'Bug', route: '/findings' },
       { key: 'risk-map', label: 'Risk map', icon: 'Shield', route: '/risk-map' },
+      { key: 'risk-coverage', label: 'Risk coverage', icon: 'Shield', route: '/risk-coverage' },
     ],
   },
   {
@@ -8881,6 +8882,141 @@ function PageRiskMap({ onNavigate, onOpenRisk, deletedRisks, updatedRisks }) {
 }
 
 // ---------------- Risk editor ----------------
+const MOCK_RISK_COVERAGE = [
+  {
+    risk_id: 'risk-cross-tenant-leak',
+    invariants_count: 3,
+    invariants_with_scenarios: 3,
+    scenarios_count: 4,
+    scenarios_with_oracles: 4,
+    scenarios_with_deterministic_replay: 3,
+    last_run_at: '2026-09-16T08:30:00Z',
+    pass_rate_30d: 0.98,
+    flaky_count: 0,
+    coverage_score: 0.95,
+    status: 'covered',
+    drift_alerts: [],
+  },
+  {
+    risk_id: 'risk-payment-double-capture',
+    invariants_count: 2,
+    invariants_with_scenarios: 1,
+    scenarios_count: 2,
+    scenarios_with_oracles: 2,
+    scenarios_with_deterministic_replay: 1,
+    last_run_at: '2026-08-28T13:10:00Z',
+    pass_rate_30d: 0.87,
+    flaky_count: 1,
+    coverage_score: 0.57,
+    status: 'partial',
+    drift_alerts: ['one or more invariants have no linked scenario', '1 flaky scenario(s) observed'],
+  },
+  {
+    risk_id: 'risk-inventory-oversell',
+    invariants_count: 2,
+    invariants_with_scenarios: 0,
+    scenarios_count: 0,
+    scenarios_with_oracles: 0,
+    scenarios_with_deterministic_replay: 0,
+    pass_rate_30d: 0,
+    flaky_count: 0,
+    coverage_score: 0,
+    status: 'stale',
+    drift_alerts: ['last successful coverage run is older than 30 days or missing'],
+  },
+];
+
+function coverageStatusLabel(status) {
+  return status === 'covered' ? 'Covered' : status === 'partial' ? 'Partial' : status === 'stale' ? 'Stale' : 'Gap';
+}
+
+function coverageStatusColor(status) {
+  return status === 'covered'
+    ? 'var(--status-success)'
+    : status === 'partial'
+      ? 'var(--status-warning)'
+      : status === 'stale'
+        ? 'var(--status-info)'
+        : 'var(--status-failed)';
+}
+
+function PageRiskCoverage({ mode, onNavigate }) {
+  const [state, setState] = React.useState({ loading: mode === 'live', rows: mode === 'live' ? [] : MOCK_RISK_COVERAGE, error: null });
+
+  React.useEffect(() => {
+    let active = true;
+    if (mode !== 'live') {
+      setState({ loading: false, rows: MOCK_RISK_COVERAGE, error: null });
+      return () => {
+        active = false;
+      };
+    }
+    setState({ loading: true, rows: [], error: null });
+    fetch(apiUrl('/api/risk-coverage'))
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        return body;
+      })
+      .then((body) => {
+        if (active) setState({ loading: false, rows: Array.isArray(body.coverage) ? body.coverage : [], error: null });
+      })
+      .catch((error) => {
+        if (active) setState({ loading: false, rows: [], error: error instanceof Error ? error.message : String(error) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [mode]);
+
+  return (
+    <div className="page" data-screen-label="08 Risk coverage">
+      <PageHeader
+        title="Risk coverage"
+        sub="Evidence-backed projection from invariants, scenarios, oracles and deterministic replay."
+        badge="DRIFT-AWARE"
+        actions={
+          <button className="btn sm ghost" onClick={() => onNavigate?.('risk-map', {})}>
+            <I.Shield size={12} /> Risk map
+          </button>
+        }
+      />
+      <Alert kind="info" title="Coverage is a measurement, not a claim">
+        Scores are computed from persisted declarations and run observations. Missing evidence is shown as a gap or stale state.
+      </Alert>
+      {state.error && <Alert kind="error" title="Coverage could not be loaded">{state.error}</Alert>}
+      {state.loading ? (
+        <div className="skeleton" style={{ height: 220, marginTop: 16 }} aria-label="Loading risk coverage" />
+      ) : state.rows.length === 0 ? (
+        <EmptyState icon={<I.Shield size={22} />} title="No risk coverage evidence" body="Create risks and execute linked scenarios to populate this projection." />
+      ) : (
+        <div className="panel" style={{ marginTop: 16, overflowX: 'auto' }}>
+          <table className="data-table" aria-label="Risk coverage table">
+            <thead><tr><th>Risk</th><th>Status</th><th>Score</th><th>Invariants</th><th>Scenarios</th><th>Replay</th><th>Pass rate</th><th>Drift</th></tr></thead>
+            <tbody>
+              {state.rows.map((row) => (
+                <tr key={row.risk_id} data-testid={`risk-coverage-${row.risk_id}`}>
+                  <td><button className="link-btn mono" onClick={() => onNavigate?.('risk-edit', { riskId: row.risk_id })}>{row.risk_id}</button></td>
+                  <td><span style={{ color: coverageStatusColor(row.status), fontWeight: 700 }}>{coverageStatusLabel(row.status)}</span></td>
+                  <td className="mono">{Math.round(row.coverage_score * 100)}%</td>
+                  <td className="mono">{row.invariants_with_scenarios}/{row.invariants_count}</td>
+                  <td className="mono">{row.scenarios_with_oracles}/{row.scenarios_count}</td>
+                  <td className="mono">{row.scenarios_with_deterministic_replay}/{row.scenarios_count}</td>
+                  <td className="mono">{Math.round(row.pass_rate_30d * 100)}%</td>
+                  <td>{row.drift_alerts?.length ? <span title={row.drift_alerts.join('; ')} style={{ color: 'var(--status-warning)' }}>{row.drift_alerts.length} alert{row.drift_alerts.length === 1 ? '' : 's'}</span> : <span style={{ color: 'var(--status-success)' }}>None</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted" style={{ marginTop: 12, fontSize: 11 }}>
+        {mode === 'live' ? 'Live server projection' : 'Fixture projection'} · status threshold: 90% covered · stale after 30 days
+      </p>
+    </div>
+  );
+}
+
 function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const isNew = riskId === 'new';
   const isDeleted = !isNew && (deletedRisks?.has?.(riskId) ?? false);
@@ -13464,6 +13600,12 @@ const ROUTES = {
     render: (ctx) => (
       <PageRiskMap {...ctx} onOpenRisk={(id) => ctx.onNavigate('risk-edit', { riskId: id })} />
     ),
+  },
+  'risk-coverage': {
+    label: 'Risk coverage',
+    section: 'Work',
+    parent: 'risk-map',
+    render: (ctx) => <PageRiskCoverage {...ctx} />,
   },
   'risk-edit': {
     label: 'Risk editor',

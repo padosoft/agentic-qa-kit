@@ -667,3 +667,10 @@ Split tender validation is an exact accounting invariant: compare minor units wi
 must be checked again at order commit, because cart pricing is stale by definition;
 the production provider still needs an atomic redemption counter and an auditable
 financial event.
+
+# 2026-09-17 — coverage UI must preserve evidence uncertainty
+
+The admin projection should render `covered`, `partial`, `gap` and `stale` as
+distinct states instead of converting missing observations into a green score.
+Live mode must use the tenant-scoped API; fixture mode is useful for visual
+verification but is not evidence of a live authenticated journey.
