@@ -34,6 +34,15 @@ describe('RunnerQueue', () => {
     assert.equal(q.size(), 0);
   });
 
+  it('renews only the current lease token', () => {
+    const q = new RunnerQueue({ lease_ms: 100 });
+    q.enqueue(JOB);
+    const lease = q.dequeue(new Date('2026-05-17T10:00:00Z'));
+    assert.equal(q.renew(JOB.id, 'stale', new Date('2026-05-17T10:00:00.050Z')), false);
+    assert.equal(q.renew(JOB.id, lease?.lease_token, new Date('2026-05-17T10:00:00.050Z')), true);
+    assert.match(q.get(JOB.id)?.leased_until ?? '', /10:00:00\.150Z/);
+  });
+
   it('stale leases are reclaimed on next dequeue', () => {
     const q = new RunnerQueue({ lease_ms: 100 });
     q.enqueue(JOB);
@@ -159,6 +168,23 @@ describe('RunnerQueue', () => {
     assert.equal(stored?.status, 'failed');
     assert.ok((stored?.failure_reason?.length ?? 0) <= 1_000);
     assert.equal(stored?.failure_reason?.includes('\n'), false);
+  });
+
+  it('does not ACK when fencing removes the lease during execution', async () => {
+    const q = new RunnerQueue({ lease_ms: 100 });
+    const job = q.enqueue({ ...JOB, id: 'worker-lease-lost-1' });
+    const worker = new RunnerWorker(
+      q,
+      async (_job, signal) =>
+        await new Promise<void>((resolve) =>
+          signal.addEventListener('abort', () => resolve(), { once: true }),
+        ),
+      { poll_ms: 10 },
+    );
+    const run = worker.runOnce();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(q.requeue(job.id), true);
+    assert.deepEqual(await run, { status: 'lease_lost', job_id: job.id });
   });
 
   it('enforces per-tenant concurrent run and scenario quotas', () => {

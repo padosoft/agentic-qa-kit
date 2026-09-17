@@ -273,6 +273,17 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     return rows[0] ? this.map(rows[0]) : null;
   }
 
+  async renew(id: string, leaseToken: string | undefined, now = new Date()): Promise<boolean> {
+    await this.wait();
+    if (!leaseToken) return false;
+    const until = new Date(now.getTime() + this.leaseMs).toISOString();
+    const rows = await this.q(
+      "UPDATE aqa_runner_jobs SET leased_until = $3, updated_at = now() WHERE id = $1 AND status = 'in_flight' AND lease_token = $2 RETURNING id",
+      [id, leaseToken, until],
+    );
+    return rows.length === 1;
+  }
+
   async fail(id: string, leaseToken: string | undefined, reason: string): Promise<boolean> {
     await this.wait();
     if (!leaseToken || !reason.trim()) return false;

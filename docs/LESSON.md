@@ -1017,3 +1017,11 @@ worker that calls `.then()` directly on a queue result works in only one mode an
 fails in the other. Normalize every adapter call with `Promise.resolve(...)` at
 the worker boundary, then test cancellation against the in-memory implementation
 and compile the PostgreSQL implementation as part of the same contract.
+
+# 2026-09-17 — leased workers need renewal and loss semantics
+
+Polling cancellation is not enough for a long scenario: the visibility lease can
+expire and another worker can receive the same job. Renew with the exact fencing
+token while the handler runs; if renewal fails, abort the handler and report
+`lease_lost` without calling `ack` or `fail`. A lost lease is ownership loss, not
+an ordinary provider failure.

@@ -777,3 +777,8 @@
 
 - Added `RunnerWorker`, a provider-neutral worker loop that dequeues a leased job, polls the queue for cancellation, propagates an `AbortSignal` to the handler, ACKs only successful non-cancelled work, and records bounded single-line failure reasons. Added `get(id)` to both queue adapters so cancellation observation works with memory and PostgreSQL implementations.
 - Evidence: server build, **120 tests passed**, including in-flight cancellation and bounded failure tests, and `git diff --check` passed. The worker handler is intentionally injected: real payload-to-`aqa run` orchestration, lease heartbeats for long jobs, runner authentication/identity, and live PostgreSQL worker evidence remain open.
+
+# 2026-09-17 — worker lease heartbeat and fencing
+
+- Added `renew(id, lease_token)` to memory and PostgreSQL queues. `RunnerWorker` renews the lease while a handler is running and aborts with `lease_lost` if the token is fenced or the job leaves `in_flight`; it never converts a lost lease into an ACK or a false failure write.
+- Evidence: server build, **122 tests passed**, including current-token renewal and lease-loss fencing, and `git diff --check` passed. Live PostgreSQL renewal/reconnect evidence and production heartbeat metrics remain open.

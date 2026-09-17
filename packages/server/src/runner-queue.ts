@@ -26,6 +26,7 @@ export interface RunnerQueueLike {
   enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
   dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   get(id: string): EnqueuedJob | null | Promise<EnqueuedJob | null>;
+  renew(id: string, leaseToken: string | undefined, now?: Date): boolean | Promise<boolean>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
   ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
   fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
@@ -190,6 +191,14 @@ export class RunnerQueue {
   get(id: string): EnqueuedJob | null {
     const job = this.jobs.find((candidate) => candidate.id === id);
     return job ? { ...job } : null;
+  }
+
+  renew(id: string, leaseToken: string | undefined, now = new Date()): boolean {
+    if (!leaseToken) return false;
+    const job = this.jobs.find((candidate) => candidate.id === id);
+    if (!job || job.status !== 'in_flight' || job.lease_token !== leaseToken) return false;
+    job.leased_until = new Date(now.getTime() + this.leaseMs).toISOString();
+    return true;
   }
 
   fail(id: string, leaseToken: string | undefined, reason: string): boolean {

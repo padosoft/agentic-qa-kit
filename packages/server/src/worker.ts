@@ -10,7 +10,7 @@ export interface RunnerWorkerOptions {
 }
 
 export interface WorkerRunResult {
-  status: 'idle' | 'completed' | 'failed' | 'cancelled';
+  status: 'idle' | 'completed' | 'failed' | 'cancelled' | 'lease_lost';
   job_id?: string;
 }
 
@@ -44,10 +44,22 @@ export class RunnerWorker {
     if (!job) return { status: 'idle' };
     const controller = new AbortController();
     let cancelled = false;
+    let leaseLost = false;
     const watcher = setInterval(() => {
-      void Promise.resolve(this.queue.get(job.id)).then((current) => {
+      void Promise.resolve(this.queue.get(job.id)).then(async (current) => {
         if (current?.status === 'cancelled') {
           cancelled = true;
+          controller.abort();
+          return;
+        }
+        if (current?.status !== 'in_flight') {
+          leaseLost = true;
+          controller.abort();
+          return;
+        }
+        const renewed = await this.queue.renew(job.id, job.lease_token);
+        if (!renewed) {
+          leaseLost = true;
           controller.abort();
         }
       });
@@ -57,12 +69,14 @@ export class RunnerWorker {
       const current = await this.queue.get(job.id);
       if (cancelled || current?.status === 'cancelled')
         return { status: 'cancelled', job_id: job.id };
+      if (leaseLost) return { status: 'lease_lost', job_id: job.id };
       const acknowledged = await this.queue.ack(job.id, job.lease_token);
-      return { status: acknowledged ? 'completed' : 'cancelled', job_id: job.id };
+      return { status: acknowledged ? 'completed' : 'lease_lost', job_id: job.id };
     } catch (error) {
       const current = await this.queue.get(job.id);
       if (cancelled || current?.status === 'cancelled')
         return { status: 'cancelled', job_id: job.id };
+      if (leaseLost) return { status: 'lease_lost', job_id: job.id };
       this.onError?.(error, job);
       await this.queue.fail(job.id, job.lease_token, boundedError(error));
       return { status: 'failed', job_id: job.id };
