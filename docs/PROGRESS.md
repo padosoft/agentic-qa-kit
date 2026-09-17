@@ -407,3 +407,8 @@
 
 - Added optional query parameters to the API request contract and wired SCIM `filter`, `startIndex` and `count` to a tenant-bound ListResponse. The endpoint now reports total results before pagination and preserves the existing dedicated bearer authorization.
 - Evidence: server typecheck, 111 tests (110 passed, one PostgreSQL EventBus skip), repository Biome check and `git diff --check` pass. Complex SCIM filter grammar, token rotation/audit events and live PostgreSQL provisioning remain open.
+
+# 2026-09-17 — repository regression gate
+
+- Ran the workspace gates after the enterprise slices: typecheck passed, `bun test` passed with 490 tests and 4 environment-dependent PostgreSQL skips, and the documentation plus workspace build passed.
+- Remaining build warnings are recorded rather than hidden: the admin SPA emits a 578.94 kB minified chunk, and the CJS CLI bundle reports three `import.meta` compatibility warnings. These are optimization/packaging gaps, not evidence of a clean production release.
