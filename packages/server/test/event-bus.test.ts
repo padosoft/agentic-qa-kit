@@ -43,6 +43,30 @@ describe('EventBus', () => {
     await bus.close();
   });
 
+  it('replays bounded tenant-scoped history after an event cursor', async () => {
+    const bus = new MemoryEventBus();
+    await bus.publish(event);
+    await bus.publish({
+      ...event,
+      id: 'evt-2',
+      org: 'other',
+    });
+    await bus.publish({
+      ...event,
+      id: 'evt-3',
+      data: { finding_id: 'f-3' },
+    });
+    const replay = await bus.replay({ after_id: 'evt-1', org: 'acme', project: 'shop' });
+    assert.equal(replay.cursor_found, true);
+    assert.deepEqual(
+      replay.events.map((item) => item.id),
+      ['evt-3'],
+    );
+    const expired = await bus.replay({ after_id: 'missing', org: 'acme' });
+    assert.equal(expired.cursor_found, false);
+    await bus.close();
+  });
+
   it('delivers across PostgreSQL LISTEN/NOTIFY clients when configured', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {
@@ -58,14 +82,36 @@ describe('EventBus', () => {
     });
     const unsubscribe = await subscriber.subscribe(resolveDelivered);
     try {
-      await publisher.publish(event);
+      const first = {
+        ...event,
+        id: `evt-pg-${Date.now()}-1`,
+        org: 'acme-pg',
+        project: 'shop-pg',
+      };
+      const second = {
+        ...first,
+        id: `evt-pg-${Date.now()}-2`,
+        data: { finding_id: 'f-pg-2' },
+      };
+      await publisher.publish(first);
       const observed = await Promise.race([
         delivered,
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('LISTEN/NOTIFY delivery timeout')), 3_000),
         ),
       ]);
-      assert.deepEqual(observed, event);
+      assert.deepEqual(observed, first);
+      await publisher.publish(second);
+      const replay = await subscriber.replay({
+        after_id: first.id,
+        org: first.org,
+        project: first.project,
+      });
+      assert.equal(replay.cursor_found, true);
+      assert.deepEqual(
+        replay.events.map((item) => item.id),
+        [second.id],
+      );
     } finally {
       await unsubscribe();
       await publisher.close();

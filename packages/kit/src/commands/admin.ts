@@ -36,7 +36,7 @@ import {
 import { safeErrorMessage } from '@aqa/observability';
 import { Event, Finding, Run } from '@aqa/schemas';
 import { buildAsyncApiDocument, buildOpenApiDocument } from '@aqa/server';
-import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
+import type { ApiContext, ApiHandler, EventBus, EventReplayResult } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
 
 export interface AdminOptions {
@@ -745,10 +745,15 @@ async function handleEventStream(args: {
     if (!closed) res.write(': heartbeat\n\n');
   }, 15_000);
   heartbeat.unref?.();
+  const seenIds = new Set<string>();
+  const writeEvent = (event: { id: string; type: string; data: Record<string, unknown> }): void => {
+    if (closed || seenIds.has(event.id)) return;
+    seenIds.add(event.id);
+    res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  };
   const unsubscribe = await hctx.ctx.eventBus.subscribe((event) => {
     if (closed || event.org !== org || (project && event.project !== project)) return;
-    const payload = JSON.stringify(event);
-    res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${payload}\n\n`);
+    writeEvent(event);
   });
   const cleanup = async (): Promise<void> => {
     if (closed) return;
@@ -758,6 +763,30 @@ async function handleEventStream(args: {
   };
   req.once('aborted', () => void cleanup());
   res.once('close', () => void cleanup());
+
+  const afterId = headers['last-event-id'] ?? headers['Last-Event-ID'];
+  let replay: EventReplayResult | undefined;
+  try {
+    replay = await hctx.ctx.eventBus.replay?.({
+      ...(afterId ? { after_id: afterId } : {}),
+      org,
+      ...(project ? { project } : {}),
+      limit: 100,
+    });
+  } catch {
+    if (!closed) {
+      res.write(
+        `event: stream.gap\ndata: ${JSON.stringify({ reason: 'replay_unavailable', recovery: 'refetch' })}\n\n`,
+      );
+    }
+    return;
+  }
+  if (replay && !replay.cursor_found && !closed) {
+    res.write(
+      `event: stream.gap\ndata: ${JSON.stringify({ reason: 'cursor_not_found', recovery: 'refetch' })}\n\n`,
+    );
+  }
+  for (const event of replay?.events ?? []) writeEvent(event);
 }
 
 async function delegateToApi(args: {

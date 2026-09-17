@@ -32,6 +32,8 @@ export {
   type BusEvent,
   type EventBus,
   type EventHandler,
+  type EventReplayOptions,
+  type EventReplayResult,
 } from './event-bus.js';
 export { buildOpenApiDocument, type OpenApiDocument } from './openapi.js';
 export {

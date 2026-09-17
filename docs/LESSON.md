@@ -1376,3 +1376,11 @@ Have the browser refetch the durable projection on the reconnect edge, while
 still using individual events for low-latency refreshes. This gives correctness
 now and leaves room for a future cursor/replay optimization without coupling
 the UI to delivery guarantees the transport does not provide.
+
+# 2026-09-17 — cursor replay needs a gap contract
+
+SSE IDs alone do not provide replay. Persist the event before publishing the
+notification, subscribe before replaying, deduplicate IDs from the overlap,
+and explicitly signal a missing/unavailable cursor. Replay reduces recovery
+cost but cannot replace the authoritative projection refetch or an operator
+owned retention policy.

@@ -241,6 +241,14 @@ describe('aqa admin — boot + smoke', () => {
     if (!boot.ok) return;
     const controller = new AbortController();
     try {
+      await eventBus.publish({
+        id: 'evt-replay',
+        type: 'run.updated',
+        occurred_at: new Date().toISOString(),
+        org: 'acme',
+        project: 'shop',
+        data: { status: 'queued' },
+      });
       const stream = await fetch(`${boot.url}/api/events/stream?org=acme&project=shop`, {
         signal: controller.signal,
       });
@@ -250,6 +258,7 @@ describe('aqa admin — boot + smoke', () => {
       assert.ok(reader);
       const first = await reader.read();
       assert.match(new TextDecoder().decode(first.value), /retry: 3000/);
+      assert.match(new TextDecoder().decode(first.value), /evt-replay/);
       await eventBus.publish({
         id: 'evt-tenant',
         type: 'run.updated',

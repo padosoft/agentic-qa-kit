@@ -1110,3 +1110,19 @@
 - Evidence: admin typecheck/build passed, ecosystem Playwright **3/3 passed**,
   repository lint and diff checks passed. Server-side durable cursors/replay and
   reverse-proxy fault-injection remain the next eventing evidence gap.
+
+# 2026-09-17 — bounded durable event replay
+
+- Added optional provider-neutral event replay with tenant/project scope and
+  bounded limits. `MemoryEventBus` retains a deterministic 1,000-event history;
+  `PostgresEventBus` persists events before `NOTIFY` in `aqa_live_events` and
+  replays after a monotonic cursor.
+- The SSE adapter subscribes before replay, deduplicates event IDs, emits
+  `stream.gap` for expired cursors or replay failures, and keeps the existing
+  authoritative reconnect refetch fallback.
+- Evidence: server suite **126 passed**, kit suite **139 passed / 2 expected
+  platform skips**, kit/server typecheck, repository lint and diff checks pass
+  locally. PostgreSQL persistence/replay remains skipped locally without
+  `AQA_TEST_POSTGRES_DSN`; CI/deployment evidence is still required.
+- Next: add outbound webhook delivery with retry/DLQ semantics and define
+  PostgreSQL event-log retention/pruning before production rollout.
