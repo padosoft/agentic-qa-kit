@@ -50,6 +50,8 @@ export interface ApiContext {
   authorizeScope?: (user: User, scope: { org: string; project?: string }) => Promise<boolean>;
   /** Verify a dedicated SCIM bearer token for the requested organization. */
   scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
+  /** Optional tenant-scoped abuse limiter; return false to reject with 429. */
+  scimRateLimit?: (org: string) => Promise<boolean> | boolean;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER
@@ -118,6 +120,18 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
 function scimOrg(req: ApiRequest): string | undefined {
   const value = req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'];
   return value?.trim() || undefined;
+}
+
+async function authorizeScim(
+  req: ApiRequest,
+  ctx: ApiContext,
+  org: string,
+): Promise<ApiResponse | null> {
+  if (ctx.scimRateLimit && !(await ctx.scimRateLimit(org)))
+    return { status: 429, body: { error: 'scim_rate_limited' } };
+  if (!ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+    return { status: 401, body: { error: 'unauthorized' } };
+  return null;
 }
 
 function scimResource(input: unknown): ScimUserResource | null {
@@ -1480,8 +1494,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         const directory = scimDirectory(ctx);
         const query = req.query ?? {};
         const startIndex = Math.max(1, Number.parseInt(query.startIndex ?? '1', 10) || 1);
@@ -1505,8 +1520,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         const resource = scimResource(req.body);
         if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
         try {
@@ -1523,8 +1539,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         try {
           const user = await new ScimProvisioner(scimDirectory(ctx), org).get(req.params.id ?? '');
           return asResponse(scimUserResource(user));
@@ -1539,8 +1556,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         const resource = scimResource(req.body);
         if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
         try {
@@ -1560,8 +1578,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         const operations = (req.body as { Operations?: unknown })?.Operations;
         if (!Array.isArray(operations))
           return asResponse({ error: 'SCIM Operations is required' }, 400);
@@ -1582,8 +1601,9 @@ export function makeApi(): ApiHandler[] {
       requires: null,
       async handle(req, ctx) {
         const org = scimOrg(req);
-        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
-          return asResponse({ error: 'SCIM authorization required' }, 401);
+        if (!org) return asResponse({ error: 'SCIM authorization required' }, 401);
+        const denied = await authorizeScim(req, ctx, org);
+        if (denied) return asResponse(denied.body, denied.status);
         try {
           await new ScimProvisioner(scimDirectory(ctx), org).deactivate(req.params.id ?? '');
           return asResponse(null, 204);

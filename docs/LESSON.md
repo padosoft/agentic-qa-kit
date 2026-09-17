@@ -747,3 +747,11 @@ The RFC vector also exposed two easy implementation traps: HMAC dynamic
 truncation must remain unsigned in JavaScript, and Base32 decoding must avoid
 32-bit bitwise overflow. Test vectors should include the exact encoded secret,
 not only the underlying ASCII value.
+
+# 2026-09-17 — SCIM limits must sit before credential work
+
+Provisioning endpoints need an abuse budget before expensive token-store and
+directory operations. The HTTP boundary now returns an explicit 429 through an
+injected tenant limiter. Process-local state is safe only for a single
+replica; production HA must replace it with an atomic shared counter and keep
+the limit key tenant/token scoped rather than trusting a client IP header.

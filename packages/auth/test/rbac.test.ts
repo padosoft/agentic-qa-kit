@@ -5,6 +5,7 @@ import {
   SamlLoginBoundary,
   SamlValidationError,
   ScimProvisioner,
+  ScimRateLimiter,
   ScimTokenManager,
   ScimValidationError,
   allows,
@@ -59,6 +60,19 @@ describe('MFA policy', () => {
       true,
     );
     assert.equal(verifyTotp({ secret_base32: secret, code: 'bad', now_ms: 59_000 }), false);
+  });
+});
+
+describe('SCIM rate limiting', () => {
+  it('bounds requests per tenant and resets after the window', () => {
+    let now = 1_000;
+    const limiter = new ScimRateLimiter({ max_requests: 2, window_ms: 100, now: () => now });
+    assert.equal(limiter.allow('org-a'), true);
+    assert.equal(limiter.allow('org-a'), true);
+    assert.equal(limiter.allow('org-a'), false);
+    assert.equal(limiter.allow('org-b'), true);
+    now += 100;
+    assert.equal(limiter.allow('org-a'), true);
   });
 });
 

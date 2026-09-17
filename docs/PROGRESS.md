@@ -20,6 +20,13 @@
   diff-check pass. The RFC vector caught and fixed an unsigned HMAC truncation
   issue and an incorrect test secret encoding.
 
+- **SCIM abuse limiter wired.** Added a bounded tenant-scoped sliding-window
+  limiter, applied before bearer authorization on every SCIM operation, with
+  `429 scim_rate_limited` responses and a default admin-boot policy. Evidence:
+  auth 19 passed/3 PostgreSQL skips, server typecheck and repository lint
+  pass. The limiter is intentionally process-local; a shared Redis/Postgres
+  implementation is required before multi-replica deployment.
+
 - **Formal risk coverage measurement shipped.** `@aqa/methodology` now
   computes the M2 weighted score (invariant mapping 35%, oracle-backed
   scenarios 25%, deterministic replay 20%, 30-day pass rate 10%, flake health

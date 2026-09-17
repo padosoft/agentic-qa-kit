@@ -23,7 +23,13 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { OidcSessionManager, PostgresScimTokenStore, ScimTokenManager, allows } from '@aqa/auth';
+import {
+  OidcSessionManager,
+  PostgresScimTokenStore,
+  ScimRateLimiter,
+  ScimTokenManager,
+  allows,
+} from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -44,6 +50,8 @@ export interface AdminOptions {
   runnerAuthorize?: ApiContext['runnerAuthorize'];
   /** Verify dedicated SCIM bearer credentials for provisioning routes. */
   scimAuthorize?: ApiContext['scimAuthorize'];
+  /** Override the default bounded process-local SCIM abuse limiter. */
+  scimRateLimit?: ApiContext['scimRateLimit'];
   /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
   scimTokenManager?: ScimTokenManager;
   /** PostgreSQL DSN for the built-in durable SCIM token store. */
@@ -189,6 +197,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const scimTokenStore = scimTokenDsn ? new PostgresScimTokenStore(scimTokenDsn) : undefined;
   const scimTokenManager =
     opts.scimTokenManager ?? (scimTokenStore ? new ScimTokenManager(scimTokenStore) : undefined);
+  const scimRateLimiter = new ScimRateLimiter();
   const api = makeApi();
   const ctx = {
     store,
@@ -211,6 +220,11 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
             scimAuthorize: (headers: Record<string, string>, org: string) =>
               scimTokenManager.verifyBearer(org, headers.authorization ?? headers.Authorization),
           }
+        : {}),
+    ...(opts.scimRateLimit
+      ? { scimRateLimit: opts.scimRateLimit }
+      : opts.scimAuthorize || scimTokenManager
+        ? { scimRateLimit: (org: string) => scimRateLimiter.allow(org) }
         : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     ...(eventBus ? { eventBus } : {}),

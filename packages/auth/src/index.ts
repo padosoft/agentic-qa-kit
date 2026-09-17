@@ -42,4 +42,6 @@ export {
 } from './oidc-session.js';
 export { PostgresOidcSessionStore } from './postgres-session.js';
 export { PostgresScimTokenStore } from './postgres-scim-token.js';
+export { ScimRateLimiter } from './scim-rate-limit.js';
+export type { ScimRateLimitOptions } from './scim-rate-limit.js';
 export { PostgresSamlReplayGuard } from './postgres-saml-replay.js';
