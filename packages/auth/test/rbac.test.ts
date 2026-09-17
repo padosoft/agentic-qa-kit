@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { OidcAdapter, allows, enforceMfa, mfaRequired } from '../dist/index.js';
+import {
+  OidcAdapter,
+  ScimProvisioner,
+  ScimValidationError,
+  allows,
+  enforceMfa,
+  mfaRequired,
+} from '../dist/index.js';
 
 const viewer = { id: '1', email: 'v@x.test', display_name: 'V', roles: ['viewer' as const] };
 const dev = { id: '2', email: 'd@x.test', display_name: 'D', roles: ['developer' as const] };
@@ -31,6 +38,72 @@ describe('MFA policy', () => {
       ...admin,
       mfa_verified: true,
     });
+  });
+});
+
+describe('SCIM provisioning', () => {
+  it('keeps CRUD operations tenant-bound and applies idempotent deactivation', async () => {
+    const users = new Map<
+      string,
+      {
+        id: string;
+        tenant: string;
+        active: boolean;
+        user_name: string;
+        email: string;
+        display_name: string;
+        roles: ['viewer'];
+        updated_at: string;
+      }
+    >();
+    const directory = {
+      async get(tenant: string, id: string) {
+        const user = users.get(id);
+        return user?.tenant === tenant ? user : null;
+      },
+      async list(tenant: string, filter?: string) {
+        return [...users.values()].filter(
+          (user) => user.tenant === tenant && (!filter || filter.includes(user.user_name)),
+        );
+      },
+      async put(user: typeof users extends Map<string, infer V> ? V : never) {
+        users.set(user.id, user);
+      },
+      async remove(tenant: string, id: string) {
+        const user = users.get(id);
+        if (user?.tenant === tenant) users.delete(id);
+      },
+    };
+    const scim = new ScimProvisioner(directory, 'org-a');
+    const created = await scim.create({
+      userName: 'alice',
+      emails: [{ value: 'alice@example.test', primary: true }],
+    });
+    assert.equal(created.tenant, 'org-a');
+    await scim.patch(created.id, [{ op: 'replace', path: 'active', value: false }]);
+    assert.equal((await scim.get(created.id)).active, false);
+    await scim.deactivate(created.id);
+    await assert.rejects(
+      () => new ScimProvisioner(directory, 'org-b').get(created.id),
+      ScimValidationError,
+    );
+  });
+
+  it('rejects duplicate names and invalid patch paths', async () => {
+    const entries = new Map<string, never>();
+    const directory = {
+      async get() {
+        return null;
+      },
+      async list() {
+        return [];
+      },
+      async put() {},
+      async remove() {},
+    };
+    const scim = new ScimProvisioner(directory, 'org-a');
+    await assert.rejects(() => scim.create({ userName: '', emails: [] }), /userName/);
+    void entries;
   });
 });
 

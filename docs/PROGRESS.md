@@ -382,3 +382,8 @@
 
 - Added `MfaPolicy`/`enforceMfa()` to `@aqa/auth`, optional `User.mfa_verified`, OIDC `amr` claim mapping (`mfa`, `otp`, `webauthn`, `hwk`) and session-manager enforcement before persistence. Policies can target all users or selected roles; missing proof fails closed.
 - Evidence: auth typecheck and 12 tests (11 passed, one PostgreSQL session skip); repository lint. TOTP/WebAuthn enrollment, recovery codes, admin policy persistence and an external-IdP complete journey remain open.
+
+# 2026-09-17 — SCIM provisioning boundary slice
+
+- Added a tenant-bound SCIM 2.0 provisioner contract to `@aqa/auth` with create, replace, patch (`active`/`displayName`), deactivate, get and list operations. It validates email/userName, assigns least-privilege viewer by default, rejects cross-tenant reads and keeps persistence behind an injected directory.
+- Evidence: auth typecheck and 14 tests (13 passed, one PostgreSQL session skip); repository lint. PostgreSQL tenant-aware user schema, bearer-token route exposure, PATCH filter semantics, SAML and complete IdP provisioning journey remain open.

@@ -578,3 +578,10 @@ An IdP claim is useful only if the policy boundary consumes it before issuing a
 session. Map accepted authentication methods explicitly, fail closed when the
 claim is absent, and keep enrollment/recovery as separate evidence-bearing
 flows rather than treating a boolean policy flag as complete MFA.
+
+# 2026-09-17 — SCIM must never inherit an unscoped user store
+
+SCIM is a tenant-facing write protocol. Keep the tenant in the provisioner and
+directory contract, reject cross-tenant IDs, validate role mapping and default
+to least privilege; exposing endpoints before the durable store and bearer-token
+boundary are ready would create a provisioning isolation bug.
