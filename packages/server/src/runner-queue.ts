@@ -10,6 +10,12 @@ export interface EnqueuedJob extends RunnerJob {
   lease_token?: string | undefined;
 }
 
+export interface RunnerQueueLike {
+  enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
+  dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
+  snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
+}
+
 /**
  * In-memory FIFO queue with visibility-timeout leases. Runner workers poll
  * `GET /api/runner/jobs/next` which calls `dequeue()`; if the worker dies

@@ -198,7 +198,9 @@ jobs:
       - name: Run PostgreSQL persistence contract
         env:
           AQA_TEST_POSTGRES_DSN: postgres://aqa:aqa-ci-only@127.0.0.1:5432/aqa_test
-        run: bun test packages/store/test/store.test.ts
+        run: |
+          bun test packages/store/test/store.test.ts
+          bun test packages/server/test/postgres-queue.test.ts
 
   test-container-sandbox:
     name: Integration (OCI container sandbox)

@@ -37,6 +37,10 @@ export interface AdminOptions {
   authenticate?: ApiContext['authenticate'];
   /** Enforce server-side org/project membership after authentication. */
   authorizeScope?: ApiContext['authorizeScope'];
+  /** Use a durable PostgreSQL runner queue instead of the local memory queue. */
+  queueDsn?: string;
+  /** Inject a queue implementation (useful for host applications/tests). */
+  queue?: ApiContext['queue'];
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -122,7 +126,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   // earlier iteration was resolved by extracting `runPackNew` into
   // `@aqa/pack-author`; the dynamic import is now an optimisation, not
   // a workaround.)
-  const { makeApi, RunnerQueue } = await import('@aqa/server');
+  const { makeApi, PostgresRunnerQueue, RunnerQueue } = await import('@aqa/server');
   const { MemoryStore } = await import('@aqa/store');
 
   const store = new MemoryStore();
@@ -131,10 +135,15 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     opts.runsRoot ?? join(opts.root, '.aqa', 'runs'),
   );
 
+  if (opts.queue && opts.queueDsn) {
+    return { ok: false, error: 'admin: pass queue or queueDsn, not both' };
+  }
+  const queueDsn = opts.queueDsn ?? process.env.AQA_QUEUE_DSN;
+  const queue = opts.queue ?? (queueDsn ? new PostgresRunnerQueue(queueDsn) : new RunnerQueue());
   const api = makeApi();
   const ctx = {
     store,
-    queue: new RunnerQueue(),
+    queue,
     authenticate:
       opts.authenticate ??
       (async () => ({
@@ -199,7 +208,11 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     port: resolvedPort,
     host,
     url: `http://${host}:${resolvedPort}`,
-    close: () => closeServer(server),
+    close: async () => {
+      await closeServer(server);
+      const closable = queue as { close?: () => Promise<void> };
+      await closable.close?.();
+    },
   };
 }
 

@@ -21,6 +21,7 @@
     "@aqa/pack-scanner": "workspace:*",
     "@aqa/schemas": "workspace:*",
     "@aqa/store": "workspace:*",
+    "postgres": "^3.4.9",
     "yaml": "^2.9.0"
   },
   "publishConfig": { "access": "public" }

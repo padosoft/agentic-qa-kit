@@ -30,11 +30,11 @@ import type {
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
-import type { RunnerQueue } from './runner-queue.js';
+import type { RunnerQueueLike } from './runner-queue.js';
 
 export interface ApiContext {
   store: StoreProvider;
-  queue: RunnerQueue;
+  queue: RunnerQueueLike;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
   /** Authorize the authenticated user for the requested org/project scope. */
@@ -245,7 +245,7 @@ export function makeApi(): ApiHandler[] {
       path: '/api/runs',
       requires: 'runs:create',
       async handle(req, ctx) {
-        const job = ctx.queue.enqueue({
+        const job = await ctx.queue.enqueue({
           id: cryptoUuid(),
           payload: req.body as Record<string, unknown>,
           enqueued_at: new Date().toISOString(),
@@ -1074,7 +1074,7 @@ export function makeApi(): ApiHandler[] {
       path: '/api/queue',
       requires: 'runs:read',
       async handle(_req, ctx) {
-        return asResponse({ jobs: ctx.queue.snapshot() });
+        return asResponse({ jobs: await ctx.queue.snapshot() });
       },
     },
     {
@@ -1082,7 +1082,7 @@ export function makeApi(): ApiHandler[] {
       path: '/api/runner/jobs/next',
       requires: null,
       async handle(_req, ctx) {
-        const next = ctx.queue.dequeue();
+        const next = await ctx.queue.dequeue();
         return { status: next ? 200 : 204, body: next ? { job: next } : null };
       },
     },
