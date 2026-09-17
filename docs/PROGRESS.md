@@ -907,3 +907,7 @@
 
 - Added Ed25519 signing and trust-map verification for canonical versioned pricing catalogs. Budget configuration can now reject unknown operator keys, algorithm changes and catalog tampering before admission; the catalog digest/version remain the reproducibility identity.
 - Evidence: cost build/typecheck and **13 tests passed**, including trusted-key verification, tampering and unknown-signer rejection. KMS/Vault key lifecycle, admin distribution/rotation and provider invoice reconciliation remain deployment evidence.
+
+# 2026-09-17 — full workspace regression after enterprise slices
+
+- Evidence: repository typecheck, **597 tests passed / 0 failed**, and Biome lint passed locally after JWT runner, commerce mutation and signed pricing catalog changes. PostgreSQL-dependent branches remain explicit skips without `AQA_TEST_POSTGRES_DSN`; hosted CI remains authoritative for those live contracts and for Node 22/OCI/browser execution.
