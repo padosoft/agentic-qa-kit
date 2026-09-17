@@ -674,3 +674,10 @@ The admin projection should render `covered`, `partial`, `gap` and `stale` as
 distinct states instead of converting missing observations into a green score.
 Live mode must use the tenant-scoped API; fixture mode is useful for visual
 verification but is not evidence of a live authenticated journey.
+
+# 2026-09-17 — performance parsing and gating are separate contracts
+
+Retain numeric measurements during k6/Locust ingestion, but do not turn an
+import into a CI verdict. A separately versioned threshold policy can evaluate
+p95, failure and check rates, emit explainable violations, and remain auditable
+when the same evidence is reprocessed under a different release policy.

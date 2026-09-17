@@ -18,6 +18,8 @@ export interface IngestRecord {
   severity?: string;
   message?: string;
   rule_id?: string;
+  /** Tool-native numeric measurements retained for threshold evaluation. */
+  measurements?: Record<string, number>;
   fingerprint: string;
 }
 
@@ -28,6 +30,25 @@ export interface IngestReport {
   ingested_at: string;
   records: IngestRecord[];
   warnings: string[];
+}
+
+export interface PerformanceThresholdPolicy {
+  max_p95_ms?: number;
+  max_failure_rate?: number;
+  min_check_rate?: number;
+}
+
+export interface PerformanceThresholdViolation {
+  record_id: string;
+  metric: 'p95_ms' | 'failure_rate' | 'check_rate';
+  actual: number;
+  expected: number;
+}
+
+export interface PerformanceThresholdResult {
+  passed: boolean;
+  evaluated_records: number;
+  violations: PerformanceThresholdViolation[];
 }
 
 function fingerprint(parts: string[]): string {
@@ -239,6 +260,7 @@ export function parseK6Summary(value: unknown, source = 'k6-summary.json'): Inge
       name,
       status,
       ...(p95 === undefined ? {} : { duration_ms: Number(p95.toFixed(3)) }),
+      ...(Object.keys(numeric).length > 0 ? { measurements: numeric } : {}),
       message: detail,
       fingerprint: fingerprint(['k6', name, detail, status]),
     });
@@ -286,6 +308,12 @@ export function parseLocustSummary(value: unknown, source = 'locust-summary.json
       name: externalId,
       status,
       ...(p95 === undefined ? {} : { duration_ms: Number(p95.toFixed(3)) }),
+      measurements: {
+        requests,
+        failures,
+        failure_rate: requests === 0 ? 0 : failures / requests,
+        ...(p95 === undefined ? {} : { p95_ms: p95 }),
+      },
       message: detail,
       fingerprint: fingerprint(['locust', externalId, detail, status]),
     });
@@ -302,6 +330,73 @@ export function parseLocustSummary(value: unknown, source = 'locust-summary.json
     records,
     warnings,
   };
+}
+
+/**
+ * Apply explicit performance policy after parsing. Parsing preserves evidence;
+ * this function is the separate, auditable pass/fail boundary for CI gates.
+ */
+export function evaluatePerformanceThresholds(
+  report: IngestReport,
+  policy: PerformanceThresholdPolicy,
+): PerformanceThresholdResult {
+  const entries = Object.entries(policy);
+  if (entries.length === 0) throw new Error('performance threshold policy is empty');
+  if (
+    (policy.max_p95_ms !== undefined &&
+      (!Number.isFinite(policy.max_p95_ms) || policy.max_p95_ms < 0)) ||
+    (policy.max_failure_rate !== undefined &&
+      (!Number.isFinite(policy.max_failure_rate) ||
+        policy.max_failure_rate < 0 ||
+        policy.max_failure_rate > 1)) ||
+    (policy.min_check_rate !== undefined &&
+      (!Number.isFinite(policy.min_check_rate) ||
+        policy.min_check_rate < 0 ||
+        policy.min_check_rate > 1))
+  )
+    throw new Error('performance threshold policy contains an invalid value');
+
+  const violations: PerformanceThresholdViolation[] = [];
+  for (const record of report.records) {
+    const measurements = record.measurements ?? {};
+    if (
+      policy.max_p95_ms !== undefined &&
+      record.duration_ms !== undefined &&
+      record.duration_ms > policy.max_p95_ms
+    )
+      violations.push({
+        record_id: record.id,
+        metric: 'p95_ms',
+        actual: record.duration_ms,
+        expected: policy.max_p95_ms,
+      });
+    const failureRate = measurements.failure_rate;
+    if (
+      policy.max_failure_rate !== undefined &&
+      failureRate !== undefined &&
+      failureRate > policy.max_failure_rate
+    )
+      violations.push({
+        record_id: record.id,
+        metric: 'failure_rate',
+        actual: failureRate,
+        expected: policy.max_failure_rate,
+      });
+    const checkRate =
+      measurements.check_rate ?? (record.external_id === 'checks' ? measurements.rate : undefined);
+    if (
+      policy.min_check_rate !== undefined &&
+      checkRate !== undefined &&
+      checkRate < policy.min_check_rate
+    )
+      violations.push({
+        record_id: record.id,
+        metric: 'check_rate',
+        actual: checkRate,
+        expected: policy.min_check_rate,
+      });
+  }
+  return { passed: violations.length === 0, evaluated_records: report.records.length, violations };
 }
 
 function numericValue(value: unknown, field: string, index: number): number {

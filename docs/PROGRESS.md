@@ -466,3 +466,8 @@
 
 - Added the `Risk coverage` admin screen and navigation entry. Mock mode renders explicit covered/partial/stale evidence states; live mode reads the tenant-scoped `/api/risk-coverage` projection, exposes drift alerts, and links each row back to the risk editor.
 - Added a Playwright journey covering navigation, table rendering and representative coverage states. Admin typecheck and the focused Playwright test passed (1/1). Full workspace regression remains the next gate; the page does not claim live authenticated browser coverage without a configured server/identity provider.
+
+# 2026-09-17 — explicit performance threshold policy
+
+- Added numeric measurement retention to k6/Locust ingestion and a separate `evaluatePerformanceThresholds` boundary for p95, failure-rate and check-rate gates. Parsing remains evidence-only; policy now produces deterministic violations without mutating imported records.
+- Evidence: ingest test 10/10; workspace typecheck, 502 tests passed, 4 PostgreSQL integration tests skipped without DSN, lint and diff-check passed. Live load execution and CI artifact wiring remain open.

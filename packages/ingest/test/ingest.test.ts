@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseJunit, parseK6Summary, parseLocustSummary, parseSast } from '../dist/index.js';
+import {
+  evaluatePerformanceThresholds,
+  parseJunit,
+  parseK6Summary,
+  parseLocustSummary,
+  parseSast,
+} from '../dist/index.js';
 
 describe('JUnit ingestion', () => {
   it('normalizes pass, failure, error and skipped cases', () => {
@@ -71,6 +77,7 @@ describe('k6 ingestion', () => {
     });
     assert.equal(report.framework, 'k6');
     assert.equal(report.records[0]?.duration_ms, 120.456);
+    assert.equal(report.records[1]?.measurements?.rate, 0.02);
     assert.deepEqual(
       report.records.map((record) => record.status),
       ['passed', 'failed', 'failed'],
@@ -106,6 +113,7 @@ describe('Locust ingestion', () => {
     assert.equal(report.records[0]?.duration_ms, 245.5);
     assert.equal(report.records[0]?.status, 'failed');
     assert.deepEqual(report.warnings, ['one worker disconnected']);
+    assert.equal(report.records[0]?.measurements?.failure_rate, 0.03);
   });
 
   it('fails closed on malformed Locust stats', () => {
@@ -114,5 +122,36 @@ describe('Locust ingestion', () => {
       () => parseLocustSummary({ stats: [{ name: '/health', num_requests: -1, num_failures: 0 }] }),
       /num_requests/,
     );
+  });
+});
+
+describe('performance threshold policy', () => {
+  it('evaluates explicit thresholds without changing imported evidence', () => {
+    const report = parseLocustSummary({
+      stats: [
+        {
+          name: '/checkout',
+          num_requests: 10,
+          num_failures: 1,
+          response_time_percentiles: { '0.95': 250 },
+        },
+      ],
+    });
+    const result = evaluatePerformanceThresholds(report, {
+      max_p95_ms: 200,
+      max_failure_rate: 0.05,
+    });
+    assert.equal(result.passed, false);
+    assert.deepEqual(
+      result.violations.map((violation) => violation.metric),
+      ['p95_ms', 'failure_rate'],
+    );
+    assert.equal(report.records[0]?.status, 'failed');
+  });
+
+  it('fails closed for an empty or invalid policy', () => {
+    const report = parseK6Summary({ metrics: { http_req_duration: { values: { 'p(95)': 10 } } } });
+    assert.throws(() => evaluatePerformanceThresholds(report, {}), /empty/);
+    assert.throws(() => evaluatePerformanceThresholds(report, { min_check_rate: 2 }), /invalid/);
   });
 });
