@@ -62,7 +62,7 @@ jobs:
         # (dist/index.{js,d.ts}). Typecheck of a downstream package therefore
         # needs the upstream dist to exist. Run a full build before typecheck.
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Typecheck (all workspaces)
         run: bun run typecheck
@@ -86,7 +86,7 @@ jobs:
 
       - name: Build all workspaces (tests import the built dist/)
         if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Run unit tests
         if: ${{ hashFiles('packages/**/*.test.ts') != '' }}
@@ -130,7 +130,7 @@ jobs:
         # packages' dist/. Build once up front in topological order so each
         # package's pretest sees a fresh dist for everything it imports.
         if: ${{ hashFiles('packages/**/tsconfig.json') != '' }}
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Run unit tests under Node
         env:
@@ -193,7 +193,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build workspace
-        run: bun run build
+        run: bun run build:workspace
 
       - name: Run PostgreSQL persistence contract
         env:
@@ -219,6 +219,7 @@ jobs:
       - name: Build (all workspaces)
         run: |
           if [ -d packages ]; then
+            npm --prefix docs-site ci
             bun run build
           else
             echo "No packages yet — gate placeholder."
@@ -241,7 +242,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build all workspaces
-        run: bun run build
+        run: |
+          npm --prefix docs-site ci
+          bun run build
 
       - name: Run CLI smoke checks
         run: bun run test:e2e-cli
@@ -268,7 +271,9 @@ jobs:
 
       - name: Build admin (Vite) for the dev server Playwright will boot
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
-        run: bun run build
+        run: |
+          npm --prefix docs-site ci
+          bun run build
 
       - name: Run Playwright (admin SPA)
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
