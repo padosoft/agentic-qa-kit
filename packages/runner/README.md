@@ -1,5 +1,11 @@
 # @aqa/runner
 
+Semantic agent evaluation is available through `evaluateAgentTrials()` and
+`calibrateAgentJudges()`. The first applies an explicit multi-judge,
+multi-trial policy and returns `inconclusive` for insufficient/disagreeing
+evidence; the second computes Brier/ECE metrics on a reviewed gold corpus.
+Both consume opaque scores and model identities, not private judge rationales.
+
 Orchestrator runner for `agentic-qa-kit`. Ships:
 
 - **`RunLifecycle`** — state machine (pending → running → {succeeded, failed, aborted, budget_exceeded}).

@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added semantic agent evaluation and calibration primitives.**
+  `evaluateAgentTrials()` now requires bounded multi-judge/multi-trial
+  evidence, distinct models when configured, and returns `inconclusive` below
+  the agreement floor. `calibrateAgentJudges()` reports Brier score and ECE
+  over a gold corpus without storing rationale text. Evidence: runner suite
+  **57 pass / 0 fail** after the new contract tests; live provider quality,
+  prompt pinning and human gold-set governance remain open. ADR-193 records
+  the boundary.
+
 - **Bound MCP to the real queue/store.** `createMcpRunPort(ctx)` now uses the
   authoritative `RunnerQueue` and `StoreProvider`: plan is read-only, start
   validates the tenant profile and uses scoped idempotency, status/cancel are
