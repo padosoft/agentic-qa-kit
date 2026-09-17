@@ -1344,3 +1344,12 @@ filters by authenticated tenant before writing, emits bounded heartbeats and
 cleans up subscriptions on both request abort and response close. The UI must
 reconcile the durable store after reconnect; a live notification alone is never
 proof of complete run state.
+
+# 2026-09-17 — an SSE label is not a browser journey
+
+An animated terminal or a passing stream writer test can falsely suggest that
+the product is live. Meaningful proof is causal: create the subscriber, publish
+a tenant-scoped event, parse it in the actual SPA, render connection state, and
+assert it in Playwright. Keep that event as an invalidation hint and re-read
+authoritative projections; EventSource retry does not recover events missed
+during a disconnected interval.

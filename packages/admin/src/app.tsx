@@ -4129,6 +4129,61 @@ function apiUrl(path) {
 }
 Object.assign(window, { __aqaApiUrl: apiUrl });
 
+// The admin keeps the durable API as the source of truth and uses SSE only as
+// a low-latency invalidation signal. EventSource reconnects automatically;
+// consumers should refetch their projection after a reconnect or event.
+function useLiveEventStream() {
+  const configured =
+    typeof import.meta !== 'undefined' &&
+    Boolean((import.meta).env?.VITE_AQA_SERVER_URL);
+  const [state, setState] = React.useState({
+    configured,
+    status: configured ? 'connecting' : 'disabled',
+    events: 0,
+    lastType: '',
+    lastId: '',
+  });
+
+  React.useEffect(() => {
+    if (!configured || typeof EventSource === 'undefined') return undefined;
+    const streamUrl = `${apiUrl('/api/events/stream')}?org=padosoft&project=gescat`;
+    const source = new EventSource(streamUrl, { withCredentials: true });
+    const onOpen = () => setState((prev) => ({ ...prev, status: 'connected' }));
+    const onError = () => setState((prev) => ({ ...prev, status: 'reconnecting' }));
+    const onEvent = (event) => {
+      let payload = null;
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      const type = typeof payload?.type === 'string' ? payload.type : event.type;
+      const id = typeof payload?.id === 'string' ? payload.id : event.lastEventId;
+      setState((prev) => ({
+        ...prev,
+        status: 'connected',
+        events: prev.events + 1,
+        lastType: type,
+        lastId: id,
+      }));
+      window.dispatchEvent(new CustomEvent('aqa:live-event', { detail: payload }));
+    };
+    source.onopen = onOpen;
+    source.onerror = onError;
+    for (const type of ['run.requested', 'run.cancelled', 'finding.status_changed']) {
+      source.addEventListener(type, onEvent);
+    }
+    return () => {
+      source.close();
+      for (const type of ['run.requested', 'run.cancelled', 'finding.status_changed']) {
+        source.removeEventListener(type, onEvent);
+      }
+    };
+  }, [configured]);
+
+  return state;
+}
+
 function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   const [items, setItems] = React.useState(initialFindings);
   const [dragId, setDragId] = React.useState(null);
@@ -14000,7 +14055,12 @@ function App() {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-  const [mode, setMode] = React.useState('mock'); // mock | live | failed
+  const [mode, setMode] = React.useState(() =>
+    typeof import.meta !== 'undefined' && (import.meta).env?.VITE_AQA_SERVER_URL
+      ? 'live'
+      : 'mock',
+  ); // mock | live | failed
+  const liveStream = useLiveEventStream();
   const [lastTick, setLastTick] = React.useState(NOW_REF);
   const [signedIn, setSignedIn] = React.useState(true);
   // Profile deletions broadcast via `aqa:profile-deleted` CustomEvent
@@ -14330,6 +14390,27 @@ function App() {
             lastTick={lastTick}
           />
           {!isError && <BreadcrumbRow crumbs={crumbs} onNavigate={navigate} mode={mode} />}
+          {liveStream.configured && (
+            <div
+              className="live-banner"
+              data-testid="live-stream-status"
+              aria-live="polite"
+              style={{
+                borderColor:
+                  liveStream.status === 'connected'
+                    ? 'var(--status-success)'
+                    : 'var(--status-warning)',
+              }}
+            >
+              <I.Activity size={12} />
+              <b>Live event stream:</b> <span>{liveStream.status}</span>
+              {liveStream.events > 0 && (
+                <span className="mono" data-testid="live-stream-event">
+                  {liveStream.events} event{liveStream.events === 1 ? '' : 's'} · {liveStream.lastType}
+                </span>
+              )}
+            </div>
+          )}
           {mode === 'failed' && (
             <div
               className="live-banner"

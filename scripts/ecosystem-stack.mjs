@@ -237,8 +237,9 @@ const runSummary = {
 };
 
 const { MemoryStore } = await import('../packages/store/dist/index.js');
-const { makeApi, RunnerQueue } = await import('../packages/server/dist/index.js');
+const { makeApi, MemoryEventBus, RunnerQueue } = await import('../packages/server/dist/index.js');
 const store = new MemoryStore();
+const eventBus = new MemoryEventBus();
 await store.saveOrg({
   schema_version: '1',
   slug: 'padosoft',
@@ -265,12 +266,14 @@ const ctx = {
     display_name: 'Admin',
     roles: ['admin'],
   }),
+  eventBus,
   projectRoot: FIXTURE,
 };
 
 const apiServer = createServer(async (req, res) => {
   try {
-    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-origin', `http://127.0.0.1:${ADMIN_PORT}`);
+    res.setHeader('access-control-allow-credentials', 'true');
     res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('access-control-allow-headers', 'content-type,x-aqa-org,x-aqa-project');
     if ((req.method ?? 'GET') === 'OPTIONS') {
@@ -280,6 +283,47 @@ const apiServer = createServer(async (req, res) => {
     }
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${API_PORT}`);
+    if (method === 'GET' && url.pathname === '/api/events/stream') {
+      res.writeHead(200, {
+        'cache-control': 'no-cache, no-transform',
+        connection: 'keep-alive',
+        'content-type': 'text/event-stream; charset=utf-8',
+        'x-accel-buffering': 'no',
+      });
+      res.write('retry: 3000\n\n');
+      let closed = false;
+      const org = url.searchParams.get('org');
+      const project = url.searchParams.get('project');
+      const heartbeat = setInterval(() => {
+        if (!closed) res.write(': heartbeat\n\n');
+      }, 15_000);
+      heartbeat.unref?.();
+      const unsubscribe = await eventBus.subscribe((event) => {
+        if (closed || event.org !== org || (project && event.project !== project)) return;
+        res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      });
+      const cleanup = async () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(heartbeat);
+        await unsubscribe();
+      };
+      req.once('aborted', () => void cleanup());
+      res.once('close', () => void cleanup());
+      // Publish only after this subscriber exists. This makes the browser
+      // journey causal instead of relying on a process-start timing window.
+      setTimeout(() => {
+        void eventBus.publish({
+          id: `ecosystem-live-stream-${Date.now()}`,
+          type: 'run.requested',
+          occurred_at: new Date().toISOString(),
+          org: 'padosoft',
+          project: 'gescat',
+          data: { source: 'ecosystem-browser-journey' },
+        });
+      }, 500).unref?.();
+      return;
+    }
     let found = null;
     for (const r of api) {
       if (r.method !== method) continue;

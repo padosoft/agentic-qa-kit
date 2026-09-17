@@ -1059,6 +1059,21 @@
   events, initial SSE framing and reader cancellation; kit suite **141 total / 
   139 passed / 2 expected platform skips**, typecheck, Biome lint and diff
   checks passed locally.
-- Remaining: wire the admin SPA to this endpoint, validate a real browser
-  EventSource journey through the deployed reverse proxy, and add replay/cursor
-  semantics for reconnect gaps in multi-replica deployments.
+- Remaining: validate the browser EventSource journey through a deployed
+  reverse proxy and add replay/cursor semantics for reconnect gaps in
+  multi-replica deployments.
+
+# 2026-09-17 — browser-proven live event stream
+
+- Replaced the admin's SSE-labelled simulation gap with a real `EventSource`
+  connection when `VITE_AQA_SERVER_URL` is configured. The UI exposes
+  connecting/connected/reconnecting state and the last received event, while
+  durable API reads remain authoritative.
+- Upgraded the ecosystem stack to use `MemoryEventBus`, a real SSE adapter and
+  a causal post-subscription fixture event. The complete browser journey now
+  proves the stream is opened and `run.requested` is rendered by the SPA.
+- Evidence: ecosystem Playwright **3/3 passed**, admin typecheck/build,
+  repository Biome lint and diff checks passed. Remaining: durable cursor/replay
+  after reconnect and reverse-proxy deployment evidence.
+- Next: add bounded replay/cursor semantics to the event bus and recovery
+  refetches on stream reconnect.
