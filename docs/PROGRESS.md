@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **CI SBOM provenance gate added.** The Build job now runs a pinned Anchore
+  Syft action after the workspace build, emits and retains a CycloneDX JSON
+  inventory, and validates that it is non-empty and structurally valid. The
+  root `npm sbom` command was tested and rejected because this Bun monorepo has
+  no root `package-lock.json` and npm sees workspace/link dependencies as
+  incomplete; it was deliberately not promoted into CI. Hosted CI evidence is
+  still required, and this does not yet prove image-level or published-pack
+  provenance.
+
 - **RFC 6238 TOTP verification boundary added.** `@aqa/auth` now exposes a
   bounded, fail-closed verifier with constant-time code comparison, Base32
   decoding, configurable period/digits/skew window and RFC vector coverage.

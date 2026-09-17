@@ -1,5 +1,12 @@
 # Lessons
 
+- **Bun monorepos need a non-npm SBOM path.** `npm sbom` can return
+  `ESBOMPROBLEMS` and an empty stream when a root package-lock is absent and
+  workspace/link dependencies are resolved by Bun. Treating that output as a
+  CI artifact creates a false supply-chain gate. Generate CycloneDX from a
+  pinned Syft action after the build, validate the document, and keep the
+  limitation explicit until the exact released image/package is scanned.
+
 ## 2026-09-17 — evidence-based enterprise review
 
 - **Fail-closed must preserve profile semantics.** Removing a synthetic no-network `200` should make missing-driver evidence visible in smoke while making release-gate fail; changing every informational smoke into a hard error would be a different contract. Test both profiles explicitly.

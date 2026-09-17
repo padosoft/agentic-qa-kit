@@ -285,6 +285,25 @@ jobs:
             echo "No packages yet — gate placeholder."
           fi
 
+      - name: Generate CycloneDX SBOM for the built repository
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: aqa-sbom.cdx.json
+          artifact-name: aqa-sbom-cyclonedx
+
+      - name: Validate CycloneDX SBOM
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const bom = JSON.parse(readFileSync('aqa-sbom.cdx.json', 'utf8'));
+          if (bom.bomFormat !== 'CycloneDX' || !bom.specVersion || !Array.isArray(bom.components) || bom.components.length === 0) {
+            throw new Error('SBOM is not a non-empty CycloneDX component inventory');
+          }
+          console.log(`CycloneDX ${bom.specVersion}: ${bom.components.length} components`);
+          NODE
+
   e2e-cli:
     name: E2E (CLI smoke)
     runs-on: ubuntu-latest
