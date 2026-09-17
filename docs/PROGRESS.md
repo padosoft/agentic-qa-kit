@@ -19,6 +19,12 @@
   failed**; PostgreSQL provider coverage remains an external-DSN/CI journey.
   Next: run the complete hosted matrix on the PR.
 
+- **Commerce refund integrity merged to `main`.** PR #63 was squash-merged as
+  `2c87ca5` after the complete hosted matrix passed: 10/10 jobs green,
+  including PostgreSQL 16, Node 22, OCI sandbox, CLI smoke and Playwright
+  admin UI. This closes the implementation slice; live payment settlement and
+  provider reconciliation remain deployment evidence.
+
 - **Budget kill-switch API merged to `main`.** PR #62 was squash-merged as
   `b81cdbc` after the complete GitHub CI matrix passed: 10/10 jobs green,
   including Node 22, PostgreSQL 16, OCI sandbox, CLI smoke and Playwright
