@@ -17,6 +17,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { FileArtifactStore } from '@aqa/artifacts';
+import { verifyEventChain } from '@aqa/compliance';
 import {
   type ScenarioOutcome,
   type ScenarioOutcomeSummary,
@@ -138,6 +139,13 @@ export function runReport(opts: ReportOptions): ReportResult {
     return {
       ok: false,
       error: `report: cannot read events.jsonl: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+  const chain = verifyEventChain(events as Parameters<typeof verifyEventChain>[0]);
+  if (!chain.ok) {
+    return {
+      ok: false,
+      error: `report: audit chain verification failed at event ${chain.bad_index}: ${chain.reason ?? 'unknown error'}`,
     };
   }
 

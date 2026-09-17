@@ -44,8 +44,24 @@ function makeRunDir(root: string, runId: string): string {
   return dir;
 }
 
-function sha256Hex(s: string): string {
-  return createHash('sha256').update(s, 'utf8').digest('hex');
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`)
+    .join(',')}}`;
+}
+
+function sealEvents(events: Array<Record<string, unknown>>): void {
+  let previous = '0'.repeat(64);
+  for (const [index, event] of events.entries()) {
+    const { prev_hash: _prevHash, hash: _hash, ...rest } = event;
+    event.prev_hash = index === 0 ? null : previous;
+    event.hash = createHash('sha256').update(previous).update(canonical(rest)).digest('hex');
+    previous = String(event.hash);
+  }
 }
 
 /** Build minimal valid hash-chained events.jsonl. */
@@ -54,18 +70,10 @@ function writeEvents(
   opts: { runId: string; profile: string; project: string; findingsCount: number },
 ): void {
   const events: Array<Record<string, unknown>> = [];
-  let prev: string | null = null;
   function append(partial: Omit<Record<string, unknown>, 'seq' | 'prev_hash' | 'hash'>): void {
     const seq = events.length;
-    // Hash recomputation here is a stub — the writer's exact canonicalization
-    // is exercised in @aqa/runner / @aqa/compliance tests. `aqa report`
-    // doesn't validate the chain (it just parses fields), so any
-    // deterministic stub hash keeps schema.parse happy.
-    const body = JSON.stringify({ ...partial, seq });
-    const hash = sha256Hex((prev ?? '') + body);
-    const evt = { schema_version: '1', seq, prev_hash: prev, hash, ...partial };
+    const evt = { schema_version: '1', seq, ...partial };
     events.push(evt);
-    prev = hash;
   }
   append({
     ts: STARTED_AT,
@@ -89,6 +97,7 @@ function writeEvents(
       runtime_errors: 0,
     },
   });
+  sealEvents(events);
   writeFileSync(
     join(runDir, 'events.jsonl'),
     `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
@@ -278,6 +287,28 @@ describe('aqa report — error cases', () => {
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.match(result.error, /cannot read events\.jsonl/);
+  });
+
+  it('refuses to render a tampered audit chain', () => {
+    const root = makeTempRoot();
+    const runDir = makeRunDir(root, RUN_ID);
+    writeEvents(runDir, { runId: RUN_ID, profile: 'smoke', project: 'demo', findingsCount: 0 });
+    writeFindings(runDir, 0);
+    const path = join(runDir, 'events.jsonl');
+    const events = readFileSync(path, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const first = events[0];
+    assert.ok(first);
+    const payload = first.payload as Record<string, unknown>;
+    payload.project = 'tampered-project';
+    writeFileSync(path, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8');
+
+    const result = runReport({ root, runId: RUN_ID });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /audit chain verification failed/);
   });
 
   it('returns error when events.jsonl is missing (Copilot iter 1 P1)', () => {
@@ -480,6 +511,7 @@ describe('aqa report — state reconstruction (Copilot iter 1 P1)', () => {
         },
       },
     ];
+    sealEvents(events);
     writeFileSync(
       join(runDir, 'events.jsonl'),
       `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
@@ -531,6 +563,7 @@ describe('aqa report — state reconstruction (Copilot iter 1 P1)', () => {
         },
       },
     ];
+    sealEvents(events);
     writeFileSync(
       join(runDir, 'events.jsonl'),
       `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
@@ -561,6 +594,7 @@ describe('aqa report — state reconstruction (Copilot iter 1 P1)', () => {
         payload: { profile: 'smoke', project: 'demo' },
       },
     ];
+    sealEvents(events);
     writeFileSync(
       join(runDir, 'events.jsonl'),
       `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,

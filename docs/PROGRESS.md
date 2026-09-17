@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Report audit-chain verification.** `aqa report` now verifies every parsed
+  event with `@aqa/compliance.verifyEventChain` before reconstructing state or
+  writing Markdown/JSON output. Tampered payloads fail closed; fixtures now
+  use production-compatible canonical SHA-256 sealing and include a negative
+  regression. ADR-126 records the local-integrity boundary.
+- Evidence: focused report suite **138 passed / 2 platform skips** after the
+  kit build. Full workspace gates are next; independent checkpoint/WORM
+  completeness and live deployment evidence remain open.
+
 - **HTTP error disclosure hardening.** Added shared `safeErrorMessage()` in
   `@aqa/observability` and wired it into server and bundled-admin failure
   responses. DSNs, bearer tokens, JWTs, cloud keys, PAN/IBAN values, secret

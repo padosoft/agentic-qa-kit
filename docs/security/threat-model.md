@@ -52,7 +52,7 @@ Boundaries (anywhere a security decision must be enforced):
 
 | ID | Threat | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| T-01 | Audit log tamper | Critical | Hash-chained `events.jsonl` (`sha256(prev_hash ‖ canonical(rest))`); `aqa-audit-verify` re-walks the chain. | Mitigated |
+| T-01 | Audit log tamper | Critical | Hash-chained `events.jsonl` (`sha256(prev_hash ‖ canonical(rest))`); `aqa-audit-verify` and `aqa report` re-walk the chain before trusting events. | **Partial — local payload tampering is detected; independent checkpoint/WORM storage is still required against full-file rewrite or truncation.** |
 | T-02 | Finding tamper post-emission | High | Findings written to append-only store; hash chain references finding events. | Mitigated |
 | T-03 | Pack manifest swap after signing | Critical | Signature covers manifest hash; load-time verification rejects mismatch. | Mitigated |
 | T-04 | DB write bypass (runner writes findings directly) | High | Runner cannot write to store; goes through server API gated by RBAC. | Mitigated |

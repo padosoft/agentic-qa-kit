@@ -1248,3 +1248,11 @@ separate classifier instead of pretending text redaction protects them.
 again.” Stateful systems can produce different oracle failures on each run;
 persist the original fingerprint and require every replay attempt to match it,
 otherwise deterministic verification is a false green.
+
+# 2026-09-17 — report consumers must verify audit input
+
+An audit-chain verifier is not sufficient if a downstream report renderer
+trusts the same JSONL fields without invoking it. Every consumer that derives
+release or compliance output from audit events must verify the chain first;
+local verification still does not replace an independent checkpoint or WORM
+store for completeness and authorship.
