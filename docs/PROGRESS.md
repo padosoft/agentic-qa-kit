@@ -11,6 +11,9 @@
 
 ## 2026-09-17
 
+- **Server identifier hardening.** API job/event IDs now use Node
+  `crypto.randomUUID()` instead of a hand-rolled `Math.random()` generator;
+  this removes predictable identifiers from queue and notification boundaries.
 - **Run enqueue idempotency and tenant boundary shipped.** `POST /api/runs`
   now requires org/project scope, embeds that scope in the job payload, binds
   `Idempotency-Key` to a canonical request fingerprint, returns the same job

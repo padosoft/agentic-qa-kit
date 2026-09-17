@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/pack-author';
@@ -187,12 +188,7 @@ function notFound(what: string): ApiResponse {
 }
 
 function cryptoUuid(): string {
-  return `${hex(8)}-${hex(4)}-4${hex(3)}-${hex(4)}-${hex(12)}`;
-}
-function hex(n: number): string {
-  let s = '';
-  for (let i = 0; i < n; i += 1) s += Math.floor(Math.random() * 16).toString(16);
-  return s;
+  return randomUUID();
 }
 
 function canonicalJson(value: unknown): string {

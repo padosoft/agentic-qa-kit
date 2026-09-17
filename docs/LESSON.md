@@ -459,6 +459,12 @@ different project or with a different request body. Qualify the key by the
 authorized scope, persist a canonical payload fingerprint, and compare after
 the unique-key conflict; otherwise a retry can silently return the wrong job.
 
+# 2026-09-17 — identifiers at trust boundaries need CSPRNG
+
+UUID-shaped strings generated with `Math.random()` are not security IDs.
+Queue/job/event identifiers cross tenant and retry boundaries, so use the
+runtime CSPRNG (`crypto.randomUUID`) rather than relying on visual UUID shape.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration
