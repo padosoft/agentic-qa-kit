@@ -151,3 +151,10 @@
 - Added canonical parsed-JSON digest verification to `@aqa/pack-scanner`; this is integrity verification only and does not establish Sigstore publisher trust.
 - Evidence: `bun run --filter @aqa/pack-scanner test` (8 passed), `bun run --filter @aqa/server test` (96 passed), `bun run --filter @aqa/server typecheck` (passed).
 - Next: implement durable artifact storage and redaction-aware artifact lifecycle; remaining enterprise gaps include WORM audit transactionality, OIDC/Vault/S3/Sigstore trust roots, live LLM adapters, and ecommerce journey packs.
+
+# 2026-09-17 — artifact storage contract
+
+- Added `@aqa/artifacts` with `ArtifactStore` and local `FileArtifactStore` implementation: content SHA-256 references, atomic temp-file writes, metadata sidecars, safe relative keys, traversal rejection, text/JSON pre-write redaction and explicit binary API.
+- Added canary tests for bearer/JWT/AWS/PAN/email redaction, JSON key redaction, binary byte preservation, deletion and traversal resistance; added ADR-013.
+- Evidence: `bun run --filter @aqa/artifacts test` (3 passed), typecheck and build passed.
+- Honest gap: existing runner/reporter/server paths still write directly to `.aqa/runs`; wiring them to this contract plus S3/MinIO/WORM/tenant authorization is the next acceptance slice.

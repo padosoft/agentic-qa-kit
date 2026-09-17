@@ -287,3 +287,7 @@
 # 2026-09-17 — every install route must share the safety boundary
 
 The YAML import route had schema/scanner/conflict controls while the older JSON route explicitly bypassed them. Enterprise hardening must audit all equivalent mutation routes, not only the newest UI path. Parsed JSON also loses the original YAML bytes, so signature verification needs a documented canonical-manifest digest; that still proves integrity, not publisher identity.
+
+# 2026-09-17 — artifact integrity starts at the writer boundary
+
+An artifact hash is meaningful only after redaction and normalization, otherwise the digest attests to bytes that must not be stored. Keep text/JSON redaction explicit, make binary writes opt-in, reject traversal before filesystem resolution, and use atomic replacement. The initial store contract is useful only once run finalization and API download paths stop bypassing it.
