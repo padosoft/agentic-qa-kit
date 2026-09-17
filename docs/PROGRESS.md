@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added the paid-order cancellation journey.** Commerce adapters can now
+  expose an optional cancellation mutation; `verifyCancellationJourney()`
+  checks customer-scoped checkout, idempotent retry, accepted decision and
+  compensating refund linkage. The aggregate suite can include it without
+  treating unsupported providers as green. Commerce contracts remain **30
+  pass / 0 fail** locally; provider void/refund, fulfillment release and
+  durable external idempotency remain live evidence.
+
 - **Added the provider-neutral commerce journey suite gate.**
   `verifyCommerceJourneySuite()` now executes required checkout/refund flows
   and optional tax/shipping/webhook flows, prefixes their evidence, and keeps

@@ -38,6 +38,8 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyCommerceJourneySuite()` combines required checkout/refund evidence
   with optional tax, shipping and webhook journeys into one explicit gate;
   unsupported capabilities remain visible and never become a green result.
+- `verifyCancellationJourney()` verifies accepted paid-order cancellation is
+  idempotent and linked to compensating refund evidence.
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.

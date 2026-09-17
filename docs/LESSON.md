@@ -1,5 +1,10 @@
 # Lessons
 
+- **Paid cancellation is a compensating transaction.** A cancellation status
+  without linked refund/void evidence is not a safe ecommerce result. Model
+  the provider capability explicitly, retry it with the same idempotency key,
+  and keep provider-specific void/refund policy outside the generic oracle.
+
 - **A list of journey functions is not an execution gate.** Commerce callers
   need one explicit suite boundary that preserves per-journey evidence and
   makes unsupported capabilities visible. Aggregate only requested journeys,
