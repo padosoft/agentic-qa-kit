@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@aqa/schemas": "workspace:*",
-    "yaml": "^2.6.0"
+    "yaml": "^2.6.0",
+    "zod": "^3.24.1"
   },
   "publishConfig": { "access": "public" }
 }

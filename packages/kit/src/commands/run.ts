@@ -43,7 +43,13 @@ import {
   parseEventLines,
 } from '@aqa/compliance';
 import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
-import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
+import {
+  type LoadedPack,
+  appliesWhen,
+  loadPack,
+  loadPackResources,
+  resolvePackScenario,
+} from '@aqa/pack-loader';
 import { verifyPackContentDigest } from '@aqa/pack-scanner';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import {
@@ -570,6 +576,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   let cancelled = false;
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
+    let resources: ReturnType<typeof loadPackResources>;
     try {
       pack = loadPack(packDir);
       const contentIntegrity = verifyPackContentDigest(pack.root, pack.manifest);
@@ -577,6 +584,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         packErrors.push(`${packDir}: ${contentIntegrity.reason}`);
         continue;
       }
+      // Resource declarations are part of the signed pack boundary. Load and
+      // validate them before any scenario can execute; missing or unsafe
+      // declarations are coverage errors, never silently ignored.
+      resources = loadPackResources(pack);
     } catch (e) {
       packErrors.push(`${packDir}: ${e instanceof Error ? e.message : String(e)}`);
       continue;
@@ -628,7 +639,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     for (const scenarioPath of paths) {
       let scenario: Scenario.Scenario;
       try {
-        scenario = Scenario.Scenario.parse(readYaml<unknown>(scenarioPath));
+        scenario = resolvePackScenario(
+          Scenario.Scenario.parse(readYaml<unknown>(scenarioPath)),
+          resources,
+        );
       } catch (e) {
         scenarioErrors.push(`${scenarioPath}: ${e instanceof Error ? e.message : String(e)}`);
         continue;

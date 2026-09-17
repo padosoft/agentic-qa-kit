@@ -17,11 +17,11 @@ my-pack/
 
 # Optional / reserved (do NOT create today unless you have a reason —
 # see note below; `aqa pack new` deliberately omits these):
-# ├── oracles/*.yaml       # reserved for a future custom-oracle loader
-# └── probes/*.yaml        # reserved for a future custom-probe loader
+# ├── oracles/*.yaml       # reusable declarative oracle definitions
+# └── probes/*.yaml        # reusable declarative probe definitions
 ```
 
-> **Note on `oracles/` and `probes/`:** the manifest schema accepts these fields, but **`aqa run` does not load or validate them yet** — it only iterates `manifest.scenarios` and only those paths are checked for existence/safety today (custom oracle/probe loading, plus existence checks for `oracles:` / `probes:` / `risks:` entries, are tracked as v1.7.x follow-ups). Oracle evaluation today is limited to the three built-in kinds wired into `@aqa/runner.builtInOracles`, and probe execution comes only from `scenario.steps[].kind`. The `oracles:` / `probes:` manifest arrays and the matching directories are reserved for a future loader; populate them if you want to forward-declare intent, but don't expect listing a file there to make it run, and don't expect `aqa run` to fail if a listed path is missing.
+> **Custom resources:** `aqa run` loads and validates every manifest-listed `oracles:` and `probes:` file before executing any scenario. A scenario can reference a reusable definition with `kind: custom` and `with: { ref: <id> }`; the loader expands it to a built-in, declarative kind. Paths must stay inside the pack, symlink escapes are rejected, missing files and duplicate IDs fail closed, and the files are covered by the pack content digest. Executable JavaScript is intentionally not supported in pack resources: host-owned probe drivers remain the explicit security boundary.
 
 Drop it under `<your-project>/packs/my-pack/`, reference `my-pack` from `.aqa/profiles.yaml`, and `aqa run` will pick it up. To share it across projects, the recommended path is to **publish under your own npm scope** (`@your-scope/pack-myname` — anyone can claim a free npm scope) and have consumers install it. Because `aqa run`'s default discovery scans `<project>/node_modules/@aqa/*`, consumers wire your pack in by adding an npm alias entry (`"@aqa/pack-myname": "npm:@your-scope/pack-myname"` in their `package.json`) so the installed package lands under `node_modules/@aqa/*` and is auto-discovered. Publishing under the `@aqa` scope itself is reserved for first-party packs and is not available to community authors — use the alias pattern instead, or vendor/copy the pack directly under `<project>/packs/`. See "How `aqa run` resolves your pack" below for the constraints.
 

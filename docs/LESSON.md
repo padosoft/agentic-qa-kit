@@ -1890,3 +1890,17 @@ real queue and store still disagree with REST. Add a concrete port that reuses
 the authoritative queue idempotency, lease fencing and tenant-scoped store,
 then test plan → start → status across that boundary. Live database,
 authentication and transport evidence remain separate.
+# 2026-09-18 — custom pack resources must be declarative and fail closed
+
+Manifest-listed probe/oracle files are part of the signed pack boundary, not
+documentation. Load them before the first scenario, reject missing paths,
+duplicate IDs and symlink escapes, and expand only explicit `with.ref`
+references into built-in contracts. Do not add executable pack JavaScript: the
+host-owned driver/sandbox boundary is easier to audit and keeps pack content
+portable and reviewable.
+
+The first hosted run exposed an important compatibility boundary: bundled packs
+already used `description`, `template` and `inputs` metadata in resource files.
+The loader must preserve that authoring format while normalizing only the
+executable contract; rejecting valid legacy metadata breaks the shipped kit.
+The regression is covered by bundled discovery plus a real `aqa run` journey.

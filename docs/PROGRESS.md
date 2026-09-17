@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Closed the custom pack-resource gap.** `aqa run` now loads and validates
+  every manifest-listed declarative probe/oracle definition before execution,
+  rejects missing/duplicate/escaping/symlinked resources, and expands explicit
+  `kind: custom` + `with.ref` references into built-in contracts. Resource
+  files are already inside the content-digest boundary; no executable pack
+  code is introduced. Evidence: workspace typecheck, Biome lint and seven
+  pack-loader regression tests pass. Next: integrate the branch and continue
+  the remaining production-evidence audit (real KMS/WORM/PITR/IdP and external
+  security validation).
+
 - **Started the evidence-integrity macro task.** The server coverage projection
   now verifies every run's hash-chained audit events before deriving risk
   coverage and returns a bounded `AUDIT_CHAIN_INVALID` error on tampering. The
