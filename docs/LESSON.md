@@ -1402,3 +1402,9 @@ network I/O, and make destinations idempotent with a stable delivery ID.
 An HTTPS origin allowlist is necessary but not sufficient for SSRF safety:
 production transports must also pin/validate DNS results and reject private,
 loopback, link-local and metadata-service addresses at connection time.
+
+# 2026-09-17 — templates must not become credential adapters
+
+Keep Slack/Teams/Jira/PagerDuty payload rendering pure and deterministic. A
+formatter should never accept or serialize routing keys, tokens or secrets;
+the queue and secret resolver own delivery authentication, retry and audit.

@@ -11,3 +11,8 @@ export {
   type WebhookTransport,
   type WebhookSecretResolver,
 } from './webhook.js';
+export {
+  renderIntegrationPayload,
+  type IntegrationNotification,
+  type IntegrationProvider,
+} from './providers.js';

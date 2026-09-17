@@ -1152,3 +1152,14 @@
 - Remaining: wire a secret-manager implementation and authenticated admin
   endpoint/metrics, enforce transport-level DNS/private-IP protections, and
   prove a real provider journey. Durable origin allowlisting is now enforced.
+
+# 2026-09-17 — provider-neutral integration templates
+
+- Added deterministic payload renderers for Slack, Teams Adaptive Cards, Jira
+  issue creation and PagerDuty Events API. Payloads carry event metadata but no
+  routing key, secret or credential; delivery remains owned by the signed,
+  durable webhook queue.
+- Evidence: integrations suite **5 pass** locally, package typecheck/lint and
+  repository diff checks pass. No external provider was contacted.
+- Remaining: secret-manager implementation, audit/metrics observer, transport
+  DNS/private-IP enforcement and real provider journeys.

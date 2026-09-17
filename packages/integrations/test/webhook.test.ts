@@ -7,6 +7,7 @@ import {
   type WebhookTransport,
   signWebhook,
 } from '../dist/index.js';
+import { renderIntegrationPayload } from '../dist/index.js';
 
 const request = (id: string) => ({
   id,
@@ -95,5 +96,30 @@ describe('outbound webhooks', () => {
     } finally {
       await queue.close();
     }
+  });
+
+  it('renders provider payloads without credentials', () => {
+    const notification = {
+      event: 'finding.created',
+      title: 'Critical finding',
+      text: 'Checkout authorization bypass detected',
+      severity: 'critical' as const,
+      finding_id: 'f-1',
+      run_id: 'r-1',
+    };
+    for (const provider of ['slack', 'teams', 'jira', 'pagerduty'] as const) {
+      const payload = renderIntegrationPayload(provider, notification);
+      assert.equal(JSON.stringify(payload).includes('routing_key'), false);
+      assert.equal(JSON.stringify(payload).includes('secret'), false);
+    }
+    assert.equal(
+      (renderIntegrationPayload('pagerduty', notification) as { event_action: string })
+        .event_action,
+      'trigger',
+    );
+    assert.throws(
+      () => renderIntegrationPayload('slack', { ...notification, title: '' }),
+      /required/,
+    );
   });
 });
