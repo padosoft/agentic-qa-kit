@@ -1,3 +1,4 @@
+import { renderAgentsMd } from './common.js';
 import type { Adapter, RenderContext, RenderedFile } from './types.js';
 
 const INSTRUCTIONS = (ctx: RenderContext) => `# GitHub Copilot instructions — \`${ctx.projectName}\`
@@ -35,6 +36,7 @@ export const copilotAdapter: Adapter = {
   },
   render(ctx: RenderContext): RenderedFile[] {
     return [
+      { path: 'AGENTS.md', kind: 'instruction', contents: renderAgentsMd(ctx) },
       { path: '.github/copilot-instructions.md', kind: 'instruction', contents: INSTRUCTIONS(ctx) },
       { path: '.github/skills/aqa-run/SKILL.md', kind: 'skill', contents: SKILL_AQA_RUN },
     ];

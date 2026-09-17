@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Fixed single-target agent bootstrap consistency.** Claude, Gemini and
+  Copilot adapters now emit the canonical `AGENTS.md` they already reference,
+  matching Codex behavior. Adapter tests cover every target's bootstrap and
+  interoperable `SKILL.md` layout. Host-version discovery and execution remain
+  separate operational evidence.
+
 - **Added bounded source reachability to risk discovery.** The source method
   now filters JS/TS signals through a non-executing relative-import graph,
   preserves dependency manifests, and emits explicit
