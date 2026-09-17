@@ -153,7 +153,10 @@ describe('AgentTrajectoryRecorder', () => {
         return row ? [{ run_id: run, scenario_id: scenario, ...row }] : [];
       },
     };
-    const store = new PostgresAgentTrajectoryStore({ client });
+    const store = new PostgresAgentTrajectoryStore({
+      client,
+      allow_unsafe_migration_without_transaction: true,
+    });
     const snapshot = recorder().snapshot();
     const first = await store.save(snapshot);
     const retry = await store.save(snapshot);
@@ -197,7 +200,14 @@ describe('AgentTrajectoryRecorder', () => {
   it('requires a DSN or injected client and rejects unsafe database identities', async () => {
     assert.throws(() => new PostgresAgentTrajectoryStore({}), /PostgreSQL DSN is required/);
     const client = { unsafe: async () => [] };
-    const store = new PostgresAgentTrajectoryStore({ client });
+    assert.throws(
+      () => new PostgresAgentTrajectoryStore({ client }),
+      /client must provide begin\(\)/,
+    );
+    const store = new PostgresAgentTrajectoryStore({
+      client,
+      allow_unsafe_migration_without_transaction: true,
+    });
     await assert.rejects(() => store.load('../escape', 'scenario-agent'), /path segment/);
   });
 });

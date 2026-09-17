@@ -143,6 +143,7 @@ export interface PostgresTrajectoryStoreOptions {
   dsn?: string;
   client?: PostgresTrajectoryClient;
   max_bytes?: number;
+  allow_unsafe_migration_without_transaction?: boolean;
 }
 
 export interface PostgresTrajectoryClient {
@@ -162,12 +163,17 @@ interface StoredPostgresTrajectory {
 export class PostgresAgentTrajectoryStore {
   private readonly sql: PostgresTrajectoryClient;
   private readonly maxBytes: number;
+  private readonly allowUnsafeMigrationWithoutTransaction: boolean;
   private readonly ownedClient: Sql | undefined;
   private readonly ready: Promise<void>;
 
   constructor(options: PostgresTrajectoryStoreOptions) {
+    this.allowUnsafeMigrationWithoutTransaction =
+      options.allow_unsafe_migration_without_transaction ?? false;
     if (options.client) {
       this.sql = options.client;
+      if (!this.sql.begin && !this.allowUnsafeMigrationWithoutTransaction)
+        throw new Error('trajectory PostgreSQL client must provide begin() for safe migrations');
     } else {
       if (!options.dsn?.trim()) throw new Error('trajectory PostgreSQL DSN is required');
       this.ownedClient = postgres(options.dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
@@ -268,6 +274,8 @@ export class PostgresAgentTrajectoryStore {
       });
       return;
     }
+    if (!this.allowUnsafeMigrationWithoutTransaction)
+      throw new Error('trajectory PostgreSQL client must provide begin() for safe migrations');
     await createTable(this.sql);
   }
 

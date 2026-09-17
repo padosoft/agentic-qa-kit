@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — unsafe injected clients must be explicit
+
+A custom PostgreSQL client that lacks a transaction primitive cannot provide
+the same bootstrap guarantees as the production driver. Keep mock-only
+migration fallbacks behind an explicit opt-in, and document hosted CI evidence
+by commit/run so old green runs cannot accidentally certify a newer race fix.
+
 # 2026-09-18 — every durable adapter needs a transaction-scoped bootstrap lock
 
 `CREATE TABLE IF NOT EXISTS` is not sufficient under concurrent PostgreSQL
