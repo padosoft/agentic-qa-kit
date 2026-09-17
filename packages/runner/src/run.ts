@@ -7,6 +7,7 @@ import { type OracleResult, type ProbeRunResult, evaluateOracle } from './oracle
 
 export interface ScenarioRunResult {
   scenario_id: string;
+  outcome: 'pass' | 'fail' | 'error' | 'blocked' | 'not_run';
   execution_status: 'completed' | 'failed';
   execution_error?: string;
   probes: readonly ProbeRunResult[];
@@ -215,6 +216,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
     const preflightError = preflightResults[0]?.error ?? cleanupResults[0]?.error;
     const preflightResult: ScenarioRunResult = {
       scenario_id: opts.scenario.id,
+      outcome: 'blocked',
       execution_status: 'failed',
       probes: preflightResults,
       cleanup: cleanupResults,
@@ -296,6 +298,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   }
   return {
     scenario_id: opts.scenario.id,
+    outcome: executionFailures.length > 0 ? 'error' : failed.length > 0 ? 'fail' : 'pass',
     execution_status: executionFailures.length > 0 ? 'failed' : 'completed',
     ...(executionError ? { execution_error: executionError } : {}),
     probes: probeResults,

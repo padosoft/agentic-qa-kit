@@ -45,6 +45,7 @@ describe('runScenario', () => {
       findingIdSeed: 1,
     });
     assert.equal(result.oracles[0]?.passed, false);
+    assert.equal(result.outcome, 'fail');
     assert.ok(result.finding);
     assert.equal(result.finding?.severity, 'high');
     assert.equal(findings.snapshot().length, 1);
@@ -61,6 +62,7 @@ describe('runScenario', () => {
       probeRunner: async (p) => ({ probe_id: p.id, status: 401 }),
     });
     assert.equal(result.oracles[0]?.passed, true);
+    assert.equal(result.outcome, 'pass');
     assert.equal(result.finding, null);
   });
 
@@ -76,6 +78,7 @@ describe('runScenario', () => {
     });
     assert.equal(result.probes[0]?.error, 'no probe runner configured');
     assert.equal(result.execution_status, 'failed');
+    assert.equal(result.outcome, 'error');
     assert.equal(result.oracles[0]?.passed, false);
     assert.equal(result.finding, null);
   });
@@ -97,6 +100,7 @@ describe('runScenario', () => {
     });
     assert.deepEqual(calls, []);
     assert.equal(result.execution_status, 'failed');
+    assert.equal(result.outcome, 'blocked');
     assert.match(result.execution_error ?? '', /playwright.*not supported/i);
     assert.equal(result.cleanup.length, 1, 'unsupported cleanup is recorded but never executed');
     assert.equal(result.finding, null);

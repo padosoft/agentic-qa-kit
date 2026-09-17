@@ -38,6 +38,11 @@
   It is not a DB permission boundary; a production adapter still needs a
   dedicated read-only role, timeout, tenant views and live provider evidence.
 
+- **Canonical scenario outcomes added.** Runner results now distinguish
+  `pass`, `fail`, `error`, `blocked` and reserved `not_run`, separating SUT
+  assertion failures from provider/driver gaps. CLI/report persistence still
+  needs to expose the field end-to-end for complete outcome coverage.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

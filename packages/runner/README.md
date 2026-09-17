@@ -22,6 +22,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   adapter, separate parameters, `SELECT`/`WITH`/`EXPLAIN`-only policy, row
   limits and evidence redaction. It complements, but never replaces, a
   database read-only role and statement timeout.
+- **Canonical outcomes** — scenario results distinguish `pass`, `fail`,
+  `error`, `blocked` and reserved `not_run`; missing capabilities never look
+  like a passing assertion.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

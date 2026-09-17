@@ -23,6 +23,12 @@
   database role, tenant-scoped views and statement timeout. A lexical guard
   alone cannot make an untrusted database credential safe.
 
+- **Execution status and outcome are different contracts.** A failed transport
+  is not a failed SUT assertion, and an unavailable capability is not an
+  infrastructure error. Persist a canonical outcome so gates can distinguish
+  `fail`, `error` and `blocked` instead of reducing all non-pass states to one
+  ambiguous boolean.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the
