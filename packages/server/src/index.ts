@@ -8,6 +8,7 @@ export {
 } from './api.js';
 export {
   RunnerQueue,
+  IdempotencyConflictError,
   type EnqueuedJob,
   type RunnerJob,
   type RunnerQueueLike,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { RunnerQueue } from '../dist/runner-queue.js';
+import { IdempotencyConflictError, RunnerQueue } from '../dist/runner-queue.js';
 
 const JOB = { id: 'job-1', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' };
 
@@ -70,5 +70,33 @@ describe('RunnerQueue', () => {
     assert.match(failed?.failure_reason ?? '', /maximum attempts/i);
     assert.equal(q.fail(JOB.id, second?.lease_token, 'late failure'), false);
     assert.ok(first?.lease_token);
+  });
+
+  it('returns the same job for an idempotent retry and rejects a changed payload', () => {
+    const q = new RunnerQueue();
+    const first = q.enqueue({
+      ...JOB,
+      id: 'job-idempotent-1',
+      idempotency_key: 'tenant/project:key',
+      idempotency_fingerprint: 'fingerprint-a',
+    });
+    const retry = q.enqueue({
+      ...JOB,
+      id: 'job-idempotent-2',
+      idempotency_key: 'tenant/project:key',
+      idempotency_fingerprint: 'fingerprint-a',
+    });
+    assert.equal(retry.id, first.id);
+    assert.equal(q.size(), 1);
+    assert.throws(
+      () =>
+        q.enqueue({
+          ...JOB,
+          id: 'job-idempotent-3',
+          idempotency_key: 'tenant/project:key',
+          idempotency_fingerprint: 'fingerprint-b',
+        }),
+      IdempotencyConflictError,
+    );
   });
 });

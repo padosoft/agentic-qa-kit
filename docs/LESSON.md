@@ -452,6 +452,13 @@ therefore validates a bounded envelope, isolates subscriber failures, and
 documents store-first persistence plus reconciliation; runner jobs remain on
 the durable queue.
 
+# 2026-09-17 — idempotency must bind tenant and payload
+
+An idempotency key alone is unsafe: the same client token can be replayed in a
+different project or with a different request body. Qualify the key by the
+authorized scope, persist a canonical payload fingerprint, and compare after
+the unique-key conflict; otherwise a retry can silently return the wrong job.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration

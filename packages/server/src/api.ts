@@ -30,6 +30,7 @@ import type {
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
 import type { EventBus } from './event-bus.js';
+import { IdempotencyConflictError } from './runner-queue.js';
 import type { RunnerQueueLike } from './runner-queue.js';
 
 export interface ApiContext {
@@ -194,6 +195,17 @@ function hex(n: number): string {
   return s;
 }
 
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.fromEntries(
+      Object.entries(current as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, item]),
+    );
+  });
+}
+
 async function publishApiEvent(
   ctx: ApiContext,
   req: ApiRequest,
@@ -266,13 +278,44 @@ export function makeApi(): ApiHandler[] {
       path: '/api/runs',
       requires: 'runs:create',
       async handle(req, ctx) {
-        const job = await ctx.queue.enqueue({
-          id: cryptoUuid(),
-          payload: req.body as Record<string, unknown>,
-          enqueued_at: new Date().toISOString(),
-        });
-        await publishApiEvent(ctx, req, 'run.requested', { job_id: job.id });
-        return asResponse({ job }, 202);
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+          return { status: 400, body: { error: 'run request body must be an object' } };
+        }
+        const payload = {
+          ...(req.body as Record<string, unknown>),
+          org: s.org,
+          project: s.project,
+        };
+        const rawKey = req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'];
+        const idempotencyKey = rawKey?.trim();
+        if (
+          idempotencyKey !== undefined &&
+          (idempotencyKey.length === 0 || idempotencyKey.length > 200)
+        ) {
+          return { status: 400, body: { error: 'Idempotency-Key must be 1..200 characters' } };
+        }
+        try {
+          const job = await ctx.queue.enqueue({
+            id: cryptoUuid(),
+            payload,
+            enqueued_at: new Date().toISOString(),
+            ...(idempotencyKey
+              ? {
+                  idempotency_key: `${s.org}/${s.project}:${idempotencyKey}`,
+                  idempotency_fingerprint: canonicalJson(payload),
+                }
+              : {}),
+          });
+          await publishApiEvent(ctx, req, 'run.requested', { job_id: job.id });
+          return asResponse({ job }, 202);
+        } catch (error) {
+          if (error instanceof IdempotencyConflictError) {
+            return { status: 409, body: { error: error.message, code: 'IDEMPOTENCY_CONFLICT' } };
+          }
+          throw error;
+        }
       },
     },
     {

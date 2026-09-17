@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Run enqueue idempotency and tenant boundary shipped.** `POST /api/runs`
+  now requires org/project scope, embeds that scope in the job payload, binds
+  `Idempotency-Key` to a canonical request fingerprint, returns the same job
+  for identical retries and returns `409 IDEMPOTENCY_CONFLICT` for changed
+  retries. Memory and PostgreSQL queue contracts cover the behavior; ADR-030
+  documents retention as a remaining operational concern.
 - **EventBus integrated into API/admin lifecycle.** `ApiContext` can now emit
   store-first `run.requested` and `finding.status_changed` notifications, and
   `aqa admin` can inject or construct `PostgresEventBus` from

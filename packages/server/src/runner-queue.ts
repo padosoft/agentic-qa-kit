@@ -2,6 +2,10 @@ export interface RunnerJob {
   id: string;
   payload: Record<string, unknown>;
   enqueued_at: string;
+  /** Stable caller key for exactly-once enqueue retries. */
+  idempotency_key?: string;
+  /** Canonical request fingerprint bound to the idempotency key. */
+  idempotency_fingerprint?: string;
 }
 
 export interface EnqueuedJob extends RunnerJob {
@@ -21,6 +25,13 @@ export interface RunnerQueueLike {
   fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
 }
 
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super('[server/queue] idempotency key was reused with a different request');
+    this.name = 'IdempotencyConflictError';
+  }
+}
+
 /**
  * In-memory FIFO queue with visibility-timeout leases. Runner workers poll
  * `GET /api/runner/jobs/next` which calls `dequeue()`; if the worker dies
@@ -35,6 +46,10 @@ export class RunnerQueue {
   private readonly leaseMs: number;
 
   private readonly maxAttempts: number;
+  private readonly idempotency = new Map<
+    string,
+    { fingerprint: string | undefined; jobId: string }
+  >();
 
   constructor(opts: { lease_ms?: number; max_attempts?: number } = {}) {
     this.leaseMs = opts.lease_ms ?? 30_000;
@@ -42,6 +57,15 @@ export class RunnerQueue {
   }
 
   enqueue(job: RunnerJob): EnqueuedJob {
+    if (job.idempotency_key) {
+      const previous = this.idempotency.get(job.idempotency_key);
+      if (previous) {
+        if (previous.fingerprint !== job.idempotency_fingerprint)
+          throw new IdempotencyConflictError();
+        const existing = this.jobs.find((candidate) => candidate.id === previous.jobId);
+        if (existing) return { ...existing };
+      }
+    }
     const enq: EnqueuedJob = {
       ...job,
       status: 'queued',
@@ -49,6 +73,12 @@ export class RunnerQueue {
       max_attempts: this.maxAttempts,
     };
     this.jobs.push(enq);
+    if (job.idempotency_key) {
+      this.idempotency.set(job.idempotency_key, {
+        fingerprint: job.idempotency_fingerprint,
+        jobId: job.id,
+      });
+    }
     return enq;
   }
 

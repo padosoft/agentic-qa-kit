@@ -130,6 +130,31 @@ describe('makeApi', () => {
     assert.equal((events[0] as { type: string }).type, 'run.requested');
   });
 
+  it('POST /api/runs requires tenant scope and deduplicates retries', async () => {
+    const c = ctx();
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/runs');
+    const missingScope = await route?.handle(
+      { headers: {}, params: {}, body: { profile: 'smoke' } },
+      c,
+    );
+    assert.equal(missingScope?.status, 400);
+    const headers = { ...TENANT_HEADERS, 'Idempotency-Key': 'checkout-like-run-1' };
+    const first = await route?.handle({ headers, params: {}, body: { profile: 'smoke' } }, c);
+    const retry = await route?.handle({ headers, params: {}, body: { profile: 'smoke' } }, c);
+    assert.equal(first?.status, 202);
+    assert.equal(retry?.status, 202);
+    assert.equal(
+      (first?.body as { job: { id: string } }).job.id,
+      (retry?.body as { job: { id: string } }).job.id,
+    );
+    assert.equal(c.queue.size(), 1);
+    const conflict = await route?.handle(
+      { headers, params: {}, body: { profile: 'release-gate' } },
+      c,
+    );
+    assert.equal(conflict?.status, 409);
+  });
+
   it('GET /api/runner/jobs/next pops from the queue', async () => {
     const c = ctx();
     c.queue.enqueue({ id: 'job-1', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' });

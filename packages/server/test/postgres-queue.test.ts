@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { PostgresRunnerQueue } from '../dist/index.js';
+import { IdempotencyConflictError, PostgresRunnerQueue } from '../dist/index.js';
 
 describe('PostgresRunnerQueue', () => {
   it('survives reconnect and fences stale acknowledgements', async () => {
@@ -37,6 +37,48 @@ describe('PostgresRunnerQueue', () => {
       assert.equal(stored.find((job) => job.id === id)?.status, 'done');
     } finally {
       await reopened.close();
+    }
+  });
+
+  it('deduplicates the same idempotency key across queue clients', async (t) => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      t.skip('AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const first = new PostgresRunnerQueue(dsn);
+    const second = new PostgresRunnerQueue(dsn);
+    const key = `queue-idempotency-${randomUUID()}`;
+    try {
+      const original = await first.enqueue({
+        id: randomUUID(),
+        payload: { project: 'demo', profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+        idempotency_key: key,
+        idempotency_fingerprint: 'same-request',
+      });
+      const retry = await second.enqueue({
+        id: randomUUID(),
+        payload: { project: 'demo', profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+        idempotency_key: key,
+        idempotency_fingerprint: 'same-request',
+      });
+      assert.equal(retry.id, original.id);
+      await assert.rejects(
+        () =>
+          second.enqueue({
+            id: randomUUID(),
+            payload: { project: 'demo', profile: 'release-gate' },
+            enqueued_at: new Date().toISOString(),
+            idempotency_key: key,
+            idempotency_fingerprint: 'different-request',
+          }),
+        IdempotencyConflictError,
+      );
+    } finally {
+      await first.close();
+      await second.close();
     }
   });
 });

@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import type { EnqueuedJob, RunnerJob, RunnerQueueLike } from './runner-queue.js';
+import {
+  type EnqueuedJob,
+  IdempotencyConflictError,
+  type RunnerJob,
+  type RunnerQueueLike,
+} from './runner-queue.js';
 
 type StoredJob = {
   id: string;
@@ -13,6 +18,8 @@ type StoredJob = {
   attempts: number;
   max_attempts: number;
   failure_reason: string | null;
+  idempotency_key: string | null;
+  idempotency_fingerprint: string | null;
 };
 
 /** PostgreSQL-backed queue with row locking, visibility leases, and fencing tokens. */
@@ -55,6 +62,13 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS max_attempts integer NOT NULL DEFAULT 5',
       );
       await this.q('ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS failure_reason text');
+      await this.q('ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS idempotency_key text');
+      await this.q(
+        'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS idempotency_fingerprint text',
+      );
+      await this.q(
+        'CREATE UNIQUE INDEX IF NOT EXISTS aqa_runner_jobs_idempotency_idx ON aqa_runner_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL',
+      );
       await this.q(
         'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_ready_idx ON aqa_runner_jobs (status, enqueued_at, leased_until)',
       );
@@ -82,16 +96,36 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
       attempts: row.attempts,
       max_attempts: row.max_attempts,
       ...(row.failure_reason ? { failure_reason: row.failure_reason } : {}),
+      ...(row.idempotency_key ? { idempotency_key: row.idempotency_key } : {}),
+      ...(row.idempotency_fingerprint
+        ? { idempotency_fingerprint: row.idempotency_fingerprint }
+        : {}),
     };
   }
 
   async enqueue(job: RunnerJob): Promise<EnqueuedJob> {
     await this.wait();
     const rows = await this.q<StoredJob>(
-      "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts) VALUES ($1, $2::jsonb, $3, 'queued', $4) RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason",
-      [job.id, JSON.stringify(job.payload), job.enqueued_at, this.maxAttempts],
+      "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint) VALUES ($1, $2::jsonb, $3, 'queued', $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint",
+      [
+        job.id,
+        JSON.stringify(job.payload),
+        job.enqueued_at,
+        this.maxAttempts,
+        job.idempotency_key ?? null,
+        job.idempotency_fingerprint ?? null,
+      ],
     );
-    const row = rows[0];
+    let row = rows[0];
+    if (!row && job.idempotency_key) {
+      const existing = await this.q<StoredJob>(
+        'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs WHERE idempotency_key = $1',
+        [job.idempotency_key],
+      );
+      row = existing[0];
+      if (row?.idempotency_fingerprint !== job.idempotency_fingerprint)
+        throw new IdempotencyConflictError();
+    }
     if (!row) throw new Error('[server/queue] enqueue returned no row');
     return this.map(row);
   }
@@ -117,7 +151,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
        SET status = 'in_flight', leased_until = $2, lease_token = $3,
            attempts = j.attempts + 1, updated_at = now()
        FROM candidate WHERE j.id = candidate.id
-       RETURNING j.id, j.payload, j.enqueued_at, j.status, j.leased_until, j.lease_token, j.attempts, j.max_attempts, j.failure_reason`,
+       RETURNING j.id, j.payload, j.enqueued_at, j.status, j.leased_until, j.lease_token, j.attempts, j.max_attempts, j.failure_reason, j.idempotency_key, j.idempotency_fingerprint`,
       [now.toISOString(), until, token],
     );
     return rows[0] ? this.map(rows[0]) : null;
@@ -146,7 +180,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   async snapshot(): Promise<EnqueuedJob[]> {
     await this.wait();
     const rows = await this.q<StoredJob>(
-      'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason FROM aqa_runner_jobs ORDER BY enqueued_at, id',
+      'SELECT id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint FROM aqa_runner_jobs ORDER BY enqueued_at, id',
     );
     return rows.map((row) => this.map(row));
   }
