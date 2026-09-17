@@ -1,5 +1,10 @@
 # Lessons
 
+- **Subscription creation needs read-after-write proof.** Same-key retry,
+  period ordering and amount validation are not enough if the provider cannot
+  re-observe the exact tenant/customer subscription. Require the observation
+  capability and keep dunning/proration as separate provider journeys.
+
 - **Checkout is not delivery evidence.** Post-purchase coverage must observe
   fulfillment records and require tracking metadata for shipped/delivered
   states; RMA requests need their own idempotency and order/quantity/currency

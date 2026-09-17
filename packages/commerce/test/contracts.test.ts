@@ -724,10 +724,18 @@ describe('@aqa/commerce contracts', () => {
           idempotencyKey: 'suite-return',
         },
       },
+      subscription: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-subscription-customer' },
+        plan: 'pro-monthly',
+        amount: { currency: 'EUR', amount_minor: '1999' },
+        interval: 'month',
+        idempotencyKey: 'suite-subscription',
+      },
     });
     assert.equal(result.outcome.status, 'pass', result.outcome.reason);
     assert.equal(result.outcome.evidence_complete, true);
-    assert.equal(Object.keys(result.journeys).length, 5);
+    assert.equal(Object.keys(result.journeys).length, 6);
     assert.ok(result.evidence.every((item) => item.step.includes('.')));
   });
 

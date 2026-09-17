@@ -212,6 +212,7 @@ export const CommerceCapabilities = z.object({
   settlement_observer: z.boolean().default(false),
   fulfillment_observer: z.boolean().default(false),
   returns: z.boolean().default(false),
+  subscription_observer: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -568,6 +569,17 @@ export interface CommerceAdapter {
     reason: string,
     idempotencyKey: string,
   ): Promise<ReturnRequestSnapshot>;
+  createSubscription?(
+    identity: CommerceIdentity,
+    plan: string,
+    amount: Money,
+    interval: SubscriptionSnapshot['interval'],
+    idempotencyKey: string,
+  ): Promise<SubscriptionSnapshot>;
+  getSubscription?(
+    identity: CommerceIdentity,
+    subscriptionId: string,
+  ): Promise<SubscriptionSnapshot>;
   quoteTax?(identity: CommerceIdentity, cartId: string): Promise<TaxQuote>;
   quoteShipping?(
     identity: CommerceIdentity,
@@ -613,6 +625,14 @@ export type PostPurchaseJourneyOptions = CheckoutJourneyOptions & {
     idempotencyKey: string;
   };
 };
+export type SubscriptionJourneyOptions = {
+  context: CommerceContext;
+  identity: CommerceIdentity;
+  plan: string;
+  amount: Money;
+  interval: SubscriptionSnapshot['interval'];
+  idempotencyKey: string;
+};
 
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
@@ -623,6 +643,7 @@ export type CommerceJourneySuiteOptions = {
   cancellation?: CancellationJourneyOptions;
   settlement?: SettlementJourneyOptions;
   postPurchase?: PostPurchaseJourneyOptions;
+  subscription?: SubscriptionJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -1151,6 +1172,78 @@ export async function verifyPostPurchaseJourney(
   }
 }
 
+/** Verifies subscription creation, idempotent retry and durable observation. */
+export async function verifySubscriptionJourney(
+  adapter: CommerceAdapter,
+  opts: SubscriptionJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (
+      !capabilities.subscription_observer ||
+      !adapter.createSubscription ||
+      !adapter.getSubscription
+    ) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks subscription creation or observation capability',
+        },
+        evidence,
+      };
+    }
+    if (!opts.plan.trim() || !opts.idempotencyKey.trim())
+      throw new Error('subscription plan and idempotency key are required');
+    assertMoneyNonNegative(opts.amount, 'subscription amount');
+    const first = SubscriptionSnapshot.parse(
+      await adapter.createSubscription(
+        opts.identity,
+        opts.plan,
+        opts.amount,
+        opts.interval,
+        opts.idempotencyKey,
+      ),
+    );
+    const retry = SubscriptionSnapshot.parse(
+      await adapter.createSubscription(
+        opts.identity,
+        opts.plan,
+        opts.amount,
+        opts.interval,
+        opts.idempotencyKey,
+      ),
+    );
+    if (JSON.stringify(first) !== JSON.stringify(retry))
+      throw new Error('idempotent subscription retry returned a different result');
+    assertSubscriptionIntegrity(first);
+    if (first.tenant !== opts.identity.tenant || first.customer_id !== opts.identity.customer_id)
+      throw new Error('subscription observation crosses tenant or customer boundary');
+    if (first.plan !== opts.plan || JSON.stringify(first.amount) !== JSON.stringify(opts.amount))
+      throw new Error('subscription does not match requested plan or amount');
+    const observed = SubscriptionSnapshot.parse(
+      await adapter.getSubscription(opts.identity, first.id),
+    );
+    if (JSON.stringify(observed) !== JSON.stringify(first))
+      throw new Error('subscription observation does not match creation result');
+    evidence.push({ step: 'subscription.persisted', ok: true, detail: `subscription=${first.id}` });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'subscription journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1173,6 +1266,8 @@ export async function verifyCommerceJourneySuite(
     journeys.settlement = await verifySettlementJourney(adapter, opts.settlement);
   if (opts.postPurchase)
     journeys.postPurchase = await verifyPostPurchaseJourney(adapter, opts.postPurchase);
+  if (opts.subscription)
+    journeys.subscription = await verifySubscriptionJourney(adapter, opts.subscription);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1260,6 +1355,11 @@ export class InMemoryCommerceReference {
   private readonly returnIdempotency = new Map<
     string,
     { fingerprint: string; result: ReturnRequestSnapshot }
+  >();
+  private readonly subscriptions = new Map<string, SubscriptionSnapshot>();
+  private readonly subscriptionIdempotency = new Map<
+    string,
+    { fingerprint: string; result: SubscriptionSnapshot }
   >();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
@@ -1626,6 +1726,58 @@ export class InMemoryCommerceReference {
     return result;
   }
 
+  createSubscription(
+    identity: CommerceIdentity,
+    plan: string,
+    amount: Money,
+    interval: SubscriptionSnapshot['interval'],
+    idempotencyKey: string,
+  ): SubscriptionSnapshot {
+    if (!plan.trim() || !idempotencyKey.trim())
+      throw new Error('subscription plan and idempotency key are required');
+    assertMoneyNonNegative(amount, 'subscription amount');
+    const key = `${identity.tenant}:${identity.customer_id}:${idempotencyKey}`;
+    const fingerprint = JSON.stringify({ plan, amount, interval });
+    const previous = this.subscriptionIdempotency.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint)
+        throw new Error('subscription idempotency key reused with a different payload');
+      return previous.result;
+    }
+    const start = new Date();
+    const end = new Date(start);
+    if (interval === 'week') end.setUTCDate(end.getUTCDate() + 7);
+    if (interval === 'month') end.setUTCMonth(end.getUTCMonth() + 1);
+    if (interval === 'year') end.setUTCFullYear(end.getUTCFullYear() + 1);
+    const result: SubscriptionSnapshot = {
+      schema_version: '1',
+      id: this.nextId('subscription'),
+      tenant: identity.tenant,
+      customer_id: identity.customer_id,
+      plan,
+      status: 'active',
+      interval,
+      amount: Money.parse(amount),
+      current_period_start: start.toISOString(),
+      current_period_end: end.toISOString(),
+      cancel_at_period_end: false,
+    };
+    this.subscriptions.set(result.id, result);
+    this.subscriptionIdempotency.set(key, { fingerprint, result });
+    return result;
+  }
+
+  getSubscription(identity: CommerceIdentity, subscriptionId: string): SubscriptionSnapshot {
+    const subscription = this.subscriptions.get(subscriptionId);
+    if (
+      !subscription ||
+      subscription.tenant !== identity.tenant ||
+      subscription.customer_id !== identity.customer_id
+    )
+      throw new Error('subscription not found');
+    return subscription;
+  }
+
   /** Exposes the reference merchant through the same async contract as real providers. */
   asAdapter(): CommerceAdapter {
     return {
@@ -1636,6 +1788,7 @@ export class InMemoryCommerceReference {
         settlement_observer: true,
         fulfillment_observer: true,
         returns: true,
+        subscription_observer: true,
         inventory_observer: true,
         webhook_observer: true,
         idempotency: true,
@@ -1655,6 +1808,10 @@ export class InMemoryCommerceReference {
       observeFulfillments: async (identity, orderId) => this.observeFulfillments(identity, orderId),
       requestReturn: async (identity, orderId, lines, amount, reason, key) =>
         this.requestReturn(identity, orderId, lines, amount, reason, key),
+      createSubscription: async (identity, plan, amount, interval, key) =>
+        this.createSubscription(identity, plan, amount, interval, key),
+      getSubscription: async (identity, subscriptionId) =>
+        this.getSubscription(identity, subscriptionId),
       quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),

@@ -21,6 +21,7 @@ import {
   SettlementSnapshot,
   type ShippingAddress,
   ShippingQuote,
+  SubscriptionSnapshot,
   TaxQuote,
   WebhookObservation,
 } from './index.js';
@@ -45,6 +46,8 @@ export interface HttpCommerceAdapterOptions {
     settlement: string;
     fulfillments: string;
     returns: string;
+    subscriptions: string;
+    subscription: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -88,6 +91,8 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       settlement: '/orders/:order_id/settlement',
       fulfillments: '/orders/:order_id/fulfillments',
       returns: '/orders/:order_id/returns',
+      subscriptions: '/subscriptions',
+      subscription: '/subscriptions/:subscription_id',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -262,6 +267,36 @@ export class HttpCommerceAdapter implements CommerceAdapter {
         identity,
         { lines, amount, reason, idempotency_key: idempotencyKey },
         { 'Idempotency-Key': idempotencyKey },
+      ),
+    );
+  }
+
+  async createSubscription(
+    identity: CommerceIdentity,
+    plan: string,
+    amount: Money,
+    interval: SubscriptionSnapshot['interval'],
+    idempotencyKey: string,
+  ) {
+    return SubscriptionSnapshot.parse(
+      await this.request(
+        'POST',
+        this.paths.subscriptions,
+        this.context(identity),
+        identity,
+        { plan, amount, interval, idempotency_key: idempotencyKey },
+        { 'Idempotency-Key': idempotencyKey },
+      ),
+    );
+  }
+
+  async getSubscription(identity: CommerceIdentity, subscriptionId: string) {
+    return SubscriptionSnapshot.parse(
+      await this.request(
+        'GET',
+        pathTemplate(this.paths.subscription, { subscription_id: subscriptionId }),
+        this.context(identity),
+        identity,
       ),
     );
   }
