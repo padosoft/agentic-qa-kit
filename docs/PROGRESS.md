@@ -732,3 +732,8 @@
 
 - `aqa run` now enforces `profile.budget_minutes` at the scenario scheduler boundary. Once the deadline is reached, remaining scenarios are recorded as `not_run` with `reason: budget_exceeded`, the run emits bounded budget metadata and returns `ok: false`; partial coverage can no longer greenlight a gate. The clock is injectable only for deterministic embedding/tests and defaults to `Date.now`.
 - Evidence: kit build/bundle, typecheck and `run-cmd` suite **30 passed, 1 explicit platform skip**. Hard cancellation of an already-running provider/browser request and LLM dollar/token budgets remain separate work.
+
+# 2026-09-17 — finding status transition enforcement
+
+- Moved finding status-transition validation to the shared schema/store write boundary. No-op and illegal transitions now fail with `409 INVALID_TRANSITION` at the API, preserve the original finding and append no audit event. Memory and PostgreSQL adapters both validate and parse the resulting finding, so callers cannot bypass the API contract through a direct store call.
+- Evidence: server + store builds, **115 tests passed**, repository diff check passed. A full PostgreSQL transition round-trip remains hosted evidence when the CI DSN is available.

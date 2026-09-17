@@ -107,6 +107,17 @@ describe('MemoryStore', () => {
     assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
   });
 
+  it('rejects a no-op status transition without mutating or auditing', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+    await assert.rejects(
+      s.transitionFindingStatus(FINDING.id, 'draft', 'qa-user', 'duplicate review'),
+      /already draft/,
+    );
+    assert.equal((await s.loadFinding(FINDING.id))?.status, 'draft');
+    assert.equal((await s.listEvents(FINDING.run_id)).length, 0);
+  });
+
   it('keeps newly written configuration resources isolated by tenant scope', async () => {
     const s = new MemoryStore();
     const profile = {

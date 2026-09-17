@@ -1,9 +1,9 @@
+import { Finding } from '@aqa/schemas';
 import type {
   Agent,
   ApiToken,
   CostSummary,
   Event,
-  Finding,
   Notification,
   PackManifest,
   Profile,
@@ -14,7 +14,7 @@ import type {
   SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
-import { findingStatusAudit } from './audit.js';
+import { InvalidFindingTransitionError, findingStatusAudit } from './audit.js';
 import {
   type StoreProvider,
   type StoreScope,
@@ -167,7 +167,9 @@ export class MemoryStore implements StoreProvider {
   ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
     const current = this.findings.get(id);
     if (!current) return null;
-    const updated = { ...current, status } as Finding.Finding;
+    const transition = Finding.validateStatusTransition(current.status, status);
+    if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
+    const updated = Finding.Finding.parse({ ...current, status });
     const previous = this.audit[this.audit.length - 1];
     const event = findingStatusAudit(
       current,

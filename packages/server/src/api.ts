@@ -522,12 +522,20 @@ export function makeApi(): ApiHandler[] {
         if (!parsed.success) {
           return { status: 400, body: { error: formatZodError(parsed.error) } };
         }
-        const transitioned = await ctx.store.transitionFindingStatus(
-          id,
-          parsed.data.status,
-          user.id,
-          body.reason,
-        );
+        let transitioned: Awaited<ReturnType<StoreProvider['transitionFindingStatus']>>;
+        try {
+          transitioned = await ctx.store.transitionFindingStatus(
+            id,
+            parsed.data.status,
+            user.id,
+            body.reason,
+          );
+        } catch (error) {
+          if (error instanceof Error && error.name === 'InvalidFindingTransitionError') {
+            return { status: 409, body: { error: error.message, code: 'INVALID_TRANSITION' } };
+          }
+          throw error;
+        }
         if (!transitioned) return notFound('finding');
         await publishApiEvent(ctx, req, 'finding.status_changed', {
           finding_id: transitioned.finding.id,

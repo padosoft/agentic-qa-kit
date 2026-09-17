@@ -950,3 +950,10 @@ before starting each scenario, emit an explicit `not_run` outcome for the
 remaining coverage and fail the run. This is a scheduler gate, not a hard
 interrupt: a provider or browser operation already in flight still needs
 bounded driver timeouts and cancellation as a separate control.
+
+# 2026-09-17 — validate state transitions at the persistence boundary
+
+Validating a finding status only in the HTTP handler leaves direct store
+callers and races able to write impossible states. Keep the transition matrix
+in the shared schema package, re-check it inside each store transaction, parse
+the updated object, and return a conflict without changing data or audit state.

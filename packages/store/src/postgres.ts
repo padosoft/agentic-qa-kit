@@ -1,9 +1,9 @@
+import { Finding } from '@aqa/schemas';
 import type {
   Agent,
   ApiToken,
   CostSummary,
   Event,
-  Finding,
   Notification,
   PackManifest,
   Profile,
@@ -16,7 +16,7 @@ import type {
 } from '@aqa/schemas';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import { findingStatusAudit } from './audit.js';
+import { InvalidFindingTransitionError, findingStatusAudit } from './audit.js';
 import {
   type LegacyMigrationResult,
   type StoreProvider,
@@ -265,6 +265,8 @@ export class PostgresStore implements StoreProvider {
       )) as Array<{ payload: unknown }>;
       const current = this.decode<Finding.Finding>(findingRows[0]?.payload);
       if (!current) return null;
+      const transition = Finding.validateStatusTransition(current.status, status);
+      if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
       const auditRows = (await query(
         'SELECT payload FROM aqa_store_events ORDER BY seq DESC LIMIT 1 FOR UPDATE',
       )) as Array<{ payload: unknown }>;
@@ -278,7 +280,7 @@ export class PostgresStore implements StoreProvider {
         (previous?.seq ?? -1) + 1,
         previous,
       );
-      const updated = { ...current, status } as Finding.Finding;
+      const updated = Finding.Finding.parse({ ...current, status });
       await query(
         'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $1',
         [id, 'finding', JSON.stringify(updated)],

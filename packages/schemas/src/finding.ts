@@ -104,3 +104,25 @@ export const Finding = z
     }
   });
 export type Finding = z.infer<typeof Finding>;
+
+const ALLOWED_STATUS_TRANSITIONS: Readonly<
+  Record<Finding['status'], readonly Finding['status'][]>
+> = {
+  draft: ['verified', 'rejected', 'duplicate', 'fixed'],
+  verified: ['rejected', 'duplicate', 'fixed'],
+  rejected: ['draft', 'fixed'],
+  duplicate: ['draft', 'fixed'],
+  fixed: ['draft'],
+};
+
+/** Validate a status transition at the write boundary, not only in the API. */
+export function validateStatusTransition(
+  from: Finding['status'],
+  to: Finding['status'],
+): { ok: true } | { ok: false; reason: string } {
+  if (from === to) return { ok: false, reason: `finding is already ${to}` };
+  if (!ALLOWED_STATUS_TRANSITIONS[from].includes(to)) {
+    return { ok: false, reason: `status transition ${from} → ${to} is not allowed` };
+  }
+  return { ok: true };
+}

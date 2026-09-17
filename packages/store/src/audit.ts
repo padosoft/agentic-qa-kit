@@ -3,6 +3,15 @@ import { Event, type Finding } from '@aqa/schemas';
 
 const ZERO_HASH = '0'.repeat(64);
 
+export class InvalidFindingTransitionError extends Error {
+  readonly code = 'INVALID_FINDING_TRANSITION';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidFindingTransitionError';
+  }
+}
+
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
