@@ -40,6 +40,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   `auth: "${SECRET_NAME}"`, but the host must inject the value through
   `HttpProbeRunnerOptions.secrets`. Missing or malformed references fail
   closed and secret values never become pack data or diagnostic output.
+- **Agent tool guard** — `AgentToolGuard` applies explicit tool allowlists,
+  call/output budgets and cooperative cancellation; `tool_call` events persist
+  only hashes and bounded metadata, never raw agent tool payloads.
 
 The probe runner is injected as a function so the runner has no ambient network
 surface; production hosts choose and configure the HTTP/shell/Playwright/SQL

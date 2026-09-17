@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Added the provider-neutral agent tool guard.** `AgentToolGuard` enforces
+  exact tool allowlists, call budgets, output byte limits and cooperative
+  cancellation, while emitting `tool_call` audit events containing only
+  digests and bounded metadata. Evidence: runner guard + regression suite
+  **33 pass / 0 fail** with no raw secret in events. ADR-189 records the
+  boundary; MCP/provider egress and model semantics remain deployment-scoped.
+
 - **Opened the agent execution boundary.** `aqa run` now accepts
   `execution_mode: agent` only with an explicit host-owned `agentRunner`; the
   run fails closed before allocation when it is missing. Agent runs propagate

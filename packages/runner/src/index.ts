@@ -28,3 +28,9 @@ export {
   type PostgresSqlProbeRunnerOptions,
 } from './postgres.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';
+export {
+  AgentToolGuard,
+  type AgentTool,
+  type AgentToolCallResult,
+  type AgentToolGuardOptions,
+} from './agent.js';
