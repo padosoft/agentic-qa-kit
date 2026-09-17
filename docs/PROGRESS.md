@@ -817,3 +817,8 @@
 
 - Added `BudgetedLlmAdapter`: it performs pre-dispatch admission using a configurable token estimate, charges authoritative provider usage after the call, exposes a budget snapshot, and blocks subsequent dispatches once the USD budget is exhausted. Unknown model pricing remains fail-closed through `BudgetTracker`.
 - Evidence: LLM adapter build and **15 tests passed**, including no-dispatch admission denial and post-call exhaustion. Default character-based estimation is conservative scaffolding; production should inject versioned tokenizer/pricing data and persist aggregate usage across workers/projects.
+
+# 2026-09-17 — distributed LLM budget reservations
+
+- Added `BudgetLedger` with atomic Memory and PostgreSQL implementations. Reservations are keyed by org/project/run scope, account for in-flight estimated spend, and settle idempotently against actual usage. `BudgetedLlmAdapter` optionally uses the ledger, preventing concurrent workers from dispatching past a shared budget.
+- Evidence: cost build and **9 tests passed**, LLM adapter build and **16 tests passed**, including concurrent shared-ledger admission. PostgreSQL live concurrency/settlement evidence, durable budget configuration APIs, pricing version distribution and reconciliation remain open.

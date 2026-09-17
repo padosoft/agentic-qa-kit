@@ -118,10 +118,19 @@ export class BudgetTracker {
     const price = this.pricing[call.model];
     if (!price) return true;
     if (this.state.budget_usd === null) return false;
-    const next =
-      (call.tokens_in / 1_000_000) * price.input_per_mtok +
-      (call.tokens_out / 1_000_000) * price.output_per_mtok;
+    const next = this.costOf(call);
     return this.state.spent_usd + next >= this.state.budget_usd;
+  }
+
+  costOf(call: LlmCall): number {
+    this.validateCall(call);
+    const price = this.pricing[call.model];
+    if (!price)
+      throw new BudgetDispatchBlockedError(`no pricing configured for model "${call.model}"`);
+    return (
+      (call.tokens_in / 1_000_000) * price.input_per_mtok +
+      (call.tokens_out / 1_000_000) * price.output_per_mtok
+    );
   }
 
   private validateCall(call: LlmCall): void {

@@ -89,6 +89,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@aqa/schemas": "workspace:*",
+        "postgres": "^3.4.9",
       },
     },
     "packages/generator": {

@@ -1073,6 +1073,14 @@ dispatch to block known overages, then charge provider-reported tokens and stop
 future calls when the actual spend reaches the limit. Estimation and pricing
 must be versioned deployment inputs, not hidden constants.
 
+# 2026-09-17 — reserve distributed LLM spend before dispatch
+
+An in-process tracker cannot protect a project when two workers dispatch at the
+same time. Reserve estimated spend under a database row lock, settle exactly
+once with provider usage, and release the estimate on provider failure. Keep the
+reservation key tenant-scoped and treat pricing/version configuration as an
+audited deployment input.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the
