@@ -43,6 +43,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **Agent tool guard** — `AgentToolGuard` applies explicit tool allowlists,
   call/output budgets and cooperative cancellation; `tool_call` events persist
   only hashes and bounded metadata, never raw agent tool payloads.
+- **Agent trajectory recorder** — `AgentTrajectoryRecorder` pins model identity,
+  enforces step/token budgets and records ordered `llm_call`/`tool_call` digests
+  without persisting prompts, completions or tool results.
 
 The probe runner is injected as a function so the runner has no ambient network
 surface; production hosts choose and configure the HTTP/shell/Playwright/SQL
