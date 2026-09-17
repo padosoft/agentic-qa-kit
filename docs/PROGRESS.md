@@ -452,3 +452,7 @@
 
 - Added optional OCI digest rendering and fail-closed `requireDigest` switches for server and runner images. Operator docs now state that production must pin digests and retain SBOM/provenance evidence; tag defaults remain development-only.
 - Evidence: chart/value/template diff validated by repository lint and diff check. Live `helm template`/upgrade against a cluster remains an infrastructure gate.
+
+# 2026-09-17 — consolidated regression gate after enterprise slices
+
+- Workspace typecheck, test and lint completed after SAML, k6, DR, sandbox and Helm changes: 498 tests passed, 4 PostgreSQL integration tests skipped because no DSN was configured, and 0 failures. Helm render was not available locally because the `helm` executable is not installed; this remains an explicit deployment gate.
