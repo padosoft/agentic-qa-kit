@@ -41,6 +41,7 @@ export function createRunArtifactStore(root: string, runId: string): ArtifactSto
     prefix,
     ...(retentionUntil ? { retainUntil: retentionUntil } : {}),
     ...(retentionMode ? { retentionMode } : {}),
+    ...(requireRetention ? { verifyRetention: true } : {}),
     clientConfig,
   });
 }

@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **S3 WORM verification strengthened.** Production retention mode now performs
+  a `HeadObject` read-back after both content and metadata writes and fails
+  closed when Object Lock is absent or shorter than requested. This closes the
+  provider-silent-ignore false-green path; independent checkpoint publication,
+  bucket/versioning/KMS and restore drills remain deployment evidence.
+
 - **CI SBOM provenance gate added.** The Build job now runs a pinned Anchore
   Syft action after the workspace build, emits and retains a CycloneDX JSON
   inventory, and validates that it is non-empty and structurally valid. The

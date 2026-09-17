@@ -31,3 +31,9 @@ authenticity. The trust key and retention domain remain operator-controlled.
   an Ed25519 signature and rejects a partial configuration before execution.
 - The checkpoint is not yet persisted to a WORM/Object-Lock domain; external
   retention and independent checkpoint publication remain deployment work.
+- When `AQA_ARTIFACT_S3_REQUIRE_RETENTION=true`, the S3 adapter now reads back
+  Object Lock mode and retention date after each content and metadata upload;
+  a provider that silently ignores or shortens retention fails the run.
+- This read-back is a provider contract check, not proof that the bucket is
+  independently administered or that checkpoint publication is external to the
+  run artifact prefix.

@@ -74,6 +74,8 @@ describe('S3ArtifactStore', () => {
             Metadata: {
               artifact: Buffer.from(metadata?.toString() ?? '', 'utf8').toString('base64'),
             },
+            ObjectLockMode: 'COMPLIANCE',
+            ObjectLockRetainUntilDate: new Date('2027-01-01T00:00:00Z'),
           };
         }
         if (command.constructor.name === 'DeleteObjectCommand') {
@@ -99,6 +101,28 @@ describe('S3ArtifactStore', () => {
     assert.deepEqual(await store.head(ref), ref);
     await store.delete(ref);
     await assert.rejects(() => store.get(ref), /empty|digest/i);
+  });
+
+  it('fails closed when the provider does not apply the requested retention', async () => {
+    const client = {
+      send: async (command: { constructor: { name: string } }) => {
+        if (command.constructor.name === 'HeadObjectCommand') {
+          return { ObjectLockMode: undefined, ObjectLockRetainUntilDate: undefined };
+        }
+        return {};
+      },
+    };
+    const store = new S3ArtifactStore({
+      bucket: 'aqa-test',
+      retainUntil: new Date('2027-01-01T00:00:00Z'),
+      retentionMode: 'COMPLIANCE',
+      verifyRetention: true,
+      client,
+    });
+    await assert.rejects(
+      () => store.putText('runs/r1/checkpoint.json', '{}'),
+      /Object Lock mode mismatch/,
+    );
   });
 
   it('rejects invalid retention configuration and traversal', () => {

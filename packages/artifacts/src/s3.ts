@@ -16,6 +16,8 @@ export interface S3ArtifactStoreOptions {
   /** Optional Object Lock retention applied to newly written objects. */
   retainUntil?: Date;
   retentionMode?: 'GOVERNANCE' | 'COMPLIANCE';
+  /** Read back Object Lock state after each write and fail closed on mismatch. */
+  verifyRetention?: boolean;
 }
 
 export type S3ArtifactClient = Pick<S3Client, 'send'>;
@@ -27,6 +29,7 @@ export class S3ArtifactStore implements ArtifactStore {
   private readonly prefix: string;
   private readonly retainUntil: Date | undefined;
   private readonly retentionMode: 'GOVERNANCE' | 'COMPLIANCE' | undefined;
+  private readonly verifyRetention: boolean;
 
   constructor(options: S3ArtifactStoreOptions & { client: S3ArtifactClient });
   constructor(options: S3ArtifactStoreOptions & { clientConfig?: S3ClientConfig });
@@ -41,6 +44,7 @@ export class S3ArtifactStore implements ArtifactStore {
     this.prefix = normalizePrefix(options.prefix);
     this.retainUntil = options.retainUntil;
     this.retentionMode = options.retentionMode;
+    this.verifyRetention = options.verifyRetention ?? false;
     if (this.retainUntil && !this.retentionMode) {
       throw new Error('retentionMode is required when retainUntil is configured');
     }
@@ -130,6 +134,7 @@ export class S3ArtifactStore implements ArtifactStore {
         ...retention,
       }),
     );
+    if (this.verifyRetention) await this.assertRetention(clean);
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -140,7 +145,27 @@ export class S3ArtifactStore implements ArtifactStore {
         ...retention,
       }),
     );
+    if (this.verifyRetention) await this.assertRetention(this.metadataKey(clean));
     return ref;
+  }
+
+  private async assertRetention(key: string): Promise<void> {
+    const result = await this.client.send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) }),
+    );
+    const actualMode = result.ObjectLockMode;
+    const actualUntil = result.ObjectLockRetainUntilDate;
+    if (actualMode !== this.retentionMode) {
+      throw new Error(
+        `S3 Object Lock mode mismatch for ${key}: expected ${this.retentionMode}, got ${actualMode ?? 'none'}`,
+      );
+    }
+    if (
+      !(actualUntil instanceof Date) ||
+      actualUntil.getTime() < (this.retainUntil?.getTime() ?? 0)
+    ) {
+      throw new Error(`S3 Object Lock retention is missing or too short for ${key}`);
+    }
   }
 
   private objectKey(key: string): string {

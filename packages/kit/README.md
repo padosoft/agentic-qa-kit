@@ -88,9 +88,10 @@ as CLI arguments or committed. Optional Object Lock requests use
 Object Lock enablement, KMS and tenant authorization remain operator controls.
 
 Set `AQA_ARTIFACT_S3_REQUIRE_RETENTION=true` in production to fail closed when
-the S3 backend is missing both Object Lock retention settings. This validates
-application configuration; it does not provision bucket versioning, KMS or
-Object Lock itself.
+the S3 backend is missing both Object Lock retention settings. The run backend
+also reads back the applied Object Lock mode/date after each content and
+metadata write. This validates the application/provider contract; it does not
+provision bucket versioning, KMS or Object Lock itself.
 
 After `run_finished`, the selected store also receives byte-preserved
 `canonical/events.jsonl` and `canonical/findings.jsonl`, plus

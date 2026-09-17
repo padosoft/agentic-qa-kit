@@ -1,5 +1,12 @@
 # Lessons
 
+- **Object Lock request is not proof of retention.** Sending
+  `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
+  storage provider. Production WORM mode must read back both fields for the
+  content object and its metadata object and fail closed on absence or
+  truncation. This still does not replace independent checkpoint publication
+  or bucket-level versioning/KMS/restore evidence.
+
 - **Bun monorepos need a non-npm SBOM path.** `npm sbom` can return
   `ESBOMPROBLEMS` and an empty stream when a root package-lock is absent and
   workspace/link dependencies are resolved by Bun. Treating that output as a
