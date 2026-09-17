@@ -1912,3 +1912,9 @@ enterprise server must default to rejecting unsigned packs before persistence.
 Shell-only checks are insufficient: metadata-only or HTTP packs can still be
 malicious or untrusted. Keep trust-root verification and real key rotation as
 separate deployment evidence.
+# 2026-09-18 — every evidence read path must verify integrity
+
+Verifying audit chains only inside one projection is insufficient: an events
+viewer can become a false-green evidence export. Every endpoint that serves
+stored run events must verify the complete ordered chain before serialization,
+with the same bounded error code used by derived coverage projections.

@@ -543,6 +543,13 @@ export function makeApi(): ApiHandler[] {
         const run = await ctx.store.loadRun(id);
         if (!run || run.project !== s.project) return notFound('run');
         const events = await ctx.store.listEvents(id);
+        const chain = verifyEventChain(events);
+        if (!chain.ok) {
+          return asResponse(
+            { error: 'run audit chain integrity verification failed', code: 'AUDIT_CHAIN_INVALID' },
+            500,
+          );
+        }
         return asResponse({ events });
       },
     },

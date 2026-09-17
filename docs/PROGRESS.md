@@ -13,6 +13,12 @@
 
 ## 2026-09-18
 
+- **Closed the audit-serving false-green boundary.** `GET /api/runs/:id/events`
+  now verifies the complete stored hash chain before returning evidence and
+  returns bounded `AUDIT_CHAIN_INVALID` on tampering, matching the existing
+  risk-coverage projection. Evidence: server integration regression plus full
+  local gate suite. Next: operational evidence and real infrastructure drills.
+
 - **Hardened enterprise pack supply-chain enforcement.** The scanner now has an
   explicit `requireSignature` policy; the admin/server import boundary enables
   it by default, rejects unsigned manifests before persistence, and preserves
