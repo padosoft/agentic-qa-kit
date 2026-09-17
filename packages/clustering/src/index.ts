@@ -1,1 +1,8 @@
-export { signatureOf, clusterFindings, type Cluster, type Signature } from './cluster.js';
+export {
+  signatureOf,
+  rootCauseId,
+  priorityOf,
+  clusterFindings,
+  type Cluster,
+  type Signature,
+} from './cluster.js';

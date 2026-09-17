@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { clusterFindings, signatureOf } from '../dist/index.js';
+import { clusterFindings, priorityOf, rootCauseId, signatureOf } from '../dist/index.js';
 
 const base = {
   schema_version: '1' as const,
@@ -129,5 +129,25 @@ describe('clusterFindings', () => {
     const clusters = clusterFindings(fs);
     assert.equal(clusters[0]?.severity, 'critical');
     assert.equal(clusters[1]?.severity, 'low');
+  });
+
+  it('assigns a stable root cause and explainable priority', () => {
+    const finding = {
+      ...base,
+      id: 'AQA-2026-0001',
+      title: 't',
+      summary: 'x',
+      severity: 'high' as const,
+      confidence: 0.8,
+      blast_radius: 4,
+      cost_to_fix_estimate: 2,
+      discovered_at: '2026-05-17T10:00:00Z',
+    };
+    const signature = signatureOf(finding);
+    assert.equal(rootCauseId(signature), `root-${signature.slice(0, 24)}`);
+    assert.equal(priorityOf(finding), 6.4);
+    const cluster = clusterFindings([finding])[0];
+    assert.equal(cluster?.root_cause_id, rootCauseId(signature));
+    assert.equal(cluster?.priority_score, 6.4);
   });
 });

@@ -480,3 +480,10 @@ The fix loop must not treat a successful local replay as a closed finding. `aqa 
 # 2026-09-17 — coverage must be derived, not declared
 
 A coverage score is only trustworthy when its numerators come from explicit risk/scenario links and run evidence. The aggregation boundary now rejects invalid timestamps, counts flaky histories, applies the 30-day window, and marks missing runs stale. Persistence and UI integrations must feed this function rather than reimplementing the formula.
+
+# 2026-09-17 — root cause must not mean fuzzy merge
+
+A deterministic fingerprint can safely provide a stable root-cause key; it
+cannot prove that two different fingerprints are the same bug. Keep semantic
+similarity and human-approved linking as a later workflow, and make ranking
+inputs explicit and bounded so priority remains explainable in an audit.

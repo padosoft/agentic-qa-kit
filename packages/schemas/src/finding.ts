@@ -75,6 +75,9 @@ export const Finding = z
     evidence: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     duplicate_of: FindingId.optional(),
+    root_cause_id: Slug.optional(),
+    blast_radius: z.number().positive().finite().max(1_000_000).optional(),
+    cost_to_fix_estimate: z.number().positive().finite().max(1_000_000).optional(),
   })
   .superRefine((v, ctx) => {
     const floor = v.reproducibility[v.verification_floor];

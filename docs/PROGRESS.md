@@ -309,3 +309,8 @@
 - Added `measureRiskCoverage()` to derive the documented coverage score from a validated risk map, scenario risk/invariant links, oracle declarations, and timestamped run observations. It counts recent pass rate, deterministic replay, flaky scenario history, and stale evidence without treating missing artifacts as success.
 - The aggregation is persistence-agnostic so CLI, API, and warehouse adapters can share one deterministic boundary. It currently consumes supplied observations; store/API ingestion and an admin coverage endpoint remain open.
 - Evidence: `bun run --filter @aqa/methodology typecheck`; `bun run --filter @aqa/methodology test` (9/9); `bun run lint`.
+
+# 2026-09-17 — root-cause clustering slice
+
+- Extended `@aqa/clustering` with stable `root_cause_id` derivation and explainable priority (`severity × confidence × blast_radius / cost_to_fix_estimate`) while preserving conservative fingerprint-only grouping. Optional finding estimates are schema-validated and bounded; missing estimates default to neutral `1`.
+- Evidence and remaining gap: clustering tests/typecheck/lint prove deterministic grouping and prioritization. Cross-fingerprint semantic clustering, persistent root-cause lifecycle, and bulk status transitions remain separate work.

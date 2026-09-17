@@ -5,11 +5,15 @@ export type Signature = string;
 
 export interface Cluster {
   signature: Signature;
+  /** Stable local root-cause key. Semantic similarity is never inferred. */
+  root_cause_id: string;
   /** Findings ordered by discovered_at ascending. */
   members: ReadonlyArray<Finding.Finding>;
   representative: Finding.Finding;
   /** Highest severity seen across the cluster. */
   severity: Finding.Finding['severity'];
+  /** Explainable severity × confidence × blast-radius / fix-cost score. */
+  priority_score: number;
 }
 
 const SEV_RANK: Record<Finding.Finding['severity'], number> = {
@@ -18,6 +22,14 @@ const SEV_RANK: Record<Finding.Finding['severity'], number> = {
   medium: 2,
   low: 3,
   info: 4,
+};
+
+const SEV_WEIGHT: Record<Finding.Finding['severity'], number> = {
+  critical: 5,
+  high: 4,
+  medium: 3,
+  low: 2,
+  info: 1,
 };
 
 /**
@@ -33,6 +45,18 @@ export function signatureOf(f: Finding.Finding): Signature {
     .replace(/\s+/g, ' ')
     .trim();
   return createHash('sha256').update(`${f.scenario_id}|${f.risk_id}|${normalised}`).digest('hex');
+}
+
+export function rootCauseId(signature: Signature): string {
+  return `root-${signature.slice(0, 24)}`;
+}
+
+export function priorityOf(finding: Finding.Finding): number {
+  const blastRadius = finding.blast_radius ?? 1;
+  const cost = finding.cost_to_fix_estimate ?? 1;
+  return Number(
+    ((SEV_WEIGHT[finding.severity] * finding.confidence * blastRadius) / cost).toFixed(6),
+  );
 }
 
 function worseSeverity(
@@ -61,8 +85,18 @@ export function clusterFindings(findings: ReadonlyArray<Finding.Finding>): Reado
     if (!representative) continue;
     let worst: Finding.Finding['severity'] = representative.severity;
     for (const m of members) worst = worseSeverity(worst, m.severity);
-    out.push({ signature, members, representative, severity: worst });
+    const priority_score = Math.max(...members.map(priorityOf));
+    out.push({
+      signature,
+      root_cause_id: representative.root_cause_id ?? rootCauseId(signature),
+      members,
+      representative,
+      severity: worst,
+      priority_score,
+    });
   }
-  out.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
+  out.sort(
+    (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.priority_score - a.priority_score,
+  );
   return out;
 }

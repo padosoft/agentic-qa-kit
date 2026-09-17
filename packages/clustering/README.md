@@ -6,7 +6,14 @@ Cross-run findings dedup + clustering for the admin panel's Findings Kanban
 - `signatureOf(finding)` — sha256 of `(scenario_id, risk_id, normalised_summary)`.
   Two findings of "the same bug" across runs collapse into one signature.
 - `clusterFindings(findings)` — groups by signature; chooses the earliest
-  member as the representative; reports the worst severity in the cluster.
+  member as the representative; reports the worst severity, a stable
+  `root_cause_id`, and an explainable priority score in the cluster.
+- `priorityOf(finding)` — computes bounded severity × confidence × blast radius
+  / fix cost. Missing optional business estimates use neutral value `1`.
+
+Clustering is deliberately conservative: root causes are linked only for the
+same deterministic fingerprint. Embedding similarity is not used to merge
+unrelated bugs.
 
 This is intentionally a small static layer; the in-run dedup already lives
 in `@aqa/runner`'s `FindingsWriter`. Clustering across runs is purely
