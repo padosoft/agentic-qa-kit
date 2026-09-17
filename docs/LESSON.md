@@ -702,3 +702,10 @@ An inline k6 summary is useful to prove the published CLI, exit-code contract
 and artifact path in CI, but it is not proof that k6 or Locust executed against
 a real SUT. Keep the fixture journey labelled and require a separately provisioned
 load environment before claiming performance validity.
+
+# 2026-09-17 — normalize tool semantics before evaluating policy
+
+Preserving a generic tool field such as k6 `rate` is insufficient for a
+cross-tool gate. Adapters must map it to explicit domain measurements such as
+`failure_rate` or `check_rate`; otherwise a policy evaluator can be technically
+correct yet silently skip the intended metric.

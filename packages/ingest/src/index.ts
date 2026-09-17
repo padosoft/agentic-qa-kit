@@ -260,7 +260,15 @@ export function parseK6Summary(value: unknown, source = 'k6-summary.json'): Inge
       name,
       status,
       ...(p95 === undefined ? {} : { duration_ms: Number(p95.toFixed(3)) }),
-      ...(Object.keys(numeric).length > 0 ? { measurements: numeric } : {}),
+      ...(Object.keys(numeric).length > 0
+        ? {
+            measurements: {
+              ...numeric,
+              ...(name === 'http_req_failed' && rate !== undefined ? { failure_rate: rate } : {}),
+              ...(name === 'checks' && rate !== undefined ? { check_rate: rate } : {}),
+            },
+          }
+        : {}),
       message: detail,
       fingerprint: fingerprint(['k6', name, detail, status]),
     });

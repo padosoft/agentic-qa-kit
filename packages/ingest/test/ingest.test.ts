@@ -78,6 +78,8 @@ describe('k6 ingestion', () => {
     assert.equal(report.framework, 'k6');
     assert.equal(report.records[0]?.duration_ms, 120.456);
     assert.equal(report.records[1]?.measurements?.rate, 0.02);
+    assert.equal(report.records[1]?.measurements?.failure_rate, 0.02);
+    assert.equal(report.records[2]?.measurements?.check_rate, 0.98);
     assert.deepEqual(
       report.records.map((record) => record.status),
       ['passed', 'failed', 'failed'],
@@ -153,5 +155,23 @@ describe('performance threshold policy', () => {
     const report = parseK6Summary({ metrics: { http_req_duration: { values: { 'p(95)': 10 } } } });
     assert.throws(() => evaluatePerformanceThresholds(report, {}), /empty/);
     assert.throws(() => evaluatePerformanceThresholds(report, { min_check_rate: 2 }), /invalid/);
+  });
+
+  it('evaluates k6 failure and check rate semantics', () => {
+    const report = parseK6Summary({
+      metrics: {
+        http_req_failed: { values: { rate: 0.2 } },
+        checks: { values: { rate: 0.8 } },
+      },
+    });
+    const result = evaluatePerformanceThresholds(report, {
+      max_failure_rate: 0.05,
+      min_check_rate: 0.95,
+    });
+    assert.equal(result.passed, false);
+    assert.deepEqual(
+      result.violations.map((violation) => violation.metric),
+      ['failure_rate', 'check_rate'],
+    );
   });
 });

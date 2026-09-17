@@ -486,3 +486,8 @@
 
 - Added a CI step to the existing built CLI smoke job. It feeds a non-secret k6 JSON fixture and policy into the published CJS bundle, asserts the expected gate exit code `2`, and checks that the separate threshold artifact was written. This proves CI wiring without pretending to execute a real load generator.
 - Evidence: workflow diff is syntactically scoped to the existing `e2e-cli` build job; local workspace build passed (admin chunk-size warning remains non-fatal). A GitHub Actions run is required for authoritative hosted-runner evidence.
+
+# 2026-09-17 — k6 threshold semantic correction
+
+- Corrected the k6 adapter so `http_req_failed.rate` normalizes to `failure_rate` and `checks.rate` to `check_rate`; the prior generic `rate` measurement could make those explicit policies silently pass.
+- Evidence: ingest suite 11/11, workspace lint and diff-check pass. The CLI/CI journey now exercises the same normalized measurement contract.
