@@ -305,3 +305,7 @@ An HttpOnly OIDC cookie that is always `Secure` cannot complete the login journe
 # 2026-09-17 — deployment templates need executable evidence
 
 Kubernetes YAML that looks hardened is not validated until rendered and linted by Helm (and ideally schema-checked against the target cluster version). When the local tool is unavailable, record that limitation and avoid calling the chart production-ready; review template indentation, selectors, PVC behavior and default namespace selectors manually, then make CI render the chart.
+
+# 2026-09-17 — a durable queue needs an explicit completion API
+
+Lease storage alone is not a worker contract. If dequeue exists but ACK is not reachable through the server, every successful worker execution appears as an expired lease and is retried. Expose ACK with the lease token and a separate runner credential boundary; stale tokens must be fenced and observable as conflicts.

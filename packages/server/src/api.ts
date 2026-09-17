@@ -37,6 +37,8 @@ export interface ApiContext {
   queue: RunnerQueueLike;
   /** Resolve the authenticated user from the request. */
   authenticate: (headers: Record<string, string>) => Promise<User | null>;
+  /** Optional runner credential verifier for runner-only endpoints. */
+  runnerAuthorize?: (headers: Record<string, string>) => Promise<boolean>;
   /** Authorize the authenticated user for the requested org/project scope. */
   authorizeScope?: (user: User, scope: { org: string; project?: string }) => Promise<boolean>;
   /**
@@ -1134,9 +1136,29 @@ export function makeApi(): ApiHandler[] {
       method: 'GET',
       path: '/api/runner/jobs/next',
       requires: null,
-      async handle(_req, ctx) {
+      async handle(req, ctx) {
+        if (ctx.runnerAuthorize && !(await ctx.runnerAuthorize(req.headers))) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
         const next = await ctx.queue.dequeue();
         return { status: next ? 200 : 204, body: next ? { job: next } : null };
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/runner/jobs/:id/ack',
+      requires: null,
+      async handle(req, ctx) {
+        if (ctx.runnerAuthorize && !(await ctx.runnerAuthorize(req.headers))) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
+        const id = req.params.id;
+        const body = (req.body ?? {}) as { lease_token?: unknown };
+        if (!id || typeof body.lease_token !== 'string' || !body.lease_token) {
+          return { status: 400, body: { error: 'job id and lease_token are required' } };
+        }
+        const acknowledged = await ctx.queue.ack(id, body.lease_token);
+        return asResponse({ acknowledged }, acknowledged ? 200 : 409);
       },
     },
 

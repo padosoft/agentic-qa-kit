@@ -14,6 +14,7 @@ export interface RunnerQueueLike {
   enqueue(job: RunnerJob): EnqueuedJob | Promise<EnqueuedJob>;
   dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
+  ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
 }
 
 /**

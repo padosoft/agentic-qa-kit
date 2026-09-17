@@ -108,6 +108,43 @@ describe('makeApi', () => {
     assert.equal(res?.status, 204);
   });
 
+  it('POST /api/runner/jobs/:id/ack closes only the current lease token', async () => {
+    const c = ctx();
+    c.queue.enqueue({ id: 'job-ack', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' });
+    const next = await c.queue.dequeue();
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/ack',
+    );
+    assert.ok(route);
+    const stale = await route.handle(
+      { headers: {}, params: { id: 'job-ack' }, body: { lease_token: 'stale' } },
+      c,
+    );
+    assert.equal(stale.status, 409);
+    const ok = await route.handle(
+      { headers: {}, params: { id: 'job-ack' }, body: { lease_token: next?.lease_token } },
+      c,
+    );
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.body, { acknowledged: true });
+  });
+
+  it('runner-only queue routes enforce the optional runner credential verifier', async () => {
+    const c = {
+      ...ctx(),
+      runnerAuthorize: async (headers: Record<string, string>) =>
+        headers.authorization === 'Bearer runner-test',
+    };
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runner/jobs/next');
+    assert.ok(route);
+    assert.equal((await route.handle({ headers: {}, params: {} }, c)).status, 401);
+    assert.equal(
+      (await route.handle({ headers: { authorization: 'Bearer runner-test' }, params: {} }, c))
+        .status,
+      204,
+    );
+  });
+
   it('GET /api/queue snapshots the queue', async () => {
     const c = ctx();
     c.queue.enqueue({ id: 'job-a', payload: {}, enqueued_at: '2026-05-18T00:00:00Z' });

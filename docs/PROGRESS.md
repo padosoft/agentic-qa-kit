@@ -179,3 +179,9 @@
 - Documented the operational limits: TCP probes are temporary until a deployable server wrapper exposes a dedicated health endpoint; audit PVC is not WORM or a backup; operators must set the real ingress namespace labels.
 - Helm CLI is not installed in this Windows workspace, so chart rendering/lint remains a CI/operator-side verification gap for this increment.
 - Added a GitHub `Validate Helm deployment chart` job to lint and render both default and ingress/TLS production-shaped values, assert the audit PVC is rendered, and reject an unrestricted ingress namespace selector. Local Helm remains unavailable, but the verification is now executable in CI.
+
+# 2026-09-17 — runner lease completion boundary
+
+- Added `POST /api/runner/jobs/:id/ack`; workers must present the current fencing `lease_token`, and stale/unknown tokens return `409` without completing the job.
+- Added optional `runnerAuthorize` enforcement to both dequeue and ACK routes, preserving local test compatibility while allowing production deployments to require a dedicated runner credential rather than a user session.
+- Evidence: server suite 98/98 passed, server typecheck and Biome passed. PostgreSQL lease fencing remains covered by the existing live CI integration.
