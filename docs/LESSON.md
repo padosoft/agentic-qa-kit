@@ -1775,3 +1775,9 @@ Agent trajectories often contain credentials, customer data and large tool
 responses. Audit the existence, identity, ordering, status and digests of tool
 calls, not their raw payloads. Enforce allowlists and budgets before dispatch;
 redaction after persistence is too late for an in-memory host boundary.
+# 2026-09-17 — pin identity before claiming agent replay
+
+Agent replay evidence must bind every call to one explicit provider/model
+identity and preserve contiguous step/token accounting. Store hashes and usage
+metadata rather than prompts or tool results; otherwise the trajectory becomes
+either non-reproducible or a sensitive data sink.

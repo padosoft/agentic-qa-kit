@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added pinned opaque agent trajectory evidence.** `AgentTrajectoryRecorder`
+  enforces contiguous step and token budgets, pins provider/model identity, and
+  emits `llm_call`/`tool_call` audit events with SHA-256 digests and usage only.
+  Evidence: trajectory + tool-guard tests **7 pass / 0 fail**; raw prompt/tool
+  data is absent from snapshots and events. ADR-190 records the boundary;
+  provider semantic evaluation, durable storage and MCP protocol evidence
+  remain open integrations.
+
 - **Added the provider-neutral agent tool guard.** `AgentToolGuard` enforces
   exact tool allowlists, call budgets, output byte limits and cooperative
   cancellation, while emitting `tool_call` audit events containing only

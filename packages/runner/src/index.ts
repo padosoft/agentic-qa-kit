@@ -34,3 +34,12 @@ export {
   type AgentToolCallResult,
   type AgentToolGuardOptions,
 } from './agent.js';
+export {
+  AgentTrajectoryRecorder,
+  type AgentModelIdentity,
+  type AgentTokenUsage,
+  type AgentTrajectoryRecorderOptions,
+  type AgentTrajectorySnapshot,
+  type AgentTrajectoryStep,
+  type RecordAgentCallOptions,
+} from './trajectory.js';
