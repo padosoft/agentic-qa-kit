@@ -153,7 +153,10 @@ describe('AgentTrajectoryRecorder', () => {
         return row ? [{ run_id: run, scenario_id: scenario, ...row }] : [];
       },
     };
-    const store = new PostgresAgentTrajectoryStore({ client });
+    const store = new PostgresAgentTrajectoryStore({
+      client,
+      allow_unsafe_migration_without_transaction: true,
+    });
     const snapshot = recorder().snapshot();
     const first = await store.save(snapshot);
     const retry = await store.save(snapshot);
@@ -172,10 +175,39 @@ describe('AgentTrajectoryRecorder', () => {
     );
   });
 
+  it('serializes PostgreSQL schema bootstrap when a transaction client is available', async () => {
+    const calls: string[] = [];
+    const client = {
+      async unsafe(query: string) {
+        calls.push(query);
+        return [];
+      },
+      async begin<T>(callback: (transaction: typeof client) => Promise<T>) {
+        calls.push('BEGIN');
+        const result = await callback(client);
+        calls.push('COMMIT');
+        return result;
+      },
+    };
+    const store = new PostgresAgentTrajectoryStore({ client });
+    await store.close();
+    assert.equal(calls[0], 'BEGIN');
+    assert.match(calls[1] ?? '', /pg_advisory_xact_lock/);
+    assert.match(calls[2] ?? '', /CREATE TABLE IF NOT EXISTS/);
+    assert.equal(calls.at(-1), 'COMMIT');
+  });
+
   it('requires a DSN or injected client and rejects unsafe database identities', async () => {
     assert.throws(() => new PostgresAgentTrajectoryStore({}), /PostgreSQL DSN is required/);
     const client = { unsafe: async () => [] };
-    const store = new PostgresAgentTrajectoryStore({ client });
+    assert.throws(
+      () => new PostgresAgentTrajectoryStore({ client }),
+      /client must provide begin\(\)/,
+    );
+    const store = new PostgresAgentTrajectoryStore({
+      client,
+      allow_unsafe_migration_without_transaction: true,
+    });
     await assert.rejects(() => store.load('../escape', 'scenario-agent'), /path segment/);
   });
 });

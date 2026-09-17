@@ -143,10 +143,13 @@ export interface PostgresTrajectoryStoreOptions {
   dsn?: string;
   client?: PostgresTrajectoryClient;
   max_bytes?: number;
+  allow_unsafe_migration_without_transaction?: boolean;
 }
 
 export interface PostgresTrajectoryClient {
   unsafe(query: string, parameters?: unknown[]): Promise<unknown>;
+  /** Optional transaction primitive; required for race-free production bootstrap. */
+  begin?<T>(callback: (transaction: PostgresTrajectoryClient) => Promise<T>): Promise<T>;
 }
 
 interface StoredPostgresTrajectory {
@@ -160,12 +163,17 @@ interface StoredPostgresTrajectory {
 export class PostgresAgentTrajectoryStore {
   private readonly sql: PostgresTrajectoryClient;
   private readonly maxBytes: number;
+  private readonly allowUnsafeMigrationWithoutTransaction: boolean;
   private readonly ownedClient: Sql | undefined;
   private readonly ready: Promise<void>;
 
   constructor(options: PostgresTrajectoryStoreOptions) {
+    this.allowUnsafeMigrationWithoutTransaction =
+      options.allow_unsafe_migration_without_transaction ?? false;
     if (options.client) {
       this.sql = options.client;
+      if (!this.sql.begin && !this.allowUnsafeMigrationWithoutTransaction)
+        throw new Error('trajectory PostgreSQL client must provide begin() for safe migrations');
     } else {
       if (!options.dsn?.trim()) throw new Error('trajectory PostgreSQL DSN is required');
       this.ownedClient = postgres(options.dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
@@ -245,16 +253,30 @@ export class PostgresAgentTrajectoryStore {
   }
 
   private async migrate(): Promise<void> {
-    await this.query(
-      `CREATE TABLE IF NOT EXISTS aqa_agent_trajectories (
-        run_id text NOT NULL,
-        scenario_id text NOT NULL,
-        snapshot_sha256 text NOT NULL CHECK (snapshot_sha256 ~ '^[a-f0-9]{64}$'),
-        envelope jsonb NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        PRIMARY KEY (run_id, scenario_id)
-      )`,
-    );
+    const createTable = async (client: PostgresTrajectoryClient): Promise<void> => {
+      await client.unsafe(
+        `CREATE TABLE IF NOT EXISTS aqa_agent_trajectories (
+          run_id text NOT NULL,
+          scenario_id text NOT NULL,
+          snapshot_sha256 text NOT NULL CHECK (snapshot_sha256 ~ '^[a-f0-9]{64}$'),
+          envelope jsonb NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (run_id, scenario_id)
+        )`,
+      );
+    };
+    if (this.sql.begin) {
+      await this.sql.begin(async (transaction) => {
+        await transaction.unsafe(
+          "SELECT pg_advisory_xact_lock(hashtext('aqa_agent_trajectories_migration'))",
+        );
+        await createTable(transaction);
+      });
+      return;
+    }
+    if (!this.allowUnsafeMigrationWithoutTransaction)
+      throw new Error('trajectory PostgreSQL client must provide begin() for safe migrations');
+    await createTable(this.sql);
   }
 
   private async query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {

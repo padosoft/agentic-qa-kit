@@ -11,6 +11,12 @@ with atomic writes, size bounds and immutable `(run_id, scenario_id)` keys.
 Reads verify the digest before returning the snapshot.
 `PostgresAgentTrajectoryStore` provides the same immutable contract across
 worker replicas with atomic conflict handling and read-time invariant checks.
+Production clients must provide a transaction primitive so schema bootstrap
+can take a transaction-scoped advisory lock before DDL. The unsafe
+non-transaction bootstrap switch exists only for injected test doubles and
+must not be enabled for real PostgreSQL deployments. The CI PostgreSQL
+integration job runs a two-instance contract when a test DSN is configured;
+this does not replace production backup, PITR or restore drills.
 Mount the production artifact domain on WORM/Object-Lock storage when legal
 retention guarantees are required.
 

@@ -11,6 +11,27 @@
 
 ## 2026-09-17
 
+## 2026-09-18
+
+- **Closed the PostgreSQL trajectory migration race in code.** Hosted CI showed
+  that two trajectory-store instances could concurrently create the same
+  PostgreSQL relation, despite `IF NOT EXISTS`, producing a `pg_type` duplicate
+  error. Production clients now bootstrap inside one transaction protected by
+  `pg_advisory_xact_lock`; injected clients without `begin()` are rejected
+  unless they explicitly opt into the unsafe test-only migration path. Local
+  runner evidence is **67 pass / 0 fail**, typecheck and Biome are green. A
+  post-fix hosted PostgreSQL run is required before this race boundary is
+  considered verified.
+
+- **Added live PostgreSQL trajectory evidence to CI.** The runner package test
+  script now includes the trajectory suite, and the PostgreSQL integration job
+  runs a two-instance trajectory contract with retry, immutable-conflict and
+  read-back assertions when `AQA_TEST_POSTGRES_DSN` is provided. The hosted
+  run for `ce11adf` is evidence for the live trajectory contract before the
+  transaction-scoped migration fix; the current PR must be validated by a newer
+  hosted run before the race fix is closed. Backup/PITR/restore and WORM
+  operations remain deployment evidence.
+
 - **Added cross-replica PostgreSQL trajectory persistence.**
   `PostgresAgentTrajectoryStore` uses an immutable `(run_id, scenario_id)`
   primary key, atomic conflict-safe insert, bounded envelopes and digest plus
