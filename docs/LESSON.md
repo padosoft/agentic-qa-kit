@@ -1644,3 +1644,10 @@ redact generated fields before queueing, require a named reviewer for terminal
 transitions, and do not persist raw model text because it can contain secrets
 or customer data. Local tests prove the boundary; reviewer identity, LLM
 quality and durable production storage need separate evidence.
+# 2026-09-17 — reachability evidence must expose its resolver boundary
+
+Scanning every source file turns dead code and fixtures into misleading risk
+evidence. A bounded import graph improves signal quality without executing
+untrusted code, but aliases, dynamic imports, generated files and other
+languages remain unresolved. Emit the resolver mode as a tag and keep the
+result explicitly heuristic rather than claiming complete reachability.
