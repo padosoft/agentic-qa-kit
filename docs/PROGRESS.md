@@ -11,6 +11,12 @@
 
 ## 2026-09-17
 
+- **Added executable subscription coverage.** `verifySubscriptionJourney()`
+  now checks idempotent create retry, plan/amount/interval, period ordering,
+  tenant/customer ownership and authoritative read-after-write observation.
+  Commerce contracts remain **30 pass / 0 fail**; billing provider, dunning,
+  invoices, proration and tax integrations remain live evidence.
+
 - **Added executable post-purchase/RMA coverage.** `verifyPostPurchaseJourney()`
   now requires fulfillment observation and validates tracking/order quantity
   invariants; it can also create and retry a typed return request with strict
