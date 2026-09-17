@@ -47,6 +47,8 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   optional idempotent return/RMA request bound to the original order.
 - `verifySubscriptionJourney()` validates idempotent subscription creation,
   period/amount invariants, tenant ownership and authoritative re-observation.
+- `verifyLoyaltyJourney()` validates checkout-linked earning, tenant/customer
+  ownership, complete ledger reconciliation and an optional points expectation.
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.

@@ -218,6 +218,7 @@ export const CommerceCapabilities = z.object({
   idempotency: z.boolean(),
   tax_quote: z.boolean().default(false),
   shipping_quote: z.boolean().default(false),
+  loyalty_observer: z.boolean().default(false),
 });
 export type CommerceCapabilities = z.infer<typeof CommerceCapabilities>;
 
@@ -587,7 +588,13 @@ export interface CommerceAdapter {
     destination: ShippingAddress,
   ): Promise<ShippingQuote>;
   observeWebhooks?(orderId: string): Promise<readonly WebhookObservation[]>;
+  observeLoyalty?(identity: CommerceIdentity): Promise<LoyaltyObservation>;
 }
+
+export type LoyaltyObservation = {
+  account: LoyaltyAccountSnapshot;
+  transactions: readonly LoyaltyTransactionSnapshot[];
+};
 
 export type CommerceJourneyEvidence = {
   step: string;
@@ -634,6 +641,10 @@ export type SubscriptionJourneyOptions = {
   idempotencyKey: string;
 };
 
+export type LoyaltyJourneyOptions = CheckoutJourneyOptions & {
+  expectedPoints?: number;
+};
+
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
   refund: RefundJourneyOptions;
@@ -644,6 +655,7 @@ export type CommerceJourneySuiteOptions = {
   settlement?: SettlementJourneyOptions;
   postPurchase?: PostPurchaseJourneyOptions;
   subscription?: SubscriptionJourneyOptions;
+  loyalty?: LoyaltyJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -1244,6 +1256,70 @@ export async function verifySubscriptionJourney(
   }
 }
 
+/** Verifies checkout-linked loyalty earning and a reconciled customer ledger. */
+export async function verifyLoyaltyJourney(
+  adapter: CommerceAdapter,
+  opts: LoyaltyJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (!capabilities.checkout || !capabilities.loyalty_observer || !adapter.observeLoyalty) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout or loyalty observation capability',
+        },
+        evidence,
+      };
+    }
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    const observed = await adapter.observeLoyalty(opts.identity);
+    const account = LoyaltyAccountSnapshot.parse(observed.account);
+    const transactions = observed.transactions.map((item) =>
+      LoyaltyTransactionSnapshot.parse(item),
+    );
+    if (
+      account.tenant !== opts.identity.tenant ||
+      account.customer_id !== opts.identity.customer_id
+    )
+      throw new Error('loyalty observation crosses tenant or customer boundary');
+    assertLoyaltyLedgerIntegrity(account, transactions);
+    const orderEarn = transactions.find(
+      (item) => item.kind === 'earn' && item.reference === checkout.order.id,
+    );
+    if (!orderEarn)
+      throw new Error('loyalty ledger has no earn transaction for the checkout order');
+    if (opts.expectedPoints !== undefined && orderEarn.points !== opts.expectedPoints)
+      throw new Error('loyalty earn points do not match the requested expectation');
+    evidence.push({
+      step: 'loyalty.reconciled',
+      ok: true,
+      detail: `account=${account.id}; order=${checkout.order.id}; balance=${account.balance_points}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'loyalty journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -1268,6 +1344,7 @@ export async function verifyCommerceJourneySuite(
     journeys.postPurchase = await verifyPostPurchaseJourney(adapter, opts.postPurchase);
   if (opts.subscription)
     journeys.subscription = await verifySubscriptionJourney(adapter, opts.subscription);
+  if (opts.loyalty) journeys.loyalty = await verifyLoyaltyJourney(adapter, opts.loyalty);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -1361,6 +1438,8 @@ export class InMemoryCommerceReference {
     string,
     { fingerprint: string; result: SubscriptionSnapshot }
   >();
+  private readonly loyaltyAccounts = new Map<string, LoyaltyAccountSnapshot>();
+  private readonly loyaltyTransactions = new Map<string, LoyaltyTransactionSnapshot[]>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: CheckoutResult }>();
   private sequence = 0;
 
@@ -1502,6 +1581,42 @@ export class InMemoryCommerceReference {
     });
     this.orders.set(order.id, order);
     this.payments.set(order.id, payment);
+    const loyaltyKey = `${identity.tenant}:${identity.customer_id}`;
+    const previousLoyalty = this.loyaltyAccounts.get(loyaltyKey) ?? {
+      schema_version: '1' as const,
+      id: this.nextId('loyalty-account'),
+      tenant: identity.tenant,
+      customer_id: identity.customer_id,
+      balance_points: 0,
+      revision: 0,
+    };
+    const earnedMinorUnits = BigInt(subtotal.amount_minor) / 100n;
+    const earnedPoints = Math.max(
+      1,
+      Number(
+        earnedMinorUnits > BigInt(Number.MAX_SAFE_INTEGER)
+          ? BigInt(Number.MAX_SAFE_INTEGER)
+          : earnedMinorUnits,
+      ),
+    );
+    const loyaltyTransaction: LoyaltyTransactionSnapshot = {
+      schema_version: '1',
+      id: this.nextId('loyalty-transaction'),
+      account_id: previousLoyalty.id,
+      kind: 'earn',
+      points: earnedPoints,
+      reference: order.id,
+      occurred_at: new Date().toISOString(),
+    };
+    this.loyaltyAccounts.set(loyaltyKey, {
+      ...previousLoyalty,
+      balance_points: previousLoyalty.balance_points + earnedPoints,
+      revision: previousLoyalty.revision + 1,
+    });
+    this.loyaltyTransactions.set(loyaltyKey, [
+      ...(this.loyaltyTransactions.get(loyaltyKey) ?? []),
+      loyaltyTransaction,
+    ]);
     this.carts.set(cart.id, { ...cart, status: 'checked_out', revision: cart.revision + 1 });
     const result = { order, payment, inventory: snapshots };
     this.idempotency.set(key, { fingerprint, result });
@@ -1794,6 +1909,7 @@ export class InMemoryCommerceReference {
         idempotency: true,
         tax_quote: true,
         shipping_quote: true,
+        loyalty_observer: true,
       }),
       createCart: async (identity) => this.createCart(identity),
       addLine: async (identity, cartId, sku, quantity) =>
@@ -1816,6 +1932,7 @@ export class InMemoryCommerceReference {
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),
       observeWebhooks: async (orderId) => this.observeWebhooks(orderId),
+      observeLoyalty: async (identity) => this.observeLoyalty(identity),
     };
   }
 
@@ -1833,6 +1950,13 @@ export class InMemoryCommerceReference {
 
   observeWebhooks(orderId: string): readonly WebhookObservation[] {
     return this.webhooks.get(orderId) ?? [];
+  }
+
+  observeLoyalty(identity: CommerceIdentity): LoyaltyObservation {
+    const key = `${identity.tenant}:${identity.customer_id}`;
+    const account = this.loyaltyAccounts.get(key);
+    if (!account) throw new Error('loyalty account not found');
+    return { account, transactions: this.loyaltyTransactions.get(key) ?? [] };
   }
 
   quoteShipping(
