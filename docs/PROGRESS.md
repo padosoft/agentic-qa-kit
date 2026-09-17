@@ -511,3 +511,7 @@
 
 - Added `PostgresSamlReplayGuard` with serialized migration, expiry index and atomic single-claim semantics. The existing SAML boundary can now use a durable replay store without weakening its maintained signature-verifier adapter boundary.
 - Evidence: auth suite 17 passed/3 PostgreSQL-dependent skips without DSN, typecheck and lint pass. The hosted PostgreSQL job now invokes the combined SCIM/SAML persistence contract; real IdP metadata/certificate rollover and HTTP login wiring remain open.
+
+# 2026-09-17 — post-identity regression gate
+
+- Workspace typecheck, full Bun suite and lint completed after durable SCIM/SAML, OTLP and performance changes: **509 passed, 6 PostgreSQL-dependent skips, 0 failures across 51 files**. `git diff --check` also passes. The six skips are now explicitly named: OIDC session, SCIM token, SAML replay, EventBus, queue idempotency and quota concurrency.
