@@ -60,6 +60,11 @@
   green; installed Chromium, live checkout journey and SUT/provider
   reconciliation remain required evidence.
 
+- **Driver lifecycle wired into kit orchestration.** `aqa run` now invokes an
+  optional probe-runner `close()` before publishing replay/audit artifacts and
+  turns shutdown failures into run errors. The Playwright journey has a real
+  close assertion; hard process cancellation remains worker/sandbox work.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

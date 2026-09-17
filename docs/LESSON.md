@@ -41,6 +41,11 @@
   actions structured, origins allowlisted, evidence bounded/redacted and close
   the context explicitly; reconcile UI claims with authoritative state.
 
+- **Resource-owning drivers need orchestration-owned shutdown.** A browser or
+  DB adapter that works in isolation can leak state across scenarios if its
+  close hook is never called. Invoke and audit shutdown before publication;
+  cooperative close is still complemented by worker-level kill/cancellation.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

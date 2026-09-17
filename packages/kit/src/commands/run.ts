@@ -56,6 +56,8 @@ import { type Event, Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
 
+type ClosableProbeRunner = ProbeRunner & { close?: () => Promise<void> };
+
 export interface RunOptions {
   root: string;
   /**
@@ -84,7 +86,7 @@ export interface RunOptions {
   /** Optional OTLP/HTTP endpoint; defaults to AQA_OTLP_ENDPOINT when set. */
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
-  probeRunner?: ProbeRunner;
+  probeRunner?: ClosableProbeRunner;
   /** Optional capability declaration forwarded to runner preflight. */
   supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
   /** Optional operator key used to sign the final audit completeness checkpoint. */
@@ -498,7 +500,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // executed and audited twice. First-seen wins, so the priority order
   // matches the discovery order above: project > node_modules > bundled.
   const seenPackNames = new Set<string>();
-  const probeRunner =
+  const probeRunner: ClosableProbeRunner | undefined =
     opts.probeRunner ??
     (project.sut.base_url ? makeHttpProbeRunner({ baseUrl: project.sut.base_url }) : undefined);
   // applies_when context built from the parsed project — lets the pack-loader
@@ -623,6 +625,16 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         });
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
+    }
+  }
+
+  if (probeRunner?.close) {
+    try {
+      await probeRunner.close();
+    } catch (e) {
+      runtimeErrors.push(
+        `probe driver close failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 

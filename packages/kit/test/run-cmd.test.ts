@@ -238,6 +238,27 @@ describe('aqa run', () => {
     assert.equal(manifest.external_checkpoint?.sha256.length, 64);
   });
 
+  it('closes a lifecycle-aware probe driver before publishing the run', async () => {
+    const { root, packDir } = fixtureProject();
+    let closed = false;
+    const runner = Object.assign(
+      async (probe: { id: string }) => ({ probe_id: probe.id, status: 200 }),
+      {
+        close: async () => {
+          closed = true;
+        },
+      },
+    );
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      probeRunner: runner,
+    });
+    assert.equal(result.ok, true, `run must succeed, got: ${JSON.stringify(result)}`);
+    assert.equal(closed, true);
+  });
+
   it('does not emit a finding when a scenario has no executable driver', async () => {
     // This fixture has no SUT base URL, so the missing driver is an execution
     // gap, not evidence that the SUT violated the oracle.
