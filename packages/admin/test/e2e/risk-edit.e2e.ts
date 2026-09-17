@@ -53,13 +53,25 @@ test.describe('Risk edit', () => {
   }) => {
     type Req = { url: string; method: string; body: Record<string, unknown> };
     const calls: Req[] = [];
+    let observedIfMatch: string | undefined;
     await page.route('**/api/risks/**', async (route) => {
       const method = route.request().method();
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          headers: { etag: '"risk-version-1"' },
+          contentType: 'application/json',
+          body: JSON.stringify({ risk: { id: 'risk-live', title: 'Live risk' } }),
+        });
+        return;
+      }
       if (method !== 'PUT') return route.continue();
+      observedIfMatch = route.request().headers()['if-match'];
       const body = route.request().postDataJSON() as Record<string, unknown>;
       calls.push({ url: route.request().url(), method, body });
       await route.fulfill({
         status: 200,
+        headers: { etag: '"risk-version-2"' },
         contentType: 'application/json',
         body: JSON.stringify({ risk: body }),
       });
@@ -70,6 +82,7 @@ test.describe('Risk edit', () => {
     await page.getByTestId('risk-save-btn').click();
     await expect(page.locator('.toast.success', { hasText: /Risk saved/i })).toBeVisible();
     expect(calls.length).toBe(1);
+    expect(observedIfMatch).toBe('"risk-version-1"');
     expect(calls[0]?.method).toBe('PUT');
     // Path id is the displayed (and stored) id — no client-side
     // slugification (see app.tsx handleSave comment for rationale).

@@ -13,11 +13,15 @@
 
 - **Conditional admin edits.** Profile, risk and scenario detail reads now
   emit strong content ETags; their PUT boundaries honor `If-Match` and reject
-  stale writes with `412 PRECONDITION_FAILED` before persistence. A server
-  regression proves the newer value survives a stale client update. The forms
-  still need to capture/send ETags in their complete editing journeys.
-- Evidence: server suite **123/123**, server/kit typechecks and Biome pass;
-  ADR-129 records the backward-compatible migration boundary.
+  stale writes with `412 PRECONDITION_FAILED` before persistence. Profile,
+  risk and scenario editors now capture the tag on open and send it on PUT;
+  successful saves refresh the tag. A server regression proves the newer value
+  survives a stale client update, and a Chromium journey proves the risk editor
+  sends the captured tag.
+- Evidence: server suite **123/123**, admin typecheck/build, targeted Risk Edit
+  browser suite **5/5**, server/kit typechecks and Biome pass; ADR-129 records
+  the backward-compatible migration boundary. A visible conflict-resolution
+  flow and unconditional legacy-client migration remain open.
 
 - **Admin live Runs/Findings integration.** Runs and Findings now consume the
   tenant-scoped API and show an explicit `live API` marker; fixture fallback is

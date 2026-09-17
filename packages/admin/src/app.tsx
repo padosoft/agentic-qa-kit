@@ -5592,6 +5592,7 @@ function ScenarioYamlWizard({
 }) {
   // mode: 'edit' | 'clone'
   const [yamlText, setYamlText] = React.useState('');
+  const [resourceEtag, setResourceEtag] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -5627,6 +5628,28 @@ function ScenarioYamlWizard({
       inFlightRef.current = false;
     }
   }, [open, scenarioId, mode, persistedBody]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!open || mode !== 'edit' || !scenarioId) {
+      setResourceEtag(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch(apiUrl(`/api/scenarios/${encodeURIComponent(scenarioId)}`), {
+      headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+    })
+      .then((res) => {
+        if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResourceEtag(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode, scenarioId]);
 
   function handleClose() {
     if (submitting) return;
@@ -5749,7 +5772,10 @@ function ScenarioYamlWizard({
           : apiUrl('/api/scenarios');
       const res = await fetch(reqUrl, {
         method: mode === 'edit' ? 'PUT' : 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(mode === 'edit' && resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(parsedBody),
       });
       const text = await res.text();
@@ -5766,6 +5792,7 @@ function ScenarioYamlWizard({
         setError(msg);
         return;
       }
+      if (mode === 'edit') setResourceEtag(res.headers.get('etag') || resourceEtag);
       // PR #37 Copilot iter 3: broadcast the SERVER's response body,
       // not the client's parsedBody. The server (Zod) applies defaults
       // (probe/oracle defaults, `invariant_refs: []`, `cleanup: []`,
@@ -5951,6 +5978,7 @@ function slugError(s) {
 
 function EditProfileWizard({ open, profile, onClose, onSaved }) {
   const [form, setForm] = React.useState(() => deriveProfileForm(profile ?? { packs: [], tags: [] }));
+  const [resourceEtag, setResourceEtag] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
   const inFlightRef = React.useRef(false);
@@ -5988,7 +6016,26 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
       setError(null);
       setSubmitting(false);
       inFlightRef.current = false;
+      let cancelled = false;
+      if (profileName) {
+        fetch(apiUrl(`/api/profiles/${encodeURIComponent(profileName)}`), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        })
+          .then((res) => {
+            if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+          })
+          .catch(() => {
+            if (!cancelled) setResourceEtag(null);
+          });
+      } else {
+        setResourceEtag(null);
+      }
+      return () => {
+        cancelled = true;
+      };
     }
+    setResourceEtag(null);
+    return undefined;
   }, [open, profileName]);
 
   // Inline validation: parallelism must be a positive integer ≤ 64
@@ -6084,7 +6131,10 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
     try {
       const res = await fetch(reqUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(body),
       });
       const text = await res.text();
@@ -6109,6 +6159,7 @@ function EditProfileWizard({ open, profile, onClose, onSaved }) {
         if (stillCurrent) setError(msg);
         return;
       }
+      setResourceEtag(res.headers.get('etag') || resourceEtag);
       toast.push({
         kind: 'success',
         title: 'Profile saved',
@@ -9133,6 +9184,7 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState(null);
+  const [resourceEtag, setResourceEtag] = React.useState(null);
   const inFlightRef = React.useRef(false);
   // Render-time ref so the stale-submit guard sees the LATEST riskId
   // after an in-flight PUT resolves. Matches EditProfileWizard's
@@ -9140,6 +9192,28 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
   const riskIdRef = React.useRef(riskId);
   riskIdRef.current = riskId;
   const toast = useToast();
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (isNew || !riskId) {
+      setResourceEtag(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch(apiUrl(`/api/risks/${encodeURIComponent(riskId)}`), {
+      headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+    })
+      .then((res) => {
+        if (!cancelled) setResourceEtag(res.ok ? res.headers.get('etag') : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResourceEtag(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isNew, riskId]);
 
   // Inline UX validation mirrors the @aqa/schemas Risk shape so the
   // user gets immediate feedback. The server is the actual trust
@@ -9175,7 +9249,10 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
     try {
       const res = await fetch(reqUrl, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(resourceEtag ? { 'If-Match': resourceEtag } : {}),
+        },
         body: JSON.stringify(body),
       });
       const text = await res.text();
@@ -9192,6 +9269,7 @@ function PageRiskEditor({ riskId, onNavigate, deletedRisks, updatedRisks }) {
         if (stillCurrent) setSaveError(msg);
         return;
       }
+      setResourceEtag(res.headers.get('etag') || resourceEtag);
       toast.push({ kind: 'success', title: 'Risk saved', body: submittedId });
       // The body sent to the server has schema-coerced fields (slugified
       // id, { id, statement } invariant objects). Re-merging that into
