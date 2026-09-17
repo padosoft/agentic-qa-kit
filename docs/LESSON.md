@@ -1101,6 +1101,13 @@ deterministic single tick for CronJob/systemd adapters and a guarded interval fo
 embedded processes; prevent overlapping ticks and surface errors through an
 injected callback so operators can add metrics/alerts without leaking payloads.
 
+# 2026-09-17 — deployment wiring must fail closed too
+
+An in-process reaper is not an operational control until a deployment invokes it.
+The Helm CronJob must use a Secret-backed DSN, forbid overlapping jobs, bound
+retry history and enforce non-root/read-only execution. Both template-time
+configuration errors and the binary's missing-DSN path must fail closed.
+
 # 2026-09-17 — browser cancellation needs post-await checks
 
 Closing a page on abort is not sufficient if the fake or provider resolves the

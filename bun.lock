@@ -211,8 +211,12 @@
     "packages/server": {
       "name": "@aqa/server",
       "version": "0.0.1",
+      "bin": {
+        "aqa-budget-reaper": "./dist/budget-reaper-cli.js",
+      },
       "dependencies": {
         "@aqa/auth": "workspace:*",
+        "@aqa/cost": "workspace:*",
         "@aqa/methodology": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-scanner": "workspace:*",

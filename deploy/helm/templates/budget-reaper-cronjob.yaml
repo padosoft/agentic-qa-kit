@@ -1,0 +1,58 @@
+{{- if .Values.cost.reaper.enabled }}
+{{- if and (not .Values.postgres.subchart.enabled) (not .Values.postgres.urlSecretRef) }}
+{{- fail "cost.reaper.enabled requires postgres.subchart.enabled or postgres.urlSecretRef" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-budget-reaper
+  labels:
+    {{- include "aqa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: budget-reaper
+spec:
+  schedule: {{ .Values.cost.reaper.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "aqa.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: budget-reaper
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: budget-reaper
+              {{- if and .Values.server.image.requireDigest (not .Values.server.image.digest) }}
+              {{- fail "server.image.digest is required when server.image.requireDigest is true" }}
+              {{- end }}
+              image: "{{ .Values.server.image.repository }}{{ if .Values.server.image.digest }}@{{ .Values.server.image.digest }}{{ else }}:{{ .Values.server.image.tag }}{{ end }}"
+              imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+              command:
+                {{- toYaml .Values.cost.reaper.command | nindent 16 }}
+              env:
+                - name: AQA_BUDGET_LEDGER_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      {{- if .Values.cost.reaper.ledgerDsnSecretRef }}
+                      name: {{ .Values.cost.reaper.ledgerDsnSecretRef }}
+                      {{- else }}
+                      name: {{ .Release.Name }}-postgres
+                      {{- end }}
+                      key: url
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                {{- toYaml .Values.server.resources | nindent 16 }}
+{{- end }}

@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": { "aqa-budget-reaper": "./dist/budget-reaper-cli.js" },
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "files": ["dist", "README.md"],
   "scripts": {
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "@aqa/auth": "workspace:*",
+    "@aqa/cost": "workspace:*",
     "@aqa/methodology": "workspace:*",
     "@aqa/pack-author": "workspace:*",
     "@aqa/pack-scanner": "workspace:*",

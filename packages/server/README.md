@@ -38,3 +38,7 @@ silently falls back to global records.
 complete persisted `oracle_evaluated` event groups through
 `@aqa/methodology`; incomplete scenario evidence is omitted rather than
 reported as a pass.
+
+The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick
+using `AQA_BUDGET_LEDGER_DSN`. It is intended for a Kubernetes CronJob or
+systemd timer; it prints only a bounded count and fails when the DSN is absent.

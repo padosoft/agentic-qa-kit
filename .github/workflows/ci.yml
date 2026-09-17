@@ -249,6 +249,8 @@ jobs:
             --set ingress.tls.enabled=true \
             --set ingress.tls.secretName=aqa-tls \
             --set postgres.urlSecretRef=aqa-db \
+            --set cost.reaper.enabled=true \
+            --set cost.reaper.ledgerDsnSecretRef=aqa-db \
             > /tmp/aqa-production.yaml
           test -s /tmp/aqa-default.yaml
           test -s /tmp/aqa-production.yaml
@@ -259,6 +261,8 @@ jobs:
           test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_TOKEN_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_RATE_LIMIT_DSN' /tmp/aqa-production.yaml)" -eq 1
+          grep -q 'kind: CronJob' /tmp/aqa-production.yaml
+          grep -q 'name: AQA_BUDGET_LEDGER_DSN' /tmp/aqa-production.yaml
           ! grep -q 'namespaceSelector: {}' /tmp/aqa-production.yaml
 
   build:

@@ -833,3 +833,8 @@
 
 - Added `BudgetReaper`, a validated long-lived scheduler around `reapExpired()`. It prevents overlapping ticks, exposes a deterministic `runOnce()` for job schedulers/tests, supports idempotent start/stop and routes failures through an injected callback.
 - Evidence: cost build/typecheck and **11 tests passed**, including scheduled lifecycle behavior. Kubernetes CronJob/systemd wiring, metrics and alerts remain deployment work.
+
+# 2026-09-17 — Helm budget reaper deployment wiring
+
+- Added the `aqa-budget-reaper` one-shot server entrypoint and an optional Helm `CronJob` with `concurrencyPolicy: Forbid`, bounded retry history, non-root/read-only security context and DSN-from-Secret wiring. Enabling the chart without a PostgreSQL Secret fails at template time; the binary fails closed without `AQA_BUDGET_LEDGER_DSN`.
+- Evidence: server build, typecheck, **122 tests passed**, CLI missing-DSN negative check, and CI Helm lint/template assertions updated. Helm is not installed in this Windows workspace, so rendered-chart evidence remains CI-authoritative.

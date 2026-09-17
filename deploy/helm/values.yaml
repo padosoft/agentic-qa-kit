@@ -87,6 +87,12 @@ postgres:
 # Cost governance hard cap (Task 11). Server refuses to start with budget=0.
 cost:
   monthlyBudgetUsd: 100
+  reaper:
+    # One-shot budget reservation cleanup. Requires a PostgreSQL DSN Secret.
+    enabled: false
+    schedule: "*/5 * * * *"
+    ledgerDsnSecretRef: ""
+    command: ["aqa-budget-reaper"]
 
 # Feature flags echoing the determinism contract (Task 10). These exist so
 # operators can pin behavior across replicas.

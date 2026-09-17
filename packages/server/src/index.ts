@@ -25,6 +25,7 @@ export {
   type RunnerWorkerOptions,
   type WorkerRunResult,
 } from './worker.js';
+export { runBudgetReaper } from './budget-reaper-cli.js';
 export {
   MemoryEventBus,
   PostgresEventBus,
