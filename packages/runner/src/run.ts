@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { type TraceContext, formatTraceParent } from '@aqa/observability';
 import { Finding, type RiskMap, type Scenario } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 import type { FindingsWriter } from './findings.js';
@@ -50,6 +51,8 @@ export interface HttpProbeRunnerOptions {
   allowed_origins?: string[];
   /** Maximum response body size retained as evidence. */
   max_response_bytes?: number;
+  /** Optional W3C context propagated to the target as `traceparent`. */
+  trace_context?: TraceContext;
 }
 
 function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
@@ -88,6 +91,7 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
   }
   const allowedOrigins = normalizeAllowedOrigins(opts.allowed_origins ?? [baseUrl.origin]);
   const maxResponseBytes = opts.max_response_bytes ?? 1_048_576;
+  const traceparent = opts.trace_context ? formatTraceParent(opts.trace_context) : undefined;
   return async (probe, externalSignal) => {
     if (probe.kind !== 'http') {
       return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
@@ -96,10 +100,14 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
     const rawUrl = typeof withCfg.url === 'string' ? withCfg.url : '';
     if (!rawUrl) return { probe_id: probe.id, error: 'http probe missing with.url' };
     const method = typeof withCfg.method === 'string' ? withCfg.method.toUpperCase() : 'GET';
-    const headers =
+    const probeHeaders =
       withCfg.headers && typeof withCfg.headers === 'object'
         ? (withCfg.headers as Record<string, string>)
         : {};
+    const headers = {
+      ...probeHeaders,
+      ...(traceparent ? { traceparent } : {}),
+    };
     const body =
       withCfg.body === undefined
         ? undefined

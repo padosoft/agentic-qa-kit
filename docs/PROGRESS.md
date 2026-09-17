@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Added W3C trace propagation across HTTP probe boundaries.**
+  `makeHttpProbeRunner` now accepts an explicit trusted trace context and
+  propagates `traceparent` to the target, overriding any scenario-supplied
+  value. Invalid/untrusted scenario metadata cannot forge the run trace.
+  Evidence: runner tests **25 passed / 0 failed**, build/typecheck/Biome/
+  diff-check pass. Collector deployment and cross-process trace export remain
+  operational evidence.
+
 - **Added restore-drill evidence validation.** `@aqa/compliance` now checks a
   drill against the signed backup inventory: source and restored manifest
   identity, monotonic timestamps, observed RPO/RTO against approved objectives,

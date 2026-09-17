@@ -1621,3 +1621,10 @@ record must bind source and restored manifest digests, enforce time ordering,
 compare observed RPO/RTO to approved objectives, and require tenant isolation,
 audit-chain, queue-fencing and redaction checks. The validator still cannot
 turn a fabricated record into proof of a real cluster restore.
+
+# 2026-09-17 — trace context must come from the trusted boundary
+
+Allowing scenario YAML to provide `traceparent` lets untrusted test content
+spoof correlation with another run. Derive propagation from the orchestrator's
+trusted context and overwrite scenario headers; treat Collector availability as
+separate operational evidence.
