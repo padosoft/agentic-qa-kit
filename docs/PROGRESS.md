@@ -19,6 +19,12 @@
   build/typecheck/Biome/diff-check pass. Live PSP settlement remains external
   deployment evidence.
 
+- **Settlement reconciliation merged to `main`.** PR #64 was squash-merged as
+  `5b801d4` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The implementation boundary is
+  closed; live PSP/payout/fee/dispute reconciliation remains deployment
+  evidence.
+
 - **Commerce refund integrity hardened.** Payment validation now parses the
   runtime snapshot, requires `partially_refunded` to carry a strictly positive
   partial amount, requires all refund states to reconcile with the captured
