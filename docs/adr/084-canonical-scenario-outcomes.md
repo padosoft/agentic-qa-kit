@@ -24,5 +24,6 @@ unknown work as green.
 
 The outcome is only as trustworthy as the execution and oracle contracts. A
 driver must report failures accurately, and the host must provide capability
-preflight and independent observers. The CLI/report aggregation still needs to
-surface this field end-to-end for every persisted scenario.
+preflight and independent observers. The kit now persists the outcome in
+`scenario_finished` and `run_finished`; the admin/report aggregation still
+needs to render this field end-to-end for every scenario.
