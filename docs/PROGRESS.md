@@ -19,6 +19,12 @@
   diff-check pass. Collector deployment and cross-process trace export remain
   operational evidence.
 
+- **W3C trace propagation merged to `main`.** PR #69 was squash-merged as
+  `c5ba579` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. Trusted trace correlation now
+  crosses the HTTP probe boundary; Collector/reverse-proxy preservation
+  remains deployment evidence.
+
 - **Added restore-drill evidence validation.** `@aqa/compliance` now checks a
   drill against the signed backup inventory: source and restored manifest
   identity, monotonic timestamps, observed RPO/RTO against approved objectives,
