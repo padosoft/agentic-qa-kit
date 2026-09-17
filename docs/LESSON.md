@@ -494,3 +494,11 @@ External test output is untrusted input. Normalize it behind a size limit,
 reject XML external entities, redact before persistence, and retain warnings
 from partial tool runs. A parsed JUnit/SAST record is evidence, not proof that
 an AQA finding is fixed or safe to close.
+
+# 2026-09-17 — discovery must start deterministic
+
+Risk discovery should create reviewable hypotheses, not silently claim that an
+agent understood a repository. The first CLI method is a fixed STRIDE catalog
+with explicit invariants, schema validation, scope tags and safe overwrite
+semantics; source-aware and LLM-assisted discovery must remain opt-in and
+auditable.

@@ -320,3 +320,9 @@
 - Added `@aqa/ingest` and `aqa ingest junit|sast <file>`. JUnit pass/failure/error/skip and Semgrep-compatible SAST results now normalize into a common bounded report with stable fingerprints; CLI writes through the redaction-aware artifact store under `.aqa/ingest/`.
 - JUnit rejects `DOCTYPE`/`ENTITY` declarations and all inputs are capped at 10 MiB. Ingestion remains evidence-only: it does not auto-verify or close findings. Playwright trace, k6, mutation and provider-specific adapters remain open.
 - Evidence: ingest package typecheck and 4/4 tests; kit typecheck and 117 tests (115 passed, 2 platform skips); repository lint passed.
+
+# 2026-09-17 — deterministic STRIDE discovery slice
+
+- Added `aqa risk discover --method stride [--scope <path>]`, producing six schema-validated STRIDE baseline risks with one explicit invariant each, mapped to AQA risk categories and tagged with scope. Existing maps are preserved unless `--force` is explicit; symlink targets and traversal scopes fail closed.
+- This is a deterministic baseline, not autonomous source-code truth. FMEA, OWASP import, attack trees, AST/LLM-assisted discovery, and human approval/versioning remain open extensions.
+- Evidence: kit typecheck; kit suite 120 tests (118 passed, 2 platform skips); repository lint and diff check passed.

@@ -7,6 +7,7 @@ import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
+import { runRiskDiscover } from '../commands/risk-discover.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 import { runVerify } from '../commands/verify.js';
@@ -44,6 +45,8 @@ const VALUE_FLAGS = new Set([
   'attempts',
   'base-url',
   'tool',
+  'method',
+  'scope',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -108,6 +111,7 @@ ${bold('Commands')}
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast> <file>         Normalize external test/security results into redacted evidence
+  risk discover --method stride      Generate a deterministic STRIDE risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
@@ -370,6 +374,32 @@ async function main(): Promise<number> {
       }
       console.info(`  ${green('✓')} ${result.report?.records.length ?? 0} record(s) ingested`);
       console.info(`    ${dim('evidence: ')}${result.artifact_path}`);
+      return 0;
+    }
+    case 'risk': {
+      const subcommand = args.positionals[0];
+      if (subcommand !== 'discover') {
+        console.error(red('aqa risk: expected `discover`'));
+        return 1;
+      }
+      const method = args.values.get('method');
+      if (method !== 'stride') {
+        console.error(red('aqa risk discover: only --method stride is currently supported'));
+        return 1;
+      }
+      const result = runRiskDiscover({
+        root: cwd,
+        method,
+        ...(args.values.has('scope') ? { scope: args.values.get('scope') ?? '' } : {}),
+        force: args.flags.has('force'),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} generated ${result.risk_count} STRIDE risks`);
+      console.info(`    ${dim('risk map: ')}${result.path}`);
+      console.info(`    ${dim('write:    ')}${result.write_result}`);
       return 0;
     }
     case 'admin': {
