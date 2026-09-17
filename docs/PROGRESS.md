@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Hardened AI scenario generation provenance and fallback validity.** Review
+  queue items now retain provider/model/version plus SHA-256 hashes for the
+  invariant, prompt and raw model response, while raw prompt/response text is
+  not persisted. Also fixed a real generator bug where minimal valid JSON
+  drafts were discarded because fallback `id`/`title` fields were absent.
+  Evidence: generator tests **6 passed / 0 failed**, build/typecheck/Biome/
+  diff-check pass. Human approval remains mandatory before activation.
+
 - **Added Ed25519 signatures for DR inventory evidence.** Backup inventories
   can now be signed over their canonical representation and verified against an
   explicitly supplied trusted public key; missing trust roots and tampered

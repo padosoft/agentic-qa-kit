@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { LlmAdapter } from '@aqa/llm-adapters';
 import { Scenario } from '@aqa/schemas';
-import type { ReviewQueue } from './queue.js';
+import type { GenerationProvenance, ReviewQueue } from './queue.js';
 
 export interface ProposeOptions {
   risk_id: string;
@@ -46,6 +47,17 @@ export async function proposeScenarios(opts: ProposeOptions): Promise<ProposeRes
       },
     ],
   });
+  const prompt = `Risk: ${opts.risk_id}\nInvariant: ${opts.invariant_statement}`;
+  const generatedAt = new Date();
+  const provenance: GenerationProvenance = {
+    provider: opts.llm.provider,
+    model: opts.model,
+    ...(out.model_version_hash ? { model_version_hash: out.model_version_hash } : {}),
+    risk_id: opts.risk_id,
+    invariant_statement_sha256: sha256(opts.invariant_statement),
+    prompt_sha256: sha256(prompt),
+    response_sha256: sha256(out.text),
+  };
   let parsed: unknown;
   try {
     parsed = JSON.parse(out.text);
@@ -55,16 +67,30 @@ export async function proposeScenarios(opts: ProposeOptions): Promise<ProposeRes
   const drafts = Array.isArray(parsed) ? parsed : [];
   const enqueued: string[] = [];
   for (let i = 0; i < drafts.length; i += 1) {
+    const id = `${opts.id_seed ?? opts.risk_id}-gen-${i + 1}`;
+    const draft = isRecord(drafts[i]) ? drafts[i] : {};
     const candidate = {
       ...SCENARIO_FALLBACK_SHAPE,
-      ...(drafts[i] as Record<string, unknown>),
+      ...draft,
+      id,
+      title:
+        typeof draft.title === 'string' && draft.title.trim().length >= 4
+          ? draft.title
+          : `Generated scenario for ${opts.risk_id}`,
       risk_refs: [opts.risk_id],
     };
     const result = Scenario.Scenario.safeParse(candidate);
     if (!result.success) continue;
-    const id = `${opts.id_seed ?? opts.risk_id}-gen-${i + 1}`;
-    opts.queue.enqueue(result.data, id);
+    opts.queue.enqueue(result.data, id, generatedAt, provenance);
     enqueued.push(id);
   }
   return { count: enqueued.length, enqueued_ids: enqueued };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }

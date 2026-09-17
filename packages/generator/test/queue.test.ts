@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { ReviewQueue } from '../dist/queue.js';
+import { ReviewQueue, proposeScenarios } from '../dist/index.js';
 
 const SCN = {
   schema_version: '1' as const,
@@ -51,5 +52,46 @@ describe('ReviewQueue', () => {
   it('returns null when transitioning a missing id', () => {
     const q = new ReviewQueue();
     assert.equal(q.approve('missing', 'alice'), null);
+  });
+
+  it('preserves generation provenance without storing the raw prompt or response', async () => {
+    const queue = new ReviewQueue();
+    const invariant = 'checkout must not oversell inventory';
+    const response = JSON.stringify([{}]);
+    const result = await proposeScenarios({
+      risk_id: 'risk-inventory',
+      invariant_statement: invariant,
+      llm: {
+        provider: 'fixture',
+        call: async () => ({
+          text: response,
+          tokens_in: 10,
+          tokens_out: 20,
+          model_version_hash: 'model-sha',
+          finish_reason: 'stop' as const,
+        }),
+      },
+      queue,
+      model: 'fixture-model',
+      id_seed: 'inventory',
+    });
+    assert.equal(result.count, 1);
+    const item = queue.list('pending')[0];
+    assert.equal(item?.provenance?.provider, 'fixture');
+    assert.equal(item?.provenance?.model_version_hash, 'model-sha');
+    assert.equal(
+      item?.provenance?.invariant_statement_sha256,
+      createHash('sha256').update(invariant).digest('hex'),
+    );
+    assert.equal(
+      item?.provenance?.prompt_sha256,
+      createHash('sha256').update(`Risk: risk-inventory\nInvariant: ${invariant}`).digest('hex'),
+    );
+    assert.equal(
+      item?.provenance?.response_sha256,
+      createHash('sha256').update(response).digest('hex'),
+    );
+    assert.doesNotMatch(JSON.stringify(item), /oversell inventory/);
+    assert.equal(JSON.stringify(item).includes(response), false);
   });
 });
