@@ -25,3 +25,9 @@ export {
   type AuditCheckpointSignature,
   type AuditCheckpointVerifyResult,
 } from './audit-checkpoint.js';
+export {
+  backupInventorySha256,
+  canonicalBackupInventory,
+  parseBackupInventory,
+  type BackupInventory,
+} from './dr-manifest.js';

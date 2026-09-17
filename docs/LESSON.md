@@ -1588,3 +1588,12 @@ to the exact payment, distinguish successful/lost effects from unresolved
 ones, and prove `captured - refunds - lost_chargebacks = net`. Provider
 adapters still need live reconciliation evidence; deterministic fixtures only
 prove the equation and linkage rules.
+
+# 2026-09-17 — DR evidence needs a signed, bounded inventory
+
+A prose restore runbook cannot be compared automatically across drills. Keep a
+machine-readable inventory with a PITR target/LSN, schema version, artifact
+manifest digest, immutable image digest, operator drill ID and explicit RPO/RTO
+objectives. Canonicalize it before signing or hashing, reject path-like or
+unbounded identifiers, and keep credentials out of the manifest. The contract
+still does not prove that infrastructure performed a restore.
