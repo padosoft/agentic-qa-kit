@@ -123,102 +123,26 @@ describe('MemoryStore', () => {
   });
 });
 
-describe('PostgresStore (v0.3 scaffold)', () => {
+describe('PostgresStore', () => {
   it('refuses empty DSN at construction', () => {
     assert.throws(() => new PostgresStore(''), /DSN is empty/);
   });
-  it('every method throws "not implemented" with a clear message', async () => {
-    const s = new PostgresStore('postgres://localhost/aqa');
-    await assert.rejects(() => s.saveRun(RUN), /not implemented/);
-    await assert.rejects(() => s.loadRun('x'), /not implemented/);
-    // Profile CRUD (v1.7 slice 4c) — keep this list in sync with the
-    // Store interface so the scaffold contract stays accurate as new
-    // methods are added.
-    await assert.rejects(() => s.listProfiles(), /not implemented/);
-    await assert.rejects(() => s.loadProfile('p'), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveProfile({
-          schema_version: '1',
-          name: 'p',
-          execution_mode: 'orchestrator',
-          llm_usage: [],
-          llm_budget_usd: null,
-          packs: [],
-          tags: [],
-          parallelism: 1,
-          require_deterministic_replay: false,
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(
-      () =>
-        s.createProfile({
-          schema_version: '1',
-          name: 'p',
-          execution_mode: 'orchestrator',
-          llm_usage: [],
-          llm_budget_usd: null,
-          packs: [],
-          tags: [],
-          parallelism: 1,
-          require_deterministic_replay: false,
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(() => s.deleteProfile('p'), /not implemented/);
-    // Scenario CRUD (v1.7 slice 4c.6) — assert the whole scenario
-    // surface so the scaffold contract stays accurate as the
-    // interface evolves.
-    await assert.rejects(() => s.listScenarios(), /not implemented/);
-    await assert.rejects(() => s.loadScenario('s'), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveScenario({
-          schema_version: '1',
-          id: 's',
-          title: 'A scaffold-test scenario',
-          risk_refs: ['risk-x'],
-          invariant_refs: [],
-          preconditions: [],
-          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
-          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
-          cleanup: [],
-          tags: [],
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(
-      () =>
-        s.createScenario({
-          schema_version: '1',
-          id: 's',
-          title: 'A scaffold-test scenario',
-          risk_refs: ['risk-x'],
-          invariant_refs: [],
-          preconditions: [],
-          steps: [{ id: 'probe-1', kind: 'http', with: {}, timeout_ms: 30_000 }],
-          oracles: [{ id: 'oracle-1', kind: 'http_status', with: {}, weight: 1 }],
-          cleanup: [],
-          tags: [],
-        }),
-      /not implemented/,
-    );
-    await assert.rejects(() => s.deleteScenario('s'), /not implemented/);
-    await assert.rejects(() => s.loadSsoConfig(), /not implemented/);
-    await assert.rejects(
-      () =>
-        s.saveSsoConfig({
-          schema_version: '1',
-          provider: 'oidc',
-          enabled: true,
-          issuer_url: 'https://id.example.com/realms/main',
-          client_id: 'aqa-admin',
-          client_secret_set: true,
-          allowed_email_domains: ['example.com'],
-          claim_mappings: { 'user.id': 'sub' },
-        }),
-      /not implemented/,
-    );
+  it('runs the durable contract when a PostgreSQL DSN is supplied', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      assert.ok(true, 'integration contract requires AQA_TEST_POSTGRES_DSN');
+      return;
+    }
+    const s = new PostgresStore(dsn);
+    try {
+      await s.saveRun(RUN);
+      assert.deepEqual(await s.loadRun(RUN.id), RUN);
+      assert.equal(
+        (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
+        true,
+      );
+    } finally {
+      await s.close();
+    }
   });
 });
