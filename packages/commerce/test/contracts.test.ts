@@ -516,7 +516,7 @@ describe('@aqa/commerce contracts', () => {
     merchant.seedProduct({
       sku: 'sku-a',
       price: { currency: 'EUR', amount_minor: '100' },
-      on_hand: 2,
+      on_hand: 3,
     });
     merchant.seedProduct({
       sku: 'sku-b',
@@ -657,7 +657,7 @@ describe('@aqa/commerce contracts', () => {
       quantity: 1,
       idempotencyKey: 'journey-checkout',
     });
-    assert.equal(result.outcome.status, 'pass');
+    assert.equal(result.outcome.status, 'pass', result.outcome.reason);
     assert.equal(result.outcome.evidence_complete, true);
     assert.equal(result.evidence.length, 4);
   });
@@ -667,7 +667,7 @@ describe('@aqa/commerce contracts', () => {
     merchant.seedProduct({
       sku: 'suite-sku',
       price: { currency: 'EUR', amount_minor: '1299' },
-      on_hand: 2,
+      on_hand: 3,
     });
     const context = {
       schema_version: '1' as const,
@@ -695,10 +695,19 @@ describe('@aqa/commerce contracts', () => {
         refundAmount: { currency: 'EUR', amount_minor: '400' },
         refundIdempotencyKey: 'suite-refund',
       },
+      cancellation: {
+        context,
+        identity: { tenant: 'shop-a', customer_id: 'suite-cancel-customer' },
+        sku: 'suite-sku',
+        quantity: 1,
+        idempotencyKey: 'suite-cancel-checkout',
+        cancellationReason: 'customer requested cancellation',
+        cancellationIdempotencyKey: 'suite-cancel',
+      },
     });
-    assert.equal(result.outcome.status, 'pass');
+    assert.equal(result.outcome.status, 'pass', result.outcome.reason);
     assert.equal(result.outcome.evidence_complete, true);
-    assert.equal(Object.keys(result.journeys).length, 2);
+    assert.equal(Object.keys(result.journeys).length, 3);
     assert.ok(result.evidence.every((item) => item.step.includes('.')));
   });
 

@@ -1,4 +1,6 @@
 import {
+  type CancellationResult,
+  CancellationSnapshot,
   CartSnapshot,
   type CheckoutResult,
   type CommerceAdapter,
@@ -33,6 +35,7 @@ export interface HttpCommerceAdapterOptions {
     payment: string;
     inventory: string;
     refund: string;
+    cancellation: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -72,6 +75,7 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       payment: '/orders/:order_id/payment',
       inventory: '/inventory/:sku',
       refund: '/orders/:order_id/refunds',
+      cancellation: '/orders/:order_id/cancellation',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -174,6 +178,28 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       refund: RefundSnapshot.parse(raw.refund),
       payment: PaymentSnapshot.parse(raw.payment),
       order: OrderSnapshot.parse(raw.order),
+    };
+  }
+
+  async cancel(
+    identity: CommerceIdentity,
+    orderId: string,
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<CancellationResult> {
+    const raw = (await this.request(
+      'POST',
+      pathTemplate(this.paths.cancellation, { order_id: orderId }),
+      this.context(identity),
+      identity,
+      { reason, idempotency_key: idempotencyKey },
+      { 'Idempotency-Key': idempotencyKey },
+    )) as Record<string, unknown>;
+    return {
+      cancellation: CancellationSnapshot.parse(raw.cancellation),
+      payment: PaymentSnapshot.parse(raw.payment),
+      order: OrderSnapshot.parse(raw.order),
+      ...(raw.refund ? { refund: RefundSnapshot.parse(raw.refund) } : {}),
     };
   }
 

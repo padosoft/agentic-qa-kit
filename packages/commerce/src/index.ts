@@ -208,6 +208,7 @@ export type JourneyOutcome = z.infer<typeof JourneyOutcome>;
 export const CommerceCapabilities = z.object({
   checkout: z.boolean(),
   refunds: z.boolean(),
+  cancellation: z.boolean().default(false),
   inventory_observer: z.boolean(),
   webhook_observer: z.boolean(),
   idempotency: z.boolean(),
@@ -545,6 +546,12 @@ export interface CommerceAdapter {
     amount: Money,
     idempotencyKey: string,
   ): Promise<RefundResult>;
+  cancel?(
+    identity: CommerceIdentity,
+    orderId: string,
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<CancellationResult>;
   quoteTax?(identity: CommerceIdentity, cartId: string): Promise<TaxQuote>;
   quoteShipping?(
     identity: CommerceIdentity,
@@ -577,6 +584,10 @@ export type TaxJourneyOptions = CheckoutJourneyOptions;
 export type ShippingJourneyOptions = CheckoutJourneyOptions & {
   destination: ShippingAddress;
 };
+export type CancellationJourneyOptions = CheckoutJourneyOptions & {
+  cancellationReason: string;
+  cancellationIdempotencyKey: string;
+};
 
 export type CommerceJourneySuiteOptions = {
   checkout: CheckoutJourneyOptions;
@@ -584,6 +595,7 @@ export type CommerceJourneySuiteOptions = {
   tax?: TaxJourneyOptions;
   shipping?: ShippingJourneyOptions;
   webhook?: CheckoutJourneyOptions;
+  cancellation?: CancellationJourneyOptions;
 };
 
 export type CommerceJourneyResult = {
@@ -896,6 +908,80 @@ export async function verifyRefundJourney(
   }
 }
 
+/** Verifies cancellation authorization, idempotency and compensation evidence. */
+export async function verifyCancellationJourney(
+  adapter: CommerceAdapter,
+  opts: CancellationJourneyOptions,
+): Promise<CommerceJourneyResult> {
+  const evidence: CommerceJourneyEvidence[] = [];
+  try {
+    const capabilities = CommerceCapabilities.parse(await adapter.capabilities(opts.context));
+    if (
+      !capabilities.checkout ||
+      !capabilities.refunds ||
+      !capabilities.cancellation ||
+      !adapter.cancel
+    ) {
+      return {
+        outcome: {
+          status: 'unsupported',
+          evidence_complete: false,
+          reason: 'adapter lacks checkout, refunds or cancellation capability',
+        },
+        evidence,
+      };
+    }
+    if (!opts.cancellationReason.trim()) throw new Error('cancellation reason is required');
+    const cart = CartSnapshot.parse(await adapter.createCart(opts.identity));
+    const updatedCart = CartSnapshot.parse(
+      await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
+    );
+    const checkout = validateCheckoutResult(
+      await adapter.checkout(opts.identity, updatedCart.id, opts.idempotencyKey),
+    );
+    const first = validateCancellationResult(
+      await adapter.cancel(
+        opts.identity,
+        checkout.order.id,
+        opts.cancellationReason,
+        opts.cancellationIdempotencyKey,
+      ),
+    );
+    const retry = validateCancellationResult(
+      await adapter.cancel(
+        opts.identity,
+        checkout.order.id,
+        opts.cancellationReason,
+        opts.cancellationIdempotencyKey,
+      ),
+    );
+    if (JSON.stringify(first) !== JSON.stringify(retry)) {
+      throw new Error('idempotent cancellation retry returned a different result');
+    }
+    assertCancellationIntegrity(first.order, first.payment, first.cancellation);
+    if (first.cancellation.status !== 'accepted')
+      throw new Error('cancellation did not reach an accepted decision');
+    evidence.push({
+      step: 'cancellation.compensated',
+      ok: true,
+      detail: `order=${first.order.id}; refund=${first.cancellation.refund_id ?? 'none'}`,
+    });
+    return {
+      outcome: { status: 'pass', evidence_complete: true, reason: 'cancellation journey passed' },
+      evidence,
+    };
+  } catch (error) {
+    return {
+      outcome: {
+        status: 'error',
+        evidence_complete: evidence.length > 0,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      evidence,
+    };
+  }
+}
+
 /**
  * Runs the provider-neutral commerce assurance suite as one explicit gate.
  * Required checkout and refund journeys are always executed; optional tax,
@@ -912,6 +998,8 @@ export async function verifyCommerceJourneySuite(
   if (opts.tax) journeys.tax = await verifyTaxJourney(adapter, opts.tax);
   if (opts.shipping) journeys.shipping = await verifyShippingJourney(adapter, opts.shipping);
   if (opts.webhook) journeys.webhook = await verifyWebhookJourney(adapter, opts.webhook);
+  if (opts.cancellation)
+    journeys.cancellation = await verifyCancellationJourney(adapter, opts.cancellation);
 
   const evidence = Object.entries(journeys).flatMap(([name, result]) =>
     result.evidence.map((item) => ({ ...item, step: `${name}.${item.step}` })),
@@ -959,6 +1047,13 @@ export type RefundResult = {
   order: OrderSnapshot;
 };
 
+export type CancellationResult = {
+  cancellation: CancellationSnapshot;
+  payment: PaymentSnapshot;
+  order: OrderSnapshot;
+  refund?: RefundSnapshot;
+};
+
 /**
  * Deterministic merchant used by contract tests and local journey pilots.
  * It deliberately has no network or real payment side effect. Mutations are
@@ -971,6 +1066,10 @@ export class InMemoryCommerceReference {
   private readonly orders = new Map<string, OrderSnapshot>();
   private readonly payments = new Map<string, PaymentSnapshot>();
   private readonly refunds = new Map<string, RefundSnapshot>();
+  private readonly cancellationIdempotency = new Map<
+    string,
+    { fingerprint: string; result: CancellationResult }
+  >();
   private readonly refundIdempotency = new Map<
     string,
     { fingerprint: string; result: RefundResult }
@@ -1202,6 +1301,46 @@ export class InMemoryCommerceReference {
     return result;
   }
 
+  cancel(
+    identity: CommerceIdentity,
+    orderId: string,
+    reason: string,
+    idempotencyKey: string,
+  ): CancellationResult {
+    const payment = this.getPayment(identity, orderId);
+    if (!reason.trim() || !idempotencyKey.trim())
+      throw new Error('cancellation reason and idempotency key are required');
+    const key = `${identity.tenant}:${idempotencyKey}`;
+    const fingerprint = JSON.stringify({ orderId, reason });
+    const previous = this.cancellationIdempotency.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint)
+        throw new Error('cancellation idempotency key reused with a different payload');
+      return previous.result;
+    }
+    const refundResult = this.refund(identity, orderId, payment.amount, `${idempotencyKey}:refund`);
+    const cancellation: CancellationSnapshot = {
+      schema_version: '1',
+      id: this.nextId('cancellation'),
+      order_id: orderId,
+      status: 'accepted',
+      reason,
+      refund_id: refundResult.refund.id,
+      requested_at: new Date().toISOString(),
+      decided_at: new Date().toISOString(),
+    };
+    const cancelledOrder = { ...refundResult.order, status: 'cancelled' as const };
+    this.orders.set(orderId, cancelledOrder);
+    const result = {
+      cancellation,
+      payment: refundResult.payment,
+      order: cancelledOrder,
+      refund: refundResult.refund,
+    };
+    this.cancellationIdempotency.set(key, { fingerprint, result });
+    return result;
+  }
+
   getInventory(sku: string): InventorySnapshot {
     const stock = this.inventory.get(sku);
     if (!stock) throw new Error(`unknown sku: ${sku}`);
@@ -1214,6 +1353,7 @@ export class InMemoryCommerceReference {
       capabilities: async () => ({
         checkout: true,
         refunds: true,
+        cancellation: true,
         inventory_observer: true,
         webhook_observer: true,
         idempotency: true,
@@ -1228,6 +1368,7 @@ export class InMemoryCommerceReference {
       getPayment: async (identity, orderId) => this.getPayment(identity, orderId),
       getInventory: async (sku) => this.getInventory(sku),
       refund: async (identity, orderId, amount, key) => this.refund(identity, orderId, amount, key),
+      cancel: async (identity, orderId, reason, key) => this.cancel(identity, orderId, reason, key),
       quoteTax: async (identity, cartId) => this.quoteTax(identity, cartId),
       quoteShipping: async (identity, cartId, destination) =>
         this.quoteShipping(identity, cartId, destination),
@@ -1406,6 +1547,25 @@ function validateRefundResult(result: RefundResult): RefundResult {
     throw new Error('refund amount exceeds the payment refunded amount');
   }
   return { refund, payment, order };
+}
+
+function validateCancellationResult(result: CancellationResult): CancellationResult {
+  const cancellation = CancellationSnapshot.parse(result.cancellation);
+  const payment = PaymentSnapshot.parse(result.payment);
+  const order = OrderSnapshot.parse(result.order);
+  const refund = result.refund ? RefundSnapshot.parse(result.refund) : undefined;
+  assertOrderIntegrity(order);
+  assertPaymentIntegrity(payment);
+  assertCancellationIntegrity(order, payment, cancellation);
+  if (refund) {
+    if (refund.order_id !== order.id || refund.status !== 'succeeded') {
+      throw new Error('cancellation refund does not belong to the returned order');
+    }
+    if (cancellation.refund_id !== refund.id) {
+      throw new Error('cancellation refund does not match refund_id evidence');
+    }
+  }
+  return { cancellation, payment, order, ...(refund ? { refund } : {}) };
 }
 
 export function assertNoOversell(snapshot: InventorySnapshot): void {
