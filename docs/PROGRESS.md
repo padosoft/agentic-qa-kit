@@ -11,6 +11,13 @@
 
 ## 2026-09-17
 
+- **Added live PostgreSQL trajectory evidence to CI.** The runner package test
+  script now includes the trajectory suite, and the PostgreSQL integration job
+  runs a two-instance trajectory contract with retry, immutable-conflict and
+  read-back assertions when `AQA_TEST_POSTGRES_DSN` is provided. The hosted
+  run for `ce11adf` is the authoritative evidence for this live boundary;
+  backup/PITR/restore and WORM operations remain deployment evidence.
+
 - **Added cross-replica PostgreSQL trajectory persistence.**
   `PostgresAgentTrajectoryStore` uses an immutable `(run_id, scenario_id)`
   primary key, atomic conflict-safe insert, bounded envelopes and digest plus

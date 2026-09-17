@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-17 — package test manifests are part of the evidence boundary
+
+Adding a test file is not enough if the package test script does not execute
+it. Keep the manifest and CI integration contract updated together, and add a
+real service-backed test for persistence semantics instead of treating an
+injected client as proof of PostgreSQL behavior.
+
 # 2026-09-17 — shared trajectory storage needs an immutable identity key
 
 Cross-replica retries cannot rely on a filesystem check. Use a database
