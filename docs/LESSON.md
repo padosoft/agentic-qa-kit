@@ -1,5 +1,11 @@
 # Lessons
 
+- **Coverage evidence must pass the same integrity gate as reports.** A
+  schema-valid `scenario_finished` event can be forged by editing a field.
+  Verify each run's hash chain before turning events into coverage
+  observations, and fail closed instead of downgrading corruption to a stale
+  or uncovered result.
+
 - **Test the artifact customers install.** An in-repository CJS bundle can
   work while the publish manifest still points at private workspace
   dependencies or omits runtime assets. The release gate must prepare the
