@@ -911,3 +911,8 @@
 # 2026-09-17 — full workspace regression after enterprise slices
 
 - Evidence: repository typecheck, **597 tests passed / 0 failed**, and Biome lint passed locally after JWT runner, commerce mutation and signed pricing catalog changes. PostgreSQL-dependent branches remain explicit skips without `AQA_TEST_POSTGRES_DSN`; hosted CI remains authoritative for those live contracts and for Node 22/OCI/browser execution.
+
+# 2026-09-17 — durable WebAuthn PostgreSQL stores
+
+- Added multi-replica WebAuthn persistence: advisory-locked migrations, atomic one-time challenge consumption, user-bound credential reads and conditional monotonic-counter updates. Credential registration is explicit and does not persist private keys.
+- Evidence: auth build/typecheck and **34 tests passed**, including a concurrent two-client counter contract (skipped without `AQA_TEST_POSTGRES_DSN`). The hosted PostgreSQL run must execute this new contract; real browser/provider ceremony and verifier integration remain open.

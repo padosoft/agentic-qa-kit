@@ -32,6 +32,7 @@ export interface WebAuthnChallengeStore {
 }
 
 export interface WebAuthnCredentialStore {
+  put(credential: WebAuthnCredential): Promise<void>;
   get(userId: string, credentialId: string): Promise<WebAuthnCredential | null>;
   updateSignCount(credentialId: string, signCount: number): Promise<boolean>;
 }
@@ -61,6 +62,10 @@ export class MemoryWebAuthnCredentialStore implements WebAuthnCredentialStore {
   constructor(credentials: readonly WebAuthnCredential[] = []) {
     for (const credential of credentials)
       this.credentials.set(credential.credential_id, credential);
+  }
+
+  async put(credential: WebAuthnCredential): Promise<void> {
+    this.credentials.set(credential.credential_id, { ...credential });
   }
 
   async get(userId: string, credentialId: string): Promise<WebAuthnCredential | null> {

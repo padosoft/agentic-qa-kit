@@ -59,6 +59,10 @@ export type { ScimRateLimit, ScimRateLimitOptions } from './scim-rate-limit.js';
 export { PostgresSamlReplayGuard } from './postgres-saml-replay.js';
 export { PostgresMfaCredentialStore } from './postgres-mfa.js';
 export {
+  PostgresWebAuthnChallengeStore,
+  PostgresWebAuthnCredentialStore,
+} from './postgres-webauthn.js';
+export {
   RunnerJwtAuthorizer,
   runnerJwtAuthorizer,
   type RunnerJwtAuthorization,

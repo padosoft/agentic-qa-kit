@@ -33,3 +33,9 @@ authenticator supports them. Counterless authenticators are supported with the
 same one-time challenge protection. The package does not claim to be a browser
 ceremony or a cryptographic provider by itself; production must connect the
 boundary to a standards-compliant verifier and durable stores.
+
+`PostgresWebAuthnChallengeStore` and `PostgresWebAuthnCredentialStore` provide
+the multi-replica persistence boundary. Challenge consumption is an atomic
+delete, and supported-authenticator counters update only when the stored value
+is lower than the assertion value. Registration remains an application/IdP
+ceremony concern; the stores never accept private keys.

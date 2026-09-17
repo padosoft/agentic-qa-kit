@@ -1204,3 +1204,10 @@ A catalog can be modified and rehashed locally while remaining internally
 consistent. Carrying a SHA-256 digest proves reproducibility, not approval;
 sign the canonical catalog with an operator key and verify against an
 out-of-band trust map before using it for budget admission.
+
+# 2026-09-17 — WebAuthn replay state must be atomic
+
+Replica-safe passkeys need more than a shared table: challenge consumption must
+be a single destructive claim, and counter advancement must use a conditional
+write whose affected-row count decides the result. A read-then-write sequence
+allows two replicas to accept the same authenticator counter.
