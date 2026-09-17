@@ -11,6 +11,17 @@
 
 ## 2026-09-17
 
+- **Enterprise safety tranche merged to `main`.** PR #60 was squash-merged as
+  `4cdc3af` after the complete hosted CI matrix passed: Meta, Helm rendering,
+  typecheck/lint, Bun and Node 22 tests, build plus CycloneDX SBOM, PostgreSQL
+  16 persistence contracts, OCI sandbox, CLI smoke and Playwright admin E2E.
+  The PostgreSQL job included concurrent migration, durable idempotency response
+  decoding, queue priority and the cross-client budget kill-switch contract.
+- **Verification boundary:** this proves the repository's automated acceptance
+  matrix, not a live merchant/payment provider, a real IdP ceremony, a restore
+  drill or a production cluster upgrade. Those remain deployment evidence and
+  are deliberately not marked complete.
+
 - **Added a durable distributed LLM kill-switch.** The optional
   `BudgetHaltController` exposes bounded per-key `halt()`/`getHaltReason()`
   operations without breaking third-party `BudgetLedger` implementations. PostgreSQL persists the
