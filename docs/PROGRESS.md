@@ -15,8 +15,9 @@
   the bounded JSON request/response MCP surface through the Fetch API: every
   request is authenticated, sessions are principal-bound and capped, bodies
   are byte-limited, protocol versions are checked, idle sessions expire and
-  `DELETE` terminates a session. Evidence: server MCP suite **143 tests pass /
-  0 fail** including auth binding, body limits, expiry and termination. SSE
+  `DELETE` terminates a session. Evidence: MCP tests **8 pass / 0 fail** and
+  server suite **140 pass / 0 fail**, including auth binding, body limits,
+  expiry and termination. SSE
   push, sticky/shared sessions and deployed TLS/IdP evidence remain open.
   ADR-195 records the transport boundary.
 
