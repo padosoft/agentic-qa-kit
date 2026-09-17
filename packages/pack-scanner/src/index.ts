@@ -3,5 +3,6 @@ export {
   manifestDigest,
   verifyManifestDigest,
   verifySignature,
+  verifyTrustedManifestSignature,
   type SignatureCheck,
 } from './signature.js';

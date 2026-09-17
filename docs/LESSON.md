@@ -786,3 +786,11 @@ entitlement logic twice. Claim a logical effect key atomically before running
 the effect, treat the same event as a duplicate, and reject a different event
 reusing that key. The PostgreSQL unique-key contract is the multi-replica
 boundary; signature verification remains a separate prior check.
+
+# 2026-09-17 — Integrity hashes are not signer authentication
+
+A SHA-256 field can detect changed bytes but cannot establish which operator
+approved a pack. The detached Ed25519 path signs the canonical unsigned digest,
+looks up the key through an explicit allowlist, and is enforced at import. A
+keyless Sigstore/cosign implementation still needs certificate identity and
+trust-root policy; it must not be implied by a local public-key verifier.

@@ -51,6 +51,14 @@
   commerce **17 passed, 1 PostgreSQL skip**, typecheck, lint and diff-check
   pass. Live provider settlement and reconciliation remain separate.
 
+- **Trusted pack signature boundary added.** Pack manifests support an
+  operator-managed `key_id` plus detached Ed25519 signature over the canonical
+  unsigned digest. The server import boundary enforces the allowlist when
+  configured, while legacy SHA-256 remains an integrity-only path. Evidence:
+  pack-scanner 9/9 and server 111 pass/1 PostgreSQL skip; schemas regenerated,
+  typecheck and lint pass. This is not yet keyless Sigstore/cosign bundle or
+  certificate-chain verification.
+
 - **Stripe-style webhook signature boundary added.** Commerce now verifies the
   raw request body, `t=` timestamp, one or more `v1=` HMAC signatures and a
   positive replay tolerance using constant-time comparison. Evidence:

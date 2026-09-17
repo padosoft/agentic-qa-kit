@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import type { PackManifest } from '@aqa/schemas';
 
 export interface SignatureCheck {
@@ -33,6 +33,31 @@ export function verifyManifestDigest(manifest: PackManifest.PackManifest): Signa
     };
   }
   return { ok: true, reason: 'canonical manifest digest matches declared signing.sha256' };
+}
+
+/** Verify an Ed25519 signature over the canonical unsigned manifest digest. */
+export function verifyTrustedManifestSignature(
+  manifest: PackManifest.PackManifest,
+  trustedKeys: Readonly<Record<string, string>>,
+): SignatureCheck {
+  const signing = manifest.signing;
+  if (!signing?.key_id || !signing.ed25519_signature)
+    return { ok: false, reason: 'manifest does not declare key_id and ed25519_signature' };
+  const publicKey = trustedKeys[signing.key_id];
+  if (!publicKey) return { ok: false, reason: `untrusted pack signing key: ${signing.key_id}` };
+  try {
+    const valid = verify(
+      null,
+      Buffer.from(manifestDigest(manifest), 'utf8'),
+      createPublicKey(publicKey),
+      Buffer.from(signing.ed25519_signature, 'base64url'),
+    );
+    return valid
+      ? { ok: true, reason: `trusted Ed25519 signature verified for key ${signing.key_id}` }
+      : { ok: false, reason: 'Ed25519 signature mismatch' };
+  } catch {
+    return { ok: false, reason: 'invalid Ed25519 public key or signature encoding' };
+  }
 }
 
 /**

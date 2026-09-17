@@ -55,6 +55,8 @@ export interface AdminOptions {
   scimRateLimit?: ApiContext['scimRateLimit'];
   /** PostgreSQL DSN for a shared SCIM abuse limiter in HA deployments. */
   scimRateLimitDsn?: string;
+  /** Operator-managed Ed25519 trust root for imported packs. */
+  packTrustedKeys?: ApiContext['packTrustedKeys'];
   /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
   scimTokenManager?: ScimTokenManager;
   /** PostgreSQL DSN for the built-in durable SCIM token store. */
@@ -233,6 +235,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
         ? { scimRateLimit: (org: string) => scimRateLimiter.allow(org) }
         : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
+    ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     ...(eventBus ? { eventBus } : {}),
     projectRoot: opts.root,
   };

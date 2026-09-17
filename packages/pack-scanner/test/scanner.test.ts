@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { manifestDigest, scanPack, verifyManifestDigest, verifySignature } from '../dist/index.js';
+import {
+  manifestDigest,
+  scanPack,
+  verifyManifestDigest,
+  verifySignature,
+  verifyTrustedManifestSignature,
+} from '../dist/index.js';
 
 const BASE = {
   schema_version: '1' as const,
@@ -67,5 +73,35 @@ describe('verifyManifestDigest', () => {
     const signed = { ...BASE, signing: { sha256: digest } };
     assert.equal(verifyManifestDigest(signed).ok, true);
     assert.equal(verifyManifestDigest({ ...signed, description: 'tampered' }).ok, false);
+  });
+});
+
+describe('verifyTrustedManifestSignature', () => {
+  it('verifies an Ed25519 signature against an operator trust root', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const keyId = 'release-key-1';
+    const signature = sign(null, Buffer.from(manifestDigest(BASE), 'utf8'), privateKey).toString(
+      'base64url',
+    );
+    const signed = {
+      ...BASE,
+      signing: { sha256: 'a'.repeat(64), key_id: keyId, ed25519_signature: signature },
+    };
+    assert.equal(
+      verifyTrustedManifestSignature(signed, {
+        [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      }).ok,
+      true,
+    );
+    assert.equal(verifyTrustedManifestSignature(signed, {}).ok, false);
+    assert.equal(
+      verifyTrustedManifestSignature(
+        { ...signed, description: 'tampered' },
+        {
+          [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        },
+      ).ok,
+      false,
+    );
   });
 });

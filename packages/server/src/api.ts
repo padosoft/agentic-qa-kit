@@ -6,7 +6,12 @@ import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/au
 import { measureRiskCoverage } from '@aqa/methodology';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
-import { scanPack, verifyManifestDigest, verifySignature } from '@aqa/pack-scanner';
+import {
+  scanPack,
+  verifyManifestDigest,
+  verifySignature,
+  verifyTrustedManifestSignature,
+} from '@aqa/pack-scanner';
 import {
   Finding as FindingSchema,
   PackManifest as PackManifestSchema,
@@ -52,6 +57,8 @@ export interface ApiContext {
   scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
   /** Optional tenant-scoped abuse limiter; return false to reject with 429. */
   scimRateLimit?: (org: string) => Promise<boolean> | boolean;
+  /** Trusted Ed25519 pack keys keyed by operator-managed key_id. */
+  packTrustedKeys?: Readonly<Record<string, string>>;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER
@@ -571,6 +578,14 @@ export function makeApi(): ApiHandler[] {
               400,
             );
           }
+          if (ctx.packTrustedKeys) {
+            const trusted = verifyTrustedManifestSignature(manifest, ctx.packTrustedKeys);
+            if (!trusted.ok)
+              return asResponse(
+                { error: `pack trust verification failed: ${trusted.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
         }
         const existing = await ctx.store.loadPack(manifest.name, scope(req));
         if (existing && body.force !== true) {
@@ -788,12 +803,22 @@ export function makeApi(): ApiHandler[] {
           );
         }
         if (manifest.signing) {
-          const signature = verifySignature(manifest, body.yaml);
+          const signature = manifest.signing.ed25519_signature
+            ? verifyManifestDigest(manifest)
+            : verifySignature(manifest, body.yaml);
           if (!signature.ok) {
             return asResponse(
               { error: `pack signature invalid: ${signature.reason}`, code: 'ESIGNATURE' },
               400,
             );
+          }
+          if (ctx.packTrustedKeys) {
+            const trusted = verifyTrustedManifestSignature(manifest, ctx.packTrustedKeys);
+            if (!trusted.ok)
+              return asResponse(
+                { error: `pack trust verification failed: ${trusted.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
           }
         }
         const existing = await ctx.store.loadPack(manifest.name, scope(req));

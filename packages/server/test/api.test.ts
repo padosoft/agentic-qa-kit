@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
 import { type QueueQuota, RunnerQueue, makeApi } from '../dist/index.js';
 
@@ -19,6 +21,7 @@ function ctx(
     eventBus?: { publish: (event: unknown) => Promise<void> };
     quota?: QueueQuota;
     scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
+    packTrustedKeys?: Readonly<Record<string, string>>;
   } = {},
 ) {
   return {
@@ -27,6 +30,7 @@ function ctx(
     authenticate: async () => FAKE_USER,
     ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
     ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
+    ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -725,6 +729,45 @@ probes: []
       const body = res?.body as { error: string; code: string };
       assert.match(body.error, /parse|yaml/i);
       assert.equal(body.code, 'EINVAL');
+    });
+
+    it('requires and verifies an operator-trusted Ed25519 pack signature', async () => {
+      const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+      const keyId = 'operator-key-1';
+      const unsigned = {
+        schema_version: '1' as const,
+        name: 'pack-trusted',
+        version: '0.1.0',
+        description: 'Trusted pack',
+        author: 'Test',
+        license: 'Apache-2.0',
+        applies_when: {},
+        templates: [],
+        scenarios: [],
+        risks: [],
+        oracles: [],
+        probes: [],
+      };
+      const digest = manifestDigest(unsigned);
+      const signature = sign(null, Buffer.from(digest, 'utf8'), privateKey).toString('base64url');
+      const yaml = JSON.stringify({
+        ...unsigned,
+        signing: { sha256: digest, key_id: keyId, ed25519_signature: signature },
+      });
+      const c = ctx({
+        packTrustedKeys: {
+          [keyId]: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        },
+      });
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs/import');
+      const accepted = await route?.handle({ headers: {}, params: {}, body: { yaml } }, c);
+      assert.equal(accepted?.status, 201);
+      const rejected = await route?.handle(
+        { headers: {}, params: {}, body: { yaml: yaml.replace(signature, `${signature}x`) } },
+        c,
+      );
+      assert.equal(rejected?.status, 400);
+      assert.equal((rejected?.body as { code: string }).code, 'ESIGNATURE');
     });
 
     it('returns 400 on schema-invalid manifest (code=EINVAL, concise path:msg list)', async () => {
