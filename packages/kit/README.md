@@ -134,6 +134,22 @@ const doctor = runDoctor({ root: process.cwd() });
 const validation = runValidate({ root: process.cwd() });
 ```
 
+## Verify a finding after a fix
+
+Use the finding ID from `aqa run` or `aqa report` to replay its scenario against
+the real system under test:
+
+```bash
+aqa verify <finding-id> --base-url http://127.0.0.1:3000 --attempts 3
+```
+
+The command refuses to use the runner's no-network stub, executes the scenario
+up to ten times, and writes a redacted verification result beside the original
+run artifacts. Exit code `0` means every attempt passed deterministically;
+exit code `2` means the replay completed but was flaky or non-deterministic.
+This is an evidence-producing replay primitive: it does not silently close the
+finding or claim that CI, deployment, or a pull request has been verified.
+
 Each command is exposed as a single function with explicit options. They do touch disk (writes for
 `runInit`, reads for `runValidate`/`runDoctor`/`profileRepo`), but only against the `root` you pass
 in — easy to unit-test against a temp directory, no TTY required.

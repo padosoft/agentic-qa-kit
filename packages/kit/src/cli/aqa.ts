@@ -8,6 +8,7 @@ import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
+import { runVerify } from '../commands/verify.js';
 
 const VERSION = '0.0.1';
 
@@ -38,6 +39,9 @@ const VALUE_FLAGS = new Set([
   'format',
   'port',
   'host',
+  'finding-id',
+  'attempts',
+  'base-url',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -100,6 +104,7 @@ ${bold('Commands')}
                                     plus per-agent skills under .claude/ .agents/ .gemini/ .github/
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
+  verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
@@ -114,6 +119,8 @@ ${bold('Common options')}
   --project-name <name>  (install-agent-files) override the slug embedded in instruction files
   --run-id <id>          (report) target a specific run; default = latest
   --format <fmt>         (report) md | json | both (default: both)
+  --attempts <n>         (verify) attempts, 1..10 (default: 3)
+  --base-url <url>       (verify) allowlisted HTTP SUT base URL
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
   --host <h>             (admin) bind host (default 127.0.0.1 — recommended)
                          WARNING: \`aqa admin\` runs WITHOUT real authentication.
@@ -302,6 +309,39 @@ async function main(): Promise<number> {
       console.info(`    ${dim('findings:  ')}${result.findingsCount}`);
       for (const f of result.files) console.info(`    ${green('+')} ${f}`);
       return 0;
+    }
+    case 'verify': {
+      printHeader('verify');
+      const findingId = args.positionals[0] ?? args.values.get('finding-id');
+      if (!findingId) {
+        console.error(red('aqa verify: missing <finding-id>'));
+        return 1;
+      }
+      const rawAttempts = args.values.get('attempts');
+      if (rawAttempts !== undefined) {
+        const parsedAttempts = Number(rawAttempts);
+        if (!Number.isInteger(parsedAttempts) || parsedAttempts < 1 || parsedAttempts > 10) {
+          console.error(red('aqa verify: --attempts must be an integer from 1 to 10'));
+          return 1;
+        }
+      }
+      const result = await runVerify({
+        root: cwd,
+        findingId,
+        ...(rawAttempts === undefined ? {} : { attempts: Number(rawAttempts) }),
+        ...(args.values.has('base-url') ? { baseUrl: args.values.get('base-url') ?? '' } : {}),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(
+        `  ${result.deterministic ? green('✓ deterministic') : yellow('⚠ non-deterministic')}`,
+      );
+      console.info(`    ${dim('finding:  ')}${result.findingId}`);
+      console.info(`    ${dim('attempts: ')}${result.successes}/${result.attempts}`);
+      console.info(`    ${dim('evidence: ')}${result.verificationPath}`);
+      return result.deterministic ? 0 : 2;
     }
     case 'admin': {
       printHeader('admin');

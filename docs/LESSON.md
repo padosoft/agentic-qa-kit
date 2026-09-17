@@ -472,3 +472,7 @@ endpoint must derive its destination from authenticated tenant scope, preflight
 all target keys, refuse partial conflict moves, and leave scoped reads
 fail-closed. The migration boundary also needs a narrow resource allowlist so
 operational configuration cannot accidentally become a run or identity import.
+
+# 2026-09-17 — verification must be an evidence boundary
+
+The fix loop must not treat a successful local replay as a closed finding. `aqa verify` therefore requires an explicit real-system base URL (or a test-injected probe runner), bounds attempts, distinguishes deterministic from flaky outcomes through its exit code, and writes a unique sidecar artifact. CI, deployment, PR status, finding transition, and audit-chain integration remain separate evidence boundaries until they are explicitly wired and tested.

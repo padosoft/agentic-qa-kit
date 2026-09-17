@@ -298,3 +298,8 @@
 - Added optional `runnerAuthorize` enforcement to both dequeue and ACK routes, preserving local test compatibility while allowing production deployments to require a dedicated runner credential rather than a user session.
 - Evidence: server suite 98/98 passed, server typecheck and Biome passed. PostgreSQL lease fencing remains covered by the existing live CI integration.
 - Exposed the same `runnerAuthorize` callback through `runAdmin`, with a complete admin HTTP test proving unauthorized dequeue is `401` and the configured runner credential reaches the route.
+# 2026-09-17 — fix→verify replay slice
+
+- Added `aqa verify <finding-id>` as the first executable fix→verify loop: it locates a persisted finding, resolves the owning scenario from project or installed packs, requires a real `--base-url` or an injected probe runner, replays with bounded attempts, and writes a unique verification evidence artifact beside the run.
+- Deterministic replay returns exit code 0; completed but flaky replay returns exit code 2; missing finding/scenario or missing network boundary fails closed. The command deliberately does not auto-close findings or imply CI/PR/deployment verification.
+- Evidence: `bun run --filter @aqa/runner build`; `bun run --filter @aqa/kit typecheck`; `bun run --filter @aqa/kit test` (113 passed, 2 platform skips); and `git diff --check` all pass. Remaining slice: publish the command and connect verification evidence to durable finding status/audit events.

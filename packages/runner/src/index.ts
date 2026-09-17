@@ -11,6 +11,7 @@ export {
 export {
   makeHttpProbeRunner,
   runScenario,
+  type ProbeRunner,
   type HttpProbeRunnerOptions,
   type ScenarioRunResult,
 } from './run.js';
