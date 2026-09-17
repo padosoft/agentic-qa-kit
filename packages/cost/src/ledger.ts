@@ -12,9 +12,13 @@ export interface BudgetLedger {
   ): Promise<string>;
   settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void>;
   reapExpired(now?: Date): Promise<number>;
+  close?(): Promise<void>;
+}
+
+/** Optional operator control plane for ledgers that support HA kill-switches. */
+export interface BudgetHaltController {
   halt(key: string, reason: string): Promise<void>;
   getHaltReason(key: string): Promise<string | null>;
-  close?(): Promise<void>;
 }
 
 /** Auditable provider usage attached to a settled reservation. */
@@ -36,7 +40,7 @@ type MemoryReservation = {
   usage?: BudgetUsage;
 };
 
-export class MemoryBudgetLedger implements BudgetLedger {
+export class MemoryBudgetLedger implements BudgetLedger, BudgetHaltController {
   private readonly budgets = new Map<string, MemoryBudget>();
   private readonly reservations = new Map<string, MemoryReservation>();
   private readonly halts = new Map<string, string>();
@@ -100,7 +104,7 @@ export class MemoryBudgetLedger implements BudgetLedger {
   }
 }
 
-export class PostgresBudgetLedger implements BudgetLedger {
+export class PostgresBudgetLedger implements BudgetLedger, BudgetHaltController {
   private readonly sql: Sql;
   private readonly ready: Promise<void>;
 

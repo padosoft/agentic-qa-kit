@@ -13,8 +13,10 @@ control boundary.
 
 ## Decision
 
-`BudgetLedger` exposes an irreversible per-key `halt()` and
-`getHaltReason()`. `MemoryBudgetLedger` keeps the explicit local fallback.
+The optional `BudgetHaltController` exposes an irreversible per-key `halt()`
+and `getHaltReason()` without breaking existing third-party
+`BudgetLedger` implementations. `MemoryBudgetLedger` keeps the explicit local
+fallback.
 `PostgresBudgetLedger` persists halts in `aqa_llm_budget_halts`; every future
 reservation checks the shared table before changing budget state. Reasons are
 bounded and never include provider credentials or request payloads.

@@ -11,8 +11,9 @@
 
 ## 2026-09-17
 
-- **Added a durable distributed LLM kill-switch.** `BudgetLedger` now exposes
-  bounded per-key `halt()`/`getHaltReason()` operations. PostgreSQL persists the
+- **Added a durable distributed LLM kill-switch.** The optional
+  `BudgetHaltController` exposes bounded per-key `halt()`/`getHaltReason()`
+  operations without breaking third-party `BudgetLedger` implementations. PostgreSQL persists the
   stop in `aqa_llm_budget_halts` and rejects later reservations across worker
   processes; the memory implementation remains an explicit local fallback.
   ADR-157 records the irreversible operator boundary.

@@ -15,6 +15,7 @@ export {
 export {
   MemoryBudgetLedger,
   PostgresBudgetLedger,
+  type BudgetHaltController,
   type BudgetLedger,
   type BudgetUsage,
 } from './ledger.js';
