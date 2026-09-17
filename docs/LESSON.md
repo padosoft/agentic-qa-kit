@@ -317,3 +317,7 @@ Visibility leases without a maximum-attempt policy create infinite poison-job lo
 # 2026-09-17 — migrate synchronous producers without weakening their contract
 
 `aqa report` is intentionally synchronous, so migrating it to an async artifact API would have changed the CLI contract. A synchronous adapter method keeps the public behavior while moving the write security boundary; the journey must assert metadata sidecars to prove the old writer was actually removed.
+
+# 2026-09-17 — audit integrity requires a transaction boundary
+
+Reading the last audit event, mutating a finding, and appending the next event as three independent store calls allows concurrent writers to fork the hash chain or lose the status/audit pairing. The API must call one store primitive; PostgreSQL must serialize the complete sequence (including the empty-tail case) with a transaction-scoped advisory lock. A passing in-memory test is useful for the API contract, but only the live PostgreSQL concurrency branch proves the durable invariant.

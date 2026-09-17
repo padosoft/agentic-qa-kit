@@ -75,6 +75,13 @@ export interface StoreProvider {
     actor: string,
     reason: string,
   ): Promise<Finding.Finding | null>;
+  /** Atomically mutate a finding and append its status audit event. */
+  transitionFindingStatus(
+    id: string,
+    status: Finding.Finding['status'],
+    actor: string,
+    reason: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null>;
   listFindings(opts: {
     run_id?: string;
     severity?: Finding.Finding['severity'];

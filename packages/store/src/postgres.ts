@@ -16,6 +16,7 @@ import type {
 } from '@aqa/schemas';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+import { findingStatusAudit } from './audit.js';
 import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
 
 type Kind =
@@ -205,6 +206,49 @@ export class PostgresStore implements StoreProvider {
     const updated = { ...current, status } as Finding.Finding;
     await this.put('finding', id, updated);
     return updated;
+  }
+  async transitionFindingStatus(
+    id: string,
+    status: Finding.Finding['status'],
+    actor: string,
+    reason: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
+    await this.wait();
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      // Serialize the read/hash/append sequence across all writers. Row-locking the
+      // last event is insufficient when two transactions observe an empty or stale tail.
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_store_audit'))");
+      const findingRows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['finding', id],
+      )) as Array<{ payload: unknown }>;
+      const current = this.decode<Finding.Finding>(findingRows[0]?.payload);
+      if (!current) return null;
+      const auditRows = (await query(
+        'SELECT payload FROM aqa_store_events ORDER BY seq DESC LIMIT 1 FOR UPDATE',
+      )) as Array<{ payload: unknown }>;
+      const previous = auditRows[0] ? this.decode<Event.Event>(auditRows[0].payload) : undefined;
+      const event = findingStatusAudit(
+        current,
+        actor,
+        current.status,
+        status,
+        reason,
+        (previous?.seq ?? -1) + 1,
+        previous,
+      );
+      const updated = { ...current, status } as Finding.Finding;
+      await query(
+        'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $1',
+        [id, 'finding', JSON.stringify(updated)],
+      );
+      await query(
+        'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
+        [event.hash, event.seq, event.run_id, null, null, event.ts, JSON.stringify(event)],
+      );
+      return { finding: updated, event };
+    });
   }
   async listFindings(opts: {
     run_id?: string;

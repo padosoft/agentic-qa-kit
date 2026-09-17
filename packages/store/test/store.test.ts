@@ -28,6 +28,26 @@ const RUN = {
   artifact_dir: '.aqa/runs/run-a',
 };
 
+const FINDING = {
+  schema_version: '1' as const,
+  id: 'AQA-2026-9001',
+  run_id: 'run-a',
+  scenario_id: 'checkout',
+  risk_id: 'payment',
+  title: 'Payment error',
+  summary: 'A payment error can be reproduced during checkout.',
+  severity: 'high' as const,
+  status: 'draft' as const,
+  execution_mode: 'orchestrator' as const,
+  discovered_at: '2026-05-17T10:00:00Z',
+  confidence: 0.8,
+  confidence_components: {},
+  reproducibility: {},
+  verification_floor: 'scenario_level' as const,
+  evidence: [],
+  tags: [],
+};
+
 describe('MemoryStore', () => {
   it('round-trips a Run', async () => {
     const s = new MemoryStore();
@@ -70,6 +90,21 @@ describe('MemoryStore', () => {
     await s.appendFinding(f);
     assert.equal((await s.listFindings({ run_id: 'run-a' })).length, 1);
     assert.equal((await s.listFindings({ severity: 'critical' })).length, 0);
+  });
+
+  it('atomically changes finding status and appends its audit event', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+    const result = await s.transitionFindingStatus(
+      FINDING.id,
+      'rejected',
+      'qa-user',
+      'not reproducible after verification',
+    );
+    assert.equal(result?.finding.status, 'rejected');
+    assert.equal(result?.event.payload.action, 'finding_status_changed');
+    assert.equal((await s.listEvents(FINDING.run_id)).length, 1);
+    assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
   });
 
   it('close() clears state', async () => {
@@ -206,6 +241,24 @@ describe('PostgresStore', () => {
       };
       await reopened.upsertUser(user);
       assert.deepEqual(await reopened.listUsers(), [user]);
+
+      await reopened.appendFinding(FINDING);
+      const beforeTransitionHashes = new Set(
+        (await reopened.listEvents(FINDING.run_id)).map((event) => event.hash),
+      );
+      const transitions = await Promise.all([
+        reopened.transitionFindingStatus(FINDING.id, 'rejected', 'ci-a', 'first decision'),
+        reopened.transitionFindingStatus(FINDING.id, 'fixed', 'ci-b', 'second decision'),
+      ]);
+      assert.equal(transitions.filter(Boolean).length, 2);
+      const auditEvents = (await reopened.listEvents(FINDING.run_id)).filter(
+        (event) =>
+          event.payload.action === 'finding_status_changed' &&
+          !beforeTransitionHashes.has(event.hash),
+      );
+      assert.equal(auditEvents.length, 2);
+      assert.equal(new Set(auditEvents.map((event) => event.seq)).size, 2);
+      assert.equal(new Set(auditEvents.map((event) => event.hash)).size, 2);
     } finally {
       await reopened.close();
     }

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
 import { runPackNew } from '@aqa/pack-author';
@@ -179,47 +178,6 @@ function asResponse(value: unknown, status = 200): ApiResponse {
   return { status, body: value };
 }
 
-function canonicalStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
-  const object = value as Record<string, unknown>;
-  return `{${Object.keys(object)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalStringify(object[key])}`)
-    .join(',')}}`;
-}
-
-function hashAuditEvent(prevHash: string, event: Record<string, unknown>): string {
-  const { prev_hash: _prevHash, hash: _hash, ...rest } = event;
-  return createHash('sha256').update(prevHash).update(canonicalStringify(rest)).digest('hex');
-}
-
-async function appendFindingStatusAudit(
-  finding: Finding.Finding,
-  actor: string,
-  from: Finding.Finding['status'],
-  to: Finding.Finding['status'],
-  reason: string,
-  ctx: ApiContext,
-): Promise<void> {
-  const existing = await ctx.store.listAuditEvents({});
-  const last = existing[0];
-  const event: Event.Event = {
-    schema_version: '1',
-    seq: (last?.seq ?? -1) + 1,
-    prev_hash: last?.hash ?? null,
-    hash: '',
-    ts: new Date().toISOString(),
-    run_id: finding.run_id,
-    kind: 'info',
-    actor: { type: 'system', id: actor },
-    finding_id: finding.id,
-    payload: { action: 'finding_status_changed', from, to, reason },
-  };
-  event.hash = hashAuditEvent(last?.hash ?? '0'.repeat(64), event);
-  await ctx.store.appendEvent(event);
-}
-
 function notFound(what: string): ApiResponse {
   return { status: 404, body: { error: `${what} not found` } };
 }
@@ -374,22 +332,14 @@ export function makeApi(): ApiHandler[] {
         if (!parsed.success) {
           return { status: 400, body: { error: formatZodError(parsed.error) } };
         }
-        const updated = await ctx.store.updateFindingStatus(
+        const transitioned = await ctx.store.transitionFindingStatus(
           id,
           parsed.data.status,
           user.id,
           body.reason,
         );
-        if (!updated) return notFound('finding');
-        await appendFindingStatusAudit(
-          updated,
-          user.id,
-          existing.status,
-          updated.status,
-          body.reason,
-          ctx,
-        );
-        return asResponse({ finding: updated });
+        if (!transitioned) return notFound('finding');
+        return asResponse({ finding: transitioned.finding });
       },
     },
 

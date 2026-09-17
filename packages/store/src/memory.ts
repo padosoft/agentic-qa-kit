@@ -14,6 +14,7 @@ import type {
   SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
+import { findingStatusAudit } from './audit.js';
 import type { StoreProvider, StoreUserDirectoryEntry } from './types.js';
 
 /**
@@ -132,6 +133,32 @@ export class MemoryStore implements StoreProvider {
     const updated = { ...f, status } as Finding.Finding;
     this.findings.set(id, updated);
     return updated;
+  }
+  async transitionFindingStatus(
+    id: string,
+    status: Finding.Finding['status'],
+    actor: string,
+    reason: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
+    const current = this.findings.get(id);
+    if (!current) return null;
+    const updated = { ...current, status } as Finding.Finding;
+    const previous = this.audit[this.audit.length - 1];
+    const event = findingStatusAudit(
+      current,
+      actor,
+      current.status,
+      status,
+      reason,
+      this.audit.length,
+      previous,
+    );
+    this.findings.set(id, updated);
+    this.audit.push(event);
+    const bucket = this.events.get(current.run_id) ?? [];
+    bucket.push(event);
+    this.events.set(current.run_id, bucket);
+    return { finding: updated, event };
   }
   async listFindings(opts: {
     run_id?: string;
