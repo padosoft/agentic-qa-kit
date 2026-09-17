@@ -782,3 +782,8 @@
 
 - Added `renew(id, lease_token)` to memory and PostgreSQL queues. `RunnerWorker` renews the lease while a handler is running and aborts with `lease_lost` if the token is fenced or the job leaves `in_flight`; it never converts a lost lease into an ACK or a false failure write.
 - Evidence: server build, **122 tests passed**, including current-token renewal and lease-loss fencing, and `git diff --check` passed. Live PostgreSQL renewal/reconnect evidence and production heartbeat metrics remain open.
+
+# 2026-09-17 — shell driver cooperative cancellation
+
+- The controlled shell driver now accepts the runner `AbortSignal`, rejects an already-cancelled probe before spawn, kills the child process on cancellation, removes its listener, and reports cancellation as execution error. This preserves the no-finding rule for interrupted execution.
+- Evidence: runner build, **20 tests passed**, including an actual long-running child cancellation, and `git diff --check` passed. SQL cancellation depends on the injected adapter contract; Playwright/provider-specific cancellation and live sandbox process-tree cleanup remain open.

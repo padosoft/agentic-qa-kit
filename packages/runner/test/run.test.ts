@@ -264,6 +264,27 @@ describe('runScenario', () => {
     assert.match(result.error ?? '', /not allowlisted/);
   });
 
+  it('makeShellProbeRunner aborts a running process cooperatively', async () => {
+    const runner = makeShellProbeRunner({
+      allowShell: true,
+      cwd: process.cwd(),
+      allowedCommands: [process.execPath],
+    });
+    const controller = new AbortController();
+    const pending = runner(
+      {
+        id: 'cancelled-shell',
+        kind: 'shell',
+        with: { command: process.execPath, args: ['-e', 'setTimeout(() => {}, 5000)'] },
+        timeout_ms: 5_000,
+      },
+      controller.signal,
+    );
+    controller.abort();
+    const result = await pending;
+    assert.match(result.error ?? '', /cancel/i);
+  });
+
   it('makeSqlProbeRunner enforces read-only bounded queries and redacts rows', async () => {
     const seen: { sql: string; params: readonly unknown[] }[] = [];
     const runner = makeSqlProbeRunner({

@@ -46,7 +46,7 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
     ? { ...opts.env, ...(opts.env.PATH ? {} : { PATH: process.env.PATH ?? '' }) }
     : { PATH: process.env.PATH ?? '' };
 
-  return (probe) => {
+  return (probe, externalSignal) => {
     if (probe.kind !== 'shell') {
       return Promise.resolve({
         probe_id: probe.id,
@@ -71,6 +71,10 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
       });
     }
     return new Promise((resolve) => {
+      if (externalSignal?.aborted) {
+        resolve({ probe_id: probe.id, error: 'shell probe cancelled before dispatch' });
+        return;
+      }
       const child = spawn(raw, args as string[], {
         cwd: opts.cwd,
         env,
@@ -82,6 +86,7 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
       let stderr = '';
       let size = 0;
       let overflow = false;
+      let cancelled = false;
       const append = (target: 'stdout' | 'stderr', chunk: Buffer) => {
         size += chunk.byteLength;
         if (size > maxOutputBytes) {
@@ -95,12 +100,23 @@ export function makeShellProbeRunner(opts: ShellProbeRunnerOptions): ProbeRunner
       child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
       child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
       const timeout = setTimeout(() => child.kill(), probe.timeout_ms);
+      const abort = () => {
+        cancelled = true;
+        child.kill();
+      };
+      externalSignal?.addEventListener('abort', abort, { once: true });
       child.once('error', (error) => {
         clearTimeout(timeout);
+        externalSignal?.removeEventListener('abort', abort);
         resolve({ probe_id: probe.id, error: redact(error.message) });
       });
       child.once('close', (code, signal) => {
         clearTimeout(timeout);
+        externalSignal?.removeEventListener('abort', abort);
+        if (cancelled) {
+          resolve({ probe_id: probe.id, error: 'shell probe cancelled' });
+          return;
+        }
         if (overflow) {
           resolve({ probe_id: probe.id, error: `shell output exceeds ${maxOutputBytes} bytes` });
           return;

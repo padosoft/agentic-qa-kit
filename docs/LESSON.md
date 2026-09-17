@@ -1025,3 +1025,10 @@ expire and another worker can receive the same job. Renew with the exact fencing
 token while the handler runs; if renewal fails, abort the handler and report
 `lease_lost` without calling `ack` or `fail`. A lost lease is ownership loss, not
 an ordinary provider failure.
+
+# 2026-09-17 — killing a shell child is not a full sandbox kill
+
+The shell driver can translate `AbortSignal` into `child.kill()` and report an
+execution error, but a spawned process may create descendants. Production
+sandboxing must still enforce process-group/container cleanup and resource caps;
+driver cancellation alone is not evidence of complete process-tree isolation.
