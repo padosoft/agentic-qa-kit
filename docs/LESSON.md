@@ -557,3 +557,10 @@ Adding a security framework is useful only when each generated item has a
 stable identifier, an executable invariant and an explicit framework tag. The
 OWASP catalog is deterministic baseline evidence, not source-code understanding
 or an approval to ship.
+
+# 2026-09-17 — FMEA needs failure modes, not generic threats
+
+FMEA discovery should produce operational failure hypotheses—cause/effect
+controls and detection invariants—not merely rename security threats. Keep the
+baseline bounded and reviewable until real process data can justify occurrence,
+detection and severity scoring.

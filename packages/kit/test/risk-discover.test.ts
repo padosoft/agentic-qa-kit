@@ -53,6 +53,19 @@ describe('risk discovery', () => {
     assert.ok(map.risks.some((risk) => risk.tags.includes('owasp:ssrf')));
   });
 
+  it('generates a schema-shaped FMEA failure-mode baseline', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-risk-'));
+    const result = runRiskDiscover({ root, method: 'fmea', scope: 'checkout' });
+    assert.equal(result.ok, true);
+    assert.equal(result.risk_count, 6);
+    const map = yamlParse(readFileSync(join(root, '.aqa', 'risk-map.yaml'), 'utf8')) as {
+      risks: Array<{ id: string; invariants: unknown[]; tags: string[] }>;
+    };
+    assert.ok(map.risks.every((risk) => risk.id.startsWith('risk-fmea-')));
+    assert.ok(map.risks.every((risk) => risk.invariants.length === 1));
+    assert.ok(map.risks.some((risk) => risk.tags.includes('fmea:concurrency-race')));
+  });
+
   it('rejects traversal and symlink targets', () => {
     const root = mkdtempSync(join(tmpdir(), 'aqa-risk-'));
     assert.equal(runRiskDiscover({ root, method: 'stride', scope: '../secrets' }).ok, false);

@@ -367,3 +367,8 @@
 
 - Extended `aqa risk discover` with a deterministic ten-control OWASP baseline (`--method owasp`) covering access control, crypto, injection, design, configuration, dependencies, authentication, integrity, logging and SSRF. It uses the same schema validation, safe overwrite and scope tags as STRIDE.
 - Evidence: kit typecheck, risk-discovery tests including the 10-risk OWASP map, and repository lint. FMEA, attack trees, source-aware analysis, LLM-assisted hypotheses and human approval/versioning remain open.
+
+# 2026-09-17 — FMEA risk discovery slice
+
+- Added `aqa risk discover --method fmea`, generating six bounded failure-mode hypotheses for ambiguous requirements, invalid input, dependency outage, concurrency races, configuration drift and detection gaps. Each has a stable ID, one invariant, framework tag, scope tag and schema validation.
+- Evidence: kit typecheck, risk-discovery tests including the FMEA map, and repository lint. Attack trees, source-aware analysis, LLM-assisted hypotheses and human approval/versioning remain open.

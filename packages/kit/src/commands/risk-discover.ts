@@ -5,7 +5,7 @@ import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { lastPathSegment, slugify } from '../cli-utils.js';
 import { type WriteResult, writeFileSafe } from '../fs-utils.js';
 
-export type RiskDiscoverMethod = 'stride' | 'owasp';
+export type RiskDiscoverMethod = 'stride' | 'owasp' | 'fmea';
 
 export interface RiskDiscoverOptions {
   root: string;
@@ -168,6 +168,63 @@ const OWASP_BASELINE = [
   },
 ] as const;
 
+const FMEA_BASELINE = [
+  {
+    key: 'ambiguous-requirement',
+    category: 'business_logic' as const,
+    title: 'Ambiguous requirement causes an incorrect outcome',
+    statement:
+      'Every critical requirement has an observable acceptance condition and an executable oracle.',
+    severity: 'high' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'invalid-input',
+    category: 'integrity' as const,
+    title: 'Invalid input propagates into a state mutation',
+    statement:
+      'Every external input is schema-validated at the boundary before it can change state.',
+    severity: 'high' as const,
+    likelihood: 'likely' as const,
+  },
+  {
+    key: 'dependency-outage',
+    category: 'availability' as const,
+    title: 'Dependency outage creates an uncontrolled failure',
+    statement:
+      'Dependency timeouts, retries, fallback behavior and operator-visible failure states are bounded.',
+    severity: 'high' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'concurrency-race',
+    category: 'integrity' as const,
+    title: 'Concurrent actors produce duplicate or lost effects',
+    statement:
+      'Shared effects are protected by idempotency, ordering or transactional concurrency controls.',
+    severity: 'critical' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'configuration-drift',
+    category: 'compliance' as const,
+    title: 'Configuration drift violates a safety control',
+    statement:
+      'Production configuration is versioned, validated and continuously checked against policy.',
+    severity: 'medium' as const,
+    likelihood: 'possible' as const,
+  },
+  {
+    key: 'detection-gap',
+    category: 'compliance' as const,
+    title: 'A failure occurs without actionable detection',
+    statement:
+      'Each critical failure mode has a redacted signal, owner, alert threshold and replayable evidence path.',
+    severity: 'medium' as const,
+    likelihood: 'possible' as const,
+  },
+] as const;
+
 function projectName(root: string): string {
   const path = join(root, '.aqa', 'project.yaml');
   if (existsSync(path)) {
@@ -199,7 +256,12 @@ export function runRiskDiscover(opts: RiskDiscoverOptions): RiskDiscoverResult {
       throw new Error('.aqa is a symlink; refusing to write through it');
     if (existsSync(target) && lstatSync(target).isSymbolicLink())
       throw new Error('risk-map.yaml is a symlink; refusing to write through it');
-    const baseline = opts.method === 'owasp' ? OWASP_BASELINE : STRIDE_BASELINE;
+    const baseline =
+      opts.method === 'owasp'
+        ? OWASP_BASELINE
+        : opts.method === 'fmea'
+          ? FMEA_BASELINE
+          : STRIDE_BASELINE;
     const risks = baseline.map((item) => ({
       id: `risk-${opts.method}-${item.key}`,
       category: item.category,
