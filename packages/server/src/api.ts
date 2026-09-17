@@ -7,9 +7,11 @@ import { measureRiskCoverage } from '@aqa/methodology';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
 import {
+  type SigstoreVerificationPolicy,
   scanPack,
   verifyManifestDigest,
   verifySignature,
+  verifySigstoreBundle,
   verifyTrustedManifestSignature,
 } from '@aqa/pack-scanner';
 import {
@@ -59,6 +61,8 @@ export interface ApiContext {
   scimRateLimit?: (org: string) => Promise<boolean> | boolean;
   /** Trusted Ed25519 pack keys keyed by operator-managed key_id. */
   packTrustedKeys?: Readonly<Record<string, string>>;
+  /** Required policy when a pack declares a Sigstore bundle. */
+  packSigstorePolicy?: SigstoreVerificationPolicy;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER
@@ -586,6 +590,22 @@ export function makeApi(): ApiHandler[] {
                 400,
               );
           }
+          if (manifest.signing.sigstore_bundle) {
+            if (!ctx.packSigstorePolicy)
+              return asResponse(
+                {
+                  error: 'Sigstore bundle requires an operator verification policy',
+                  code: 'ESIGNATURE',
+                },
+                400,
+              );
+            const sigstore = await verifySigstoreBundle(manifest, ctx.packSigstorePolicy);
+            if (!sigstore.ok)
+              return asResponse(
+                { error: `Sigstore verification failed: ${sigstore.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
         }
         const existing = await ctx.store.loadPack(manifest.name, scope(req));
         if (existing && body.force !== true) {
@@ -817,6 +837,22 @@ export function makeApi(): ApiHandler[] {
             if (!trusted.ok)
               return asResponse(
                 { error: `pack trust verification failed: ${trusted.reason}`, code: 'ESIGNATURE' },
+                400,
+              );
+          }
+          if (manifest.signing.sigstore_bundle) {
+            if (!ctx.packSigstorePolicy)
+              return asResponse(
+                {
+                  error: 'Sigstore bundle requires an operator verification policy',
+                  code: 'ESIGNATURE',
+                },
+                400,
+              );
+            const sigstore = await verifySigstoreBundle(manifest, ctx.packSigstorePolicy);
+            if (!sigstore.ok)
+              return asResponse(
+                { error: `Sigstore verification failed: ${sigstore.reason}`, code: 'ESIGNATURE' },
                 400,
               );
           }

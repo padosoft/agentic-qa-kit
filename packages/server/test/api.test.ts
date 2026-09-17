@@ -22,6 +22,7 @@ function ctx(
     quota?: QueueQuota;
     scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
     packTrustedKeys?: Readonly<Record<string, string>>;
+    packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
   } = {},
 ) {
   return {
@@ -31,6 +32,7 @@ function ctx(
     ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
     ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
+    ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -897,6 +899,22 @@ probes: []
       assert.equal(shell.status, 400);
       assert.equal((shell.body as { code: string }).code, 'EPACKSCAN');
       assert.equal(await c.store.loadPack('shell-json'), null);
+    });
+
+    it('rejects a declared Sigstore bundle when no operator identity policy is configured', async () => {
+      const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/packs');
+      assert.ok(route);
+      const signed = {
+        ...manifest,
+        name: 'sigstore-without-policy',
+        signing: {
+          sha256: manifestDigest({ ...manifest, name: 'sigstore-without-policy' }),
+          sigstore_bundle: '{}',
+        },
+      };
+      const res = await route.handle({ headers: {}, params: {}, body: signed }, ctx());
+      assert.equal(res.status, 400);
+      assert.equal((res.body as { code: string }).code, 'ESIGNATURE');
     });
   });
 

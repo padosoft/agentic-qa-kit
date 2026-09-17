@@ -2,10 +2,18 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { PackManifest } from '@aqa/schemas';
+import { verify as verifySigstore } from 'sigstore';
 
 export interface SignatureCheck {
   ok: boolean;
   reason: string;
+}
+
+export interface SigstoreVerificationPolicy {
+  certificate_identity?: string;
+  certificate_identity_uri?: string;
+  certificate_oidc_issuer?: string;
+  tlog_threshold?: number;
 }
 
 function canonicalStringify(value: unknown): string {
@@ -104,6 +112,53 @@ export function verifyPackContentDigest(
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Verify a serialized Sigstore bundle over the canonical pack payload. */
+export async function verifySigstoreBundle(
+  manifest: PackManifest.PackManifest,
+  policy: SigstoreVerificationPolicy,
+): Promise<SignatureCheck> {
+  const signing = manifest.signing;
+  const encoded = signing?.sigstore_bundle;
+  if (!signing || !encoded)
+    return { ok: false, reason: 'manifest does not declare signing.sigstore_bundle' };
+  if (
+    !policy.certificate_oidc_issuer ||
+    (!policy.certificate_identity && !policy.certificate_identity_uri)
+  )
+    return { ok: false, reason: 'Sigstore policy requires certificate identity and OIDC issuer' };
+  try {
+    const bundleText = decodeBundle(encoded);
+    const bundle = JSON.parse(bundleText) as Parameters<typeof verifySigstore>[0];
+    const payload = Buffer.from(signing.content_sha256 ?? manifestDigest(manifest), 'utf8');
+    const signer = await verifySigstore(bundle, payload, {
+      ...(policy.certificate_identity
+        ? { certificateIdentityEmail: policy.certificate_identity }
+        : {}),
+      ...(policy.certificate_identity_uri
+        ? { certificateIdentityURI: policy.certificate_identity_uri }
+        : {}),
+      certificateIssuer: policy.certificate_oidc_issuer,
+      tlogThreshold: policy.tlog_threshold ?? 1,
+    });
+    const identity = signer.identity?.subjectAlternativeName ?? 'certificate identity';
+    return { ok: true, reason: `Sigstore bundle verified for ${identity}` };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `Sigstore verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function decodeBundle(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('{')) return trimmed;
+  const decoded = Buffer.from(trimmed, 'base64').toString('utf8');
+  if (!decoded.trim().startsWith('{'))
+    throw new Error('sigstore bundle is not JSON or base64 JSON');
+  return decoded;
 }
 
 /**

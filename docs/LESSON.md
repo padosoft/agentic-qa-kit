@@ -812,3 +812,6 @@ Adding a compatibility field without migrating first-party producers leaves the 
 # 2026-09-17 — manifest signatures do not cover pack content
 
 Signing only `pack.yaml` leaves scenarios, probes and templates mutable after installation. A content-addressed pack digest must define a deterministic file set, include canonical unsigned manifest bytes, reject symlinks, and be enforced at the execution boundary—not merely exposed as a helper.
+# 2026-09-17 — Sigstore requires policy, not just bundle parsing
+
+A serialized Sigstore bundle is not a trust decision by itself. Verification must bind the payload, certificate identity, OIDC issuer and transparency-log evidence; malformed or policy-less bundles must fail closed. Pin a maintained verifier version and track its security advisories rather than reimplementing Fulcio/Rekor crypto.

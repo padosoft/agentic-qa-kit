@@ -11,6 +11,7 @@ import {
   verifyManifestDigest,
   verifyPackContentDigest,
   verifySignature,
+  verifySigstoreBundle,
   verifyTrustedManifestSignature,
 } from '../dist/index.js';
 
@@ -122,5 +123,25 @@ describe('packContentDigest', () => {
     assert.equal(verifyPackContentDigest(root, signed).ok, true);
     writeFileSync(join(root, 'scenarios', 'one.yaml'), 'expected: 500\n', 'utf8');
     assert.equal(verifyPackContentDigest(root, signed).ok, false);
+  });
+});
+
+describe('verifySigstoreBundle', () => {
+  it('requires an explicit identity policy and fails closed on malformed bundles', async () => {
+    const missingPolicy = await verifySigstoreBundle(
+      { ...BASE, signing: { sha256: 'a'.repeat(64), sigstore_bundle: '{}' } },
+      {},
+    );
+    assert.equal(missingPolicy.ok, false);
+    assert.match(missingPolicy.reason, /policy requires/i);
+    const malformed = await verifySigstoreBundle(
+      { ...BASE, signing: { sha256: 'a'.repeat(64), sigstore_bundle: '{}' } },
+      {
+        certificate_identity: 'release@example.test',
+        certificate_oidc_issuer: 'https://issuer.test',
+      },
+    );
+    assert.equal(malformed.ok, false);
+    assert.match(malformed.reason, /Sigstore verification failed/i);
   });
 });

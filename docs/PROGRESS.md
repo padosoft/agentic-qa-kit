@@ -595,3 +595,7 @@
 
 - Added optional `signing.content_sha256`, a deterministic digest over the unsigned canonical manifest plus every regular pack file. Symlinks and unsupported file types fail closed. `aqa run` verifies this digest after loading a pack and refuses tampered scenario/probe content before execution.
 - Evidence: pack-scanner/CLI targeted tests 37/37, workspace typecheck and lint pass. Existing packs without `content_sha256` remain integrity-unpinned until a signing pipeline emits and verifies the field; Sigstore keyless publisher identity remains open.
+# 2026-09-17 — Sigstore bundle verification boundary
+
+- Added real Sigstore bundle verification through the maintained `sigstore` JavaScript client, with explicit certificate identity, OIDC issuer and transparency-log threshold policy. Server pack imports now reject declared bundles when no operator policy is configured and fail closed on malformed or unverifiable bundles.
+- Evidence: scanner/server targeted tests 112/112, pack-scanner/server builds, workspace lint/typecheck pass. No live Fulcio/Rekor bundle was claimed in local evidence; CI must provide a real signed bundle journey before marking keyless production trust complete.
