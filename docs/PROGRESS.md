@@ -11,6 +11,14 @@
 
 ## 2026-09-17
 
+- **Legacy configuration migration shipped.** Memory/Postgres stores now expose
+  an explicit, fail-closed migration primitive for global packs, profiles,
+  risks and scenarios. The admin-only
+  `POST /api/admin/migrate-legacy-configuration` endpoint derives its target
+  only from tenant scope headers, preflights conflicts and never overwrites a
+  namespaced record. PostgreSQL performs the move in a serialized transaction;
+  ADR-025 records the operator workflow. It intentionally does not migrate
+  runs/findings or identity data.
 - **Canonical run evidence publication shipped.** `aqa run` now publishes the
   byte-preserved `events.jsonl` and `findings.jsonl` through the configured
   `ArtifactStore`, plus a digest-bearing `canonical/manifest.json`. It uses

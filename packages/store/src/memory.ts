@@ -282,6 +282,38 @@ export class MemoryStore implements StoreProvider {
     this.scenarios.delete(this.key(id, scope));
   }
 
+  async migrateLegacyConfiguration(scope: StoreScope) {
+    if (!scope.org && !scope.project)
+      throw new Error('legacy migration requires an org or project destination');
+    const resources = [
+      ['pack', this.packs],
+      ['profile', this.profiles],
+      ['risk', this.risks],
+      ['scenario', this.scenarios],
+    ] as unknown as Array<[string, Map<string, unknown>]>;
+    const conflicts: string[] = [];
+    let skipped = 0;
+    for (const [kind, map] of resources) {
+      for (const key of map.keys()) {
+        if (isScopedRecordKey(key)) continue;
+        const target = this.key(key, scope);
+        if (map.has(target)) conflicts.push(`${kind}:${key}`);
+        else skipped += 1;
+      }
+    }
+    if (conflicts.length > 0) return { migrated: 0, skipped, conflicts };
+    let migrated = 0;
+    for (const [, map] of resources) {
+      for (const [key, value] of [...map.entries()]) {
+        if (isScopedRecordKey(key)) continue;
+        map.set(this.key(key, scope), value);
+        map.delete(key);
+        migrated += 1;
+      }
+    }
+    return { migrated, skipped: 0, conflicts: [] };
+  }
+
   // ----- Agents (v1.7 slice 4d) -----
   async listAgents(): Promise<Agent.Agent[]> {
     return [...this.agents.values()];

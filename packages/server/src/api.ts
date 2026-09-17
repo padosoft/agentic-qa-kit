@@ -1255,6 +1255,21 @@ export function makeApi(): ApiHandler[] {
 
     // ============ Tenancy ============
     {
+      method: 'POST',
+      path: '/api/admin/migrate-legacy-configuration',
+      requires: 'admin:everything',
+      async handle(req, ctx) {
+        const destination = scope(req);
+        if (!destination.org && !destination.project)
+          return asResponse(
+            { error: 'x-aqa-org or x-aqa-project is required for legacy migration' },
+            400,
+          );
+        const result = await ctx.store.migrateLegacyConfiguration(destination);
+        return asResponse(result);
+      },
+    },
+    {
       method: 'GET',
       path: '/api/orgs',
       requires: 'settings:read',

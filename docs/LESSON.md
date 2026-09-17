@@ -409,3 +409,11 @@ runner therefore sends canonical `events.jsonl` and `findings.jsonl` through
 `putBytes`, then records their digests in a manifest. Artifact publication is
 still not a distributed transaction, so partial remote uploads remain an
 explicit operational recovery concern.
+
+# 2026-09-17 — migration must be a privileged operation
+
+Legacy global records cannot be safely made visible by fallback. A migration
+endpoint must derive its destination from authenticated tenant scope, preflight
+all target keys, refuse partial conflict moves, and leave scoped reads
+fail-closed. The migration boundary also needs a narrow resource allowlist so
+operational configuration cannot accidentally become a run or identity import.

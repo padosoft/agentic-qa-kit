@@ -149,6 +149,35 @@ describe('MemoryStore', () => {
     assert.deepEqual(await s.listProfiles({ org: 'acme', project: 'alpha' }), []);
   });
 
+  it('migrates legacy configuration only into an explicit namespace and never overwrites it', async () => {
+    const store = new MemoryStore();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    await store.saveProfile(profile);
+    const first = await store.migrateLegacyConfiguration({ org: 'acme', project: 'shop' });
+    assert.deepEqual(first, { migrated: 1, skipped: 0, conflicts: [] });
+    assert.equal(await store.loadProfile(profile.name), null);
+    assert.deepEqual(
+      await store.loadProfile(profile.name, { org: 'acme', project: 'shop' }),
+      profile,
+    );
+
+    await store.saveProfile(profile);
+    const conflict = await store.migrateLegacyConfiguration({ org: 'acme', project: 'shop' });
+    assert.equal(conflict.migrated, 0);
+    assert.deepEqual(conflict.conflicts, [`profile:${profile.name}`]);
+    assert.deepEqual(await store.loadProfile(profile.name), profile);
+  });
+
   it('close() clears state', async () => {
     const s = new MemoryStore();
     await s.saveRun(RUN);

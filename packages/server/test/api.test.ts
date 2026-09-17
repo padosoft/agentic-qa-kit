@@ -71,6 +71,35 @@ describe('makeApi', () => {
     assert.deepEqual((scoped?.body as { runs: unknown[] }).runs, []);
   });
 
+  it('POST /api/admin/migrate-legacy-configuration requires an explicit destination scope', async () => {
+    const c = ctx();
+    const profile = {
+      schema_version: '1' as const,
+      name: 'legacy-profile',
+      execution_mode: 'orchestrator' as const,
+      llm_usage: [],
+      llm_budget_usd: null,
+      parallelism: 1,
+      require_deterministic_replay: false,
+      packs: [],
+      tags: [],
+    };
+    await c.store.saveProfile(profile);
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/admin/migrate-legacy-configuration',
+    );
+    const missing = await route?.handle({ headers: {}, params: {} }, c);
+    assert.equal(missing?.status, 400);
+    const migrated = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(migrated?.status, 200);
+    assert.deepEqual(migrated?.body, { migrated: 1, skipped: 0, conflicts: [] });
+    assert.equal(await c.store.loadProfile(profile.name), null);
+    assert.deepEqual(
+      await c.store.loadProfile(profile.name, { org: 'padosoft', project: 'demo' }),
+      profile,
+    );
+  });
+
   it('GET /api/runs/:id 404s when missing', async () => {
     const c = ctx();
     const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/runs/:id');

@@ -18,6 +18,7 @@ import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { findingStatusAudit } from './audit.js';
 import {
+  type LegacyMigrationResult,
   type StoreProvider,
   type StoreScope,
   type StoreUserDirectoryEntry,
@@ -369,6 +370,44 @@ export class PostgresStore implements StoreProvider {
   }
   async deleteScenario(id: string, scope?: StoreScope): Promise<void> {
     await this.remove('scenario', id, scope);
+  }
+
+  async migrateLegacyConfiguration(scope: StoreScope): Promise<LegacyMigrationResult> {
+    if (!scope.org && !scope.project)
+      throw new Error('legacy migration requires an org or project destination');
+    await this.wait();
+    const kinds = ['pack', 'profile', 'risk', 'scenario'] as const;
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_store_legacy_migration'))");
+      const legacy = (await query(
+        'SELECT kind, record_key, payload FROM aqa_store_records WHERE kind = ANY($1) AND record_key NOT LIKE $2',
+        [kinds, '@scope/%'],
+      )) as Array<{ kind: string; record_key: string; payload: unknown }>;
+      const conflicts: string[] = [];
+      for (const row of legacy) {
+        const target = scopedRecordKey(row.record_key, scope);
+        const found = (await query(
+          'SELECT 1 FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+          [row.kind, target],
+        )) as unknown[];
+        if (found.length > 0) conflicts.push(`${row.kind}:${row.record_key}`);
+      }
+      if (conflicts.length > 0) return { migrated: 0, skipped: legacy.length, conflicts };
+      for (const row of legacy) {
+        await query(
+          'UPDATE aqa_store_records SET record_key = $1, org = $2, project = $3, updated_at = now() WHERE kind = $4 AND record_key = $5',
+          [
+            scopedRecordKey(row.record_key, scope),
+            scope.org ?? null,
+            scope.project ?? null,
+            row.kind,
+            row.record_key,
+          ],
+        );
+      }
+      return { migrated: legacy.length, skipped: 0, conflicts: [] };
+    });
   }
   async listAgents(): Promise<Agent.Agent[]> {
     return this.values(await this.many('agent'));

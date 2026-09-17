@@ -16,3 +16,8 @@ Permission gates use `@aqa/auth`'s `allows()` predicate. Storage uses
 production. `aqa admin` selects `PostgresRunnerQueue` when `AQA_QUEUE_DSN` is
 configured and `PostgresStore` when `AQA_STORE_DSN` is configured; otherwise it
 intentionally uses local in-memory components for development.
+
+The protected `POST /api/admin/migrate-legacy-configuration` endpoint performs
+the explicit legacy configuration migration using `x-aqa-org` and/or
+`x-aqa-project` scope headers. It requires `admin:everything` and never
+silently falls back to global records.

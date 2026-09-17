@@ -9,6 +9,12 @@ Storage abstraction. Single `StoreProvider` interface; two adapters:
 
 Swap adapter via configuration; the runner only depends on `StoreProvider`.
 
+Legacy global configuration is never exposed through scoped reads. An
+administrator can explicitly move packs, profiles, risks and scenarios to a
+tenant with `migrateLegacyConfiguration({ org, project })`; the operation is
+fail-closed on destination conflicts and does not migrate runs, findings or
+identity data.
+
 Set `AQA_TEST_POSTGRES_DSN` to run the optional integration contract against a
 real PostgreSQL instance. Without that variable the default test command does
 not invent a database. Production readiness still requires a PostgreSQL 16 CI

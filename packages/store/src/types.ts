@@ -33,6 +33,12 @@ export interface StoreScope {
   project?: string;
 }
 
+export interface LegacyMigrationResult {
+  migrated: number;
+  skipped: number;
+  conflicts: string[];
+}
+
 /** Stable key namespace for tenant-scoped resources while preserving legacy keys. */
 export function scopedRecordKey(key: string, scope?: StoreScope): string {
   if (!scope?.org && !scope?.project) return key;
@@ -145,6 +151,9 @@ export interface StoreProvider {
   // loadScenario + saveScenario.
   createScenario(scenario: Scenario.Scenario, scope?: StoreScope): Promise<{ created: boolean }>;
   deleteScenario(id: string, scope?: StoreScope): Promise<void>;
+
+  /** Explicitly assign legacy global configuration to one tenant namespace. */
+  migrateLegacyConfiguration(scope: StoreScope): Promise<LegacyMigrationResult>;
 
   // ----- Agents (v1.7 slice 4d) -----
   listAgents(): Promise<Agent.Agent[]>;
