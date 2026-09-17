@@ -8,6 +8,12 @@ export { runIngest } from './commands/ingest.js';
 export { runRiskDiscover } from './commands/risk-discover.js';
 export { makeRunJobHandler, type RunJob, type RunJobHandlerOptions } from './worker-handler.js';
 export { makeKitWorker, type KitWorkerOptions } from './worker.js';
+export {
+  parseRunnerScopes,
+  runnerConfigFromEnv,
+  runWorker,
+  type RunnerWorkerConfig,
+} from './commands/worker.js';
 export { runPackNew } from './commands/pack-new.js';
 export type {
   PackNewErrorCode,

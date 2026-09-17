@@ -1,4 +1,4 @@
-import type { EnqueuedJob, RunnerQueueLike } from './runner-queue.js';
+import type { EnqueuedJob, RunnerQueueLike, RunnerScope } from './runner-queue.js';
 
 export type RunnerJobHandler = (job: EnqueuedJob, signal: AbortSignal) => Promise<void>;
 
@@ -7,6 +7,8 @@ export interface RunnerWorkerOptions {
   poll_ms?: number;
   /** Optional callback for bounded worker diagnostics. */
   on_error?: (error: unknown, job: EnqueuedJob) => void;
+  /** Tenant scopes assigned to this worker; undefined means legacy unscoped mode. */
+  scopes?: readonly RunnerScope[];
 }
 
 export interface WorkerRunResult {
@@ -31,16 +33,18 @@ export class RunnerWorker {
   ) {
     this.pollMs = Math.max(10, opts.poll_ms ?? 250);
     this.onError = opts.on_error;
+    this.scopes = opts.scopes;
   }
 
   private readonly onError: RunnerWorkerOptions['on_error'];
+  private readonly scopes: RunnerWorkerOptions['scopes'];
 
   stop(): void {
     this.stopped = true;
   }
 
   async runOnce(): Promise<WorkerRunResult> {
-    const job = await this.queue.dequeue();
+    const job = await this.queue.dequeue(undefined, this.scopes);
     if (!job) return { status: 'idle' };
     const controller = new AbortController();
     let cancelled = false;

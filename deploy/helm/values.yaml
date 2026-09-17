@@ -32,6 +32,15 @@ server:
   auditLogPath: /var/lib/aqa/events.jsonl
 
 runner:
+  worker:
+    # The source repo's runner image must contain `aqa worker`. Keep disabled
+    # for the scaffold/PoC default; production values should enable it.
+    enabled: false
+    root: /var/lib/aqa/project
+    scopes: []
+    queueDsnSecretRef: ""
+    queueDsnSecretKey: url
+    command: ["aqa", "worker"]
   image:
     repository: ghcr.io/padosoft/agentic-qa-kit-runner
     tag: "1.1.0"

@@ -12,6 +12,7 @@ import { runRiskDiscover } from '../commands/risk-discover.js';
 import { runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 import { runVerify } from '../commands/verify.js';
+import { runWorker, runnerConfigFromEnv } from '../commands/worker.js';
 
 const VERSION = '0.0.1';
 
@@ -116,6 +117,7 @@ ${bold('Commands')}
   ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
   risk discover --method stride|owasp|fmea Generate a deterministic framework risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
+  worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
                                     — this path is only present in the source repo, not in the npm tarball)
@@ -487,6 +489,22 @@ async function main(): Promise<number> {
       // Block forever — until a signal triggers stop().
       await new Promise<void>(() => {});
       return 0;
+    }
+    case 'worker': {
+      printHeader('worker');
+      try {
+        const config = runnerConfigFromEnv();
+        console.info(`  ${green('✓')} scoped runner worker starting`);
+        console.info(`    ${dim('root:    ')}${config.root}`);
+        console.info(
+          `    ${dim('scopes:  ')}${config.scopes.map((s) => `${s.org}/${s.project ?? '*'}`).join(',')}`,
+        );
+        await runWorker(config);
+        return 0;
+      } catch (error) {
+        console.error(red(`  ✗ ${error instanceof Error ? error.message : String(error)}`));
+        return 1;
+      }
     }
     case 'pack': {
       // Subcommand router for `aqa pack <subcommand>`.

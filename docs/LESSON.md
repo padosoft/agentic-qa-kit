@@ -1149,3 +1149,10 @@ Runner credentials are not enough: a valid runner must also be constrained to
 the tenant projects it may process. Enforce the scope inside dequeue and repeat
 the check on ACK/fail, because route-level authentication alone cannot prevent
 cross-tenant work consumption or completion.
+
+# 2026-09-17 — a worker deployment must execute the real handler
+
+A Kubernetes StatefulSet that only has an image and environment is not a
+worker journey. The entrypoint must compose the durable queue, canonical run
+handler, scoped lease acquisition and graceful shutdown; otherwise rendered
+YAML creates a process that may never consume work.

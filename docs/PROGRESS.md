@@ -863,3 +863,8 @@
 
 - Runner authentication can now return explicit `org`/`project` scopes. Memory and PostgreSQL dequeue apply those scopes before leasing; ACK/fail re-read the job and hide cross-tenant attempts as not-found. Boolean authorizers remain compatible as an intentionally unscoped bootstrap path.
 - Evidence: server build/typecheck and **125 tests passed**, including scoped dequeue and cross-tenant ACK denial. Live PostgreSQL scoped dequeue and production mTLS/OIDC claim issuance remain deployment evidence.
+
+# 2026-09-17 — executable scoped worker deployment
+
+- Added the real `aqa worker` entrypoint: it requires a PostgreSQL queue DSN, operator-owned project root and explicit runner scopes, composes `RunnerWorker` with the canonical kit handler, handles SIGTERM/SIGINT and closes the queue cleanly. Helm can now enable the worker StatefulSet with Secret-backed DSN and scoped environment configuration; default scaffold remains disabled until configured.
+- Evidence: server/kit builds and worker configuration tests **3/3 passed**. Helm is not installed in this Windows workspace; CI render/lint is authoritative for the chart path.

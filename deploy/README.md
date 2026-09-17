@@ -33,6 +33,12 @@ operators.
   controlled `postgres.url`. The chart maps the same database endpoint to the
   control-plane store, runner queue, shared OIDC sessions and EventBus; the
   application still owns migrations and least-privilege database roles.
+- Enable the real worker in production with
+  `runner.worker.enabled=true`, set `runner.worker.scopes` to explicit
+  `org/project` or `org/*` entries, and use `runner.worker.queueDsnSecretRef`
+  (or the shared `postgres.urlSecretRef`). The worker fails closed when the
+  DSN or scopes are absent; it runs `aqa worker` and uses the configured root,
+  never a client-supplied filesystem path.
 - Pin server and runner images by digest in production and set both
   `server.image.requireDigest=true` and `runner.image.requireDigest=true`.
   The chart fails during render when a required digest is missing; mutable tags

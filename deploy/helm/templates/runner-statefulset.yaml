@@ -1,3 +1,10 @@
+{{- if .Values.runner.worker.enabled }}
+{{- if and (not .Values.postgres.subchart.enabled) (not .Values.postgres.urlSecretRef) (not .Values.postgres.url) (not .Values.runner.worker.queueDsnSecretRef) }}
+{{- fail "runner.worker.enabled requires postgres.subchart.enabled, postgres.url, postgres.urlSecretRef or runner.worker.queueDsnSecretRef" }}
+{{- end }}
+{{- if eq (len .Values.runner.worker.scopes) 0 }}
+{{- fail "runner.worker.scopes must contain at least one org/project or org/* scope when runner.worker.enabled is true" }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -33,11 +40,36 @@ spec:
           {{- end }}
           image: "{{ .Values.runner.image.repository }}{{ if .Values.runner.image.digest }}@{{ .Values.runner.image.digest }}{{ else }}:{{ .Values.runner.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.runner.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.runner.worker.command | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           env:
+            - name: AQA_QUEUE_DSN
+              {{- if .Values.runner.worker.queueDsnSecretRef }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.worker.queueDsnSecretRef }}
+                  key: {{ .Values.runner.worker.queueDsnSecretKey }}
+              {{- else if .Values.postgres.subchart.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+              {{- else if .Values.postgres.urlSecretRef }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+              {{- else }}
+              value: {{ .Values.postgres.url | quote }}
+              {{- end }}
+            - name: AQA_RUNNER_ROOT
+              value: {{ .Values.runner.worker.root | quote }}
+            - name: AQA_RUNNER_SCOPES
+              value: {{ join "," .Values.runner.worker.scopes | quote }}
             - name: AQA_SERVER_URL
               value: "http://{{ .Release.Name }}-server:8080"
             - name: AQA_DETERMINISM_LEVEL
@@ -75,3 +107,4 @@ spec:
   selector:
     {{- include "aqa.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: runner
+{{- end }}
