@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { EventChainWriter } from '../dist/events.js';
 import { FindingsWriter } from '../dist/findings.js';
 import { makeHttpProbeRunner, runScenario } from '../dist/run.js';
+import { makeShellProbeRunner } from '../dist/shell.js';
 
 const SCENARIO = {
   schema_version: '1' as const,
@@ -198,6 +199,42 @@ describe('runScenario', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('makeShellProbeRunner executes an allowlisted argv without a shell and redacts output', async () => {
+    const runner = makeShellProbeRunner({
+      allowShell: true,
+      cwd: process.cwd(),
+      allowedCommands: [process.execPath],
+    });
+    const result = await runner({
+      id: 'probe-shell',
+      kind: 'shell',
+      with: { command: process.execPath, args: ['-e', 'console.log("Bearer secret")'] },
+      timeout_ms: 2_000,
+    });
+    assert.equal(result.status, 0);
+    assert.equal((result.body as { stdout: string }).stdout, 'Bearer [REDACTED]\n');
+  });
+
+  it('makeShellProbeRunner fails closed for missing opt-in and non-allowlisted commands', async () => {
+    assert.throws(
+      () =>
+        makeShellProbeRunner({ allowShell: false, cwd: process.cwd(), allowedCommands: ['node'] }),
+      /allowShell=true/,
+    );
+    const runner = makeShellProbeRunner({
+      allowShell: true,
+      cwd: process.cwd(),
+      allowedCommands: ['definitely-not-node'],
+    });
+    const result = await runner({
+      id: 'probe-shell-denied',
+      kind: 'shell',
+      with: { command: process.execPath, args: ['-e', 'process.exit(0)'] },
+      timeout_ms: 2_000,
+    });
+    assert.match(result.error ?? '', /not allowlisted/);
   });
 
   it('makeHttpProbeRunner rejects unsupported probe kinds', async () => {

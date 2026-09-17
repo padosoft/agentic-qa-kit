@@ -14,6 +14,10 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
 - **Capability preflight** — optionally reject unsupported probe kinds before
   executing steps or cleanup, preserving an explicit execution gap instead of
   partial side effects or a false finding.
+- **Controlled shell driver** — `makeShellProbeRunner()` supports explicit,
+  allowlisted argv checks with `shell:false`, bounded output, timeout cleanup,
+  minimal environment and output redaction. It is not a sandbox and must be
+  hosted inside the configured execution boundary.
 
 The probe runner is injected as a function so the runner has no built-in network surface; HTTP /
 shell / Playwright / SQL drivers ship in subsequent passes. Tests can therefore exercise the full

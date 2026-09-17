@@ -26,6 +26,12 @@
   final checkpoint. Partial configuration and non-`COMPLIANCE` retention fail
   before execution; credentials remain on the AWS provider chain.
 
+- **Controlled shell driver added.** The runner now has an explicit
+  `makeShellProbeRunner()` with `shell:false`, executable allowlist, argv-only
+  inputs, bounded/redacted output and timeout termination. It is deliberately
+  not a sandbox; OCI/non-privileged deployment and explicit capability wiring
+  remain required before production use.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the

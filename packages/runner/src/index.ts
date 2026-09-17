@@ -15,4 +15,5 @@ export {
   type HttpProbeRunnerOptions,
   type ScenarioRunResult,
 } from './run.js';
+export { makeShellProbeRunner, type ShellProbeRunnerOptions } from './shell.js';
 export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';

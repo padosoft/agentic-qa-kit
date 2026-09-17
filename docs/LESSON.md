@@ -12,6 +12,12 @@
   The CLI therefore requires a dedicated bucket and `COMPLIANCE` retention;
   provider credentials still come from the normal SDK chain.
 
+- **A shell driver is a policy boundary, not a sandbox.** `shell:false`, argv
+  separation and allowlists prevent shell interpolation but do not contain a
+  process. Keep shell probes opt-in, run them in the OCI/non-privileged
+  sandbox, minimize environment inheritance, bound output and redact before
+  evidence leaves the process.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the
