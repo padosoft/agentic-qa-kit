@@ -162,6 +162,44 @@ jobs:
           done
           exit $worst
 
+  test-postgres:
+    name: Integration (PostgreSQL 16 store)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [typecheck-lint]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aqa
+          POSTGRES_PASSWORD: aqa-ci-only
+          POSTGRES_DB: aqa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aqa -d aqa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspace
+        run: bun run build
+
+      - name: Run PostgreSQL persistence contract
+        env:
+          AQA_TEST_POSTGRES_DSN: postgres://aqa:aqa-ci-only@127.0.0.1:5432/aqa_test
+        run: bun test packages/store/test/store.test.ts
+
   build:
     name: Build
     runs-on: ubuntu-latest
