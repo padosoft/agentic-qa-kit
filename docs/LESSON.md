@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-17 — semantic confidence needs an inconclusive state
+
+An ensemble that is too small or disagrees should not be coerced into pass or
+fail. Keep `inconclusive` explicit, require distinct model identities when
+policy demands it, and measure confidence against a reviewed gold corpus with
+Brier/ECE before using it for release decisions.
+
 - **Fail-closed secret references need a host injection path.** Rejecting
   missing auth values prevents false greens, but a useful authenticated
   journey must still cross the real `aqa run` boundary. Keep named references

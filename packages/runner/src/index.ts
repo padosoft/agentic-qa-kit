@@ -45,3 +45,14 @@ export {
   type RecordAgentCallOptions,
   verifyAgentTrajectory,
 } from './trajectory.js';
+export {
+  calibrateAgentJudges,
+  evaluateAgentTrials,
+  rationaleSha256,
+  type AgentEvaluationPolicy,
+  type AgentEvaluationResult,
+  type AgentJudgeVerdict,
+  type AgentTrial,
+  type CalibrationReport,
+  type CalibrationSample,
+} from './agent-evaluation.js';
