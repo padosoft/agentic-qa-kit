@@ -18,6 +18,12 @@
   build/typecheck/Biome/diff-check pass. Key custody/rotation remains an
   external KMS/Vault responsibility.
 
+- **DR inventory signatures merged to `main`.** PR #66 was squash-merged as
+  `4b38898` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The code now verifies signed
+  recovery evidence; key custody, rotation and live restore remain external
+  operational evidence.
+
 - **Added a machine-validatable DR backup inventory contract.**
   `@aqa/compliance` now parses and canonicalizes a redacted recovery manifest
   containing PITR target/LSN, schema version, artifact manifest digest/object
