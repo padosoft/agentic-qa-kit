@@ -8,6 +8,8 @@ import {
   CommerceCapabilities,
   type CommerceContext,
   type CommerceIdentity,
+  DunningAttemptSnapshot,
+  type DunningObservation,
   type FulfillmentLine,
   FulfillmentSnapshot,
   InventorySnapshot,
@@ -51,6 +53,7 @@ export interface HttpCommerceAdapterOptions {
     returns: string;
     subscriptions: string;
     subscription: string;
+    dunning: string;
     tax: string;
     shipping: string;
     webhooks: string;
@@ -97,6 +100,7 @@ export class HttpCommerceAdapter implements CommerceAdapter {
       returns: '/orders/:order_id/returns',
       subscriptions: '/subscriptions',
       subscription: '/subscriptions/:subscription_id',
+      dunning: '/subscriptions/:subscription_id/dunning',
       tax: '/carts/:cart_id/tax',
       shipping: '/carts/:cart_id/shipping',
       webhooks: '/orders/:order_id/webhooks',
@@ -304,6 +308,24 @@ export class HttpCommerceAdapter implements CommerceAdapter {
         identity,
       ),
     );
+  }
+
+  async observeDunning(
+    identity: CommerceIdentity,
+    subscriptionId: string,
+  ): Promise<DunningObservation> {
+    const raw = (await this.request(
+      'GET',
+      pathTemplate(this.paths.dunning, { subscription_id: subscriptionId }),
+      this.context(identity),
+      identity,
+    )) as Record<string, unknown>;
+    if (!Array.isArray(raw.attempts))
+      throw new Error('commerce dunning response must include attempts array');
+    return {
+      subscription: SubscriptionSnapshot.parse(raw.subscription),
+      attempts: raw.attempts.map((item) => DunningAttemptSnapshot.parse(item)),
+    };
   }
 
   async quoteTax(identity: CommerceIdentity, cartId: string) {

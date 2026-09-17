@@ -1,5 +1,11 @@
 # Lessons
 
+- **Subscription dunning must be observed, not inferred.** Require a provider
+  event sequence with contiguous attempt numbers, exact subscription
+  amount/currency, retry timing metadata and a failed attempt. A local fixture
+  can verify the contract, but only a billing sandbox can prove collection
+  behavior and customer notifications.
+
 - **A loyalty ledger is not checkout evidence by itself.** Require an
   authoritative account observation, tenant/customer binding, full ledger
   reconciliation and an earn transaction referencing the exact order. Keep the
