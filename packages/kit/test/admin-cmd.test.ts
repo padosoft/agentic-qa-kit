@@ -229,8 +229,11 @@ describe('aqa admin — boot + smoke', () => {
     });
     assert.equal(boot.ok, true);
     if (!boot.ok) return;
+    const controller = new AbortController();
     try {
-      const stream = await fetch(`${boot.url}/api/events/stream?org=acme&project=shop`);
+      const stream = await fetch(`${boot.url}/api/events/stream?org=acme&project=shop`, {
+        signal: controller.signal,
+      });
       assert.equal(stream.status, 200);
       assert.match(stream.headers.get('content-type') ?? '', /text\/event-stream/);
       const reader = stream.body?.getReader();
@@ -259,6 +262,7 @@ describe('aqa admin — boot + smoke', () => {
       assert.doesNotMatch(text, /evt-other/);
       await reader.cancel();
     } finally {
+      controller.abort();
       await boot.close();
     }
   });

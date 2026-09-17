@@ -52,7 +52,11 @@ jobs:
 
       - name: Install documentation dependencies
         working-directory: docs-site
-        run: npm ci
+        # The native ONNX package runs a platform-specific binary download
+        # during install. Documentation builds do not execute that optional
+        # native path; skipping lifecycle scripts keeps CI hermetic and avoids
+        # an external NuGet outage turning the repository gate red.
+        run: npm ci --ignore-scripts
 
       - name: Audit documentation dependency graph
         working-directory: docs-site
