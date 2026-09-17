@@ -12,12 +12,15 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - Decimal-safe `Money` values using ISO currency plus integer minor units.
 - Versioned tenant/run context and order, payment, inventory snapshots.
 - Versioned fulfillment and return/RMA snapshots with anti-over-quantity invariants.
+- Versioned subscription and chargeback snapshots with period and payment-linkage invariants.
 - Explicit `pass`, `fail`, `blocked`, `unsupported`, and `inconclusive` outcomes.
 - `HttpCommerceAdapter` for live provider-neutral HTTP merchants, with origin
   allowlisting, bounded responses, tenant context and typed snapshot parsing.
 - Fail-closed currency and inventory invariants.
 - Fulfillment evidence requires tracking metadata for shipped/delivered states;
   return requests cannot exceed original order quantities or currency.
+- Subscription periods cannot invert; opened chargebacks require an evidence
+  deadline and cannot exceed the captured payment.
 - Provider-neutral `CommerceAdapter` contract for HTTP, browser and observer-backed merchants.
 - `verifyCheckoutJourney()` checks capability preflight, exact inventory effects,
   snapshot integrity and idempotent checkout retries with structured evidence.

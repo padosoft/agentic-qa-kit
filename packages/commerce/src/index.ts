@@ -88,6 +88,34 @@ export const PaymentSnapshot = z.object({
 });
 export type PaymentSnapshot = z.infer<typeof PaymentSnapshot>;
 
+export const SubscriptionSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  tenant: z.string().min(1),
+  customer_id: z.string().min(1),
+  plan: z.string().min(1),
+  status: z.enum(['trialing', 'active', 'past_due', 'paused', 'cancelled']),
+  interval: z.enum(['week', 'month', 'year']),
+  amount: Money,
+  current_period_start: z.string().datetime({ offset: true }),
+  current_period_end: z.string().datetime({ offset: true }),
+  cancel_at_period_end: z.boolean(),
+});
+export type SubscriptionSnapshot = z.infer<typeof SubscriptionSnapshot>;
+
+export const ChargebackSnapshot = z.object({
+  schema_version: z.literal('1'),
+  id: z.string().min(1),
+  order_id: z.string().min(1),
+  payment_id: z.string().min(1),
+  amount: Money,
+  status: z.enum(['opened', 'won', 'lost']),
+  reason: z.string().min(1),
+  opened_at: z.string().datetime({ offset: true }),
+  evidence_due_at: z.string().datetime({ offset: true }).optional(),
+});
+export type ChargebackSnapshot = z.infer<typeof ChargebackSnapshot>;
+
 export const RefundSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
@@ -268,6 +296,31 @@ export function assertPromotionRedeemable(promotion: PromotionSnapshot, now = ne
     throw new Error('promotion redemption limit reached');
   if (item.expires_at && Date.parse(item.expires_at) <= now.getTime())
     throw new Error('promotion is expired');
+}
+
+export function assertSubscriptionIntegrity(subscription: SubscriptionSnapshot): void {
+  const item = SubscriptionSnapshot.parse(subscription);
+  if (Date.parse(item.current_period_end) <= Date.parse(item.current_period_start))
+    throw new Error('subscription period end must be after period start');
+  assertMoneyNonNegative(item.amount, 'subscription amount');
+  if (item.status === 'cancelled' && !item.cancel_at_period_end)
+    throw new Error('cancelled subscription must be marked cancel_at_period_end');
+}
+
+export function assertChargebackIntegrity(
+  order: OrderSnapshot,
+  payment: PaymentSnapshot,
+  chargeback: ChargebackSnapshot,
+): void {
+  const item = ChargebackSnapshot.parse(chargeback);
+  if (item.order_id !== order.id || item.payment_id !== payment.payment_id)
+    throw new Error('chargeback is not linked to the exact order payment');
+  assertSameCurrency(item.amount, payment.amount);
+  if (BigInt(item.amount.amount_minor) <= 0n) throw new Error('chargeback amount must be positive');
+  if (BigInt(item.amount.amount_minor) > BigInt(payment.amount.amount_minor))
+    throw new Error('chargeback exceeds captured payment');
+  if (item.status === 'opened' && !item.evidence_due_at)
+    throw new Error('opened chargeback requires evidence_due_at');
 }
 
 /** A fulfillment or RMA line can never exceed the original order quantity. */

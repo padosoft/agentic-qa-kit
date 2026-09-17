@@ -14,12 +14,14 @@ import {
   Money,
   PostgresWebhookEffectLedger,
   applyWebhookEffectOnce,
+  assertChargebackIntegrity,
   assertFulfillmentIntegrity,
   assertNoOversell,
   assertOrderIntegrity,
   assertPromotionRedeemable,
   assertReturnRequestIntegrity,
   assertSameCurrency,
+  assertSubscriptionIntegrity,
   assertTenderAllocation,
   verifyCheckoutJourney,
   verifyRefundJourney,
@@ -733,6 +735,66 @@ describe('@aqa/commerce contracts', () => {
           created_at: '2026-09-17T13:00:00Z',
         }),
       /currency/,
+    );
+  });
+
+  it('enforces subscription periods and chargeback/payment linkage', () => {
+    const subscription = {
+      schema_version: '1' as const,
+      id: 'sub-1',
+      tenant: 'shop-a',
+      customer_id: 'customer-a',
+      plan: 'pro',
+      status: 'active' as const,
+      interval: 'month' as const,
+      amount: { currency: 'EUR', amount_minor: '990' },
+      current_period_start: '2026-09-01T00:00:00Z',
+      current_period_end: '2026-10-01T00:00:00Z',
+      cancel_at_period_end: false,
+    };
+    assertSubscriptionIntegrity(subscription);
+    assert.throws(
+      () =>
+        assertSubscriptionIntegrity({
+          ...subscription,
+          current_period_end: '2026-08-01T00:00:00Z',
+        }),
+      /period end/,
+    );
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'cb-sku',
+      price: { currency: 'EUR', amount_minor: '1200' },
+      on_hand: 1,
+    });
+    const identity = { tenant: 'shop-a', customer_id: 'customer-a' };
+    const cart = merchant.createCart(identity);
+    merchant.addLine(identity, cart.id, 'cb-sku', 1);
+    const result = merchant.checkout(identity, cart.id, 'cb-key');
+    assertChargebackIntegrity(result.order, result.payment, {
+      schema_version: '1',
+      id: 'cb-1',
+      order_id: result.order.id,
+      payment_id: result.payment.payment_id,
+      amount: { currency: 'EUR', amount_minor: '1200' },
+      status: 'opened',
+      reason: 'fraud',
+      opened_at: '2026-09-17T10:00:00Z',
+      evidence_due_at: '2026-09-24T10:00:00Z',
+    });
+    assert.throws(
+      () =>
+        assertChargebackIntegrity(result.order, result.payment, {
+          schema_version: '1',
+          id: 'cb-2',
+          order_id: result.order.id,
+          payment_id: 'other-payment',
+          amount: { currency: 'EUR', amount_minor: '1200' },
+          status: 'lost',
+          reason: 'fraud',
+          opened_at: '2026-09-17T10:00:00Z',
+        }),
+      /exact order payment/,
     );
   });
 });

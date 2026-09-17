@@ -1426,3 +1426,9 @@ DNS pinning belong in a connection-aware egress proxy or runtime connector.
 Payment success is not shipment success. Keep fulfillment and RMA snapshots
 separate from order/payment state, enforce quantities against the original
 order, and require tracking/timestamps before claiming shipped or delivered.
+
+# 2026-09-17 — recurring billing and disputes are separate lifecycles
+
+Subscription state must carry its own period and cancellation semantics;
+chargebacks must link to the exact payment and bound amount/evidence timing.
+Neither can be inferred safely from an order status of `paid`.

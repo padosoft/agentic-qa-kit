@@ -1187,6 +1187,16 @@
 - Next ecommerce gaps: subscriptions, cancellations/chargebacks, loyalty and
   provider-backed fulfillment journeys, if required by the target merchant.
 
+# 2026-09-17 — ecommerce subscriptions and chargebacks
+
+- Added versioned `SubscriptionSnapshot` and `ChargebackSnapshot` contracts
+  with invariants for billing period order, cancellation semantics, exact
+  payment linkage, currency/amount bounds and dispute evidence deadlines.
+- Evidence: `@aqa/commerce` suite **25 passed / 0 failed**, typecheck, lint and
+  diff checks pass locally. No billing or dispute provider was contacted.
+- Remaining: provider-backed subscription/dunning/dispute journeys and
+  loyalty/cancellation adapters.
+
 # 2026-09-17 — redacted webhook observability
 
 - Added an optional `PostgresWebhookQueue` observer for attempt/outcome
