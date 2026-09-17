@@ -267,7 +267,10 @@ jobs:
 
       - name: Install Playwright browsers
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}
-        run: bunx playwright install --with-deps chromium
+        # Playwright 1.60 launches Chromium through its separate headless
+        # shell in headless CI. Install both artifacts explicitly so a
+        # browser package update cannot leave the runner half-provisioned.
+        run: bunx playwright install --with-deps chromium chromium-headless-shell
 
       - name: Build admin (Vite) for the dev server Playwright will boot
         if: ${{ hashFiles('packages/admin/playwright.config.*') != '' }}

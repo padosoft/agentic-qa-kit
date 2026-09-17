@@ -14,7 +14,7 @@
     "test:e2e": "playwright test --reporter=line",
     "test:e2e:ecosystem": "playwright test -c playwright.ecosystem.config.ts --reporter=line",
     "test:e2e:headed": "playwright test --headed",
-    "test:install-browsers": "playwright install --with-deps chromium",
+    "test:install-browsers": "playwright install --with-deps chromium chromium-headless-shell",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo','node_modules/.vite','playwright-report','test-results']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "dependencies": {
