@@ -111,7 +111,7 @@ ${bold('Commands')}
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast> <file>         Normalize external test/security results into redacted evidence
-  risk discover --method stride      Generate a deterministic STRIDE risk baseline
+  risk discover --method stride|owasp Generate a deterministic framework risk baseline
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
                                     guide: https://github.com/padosoft/agentic-qa-kit/blob/main/docs/PACK-AUTHORING.md
@@ -383,8 +383,8 @@ async function main(): Promise<number> {
         return 1;
       }
       const method = args.values.get('method');
-      if (method !== 'stride') {
-        console.error(red('aqa risk discover: only --method stride is currently supported'));
+      if (method !== 'stride' && method !== 'owasp') {
+        console.error(red('aqa risk discover: --method must be stride or owasp'));
         return 1;
       }
       const result = runRiskDiscover({
@@ -397,7 +397,7 @@ async function main(): Promise<number> {
         console.error(red(`  ✗ ${result.error}`));
         return 1;
       }
-      console.info(`  ${green('✓')} generated ${result.risk_count} STRIDE risks`);
+      console.info(`  ${green('✓')} generated ${result.risk_count} ${method.toUpperCase()} risks`);
       console.info(`    ${dim('risk map: ')}${result.path}`);
       console.info(`    ${dim('write:    ')}${result.write_result}`);
       return 0;

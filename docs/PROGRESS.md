@@ -362,3 +362,8 @@
 
 - Added a bounded `OtlpHttpSpanExporter` with OTLP/HTTP JSON payloads, explicit flush, failed-batch retry, queue limits, endpoint validation and span-attribute redaction. It is injectable through `fetcher`, so tests do not require a Collector.
 - Evidence: observability typecheck and 9/9 tests; repository lint. Timer/shutdown integration, Collector deployment, Prometheus metric wiring and dashboards remain open.
+
+# 2026-09-17 — OWASP risk discovery slice
+
+- Extended `aqa risk discover` with a deterministic ten-control OWASP baseline (`--method owasp`) covering access control, crypto, injection, design, configuration, dependencies, authentication, integrity, logging and SSRF. It uses the same schema validation, safe overwrite and scope tags as STRIDE.
+- Evidence: kit typecheck, risk-discovery tests including the 10-risk OWASP map, and repository lint. FMEA, attack trees, source-aware analysis, LLM-assisted hypotheses and human approval/versioning remain open.

@@ -550,3 +550,10 @@ journey tests.
 An OTLP exporter must not turn an outage into unbounded memory growth or make
 telemetry the audit record. Bound the queue, retry a failed batch, redact before
 serialization, and keep immutable hash-chained events as the source of truth.
+
+# 2026-09-17 — framework discovery must remain reviewable
+
+Adding a security framework is useful only when each generated item has a
+stable identifier, an executable invariant and an explicit framework tag. The
+OWASP catalog is deterministic baseline evidence, not source-code understanding
+or an approval to ship.
