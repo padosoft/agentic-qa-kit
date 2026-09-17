@@ -21,6 +21,8 @@ import type {
 // extracted from inline-anon types in `listUsers` and `MemoryStore`.
 export interface StoreUserDirectoryEntry {
   id: string;
+  /** SCIM/OIDC directory login name; legacy snapshots may omit it. */
+  user_name?: string;
   email: string;
   display_name: string;
   roles: Array<'viewer' | 'developer' | 'maintainer' | 'admin'>;

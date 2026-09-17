@@ -392,3 +392,8 @@
 
 - Extended `StoreProvider.listUsers/upsertUser` with optional org/project scope. MemoryStore namespaces user IDs with the same safe scope key used by other resources; PostgresStore persists the scope columns and queries through the existing scoped record index. The server users projection and OIDC admin snapshot now preserve the authenticated organization/project boundary.
 - Evidence: store 13/13 tests, store/server typechecks, server suite 109 passed plus one PostgreSQL EventBus skip, repository lint. Live PostgreSQL scoped-user round-trip remains CI evidence; SCIM bearer routes, audit events and legacy-user migration remain open.
+
+# 2026-09-17 — SCIM HTTP journey slice
+
+- Added `/scim/v2/Users` and `/scim/v2/Users/:id` GET/POST/PUT/PATCH/DELETE routes. Every route requires an injected dedicated bearer verifier and `x-aqa-org`; DELETE deactivates rather than destructively erases the directory record. The journey preserves SCIM `userName`, roles, active state and tenant isolation.
+- Complete HTTP evidence: server suite 111 tests (110 passed, one PostgreSQL EventBus skip), including unauthorized access, create, patch, list, cross-org denial and soft-delete; store build/typecheck and repository lint pass. SCIM token rotation/audit events, RFC filter pagination, SAML and live PostgreSQL SCIM round-trip remain open.

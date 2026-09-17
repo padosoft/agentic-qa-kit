@@ -18,6 +18,7 @@ function ctx(
     projectRoot?: string;
     eventBus?: { publish: (event: unknown) => Promise<void> };
     quota?: QueueQuota;
+    scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
   } = {},
 ) {
   return {
@@ -25,6 +26,7 @@ function ctx(
     queue: new RunnerQueue({ quota: opts.quota }),
     authenticate: async () => FAKE_USER,
     ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
+    ...(opts.scimAuthorize ? { scimAuthorize: opts.scimAuthorize } : {}),
     // The server is configured at boot with the on-disk project root
     // it manages. Endpoints that touch the filesystem (pack scaffold)
     // anchor to this path — they NEVER honor a client-supplied root,
@@ -595,6 +597,61 @@ describe('makeApi', () => {
     const res = await route?.handle({ headers: {}, params: {} }, c);
     assert.equal(res?.status, 200);
     assert.deepEqual((res?.body as { orgs: unknown[] }).orgs, []);
+  });
+
+  it('exposes tenant-bound SCIM users with bearer authorization and soft delete', async () => {
+    const c = ctx({
+      scimAuthorize: async (headers) => headers.authorization === 'Bearer scim-test',
+    });
+    const headers = { 'x-aqa-org': 'scim-org', authorization: 'Bearer scim-test' };
+    const create = makeApi().find((r) => r.method === 'POST' && r.path === '/scim/v2/Users');
+    const list = makeApi().find((r) => r.method === 'GET' && r.path === '/scim/v2/Users');
+    const detail = makeApi().find((r) => r.method === 'GET' && r.path === '/scim/v2/Users/:id');
+    const patch = makeApi().find((r) => r.method === 'PATCH' && r.path === '/scim/v2/Users/:id');
+    const remove = makeApi().find((r) => r.method === 'DELETE' && r.path === '/scim/v2/Users/:id');
+    assert.equal((await create?.handle({ headers: {}, params: {}, body: {} }, c))?.status, 401);
+    const created = await create?.handle(
+      {
+        headers,
+        params: {},
+        body: {
+          userName: 'scim-user',
+          displayName: 'SCIM User',
+          emails: [{ value: 'scim@example.test', primary: true }],
+          roles: [{ value: 'developer' }],
+        },
+      },
+      c,
+    );
+    assert.equal(created?.status, 201);
+    const id = (created?.body as { id: string }).id;
+    assert.equal(
+      (
+        await patch?.handle(
+          {
+            headers,
+            params: { id },
+            body: { Operations: [{ op: 'replace', path: 'active', value: false }] },
+          },
+          c,
+        )
+      )?.status,
+      200,
+    );
+    const afterPatch = await detail?.handle({ headers, params: { id } }, c);
+    assert.equal((afterPatch?.body as { userName: string }).userName, 'scim-user');
+    const listed = await list?.handle({ headers, params: {} }, c);
+    assert.equal((listed?.body as { totalResults: number }).totalResults, 1);
+    assert.equal(
+      (
+        await detail?.handle(
+          { headers: { ...headers, 'x-aqa-org': 'other-org' }, params: { id } },
+          c,
+        )
+      )?.status,
+      404,
+    );
+    assert.equal((await remove?.handle({ headers, params: { id } }, c))?.status, 204);
   });
 
   // ============ v1.7 slice 4b — Pack import (admin "Import manifest") ============

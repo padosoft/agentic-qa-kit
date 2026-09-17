@@ -592,3 +592,10 @@ Users are data too: a shared `id` or project slug cannot identify the tenant.
 Use the existing scoped record-key/columns for directory writes and reads, keep
 unscoped access explicit for migration/admin-only paths, and test two tenants
 with the same external user ID.
+
+# 2026-09-17 — SCIM DELETE must be a lifecycle transition
+
+Directory deprovisioning is security-sensitive and often retried. Treat DELETE
+as an idempotent deactivation until a reviewed retention/deletion contract exists;
+preserve the resource ID and auditability, and require a dedicated bearer verifier
+separate from interactive user authentication.

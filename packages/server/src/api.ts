@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Permission, rolePermissions } from '@aqa/auth';
 import type { Permission as PermissionType, Role, User, allows } from '@aqa/auth';
+import { ScimProvisioner } from '@aqa/auth';
+import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
 import { measureRiskCoverage } from '@aqa/methodology';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
@@ -46,6 +48,8 @@ export interface ApiContext {
   runnerAuthorize?: (headers: Record<string, string>) => Promise<boolean>;
   /** Authorize the authenticated user for the requested org/project scope. */
   authorizeScope?: (user: User, scope: { org: string; project?: string }) => Promise<boolean>;
+  /** Verify a dedicated SCIM bearer token for the requested organization. */
+  scimAuthorize?: (headers: Record<string, string>, org: string) => Promise<boolean>;
   /**
    * Absolute on-disk path of the project the server manages. Set at boot.
    * Endpoints that scaffold or modify files anchor to this path and NEVER
@@ -59,7 +63,7 @@ export interface ApiContext {
   projectRoot?: string;
 }
 
-export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface ApiRequest {
   headers: Record<string, string>;
@@ -108,6 +112,87 @@ function errorCodeToStatus(code: PackNewErrorCode | undefined): number {
     default:
       return 400;
   }
+}
+
+function scimOrg(req: ApiRequest): string | undefined {
+  const value = req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'];
+  return value?.trim() || undefined;
+}
+
+function scimResource(input: unknown): ScimUserResource | null {
+  if (!input || typeof input !== 'object') return null;
+  const value = input as { userName?: unknown };
+  return typeof value.userName === 'string' ? (input as ScimUserResource) : null;
+}
+
+function scimUserResource(user: ScimDirectoryUser): Record<string, unknown> {
+  return {
+    schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+    id: user.id,
+    userName: user.user_name,
+    displayName: user.display_name,
+    active: user.active,
+    emails: [{ value: user.email, primary: true }],
+    roles: user.roles.map((value) => ({ value })),
+    meta: { resourceType: 'User', lastModified: user.updated_at },
+  };
+}
+
+function scimDirectory(ctx: ApiContext): ScimDirectory {
+  return {
+    async get(tenant, id) {
+      const user = (await ctx.store.listUsers({ org: tenant })).find((entry) => entry.id === id);
+      return user
+        ? {
+            id: user.id,
+            user_name: user.user_name ?? user.email,
+            email: user.email,
+            display_name: user.display_name,
+            roles: user.roles,
+            active: user.status !== 'suspended',
+            tenant,
+            updated_at: user.last_active_at ?? new Date(0).toISOString(),
+          }
+        : null;
+    },
+    async list(tenant, filter) {
+      const users = await ctx.store.listUsers({ org: tenant });
+      const exact = filter?.match(/^userName\s+eq\s+"([^"]+)"$/i)?.[1];
+      return users
+        .filter(
+          (entry) =>
+            !exact || entry.user_name === exact || entry.email === exact || entry.id === exact,
+        )
+        .map((entry) => ({
+          id: entry.id,
+          user_name: entry.user_name ?? entry.email,
+          email: entry.email,
+          display_name: entry.display_name,
+          roles: entry.roles,
+          active: entry.status !== 'suspended',
+          tenant,
+          updated_at: entry.last_active_at ?? new Date(0).toISOString(),
+        }));
+    },
+    async put(user) {
+      await ctx.store.upsertUser(
+        {
+          id: user.id,
+          user_name: user.user_name,
+          email: user.email,
+          display_name: user.display_name,
+          roles: user.roles,
+          status: user.active ? 'active' : 'suspended',
+          last_active_at: user.updated_at,
+        },
+        { org: user.tenant },
+      );
+    },
+    async remove() {
+      // SCIM DELETE is deliberately a deactivation at this boundary; the
+      // store has no destructive user-delete contract yet.
+    },
+  };
 }
 
 function validatePackForInstall(
@@ -1384,6 +1469,122 @@ export function makeApi(): ApiHandler[] {
         if (!id) return notFound('token');
         await ctx.store.revokeToken(id, new Date().toISOString());
         return asResponse({ ok: true });
+      },
+    },
+
+    // ============ Tenancy ============
+    {
+      method: 'GET',
+      path: '/scim/v2/Users',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        const directory = scimDirectory(ctx);
+        const users = await new ScimProvisioner(directory, org).list(
+          typeof req.params.filter === 'string' ? req.params.filter : undefined,
+        );
+        return asResponse({
+          schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'],
+          totalResults: users.length,
+          startIndex: 1,
+          itemsPerPage: users.length,
+          Resources: users.map(scimUserResource),
+        });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/scim/v2/Users',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        const resource = scimResource(req.body);
+        if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).create(resource);
+          return asResponse(scimUserResource(user), 201);
+        } catch (error) {
+          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+        }
+      },
+    },
+    {
+      method: 'GET',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).get(req.params.id ?? '');
+          return asResponse(scimUserResource(user));
+        } catch {
+          return asResponse({ error: 'SCIM resource not found' }, 404);
+        }
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        const resource = scimResource(req.body);
+        if (!resource) return asResponse({ error: 'SCIM userName is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).replace(
+            req.params.id ?? '',
+            resource,
+          );
+          return asResponse(scimUserResource(user));
+        } catch (error) {
+          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+        }
+      },
+    },
+    {
+      method: 'PATCH',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        const operations = (req.body as { Operations?: unknown })?.Operations;
+        if (!Array.isArray(operations))
+          return asResponse({ error: 'SCIM Operations is required' }, 400);
+        try {
+          const user = await new ScimProvisioner(scimDirectory(ctx), org).patch(
+            req.params.id ?? '',
+            operations as never,
+          );
+          return asResponse(scimUserResource(user));
+        } catch (error) {
+          return asResponse({ error: error instanceof Error ? error.message : String(error) }, 400);
+        }
+      },
+    },
+    {
+      method: 'DELETE',
+      path: '/scim/v2/Users/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const org = scimOrg(req);
+        if (!org || !ctx.scimAuthorize || !(await ctx.scimAuthorize(req.headers, org)))
+          return asResponse({ error: 'SCIM authorization required' }, 401);
+        try {
+          await new ScimProvisioner(scimDirectory(ctx), org).deactivate(req.params.id ?? '');
+          return asResponse(null, 204);
+        } catch {
+          return asResponse({ error: 'SCIM resource not found' }, 404);
+        }
       },
     },
 
