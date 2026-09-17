@@ -620,6 +620,13 @@ time comparison, expire and rotate tokens, and emit classified audit events
 without including the presented secret. The route verifier still needs an
 atomic durable store and rate limiter before production signoff.
 
+# 2026-09-17 — performance ingestion must preserve measurements and policy boundaries
+
+Import p95 and failure/check rates as typed evidence rather than reducing a load
+test to a process exit code. If thresholds are absent, keep the metric visible
+without inventing a pass criterion; execution, threshold policy and functional
+oracles must remain separate.
+
 # 2026-09-17 — tender and promotion checks have different consistency boundaries
 
 Split tender validation is an exact accounting invariant: compare minor units with

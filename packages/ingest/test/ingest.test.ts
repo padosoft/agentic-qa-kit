@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseJunit, parseSast } from '../dist/index.js';
+import { parseJunit, parseK6Summary, parseSast } from '../dist/index.js';
 
 describe('JUnit ingestion', () => {
   it('normalizes pass, failure, error and skipped cases', () => {
@@ -57,5 +57,32 @@ describe('SAST ingestion', () => {
   it('fails closed on malformed or ambiguous SAST input', () => {
     assert.throws(() => parseSast([]), /object/);
     assert.throws(() => parseSast({ results: [{}] }), /check_id/);
+  });
+});
+
+describe('k6 ingestion', () => {
+  it('normalizes p95 latency and fails checks or request errors', () => {
+    const report = parseK6Summary({
+      metrics: {
+        http_req_duration: { values: { avg: 42.1, 'p(95)': 120.456 } },
+        http_req_failed: { values: { rate: 0.02 } },
+        checks: { values: { rate: 0.98, passes: 98, fails: 2 } },
+      },
+    });
+    assert.equal(report.framework, 'k6');
+    assert.equal(report.records[0]?.duration_ms, 120.456);
+    assert.deepEqual(
+      report.records.map((record) => record.status),
+      ['passed', 'failed', 'failed'],
+    );
+    assert.ok(report.records.every((record) => record.fingerprint.length === 64));
+  });
+
+  it('fails closed for a missing or non-numeric metrics summary', () => {
+    assert.throws(() => parseK6Summary({}), /metrics/);
+    assert.throws(
+      () => parseK6Summary({ metrics: { checks: { values: { rate: '0.9' } } } }),
+      /numeric metrics/,
+    );
   });
 });

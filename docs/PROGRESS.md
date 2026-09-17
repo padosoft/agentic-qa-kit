@@ -427,3 +427,8 @@
 
 - Added `ScimTokenManager` with opaque high-entropy issuance, hash-only persistence, tenant-bound constant-time verification, expiry, revoke/rotate and injected audit events. Rejected attempts are classified without recording bearer material.
 - Evidence: auth typecheck and 14/15 tests (one PostgreSQL session skip), repository Biome check and diff check. Secret-manager wiring, atomic durable rotation, rate limiting and HTTP administration remain deployment work.
+
+# 2026-09-17 — k6 performance summary ingestion
+
+- Added bounded ingestion for k6 JSON summaries. p95 latency is preserved as duration evidence; request-error and check rates become explicit failed records, with stable fingerprints and fail-closed malformed-input handling.
+- Evidence: ingest typecheck and 6/6 tests; repository Biome check and diff check pass. Threshold-policy evaluation, Locust ingestion and live performance execution remain open.

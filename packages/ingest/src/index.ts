@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 
-export type IngestFramework = 'junit' | 'sast';
+export type IngestFramework = 'junit' | 'sast' | 'k6';
 export type IngestStatus = 'passed' | 'failed' | 'error' | 'skipped';
 
 export interface IngestRecord {
@@ -195,5 +195,61 @@ export function parseSast(value: unknown, source = 'sast.json', tool = 'sast'): 
     ingested_at: new Date().toISOString(),
     records,
     warnings,
+  };
+}
+
+/** Normalize the stable JSON summary emitted by k6 after a load test. */
+export function parseK6Summary(value: unknown, source = 'k6-summary.json'): IngestReport {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('k6 summary must be an object');
+  const metrics = (value as Record<string, unknown>).metrics;
+  if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics))
+    throw new Error('k6 summary must contain a metrics object');
+
+  const records: IngestRecord[] = [];
+  for (const [name, raw] of Object.entries(metrics as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      throw new Error(`k6 metric ${name} must be an object`);
+    const values = (raw as Record<string, unknown>).values;
+    if (!values || typeof values !== 'object' || Array.isArray(values))
+      throw new Error(`k6 metric ${name} must contain values`);
+    const numeric = Object.fromEntries(
+      Object.entries(values as Record<string, unknown>).filter(
+        (entry): entry is [string, number] =>
+          typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+      ),
+    );
+    if (Object.keys(numeric).length === 0) continue;
+    const p95 = numeric['p(95)'];
+    const rate = numeric.rate;
+    const status: IngestStatus =
+      name === 'http_req_failed' && rate !== undefined && rate > 0
+        ? 'failed'
+        : name === 'checks' && rate !== undefined && rate < 1
+          ? 'failed'
+          : 'passed';
+    const detail = Object.entries(numeric)
+      .slice(0, 20)
+      .map(([key, metricValue]) => `${key}=${metricValue}`)
+      .join(', ');
+    records.push({
+      id: `k6-${records.length + 1}`,
+      framework: 'k6',
+      external_id: name,
+      name,
+      status,
+      ...(p95 === undefined ? {} : { duration_ms: Number(p95.toFixed(3)) }),
+      message: detail,
+      fingerprint: fingerprint(['k6', name, detail, status]),
+    });
+  }
+  if (records.length === 0) throw new Error('k6 summary contains no numeric metrics');
+  return {
+    schema_version: '1',
+    framework: 'k6',
+    source,
+    ingested_at: new Date().toISOString(),
+    records,
+    warnings: [],
   };
 }
