@@ -1,6 +1,7 @@
 export {
   MemoryWebhookQueue,
   PostgresWebhookQueue,
+  WebhookDestinationPolicy,
   signWebhook,
   type DurableWebhookRequest,
   type DeliveryResult,

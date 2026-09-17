@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   MemoryWebhookQueue,
   PostgresWebhookQueue,
+  WebhookDestinationPolicy,
   type WebhookTransport,
   signWebhook,
 } from '../dist/index.js';
@@ -61,6 +62,13 @@ describe('outbound webhooks', () => {
       () => queue.enqueue({ ...request('bad'), url: 'file:///secret' }, 0),
       /http or https/,
     );
+    const policy = new WebhookDestinationPolicy(['https://hooks.example.test']);
+    policy.assertAllowed('https://hooks.example.test/events');
+    assert.throws(
+      () => policy.assertAllowed('https://other.example.test/events'),
+      /not allowlisted/,
+    );
+    assert.throws(() => new WebhookDestinationPolicy(['http://hooks.example.test']), /HTTPS/);
   });
 
   it('persists, claims and removes a delivery against PostgreSQL when configured', async () => {
@@ -70,7 +78,11 @@ describe('outbound webhooks', () => {
       return;
     }
     const id = `pg-${Date.now()}`;
-    const queue = new PostgresWebhookQueue(dsn, { resolve: async () => 'test-secret' });
+    const queue = new PostgresWebhookQueue(
+      dsn,
+      { resolve: async () => 'test-secret' },
+      new WebhookDestinationPolicy(['https://example.test']),
+    );
     const transport: WebhookTransport = {
       send: async ({ headers }) => {
         assert.equal(headers['x-aqa-delivery-id'], id);

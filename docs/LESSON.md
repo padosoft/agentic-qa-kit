@@ -1398,3 +1398,7 @@ atomic persistent queue, secret rotation and an audited redrive path.
 Persist delivery metadata and a secret reference, never the signing secret.
 Claim rows atomically with `SKIP LOCKED`, release the lease before performing
 network I/O, and make destinations idempotent with a stable delivery ID.
+
+An HTTPS origin allowlist is necessary but not sufficient for SSRF safety:
+production transports must also pin/validate DNS results and reject private,
+loopback, link-local and metadata-service addresses at connection time.

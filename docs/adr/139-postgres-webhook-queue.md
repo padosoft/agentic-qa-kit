@@ -19,6 +19,10 @@ manager, deliver outside the database lock, then delete successful rows or
 update retry/DLQ state. `redrive(id)` resets only dead rows and is intended to
 sit behind an authenticated, audited operator endpoint.
 
+The durable queue also requires an exact HTTPS origin allowlist. URL
+credentials are rejected; the transport must separately enforce DNS
+rebinding and private/link-local IP protections.
+
 ## Consequences
 
 - Multiple workers can scale horizontally without duplicate claims from the

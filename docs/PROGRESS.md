@@ -1150,5 +1150,5 @@
   three deterministic tests pass; the durable test is intentionally skipped
   without PostgreSQL credentials.
 - Remaining: wire a secret-manager implementation and authenticated admin
-  endpoint/metrics, enforce destination allowlists, and prove a real provider
-  journey.
+  endpoint/metrics, enforce transport-level DNS/private-IP protections, and
+  prove a real provider journey. Durable origin allowlisting is now enforced.

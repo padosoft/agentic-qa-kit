@@ -31,6 +31,35 @@ export interface WebhookSecretResolver {
   resolve(secretRef: string): Promise<string>;
 }
 
+export class WebhookDestinationPolicy {
+  private readonly origins: ReadonlySet<string>;
+
+  constructor(origins: readonly string[]) {
+    const normalized = origins.map((origin) => {
+      const url = new URL(origin);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.pathname !== '/' ||
+        url.search ||
+        url.hash
+      )
+        throw new Error('webhook destination origins must be credential-free HTTPS origins');
+      return url.origin;
+    });
+    if (normalized.length === 0) throw new Error('webhook destination allowlist must not be empty');
+    this.origins = new Set(normalized);
+  }
+
+  assertAllowed(rawUrl: string): void {
+    const url = new URL(rawUrl);
+    if (url.username || url.password) throw new Error('webhook URL must not contain credentials');
+    if (url.protocol !== 'https:' || !this.origins.has(url.origin))
+      throw new Error(`webhook destination is not allowlisted: ${url.origin}`);
+  }
+}
+
 export interface WebhookResponse {
   status: number;
   retry_after_ms?: number;
@@ -176,11 +205,17 @@ export class PostgresWebhookQueue {
   private readonly sql: Sql;
   private readonly ready: Promise<void>;
   private readonly resolver: WebhookSecretResolver;
+  private readonly destinationPolicy: WebhookDestinationPolicy;
 
-  constructor(dsn: string, resolver: WebhookSecretResolver) {
+  constructor(
+    dsn: string,
+    resolver: WebhookSecretResolver,
+    destinationPolicy: WebhookDestinationPolicy,
+  ) {
     if (!dsn.trim()) throw new Error('[integrations/webhook] DSN is empty');
     this.sql = postgres(dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
     this.resolver = resolver;
+    this.destinationPolicy = destinationPolicy;
     this.ready = this.initialize();
   }
 
@@ -207,6 +242,7 @@ export class PostgresWebhookQueue {
 
   async enqueue(request: DurableWebhookRequest, now = new Date()): Promise<void> {
     validateDurableRequest(request);
+    this.destinationPolicy.assertAllowed(request.url);
     await this.ready;
     await this.sql`
       INSERT INTO aqa_webhook_deliveries (id, org, integration, url, payload, secret_ref, next_attempt_at)

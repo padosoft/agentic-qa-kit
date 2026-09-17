@@ -9,7 +9,8 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - per-integration rate limiting hook;
 - explicit dead-letter queue state after five attempts;
 - injectable transport, so tests never call a real vendor;
-- PostgreSQL queue with atomic `SKIP LOCKED` claims and operator redrive.
+- PostgreSQL queue with atomic `SKIP LOCKED` claims and operator redrive;
+- mandatory HTTPS destination-origin allowlisting for the durable queue.
 
 ## Setup
 
@@ -24,3 +25,5 @@ secret manager. Only `secret_ref` is persisted; the secret itself is resolved
 inside the worker and is never written to the queue. Both implementations
 require audit metrics, destination allowlisting and an authenticated operator
 workflow for DLQ redrive.
+The transport layer must additionally enforce DNS rebinding and private/link-local
+IP protections at connection time.
