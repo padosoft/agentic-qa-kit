@@ -56,6 +56,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-postgres
                   key: url
+            - name: AQA_SCIM_TOKEN_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
             {{- else if .Values.postgres.urlSecretRef }}
             - name: AQA_STORE_DSN
               valueFrom:
@@ -77,6 +82,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.urlSecretRef }}
                   key: url
+            - name: AQA_SCIM_TOKEN_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
             {{- else if .Values.postgres.url }}
             - name: AQA_STORE_DSN
               value: {{ .Values.postgres.url | quote }}
@@ -85,6 +95,8 @@ spec:
             - name: AQA_OIDC_SESSION_DSN
               value: {{ .Values.postgres.url | quote }}
             - name: AQA_EVENT_BUS_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_SCIM_TOKEN_DSN
               value: {{ .Values.postgres.url | quote }}
             {{- end }}
           ports:

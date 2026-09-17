@@ -35,3 +35,4 @@ export {
   type OidcStoredSession,
 } from './oidc-session.js';
 export { PostgresOidcSessionStore } from './postgres-session.js';
+export { PostgresScimTokenStore } from './postgres-scim-token.js';

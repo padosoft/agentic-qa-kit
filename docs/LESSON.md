@@ -723,3 +723,10 @@ An API route can have complete handler tests yet remain dead in the product if
 the HTTP shell only delegates a narrower prefix. Keep the server's route-prefix
 allowlist aligned with the API registry and cover the boot process, especially
 for security-sensitive SCIM/provisioning endpoints.
+
+# 2026-09-17 — durable auth records need an independent storage contract
+
+Hash-only token lifecycle logic is not durable merely because its interface is
+async. Provide a storage implementation with serialized migration, tenant
+indexes, expiry handling and close semantics, then wire its DSN through the
+deployment chart and exercise it in the real database job.

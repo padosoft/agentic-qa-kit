@@ -501,3 +501,8 @@
 
 - Added the standard `Bearer <token-id>.<secret>` verification helper and wired `ScimTokenManager` into `aqa admin` as an explicit option. The admin HTTP server now delegates `/scim/v2/*` routes to the API (the previous static-only path made the tested SCIM routes unreachable from the bundled server).
 - Evidence: auth 17 passed/1 PostgreSQL skip; kit 125 passed/2 platform skips; the real boot test covers unauthorized and authorized SCIM list requests, with lint/typecheck path green. Durable token storage and rate limiting remain deployment work.
+
+# 2026-09-17 — durable SCIM token store
+
+- Added `PostgresScimTokenStore` with serialized schema migration, hash-only records, tenant/index support, expiry cleanup and explicit close. Helm now maps `AQA_SCIM_TOKEN_DSN` in all PostgreSQL modes, and the CI Helm assertions cover the new production wiring.
+- Evidence: auth typecheck and 17 passed/2 environment skips (the new PostgreSQL round-trip is skipped without DSN); lint and diff-check pass. The hosted PostgreSQL job must execute the round-trip before claiming durable production evidence; atomic rotation/rate limiting remain open.

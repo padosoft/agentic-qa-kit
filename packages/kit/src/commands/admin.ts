@@ -23,7 +23,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { OidcSessionManager, type ScimTokenManager, allows } from '@aqa/auth';
+import { OidcSessionManager, PostgresScimTokenStore, ScimTokenManager, allows } from '@aqa/auth';
 import { Event, Finding, Run } from '@aqa/schemas';
 import type { ApiContext, ApiHandler, EventBus } from '@aqa/server';
 import type { StoreProvider } from '@aqa/store';
@@ -46,6 +46,8 @@ export interface AdminOptions {
   scimAuthorize?: ApiContext['scimAuthorize'];
   /** Convenience adapter for the standard Bearer <id>.<secret> transport. */
   scimTokenManager?: ScimTokenManager;
+  /** PostgreSQL DSN for the built-in durable SCIM token store. */
+  scimTokenDsn?: string;
   /** Use a durable PostgreSQL runner queue instead of the local memory queue. */
   queueDsn?: string;
   /** Inject a queue implementation (useful for host applications/tests). */
@@ -124,8 +126,14 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   if (opts.authenticate && opts.oidc) {
     return { ok: false, error: 'admin: pass authenticate or oidc, not both' };
   }
-  if (opts.scimAuthorize && opts.scimTokenManager) {
-    return { ok: false, error: 'admin: pass scimAuthorize or scimTokenManager, not both' };
+  if (
+    (opts.scimAuthorize && (opts.scimTokenManager || opts.scimTokenDsn)) ||
+    (opts.scimTokenManager && opts.scimTokenDsn)
+  ) {
+    return {
+      ok: false,
+      error: 'admin: pass only one of scimAuthorize, scimTokenManager or scimTokenDsn',
+    };
   }
 
   const adminDistDir = opts.adminDistDir ?? defaultAdminDistDir();
@@ -177,6 +185,10 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   }
   const eventBusDsn = opts.eventBusDsn ?? process.env.AQA_EVENT_BUS_DSN;
   const eventBus = opts.eventBus ?? (eventBusDsn ? new PostgresEventBus(eventBusDsn) : undefined);
+  const scimTokenDsn = opts.scimTokenDsn ?? process.env.AQA_SCIM_TOKEN_DSN;
+  const scimTokenStore = scimTokenDsn ? new PostgresScimTokenStore(scimTokenDsn) : undefined;
+  const scimTokenManager =
+    opts.scimTokenManager ?? (scimTokenStore ? new ScimTokenManager(scimTokenStore) : undefined);
   const api = makeApi();
   const ctx = {
     store,
@@ -194,13 +206,10 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     ...(opts.scimAuthorize
       ? { scimAuthorize: opts.scimAuthorize }
-      : opts.scimTokenManager
+      : scimTokenManager
         ? {
             scimAuthorize: (headers: Record<string, string>, org: string) =>
-              opts.scimTokenManager?.verifyBearer(
-                org,
-                headers.authorization ?? headers.Authorization,
-              ) ?? Promise.resolve(false),
+              scimTokenManager.verifyBearer(org, headers.authorization ?? headers.Authorization),
           }
         : {}),
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
@@ -272,6 +281,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       await closable.close?.();
       await store.close();
       await eventBus?.close();
+      await scimTokenStore?.close();
       await opts.oidc?.close();
     },
   };
