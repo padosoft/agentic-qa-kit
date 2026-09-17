@@ -1136,6 +1136,19 @@
 - Evidence: package tests **3 passed**, package typecheck, repository lint and
   diff checks pass locally. The implementation uses an injectable transport and
   memory queue; no external vendor or secret was contacted.
-- Remaining before production integrations: durable PostgreSQL queue, secret
-  manager integration, redacted audit/metrics, operator-controlled redrive,
-  destination allowlisting and real provider journeys.
+- Remaining before production integrations: secret manager integration,
+  redacted audit/metrics, destination allowlisting and real provider journeys.
+
+# 2026-09-17 — durable webhook queue
+
+- Added `PostgresWebhookQueue` with `aqa_webhook_deliveries`, atomic
+  `FOR UPDATE SKIP LOCKED` claims, lease fencing, retry/DLQ state and explicit
+  `redrive(id)`. The queue stores only `secret_ref`; workers resolve the secret
+  through an injected resolver before signing the exact body.
+- Added an optional PostgreSQL integration contract that runs when
+  `AQA_TEST_POSTGRES_DSN` is configured. Local evidence: package typecheck and
+  three deterministic tests pass; the durable test is intentionally skipped
+  without PostgreSQL credentials.
+- Remaining: wire a secret-manager implementation and authenticated admin
+  endpoint/metrics, enforce destination allowlists, and prove a real provider
+  journey.

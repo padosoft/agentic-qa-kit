@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { MemoryWebhookQueue, type WebhookTransport, signWebhook } from '../dist/index.js';
+import {
+  MemoryWebhookQueue,
+  PostgresWebhookQueue,
+  type WebhookTransport,
+  signWebhook,
+} from '../dist/index.js';
 
 const request = (id: string) => ({
   id,
@@ -56,5 +61,27 @@ describe('outbound webhooks', () => {
       () => queue.enqueue({ ...request('bad'), url: 'file:///secret' }, 0),
       /http or https/,
     );
+  });
+
+  it('persists, claims and removes a delivery against PostgreSQL when configured', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the durable webhook contract');
+      return;
+    }
+    const id = `pg-${Date.now()}`;
+    const queue = new PostgresWebhookQueue(dsn, { resolve: async () => 'test-secret' });
+    const transport: WebhookTransport = {
+      send: async ({ headers }) => {
+        assert.equal(headers['x-aqa-delivery-id'], id);
+        return { status: 204 };
+      },
+    };
+    try {
+      await queue.enqueue({ ...request(id), secret_ref: 'test/webhook' });
+      assert.deepEqual(await queue.deliverDue(transport), [{ id, state: 'delivered' }]);
+    } finally {
+      await queue.close();
+    }
   });
 });

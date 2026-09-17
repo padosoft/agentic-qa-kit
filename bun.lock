@@ -108,6 +108,9 @@
     "packages/integrations": {
       "name": "@aqa/integrations",
       "version": "0.0.1",
+      "dependencies": {
+        "postgres": "^3.4.9",
+      },
     },
     "packages/kit": {
       "name": "@aqa/kit",

@@ -1392,3 +1392,9 @@ exact serialized body, bounded retry, `Retry-After`, per-integration rate
 limits and a visible DLQ are one contract. An in-memory queue can prove the
 state machine, but cannot be presented as production durability without an
 atomic persistent queue, secret rotation and an audited redrive path.
+
+# 2026-09-17 — durable queues must reference secrets
+
+Persist delivery metadata and a secret reference, never the signing secret.
+Claim rows atomically with `SKIP LOCKED`, release the lease before performing
+network I/O, and make destinations idempotent with a stable delivery ID.

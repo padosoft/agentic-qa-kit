@@ -8,7 +8,8 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
 - HMAC-SHA256 signatures and stable delivery IDs;
 - per-integration rate limiting hook;
 - explicit dead-letter queue state after five attempts;
-- injectable transport, so tests never call a real vendor.
+- injectable transport, so tests never call a real vendor;
+- PostgreSQL queue with atomic `SKIP LOCKED` claims and operator redrive.
 
 ## Setup
 
@@ -18,5 +19,8 @@ Provider-neutral outbound delivery primitives for enterprise integrations.
    manager, never from committed configuration.
 4. Run `bun run --filter @aqa/integrations test`.
 
-The memory queue is a contract/reference implementation. A production adapter
-must persist pending and dead-letter rows atomically and expose audit metrics.
+For production, use `PostgresWebhookQueue` with a secret resolver backed by a
+secret manager. Only `secret_ref` is persisted; the secret itself is resolved
+inside the worker and is never written to the queue. Both implementations
+require audit metrics, destination allowlisting and an authenticated operator
+workflow for DLQ redrive.
