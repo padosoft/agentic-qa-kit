@@ -19,6 +19,12 @@
   Evidence: generator tests **6 passed / 0 failed**, build/typecheck/Biome/
   diff-check pass. Human approval remains mandatory before activation.
 
+- **AI generation provenance merged to `main`.** PR #67 was squash-merged as
+  `0df8663` after all 10 hosted CI jobs passed, including PostgreSQL 16,
+  Node 22, CLI smoke and Playwright admin UI. The generated-draft audit trail
+  and fallback regression are now released; model trust and human review remain
+  explicit governance boundaries.
+
 - **Added Ed25519 signatures for DR inventory evidence.** Backup inventories
   can now be signed over their canonical representation and verified against an
   explicitly supplied trusted public key; missing trust roots and tampered
