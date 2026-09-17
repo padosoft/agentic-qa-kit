@@ -49,4 +49,25 @@ describe('aqa ingest', () => {
     assert.equal(k6Result.ok, true);
     assert.equal(locustResult.ok, true);
   });
+
+  it('persists threshold evidence separately and reports a failed gate', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-ingest-'));
+    const input = join(root, 'k6.json');
+    const policy = join(root, 'thresholds.json');
+    writeFileSync(
+      input,
+      JSON.stringify({ metrics: { http_req_duration: { values: { 'p(95)': 250 } } } }),
+    );
+    writeFileSync(policy, JSON.stringify({ max_p95_ms: 100 }));
+    const result = runIngest({ root, kind: 'k6', file: input, threshold_file: policy });
+    assert.equal(result.ok, true);
+    assert.equal(result.threshold_result?.passed, false);
+    assert.equal(result.threshold_result?.violations.length, 1);
+    const thresholdEvidence = readFileSync(
+      join(root, result.threshold_artifact_path ?? ''),
+      'utf8',
+    );
+    assert.match(thresholdEvidence, /max_p95_ms/);
+    assert.match(thresholdEvidence, /p95_ms/);
+  });
 });

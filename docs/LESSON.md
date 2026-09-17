@@ -688,3 +688,10 @@ Adding a tool to `aqa ingest` must reuse the same bounded parser and redacted
 artifact store as existing frameworks. The CLI should not duplicate parsing or
 write tool-specific files that bypass the evidence retention and secret-redaction
 guarantees.
+
+# 2026-09-17 — performance gate failure must preserve evidence
+
+A threshold violation is not an ingestion failure: the report must still be
+stored for diagnosis, while the CLI returns a distinct non-zero gate code and
+stores policy/violations separately. This preserves both CI enforcement and the
+ability to audit what was measured.

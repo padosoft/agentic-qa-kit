@@ -476,3 +476,8 @@
 
 - Extended `aqa ingest` to accept k6 and Locust JSON summaries, preserving the same bounded/redacted artifact path and normalized report contract used by JUnit/SAST. Added a CLI-boundary test for both frameworks.
 - Evidence: workspace typecheck, full workspace test gate passed (506 tests, 4 PostgreSQL skips, 0 failures), lint and diff-check passed. Threshold-file CLI flags and live CI gate enforcement remain separate follow-up work.
+
+# 2026-09-17 — CLI performance threshold gate
+
+- Added `aqa ingest k6|locust <file> --threshold-file <policy.json>`. The report remains the primary redacted evidence artifact; the numeric policy and structured violations are persisted in a separate threshold artifact. A failed threshold returns exit code 2 while ingestion itself remains recorded, making CI behavior explicit and inspectable.
+- Evidence: kit suite 124 passed, 2 platform symlink skips; root lint and diff-check pass. CI workflow wiring and live load execution remain open.

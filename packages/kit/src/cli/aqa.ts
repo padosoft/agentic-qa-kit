@@ -45,6 +45,7 @@ const VALUE_FLAGS = new Set([
   'attempts',
   'base-url',
   'tool',
+  'threshold-file',
   'method',
   'scope',
 ]);
@@ -126,6 +127,7 @@ ${bold('Common options')}
   --project-name <name>  (install-agent-files) override the slug embedded in instruction files
   --run-id <id>          (report) target a specific run; default = latest
   --format <fmt>         (report) md | json | both (default: both)
+  --threshold-file <f>   (ingest k6/locust) apply explicit performance policy JSON
   --attempts <n>         (verify) attempts, 1..10 (default: 3)
   --base-url <url>       (verify) allowlisted HTTP SUT base URL
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
@@ -373,6 +375,9 @@ async function main(): Promise<number> {
         kind,
         file,
         ...(args.values.has('tool') ? { tool: args.values.get('tool') ?? '' } : {}),
+        ...(args.values.has('threshold-file')
+          ? { threshold_file: args.values.get('threshold-file') ?? '' }
+          : {}),
       });
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));
@@ -380,7 +385,13 @@ async function main(): Promise<number> {
       }
       console.info(`  ${green('✓')} ${result.report?.records.length ?? 0} record(s) ingested`);
       console.info(`    ${dim('evidence: ')}${result.artifact_path}`);
-      return 0;
+      if (result.threshold_result) {
+        console.info(
+          `    ${result.threshold_result.passed ? green('✓ thresholds passed') : red('✗ thresholds failed')} (${result.threshold_result.violations.length} violation(s))`,
+        );
+        console.info(`    ${dim('threshold evidence: ')}${result.threshold_artifact_path}`);
+      }
+      return result.threshold_result?.passed === false ? 2 : 0;
     }
     case 'risk': {
       const subcommand = args.positionals[0];
