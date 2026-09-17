@@ -33,19 +33,55 @@ spec:
             - name: AQA_MONTHLY_BUDGET_USD
               value: {{ .Values.cost.monthlyBudgetUsd | quote }}
             {{- if .Values.postgres.subchart.enabled }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_QUEUE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_OIDC_SESSION_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
+            - name: AQA_EVENT_BUS_DSN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-postgres
                   key: url
             {{- else if .Values.postgres.urlSecretRef }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_QUEUE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_OIDC_SESSION_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
+            - name: AQA_EVENT_BUS_DSN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgres.urlSecretRef }}
                   key: url
             {{- else if .Values.postgres.url }}
-            - name: AQA_POSTGRES_URL
+            - name: AQA_STORE_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_QUEUE_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_OIDC_SESSION_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_EVENT_BUS_DSN
               value: {{ .Values.postgres.url | quote }}
             {{- end }}
           ports:

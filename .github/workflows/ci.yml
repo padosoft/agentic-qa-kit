@@ -246,10 +246,15 @@ jobs:
             --set ingress.enabled=true \
             --set ingress.tls.enabled=true \
             --set ingress.tls.secretName=aqa-tls \
+            --set postgres.urlSecretRef=aqa-db \
             > /tmp/aqa-production.yaml
           test -s /tmp/aqa-default.yaml
           test -s /tmp/aqa-production.yaml
           grep -q 'PersistentVolumeClaim' /tmp/aqa-production.yaml
+          test "$(grep -c 'name: AQA_STORE_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_QUEUE_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_OIDC_SESSION_DSN' /tmp/aqa-production.yaml)" -eq 1
+          test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
           ! grep -q 'namespaceSelector: {}' /tmp/aqa-production.yaml
 
   build:

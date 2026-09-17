@@ -29,6 +29,10 @@ operators.
 - Keep `server.auditPersistence.enabled=true` in production and use a backed-up
   storage class. The audit PVC is not a substitute for Postgres/S3 backup or
   WORM retention.
+- Configure `postgres.urlSecretRef` (secret key `url`) or a deliberately
+  controlled `postgres.url`. The chart maps the same database endpoint to the
+  control-plane store, runner queue, shared OIDC sessions and EventBus; the
+  application still owns migrations and least-privilege database roles.
 - The chart uses TCP probes because the current server package exposes the
   framework-agnostic route table rather than a standalone health HTTP server;
   replace them with an authenticated-free application health endpoint when the

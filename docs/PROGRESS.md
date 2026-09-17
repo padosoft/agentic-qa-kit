@@ -11,6 +11,11 @@
 
 ## 2026-09-17
 
+- **Helm production DSN wiring corrected.** The chart now maps an external or
+  in-cluster PostgreSQL URL to the actual store, queue, shared OIDC-session and
+  EventBus environment variables. CI renders a secret-ref production shape and
+  asserts all four DSNs are present; the previous `AQA_POSTGRES_URL` alone did
+  not activate the production adapters.
 - **PostgreSQL event bus shipped.** `@aqa/server` now exposes `EventBus`,
   `MemoryEventBus` and `PostgresEventBus` with bounded envelopes, validated
   channels, cross-replica `LISTEN/NOTIFY`, idempotent unsubscribe and isolated
