@@ -7,6 +7,8 @@ import { type OracleResult, type ProbeRunResult, evaluateOracle } from './oracle
 
 export interface ScenarioRunResult {
   scenario_id: string;
+  execution_status: 'completed' | 'failed';
+  execution_error?: string;
   probes: readonly ProbeRunResult[];
   cleanup: readonly ProbeRunResult[];
   oracles: readonly OracleResult[];
@@ -144,10 +146,12 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   const probeResults: ProbeRunResult[] = [];
   const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
     try {
-      return await runner(probe);
+      const result = await runner(probe);
+      return { ...result, execution_status: result.error ? 'failed' : 'completed' };
     } catch (error) {
       return {
         probe_id: probe.id,
+        execution_status: 'failed',
         error: error instanceof Error ? error.message : String(error),
       };
     }
@@ -159,7 +163,13 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       kind: 'probe_executed',
       actor: { type: 'orchestrator', id: 'runner' },
       scenario_id: opts.scenario.id,
-      payload: { probe_id: probe.id, status: r.status, error: r.error, cleanup },
+      payload: {
+        probe_id: probe.id,
+        status: r.status,
+        execution_status: r.execution_status,
+        error: r.error,
+        cleanup,
+      },
     });
   };
   for (const probe of opts.scenario.steps) {
@@ -187,8 +197,12 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
     });
   }
   const failed = oracleResults.filter((o) => !o.passed);
+  const executionFailures = [...probeResults, ...cleanupResults].filter(
+    (probe) => probe.execution_status === 'failed' || Boolean(probe.error),
+  );
+  const executionError = executionFailures[0]?.error;
   let finding: Finding.Finding | null = null;
-  if (failed.length > 0) {
+  if (failed.length > 0 && executionFailures.length === 0) {
     const year = new Date().getUTCFullYear();
     // The human-readable code must remain schema-compatible, but it cannot
     // be based on the scenario position: that value repeats on every run and
@@ -230,6 +244,8 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
   }
   return {
     scenario_id: opts.scenario.id,
+    execution_status: executionFailures.length > 0 ? 'failed' : 'completed',
+    ...(executionError ? { execution_error: executionError } : {}),
     probes: probeResults,
     cleanup: cleanupResults,
     oracles: oracleResults,

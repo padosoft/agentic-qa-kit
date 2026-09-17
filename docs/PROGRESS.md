@@ -575,3 +575,7 @@
 - Added `MfaLifecycle` with generated TOTP enrollment material, `otpauth` URI, confirmation before activation, protected-secret injection, and one-time recovery-code consumption. Raw TOTP secrets and recovery codes are never persisted by the lifecycle; production must provide a KMS/Vault-backed protector and durable store.
 - Added `PostgresMfaCredentialStore` with idempotent migration and composite tenant/user key; the store persists only protected secret material and recovery-code hashes.
 - Evidence: auth build/typecheck, lifecycle tests 2/2, PostgreSQL contract 1 skip without DSN, repository lint and diff-check pass. Provider-backed secret protection, rate limiting/audit integration and WebAuthn remain open deployment work.
+# 2026-09-17 — fail-closed execution versus assertion outcomes
+
+- Separated probe execution state from oracle assertion state. Missing drivers, transport errors and cleanup failures now produce `execution_status=failed`, block `aqa run`, and do not create security findings. `aqa run` records bounded execution-error samples in `run_finished`; success fixtures inject an explicit probe driver instead of relying on an implicit no-op.
+- Evidence: runner/kit journey tests 36/36 and pack-scaffold integration updated; full regression pending after this increment. This closes the false-green boundary but does not yet provide browser/SQL/shell drivers for every pack.

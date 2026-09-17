@@ -10,6 +10,8 @@ export interface OracleResult {
 
 export interface ProbeRunResult {
   probe_id: string;
+  /** Transport/execution outcome; assertion status is represented separately by OracleResult. */
+  execution_status?: 'completed' | 'failed';
   status?: number;
   body?: unknown;
   headers?: Record<string, string>;

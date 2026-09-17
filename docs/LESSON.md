@@ -797,3 +797,6 @@ trust-root policy; it must not be implied by a local public-key verifier.
 # 2026-09-17 — MFA verification is not an enrollment lifecycle
 
 TOTP verification alone does not establish a usable MFA product. Enrollment must confirm possession before activation, recovery codes must be stored as non-reversible hashes and consumed atomically, and the secret protector must be an explicit KMS/Vault boundary. A memory store or test protector is evidence for contract behavior only, never production persistence.
+# 2026-09-17 — execution failure is not a finding
+
+An oracle receiving no observation must not manufacture evidence of a SUT vulnerability. Keep transport/execution state and assertion state separate; a missing driver blocks the run and produces a coverage gap, while a finding requires a valid observation that violates an oracle. Tests that want a successful run must inject or boot a real driver explicitly.

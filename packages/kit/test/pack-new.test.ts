@@ -288,11 +288,12 @@ describe('aqa pack new — integration with aqa run', () => {
     // a freshly-scaffolded pack must be discoverable by `runRun`'s default
     // discovery (which scans `<root>/packs/*`) without any caller hint.
     const result = await runRun({ root, profile: 'smoke' });
-    // Smoke remains informational by contract, but the finding makes the
-    // missing driver visible; only a release-gate profile may be green.
-    assert.equal(result.ok, true, `smoke should remain informational: ${JSON.stringify(result)}`);
+    // A missing driver is an execution gap, never a security finding and
+    // never an informational success.
+    assert.equal(result.ok, false, `missing driver must block the run: ${JSON.stringify(result)}`);
     assert.ok(result.scenariosRun >= 1, 'starter scenario must execute');
-    assert.ok(result.findingsCount >= 1, 'missing driver must be observable as a finding');
+    assert.equal(result.findingsCount, 0);
+    assert.match(result.error ?? '', /could not execute|no probe runner/i);
 
     // Prove the scaffolded scenario actually ran (not some bundled pack
     // sneaking in). `scn-pack-demo-starter` is the derived id from the

@@ -38,7 +38,13 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
 import { buildReplayArtifacts } from '@aqa/reporter';
-import { EventChainWriter, FindingsWriter, makeHttpProbeRunner, runScenario } from '@aqa/runner';
+import {
+  EventChainWriter,
+  FindingsWriter,
+  type ProbeRunner,
+  makeHttpProbeRunner,
+  runScenario,
+} from '@aqa/runner';
 import { type Event, Profile, Project, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
@@ -70,6 +76,8 @@ export interface RunOptions {
   packsRoot?: string[];
   /** Optional OTLP/HTTP endpoint; defaults to AQA_OTLP_ENDPOINT when set. */
   otlpEndpoint?: string;
+  /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
+  probeRunner?: ProbeRunner;
 }
 
 export interface RunResult {
@@ -477,9 +485,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // executed and audited twice. First-seen wins, so the priority order
   // matches the discovery order above: project > node_modules > bundled.
   const seenPackNames = new Set<string>();
-  const probeRunner = project.sut.base_url
-    ? makeHttpProbeRunner({ baseUrl: project.sut.base_url })
-    : undefined;
+  const probeRunner =
+    opts.probeRunner ??
+    (project.sut.base_url ? makeHttpProbeRunner({ baseUrl: project.sut.base_url }) : undefined);
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -506,6 +514,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const missingScenarios: string[] = [];
   const unsafeScenarioPaths: string[] = [];
   const runtimeErrors: string[] = [];
+  const executionErrors: string[] = [];
   const executedScenarios: Scenario.Scenario[] = [];
   for (const packDir of resolvePackDirs(opts)) {
     let pack: LoadedPack;
@@ -548,7 +557,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       // exception (or write failure) is collected instead of bubbling out
       // and skipping the `run_finished` audit event.
       try {
-        await runScenario({
+        const scenarioResult = await runScenario({
           scenario,
           run_id: runId,
           events,
@@ -556,6 +565,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           ...(probeRunner ? { probeRunner } : {}),
           findingIdSeed: scenariosRun,
         });
+        if (scenarioResult.execution_status === 'failed') {
+          executionErrors.push(
+            `${scenario.id}: ${scenarioResult.execution_error ?? 'probe execution failed'}`,
+          );
+        }
       } catch (e) {
         runtimeErrors.push(`${scenario.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -604,6 +618,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenarios: missingScenarios.length,
         unsafe_paths: unsafeScenarioPaths.length,
         runtime_errors: runtimeErrors.length,
+        execution_errors: executionErrors.length,
         replay_artifacts: replayArtifacts.length,
         replay_errors: replayErrors.length,
         release_gate_failed: profile.require_deterministic_replay && findings.snapshot().length > 0,
@@ -615,6 +630,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         missing_scenario_samples: cap(missingScenarios),
         unsafe_path_samples: cap(unsafeScenarioPaths),
         runtime_error_samples: cap(runtimeErrors),
+        execution_error_samples: cap(executionErrors),
         replay_artifact_samples: cap(replayArtifacts),
         replay_error_samples: cap(replayErrors),
       },
@@ -737,6 +753,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     );
   if (runtimeErrors.length > 0)
     reasons.push(`${runtimeErrors.length} scenario(s) threw at runtime: ${fmtList(runtimeErrors)}`);
+  if (executionErrors.length > 0)
+    reasons.push(
+      `${executionErrors.length} scenario(s) could not execute: ${fmtList(executionErrors)}`,
+    );
   if (replayErrors.length > 0)
     reasons.push(`${replayErrors.length} replay artifact(s) failed: ${fmtList(replayErrors)}`);
   if (canonicalArtifactErrors.length > 0)

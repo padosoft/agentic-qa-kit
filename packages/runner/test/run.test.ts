@@ -62,7 +62,7 @@ describe('runScenario', () => {
     assert.equal(result.finding, null);
   });
 
-  it('fails closed when no probe runner is configured', async () => {
+  it('does not turn a missing probe runner into a security finding', async () => {
     const result = await runScenario({
       scenario: {
         ...SCENARIO,
@@ -73,8 +73,9 @@ describe('runScenario', () => {
       run_id: 'run-no-driver',
     });
     assert.equal(result.probes[0]?.error, 'no probe runner configured');
+    assert.equal(result.execution_status, 'failed');
     assert.equal(result.oracles[0]?.passed, false);
-    assert.ok(result.finding);
+    assert.equal(result.finding, null);
   });
 
   it('runs every cleanup probe after a failed step and records cleanup failures', async () => {
