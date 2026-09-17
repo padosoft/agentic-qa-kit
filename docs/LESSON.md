@@ -1545,3 +1545,11 @@ object contract across drivers and runtimes. A cached idempotency response can
 come back as a JSON string, including the literal string `"null"` for nullable
 headers. Decode at the durable adapter boundary and test the live response
 shape, not only the database row or the original handler result.
+
+# 2026-09-17 — emergency controls must cross the worker boundary
+
+A process-local LLM budget halt is not an operational kill-switch when the
+queue can dispatch through multiple workers. Persist the halt beside the
+shared reservation ledger, check it before every reservation, bound the
+operator reason, and make reset explicit rather than allowing a retry to
+silently re-enable dispatch.

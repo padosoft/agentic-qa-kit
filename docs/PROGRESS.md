@@ -11,6 +11,15 @@
 
 ## 2026-09-17
 
+- **Added a durable distributed LLM kill-switch.** `BudgetLedger` now exposes
+  bounded per-key `halt()`/`getHaltReason()` operations. PostgreSQL persists the
+  stop in `aqa_llm_budget_halts` and rejects later reservations across worker
+  processes; the memory implementation remains an explicit local fallback.
+  ADR-157 records the irreversible operator boundary.
+- Evidence: cost typecheck and **14 tests passed**. A live PostgreSQL
+  multi-client halt/admission journey remains required before claiming HA
+  production evidence.
+
 - **Fixed PostgreSQL idempotency response decoding.** The live multi-replica
   contract exposed that PostgreSQL's JSONB driver result can arrive as a JSON
   string, so a coalesced retry returned serialized body/headers instead of the

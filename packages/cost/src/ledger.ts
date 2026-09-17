@@ -12,6 +12,8 @@ export interface BudgetLedger {
   ): Promise<string>;
   settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void>;
   reapExpired(now?: Date): Promise<number>;
+  halt(key: string, reason: string): Promise<void>;
+  getHaltReason(key: string): Promise<string | null>;
   close?(): Promise<void>;
 }
 
@@ -37,6 +39,7 @@ type MemoryReservation = {
 export class MemoryBudgetLedger implements BudgetLedger {
   private readonly budgets = new Map<string, MemoryBudget>();
   private readonly reservations = new Map<string, MemoryReservation>();
+  private readonly halts = new Map<string, string>();
 
   async reserve(
     key: string,
@@ -44,8 +47,11 @@ export class MemoryBudgetLedger implements BudgetLedger {
     estimatedUsd: number,
     ttlMs = 300_000,
   ): Promise<string> {
+    validateKey(key);
     validateAmount(estimatedUsd);
     validateTtl(ttlMs);
+    const haltReason = this.halts.get(key);
+    if (haltReason) throw new BudgetDispatchBlockedError(`halted: ${haltReason}`);
     const current = this.budgets.get(key) ?? { budgetUsd, reservedUsd: 0, spentUsd: 0 };
     if (current.budgetUsd !== budgetUsd && this.budgets.has(key))
       throw new Error('[cost] budget configuration changed for active ledger key');
@@ -72,6 +78,16 @@ export class MemoryBudgetLedger implements BudgetLedger {
     if (usage) reservation.usage = usage;
   }
 
+  async halt(key: string, reason: string): Promise<void> {
+    validateKey(key);
+    this.halts.set(key, validateHaltReason(reason));
+  }
+
+  async getHaltReason(key: string): Promise<string | null> {
+    validateKey(key);
+    return this.halts.get(key) ?? null;
+  }
+
   async reapExpired(now = new Date()): Promise<number> {
     let count = 0;
     for (const [id, reservation] of this.reservations) {
@@ -94,6 +110,13 @@ export class PostgresBudgetLedger implements BudgetLedger {
     this.ready = this.migrate();
   }
 
+  private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
+    return (await (this.sql.unsafe as unknown as (q: string, v: unknown[]) => Promise<unknown>)(
+      text,
+      values,
+    )) as T[];
+  }
+
   private async migrate(): Promise<void> {
     await this.sql.begin(async (tx) => {
       const query = tx.unsafe as unknown as (q: string, v?: unknown[]) => Promise<unknown>;
@@ -110,6 +133,9 @@ export class PostgresBudgetLedger implements BudgetLedger {
       await query(
         "ALTER TABLE aqa_llm_budget_reservations ADD COLUMN IF NOT EXISTS expires_at timestamptz NOT NULL DEFAULT (now() + interval '5 minutes')",
       );
+      await query(
+        'CREATE TABLE IF NOT EXISTS aqa_llm_budget_halts (budget_key text PRIMARY KEY, reason text NOT NULL, halted_at timestamptz NOT NULL DEFAULT now())',
+      );
     });
   }
 
@@ -119,11 +145,17 @@ export class PostgresBudgetLedger implements BudgetLedger {
     estimatedUsd: number,
     ttlMs = 300_000,
   ): Promise<string> {
+    validateKey(key);
     validateAmount(estimatedUsd);
     validateTtl(ttlMs);
     await this.ready;
     return this.sql.begin(async (tx) => {
       const query = tx.unsafe as unknown as (q: string, v?: unknown[]) => Promise<unknown>;
+      const haltRows = (await query(
+        'SELECT reason FROM aqa_llm_budget_halts WHERE budget_key = $1',
+        [key],
+      )) as Array<{ reason: string }>;
+      if (haltRows[0]) throw new BudgetDispatchBlockedError(`halted: ${haltRows[0].reason}`);
       const rows = (await query(
         'INSERT INTO aqa_llm_budgets (key, budget_usd) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET updated_at = now() RETURNING key',
         [key, budgetUsd],
@@ -176,6 +208,26 @@ export class PostgresBudgetLedger implements BudgetLedger {
     });
   }
 
+  async halt(key: string, reason: string): Promise<void> {
+    validateKey(key);
+    const normalized = validateHaltReason(reason);
+    await this.ready;
+    await this.q(
+      'INSERT INTO aqa_llm_budget_halts (budget_key, reason) VALUES ($1, $2) ON CONFLICT (budget_key) DO UPDATE SET reason = EXCLUDED.reason, halted_at = now()',
+      [key, normalized],
+    );
+  }
+
+  async getHaltReason(key: string): Promise<string | null> {
+    validateKey(key);
+    await this.ready;
+    const rows = await this.q<{ reason: string }>(
+      'SELECT reason FROM aqa_llm_budget_halts WHERE budget_key = $1',
+      [key],
+    );
+    return rows[0]?.reason ?? null;
+  }
+
   async settle(reservationId: string, actualUsd: number, usage?: BudgetUsage): Promise<void> {
     validateAmount(actualUsd);
     await this.ready;
@@ -220,4 +272,14 @@ function validateAmount(value: number): void {
 function validateTtl(value: number): void {
   if (!Number.isInteger(value) || value < 1)
     throw new Error('[cost] ledger ttl must be a positive integer');
+}
+
+function validateKey(value: string): void {
+  if (!value.trim() || value.length > 256) throw new Error('[cost] ledger key is invalid');
+}
+
+function validateHaltReason(value: string): string {
+  const normalized = value.trim().slice(0, 200);
+  if (!normalized) throw new Error('[cost] halt reason is required');
+  return normalized;
 }

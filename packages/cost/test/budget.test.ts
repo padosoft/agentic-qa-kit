@@ -157,6 +157,16 @@ describe('MemoryBudgetLedger', () => {
     assert.ok(next);
   });
 
+  it('persists an irreversible halt across future admissions', async () => {
+    const ledger = new MemoryBudgetLedger();
+    await ledger.halt('org/halted', 'operator emergency stop');
+    assert.equal(await ledger.getHaltReason('org/halted'), 'operator emergency stop');
+    await assert.rejects(
+      () => ledger.reserve('org/halted', 10, 0.01),
+      /distributed budget exhausted|halted: operator emergency stop/,
+    );
+  });
+
   it('runs a bounded reaper tick and tolerates repeated start/stop', async () => {
     const ledger = new MemoryBudgetLedger();
     await ledger.reserve('org/scheduled', 1, 0.8, 10);
