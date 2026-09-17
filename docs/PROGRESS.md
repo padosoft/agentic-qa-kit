@@ -11,6 +11,10 @@
 
 ## 2026-09-17
 
+- **OIDC store retention hardening.** The PostgreSQL session backend now indexes
+  pending-state expiry and opportunistically removes expired PKCE/session rows
+  on writes, preventing abandoned login attempts from producing unbounded
+  table growth while preserving fail-closed expiry checks.
 - **Post-OIDC acceptance gates green.** `bun run lint`, workspace typecheck,
   full Bun test suite (444 pass, 1 skip), workspace/docs build and
   `bun audit --json` all pass locally. The one skip is deliberate: the live

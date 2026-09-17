@@ -34,12 +34,16 @@ export class PostgresOidcSessionStore implements OidcSessionStore {
         'CREATE TABLE IF NOT EXISTS aqa_oidc_sessions (token text PRIMARY KEY, user_json jsonb NOT NULL, expires_at timestamptz NOT NULL)',
       );
       await query(
+        'CREATE INDEX IF NOT EXISTS aqa_oidc_pending_expiry_idx ON aqa_oidc_pending (expires_at)',
+      );
+      await query(
         'CREATE INDEX IF NOT EXISTS aqa_oidc_sessions_expiry_idx ON aqa_oidc_sessions (expires_at)',
       );
     });
   }
 
   async putPending(state: string, pending: OidcPendingLogin): Promise<void> {
+    await this.query('DELETE FROM aqa_oidc_pending WHERE expires_at <= now()');
     await this.query(
       'INSERT INTO aqa_oidc_pending (state, verifier, expires_at) VALUES ($1, $2, to_timestamp($3 / 1000.0)) ON CONFLICT (state) DO UPDATE SET verifier = EXCLUDED.verifier, expires_at = EXCLUDED.expires_at',
       [state, pending.verifier, pending.expires_at],
@@ -56,6 +60,7 @@ export class PostgresOidcSessionStore implements OidcSessionStore {
   }
 
   async putSession(token: string, session: OidcStoredSession): Promise<void> {
+    await this.query('DELETE FROM aqa_oidc_sessions WHERE expires_at <= now()');
     await this.query(
       'INSERT INTO aqa_oidc_sessions (token, user_json, expires_at) VALUES ($1, $2::jsonb, to_timestamp($3 / 1000.0)) ON CONFLICT (token) DO UPDATE SET user_json = EXCLUDED.user_json, expires_at = EXCLUDED.expires_at',
       [token, JSON.stringify(session.user), session.expires_at],

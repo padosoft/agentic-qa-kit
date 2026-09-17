@@ -440,6 +440,10 @@ the HTTP boundary, with one-time state consumption serialized by the durable
 backend. Keeping the old synchronous API but failing closed when a shared
 backend is configured prevents accidental use of stale local state.
 
+The shared tables also need expiry indexes and opportunistic cleanup on writes;
+otherwise abandoned PKCE states and expired sessions become an unbounded store
+growth vector even when reads correctly reject them.
+
 # 2026-09-17 — migration must be a privileged operation
 
 Legacy global records cannot be safely made visible by fallback. A migration
