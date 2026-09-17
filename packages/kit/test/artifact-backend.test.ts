@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { FileArtifactStore, S3ArtifactStore } from '@aqa/artifacts';
-import { createRunArtifactStore } from '../dist/artifacts.js';
+import { createAuditCheckpointStore, createRunArtifactStore } from '../dist/artifacts.js';
 
 const names = [
   'AQA_ARTIFACT_S3_BUCKET',
@@ -11,6 +11,12 @@ const names = [
   'AQA_ARTIFACT_S3_ENDPOINT',
   'AQA_ARTIFACT_S3_FORCE_PATH_STYLE',
   'AQA_ARTIFACT_S3_REQUIRE_RETENTION',
+  'AQA_AUDIT_CHECKPOINT_S3_BUCKET',
+  'AQA_AUDIT_CHECKPOINT_S3_PREFIX',
+  'AQA_AUDIT_CHECKPOINT_S3_ENDPOINT',
+  'AQA_AUDIT_CHECKPOINT_S3_FORCE_PATH_STYLE',
+  'AQA_AUDIT_CHECKPOINT_S3_RETAIN_UNTIL',
+  'AQA_AUDIT_CHECKPOINT_S3_RETENTION_MODE',
 ] as const;
 const saved = new Map<string, string | undefined>();
 
@@ -46,5 +52,15 @@ describe('run artifact backend', () => {
     setEnv('AQA_ARTIFACT_S3_BUCKET', 'aqa-artifacts');
     setEnv('AQA_ARTIFACT_S3_REQUIRE_RETENTION', 'true');
     assert.throws(() => createRunArtifactStore('/tmp/run', 'run-1'), /requires/);
+  });
+
+  it('requires a dedicated compliance-retained bucket for CLI checkpoint publication', () => {
+    assert.equal(createAuditCheckpointStore(), undefined);
+    setEnv('AQA_AUDIT_CHECKPOINT_S3_BUCKET', 'aqa-audit');
+    assert.throws(() => createAuditCheckpointStore(), /RETAIN_UNTIL/);
+    setEnv('AQA_AUDIT_CHECKPOINT_S3_RETAIN_UNTIL', '2030-01-01T00:00:00Z');
+    assert.throws(() => createAuditCheckpointStore(), /RETENTION_MODE/);
+    setEnv('AQA_AUDIT_CHECKPOINT_S3_RETENTION_MODE', 'COMPLIANCE');
+    assert.equal(createAuditCheckpointStore() instanceof S3ArtifactStore, true);
   });
 });

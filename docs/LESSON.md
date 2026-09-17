@@ -6,6 +6,12 @@
   preflight steps and cleanup, record the missing coverage, and suppress
   findings until a real observation exists.
 
+- **Independent audit storage needs a distinct configuration namespace.**
+  Reusing the ordinary artifact bucket variables makes it too easy to believe
+  that a checkpoint is independently governed when it shares the run domain.
+  The CLI therefore requires a dedicated bucket and `COMPLIANCE` retention;
+  provider credentials still come from the normal SDK chain.
+
 - **Object Lock request is not proof of retention.** Sending
   `ObjectLockMode` and `ObjectLockRetainUntilDate` is only a request to the
   storage provider. Production WORM mode must read back both fields for the

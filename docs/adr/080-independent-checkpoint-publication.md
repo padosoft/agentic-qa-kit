@@ -27,3 +27,8 @@ Object Lock, versioning, KMS, backup or independent administration. Production
 bootstrap must inject a separately configured store and provide restore-drill
 evidence. The local file-store test proves separation of stores, not durable
 immutability.
+
+The CLI uses a dedicated `AQA_AUDIT_CHECKPOINT_S3_*` namespace and requires a
+compliance-retained S3 bucket when that mode is enabled. This prevents the
+ordinary run-artifact configuration from accidentally being reused as the
+supposed independent attestation domain.

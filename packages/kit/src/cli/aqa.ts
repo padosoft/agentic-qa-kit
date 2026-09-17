@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
+import { createAuditCheckpointStore } from '../artifacts.js';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runIngest } from '../commands/ingest.js';
@@ -284,6 +285,8 @@ async function main(): Promise<number> {
           private_key_pem: checkpointPrivateKey,
         };
       }
+      const auditCheckpointStore = createAuditCheckpointStore();
+      if (auditCheckpointStore) runOpts.auditCheckpointStore = auditCheckpointStore;
       const result = await runRun(runOpts);
       if (!result.ok) {
         console.error(red(`  ✗ ${result.error}`));

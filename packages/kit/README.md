@@ -105,6 +105,14 @@ published as `checkpoints/<run_id>.json` and its digest is recorded in the local
 manifest. Configure that store with its own tenant boundary, Object Lock/KMS,
 backup and restore evidence; the runner does not infer those controls.
 
+The CLI configures the same boundary when all of the following are present:
+`AQA_AUDIT_CHECKPOINT_S3_BUCKET`, optional
+`AQA_AUDIT_CHECKPOINT_S3_PREFIX`/`AQA_AUDIT_CHECKPOINT_S3_ENDPOINT`,
+`AQA_AUDIT_CHECKPOINT_S3_RETAIN_UNTIL`, and
+`AQA_AUDIT_CHECKPOINT_S3_RETENTION_MODE=COMPLIANCE`. Partial or non-compliance
+configuration fails before the run starts. Credentials still come from the AWS
+credential chain and are never accepted as CLI values.
+
 ## Durable admin state
 
 `aqa admin` uses `MemoryStore` for local development. Set `AQA_STORE_DSN` to a

@@ -21,6 +21,11 @@
   scenario, so integrations cannot accidentally configure preflight on the
   runner and then lose it at `aqa run`.
 
+- **CLI audit publication wired.** A dedicated `AQA_AUDIT_CHECKPOINT_S3_*`
+  configuration now creates a separate compliance-retained S3 store for the
+  final checkpoint. Partial configuration and non-`COMPLIANCE` retention fail
+  before execution; credentials remain on the AWS provider chain.
+
 - **S3 WORM verification strengthened.** Production retention mode now performs
   a `HeadObject` read-back after both content and metadata writes and fails
   closed when Object Lock is absent or shorter than requested. This closes the
