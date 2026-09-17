@@ -1,5 +1,7 @@
 import { AnthropicAdapter, type AnthropicOptions } from './anthropic.js';
+import { CohereAdapter, type CohereOptions } from './cohere.js';
 import { FixtureAdapter } from './fixture.js';
+import { GoogleAdapter, type GoogleOptions } from './google.js';
 import { OpenAiCompatibleAdapter, type OpenAiCompatibleOptions } from './openai-compatible.js';
 import type { LlmAdapter, LlmProvider } from './types.js';
 
@@ -21,6 +23,8 @@ export function adapterFor(
   opts?: {
     live?: OpenAiCompatibleOptions;
     anthropic?: AnthropicOptions;
+    google?: GoogleOptions;
+    cohere?: CohereOptions;
     fixtures?: Parameters<typeof FixtureAdapter.prototype.call> extends never
       ? never
       : Array<{
@@ -41,5 +45,7 @@ export function adapterFor(
     return new OpenAiCompatibleAdapter(provider, opts?.live);
   }
   if (provider === 'anthropic') return new AnthropicAdapter(opts?.anthropic);
+  if (provider === 'google') return new GoogleAdapter(opts?.google);
+  if (provider === 'cohere') return new CohereAdapter(opts?.cohere);
   return new ScaffoldAdapter(provider);
 }

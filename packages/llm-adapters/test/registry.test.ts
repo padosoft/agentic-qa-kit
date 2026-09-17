@@ -9,12 +9,12 @@ describe('adapterFor', () => {
   });
 
   it('returns a scaffold that throws for providers without a live adapter', async () => {
-    const a = adapterFor('google');
+    const a = adapterFor('bedrock');
     await assert.rejects(
       () =>
         a.call({
-          provider: 'google',
-          model: 'gemini-test',
+          provider: 'bedrock',
+          model: 'bedrock-test',
           messages: [{ role: 'user', content: 'hi' }],
         }),
       /not implemented at v0.3/,

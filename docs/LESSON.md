@@ -385,3 +385,21 @@ findings in a process-local map creates a misleadingly durable deployment.
 Expose control-plane store selection separately, keep the in-memory default
 only for local development, and close both resources on shutdown. The
 configuration path must be explicit and must never print credentials.
+
+# 2026-09-17 — provider names are not wire contracts
+
+Google Gemini and Cohere expose different roles, content blocks, tool schema
+names and usage fields. Registering both behind an OpenAI-compatible adapter
+would make tests look green while sending semantically wrong requests. Each
+provider needs its own bounded/redacted adapter and injected transport tests;
+unsupported Bedrock remains explicit until SigV4 and runtime behavior are
+verified.
+
+# 2026-09-17 — provider names are not wire contracts
+
+Google Gemini and Cohere expose different roles, content blocks, tool schema
+names and usage fields. Registering both behind an OpenAI-compatible adapter
+would make tests look green while sending semantically wrong requests. Each
+provider needs its own bounded/redacted adapter and injected transport tests;
+unsupported Bedrock remains explicit until SigV4 and runtime behavior are
+verified.
