@@ -1,4 +1,6 @@
 import { createHash, createPublicKey, verify } from 'node:crypto';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import type { PackManifest } from '@aqa/schemas';
 
 export interface SignatureCheck {
@@ -57,6 +59,50 @@ export function verifyTrustedManifestSignature(
       : { ok: false, reason: 'Ed25519 signature mismatch' };
   } catch {
     return { ok: false, reason: 'invalid Ed25519 public key or signature encoding' };
+  }
+}
+
+/**
+ * Digest every pack file deterministically, excluding YAML presentation of
+ * the manifest. The unsigned parsed manifest is included as a virtual file
+ * so signing metadata cannot create a recursive digest.
+ */
+export function packContentDigest(root: string, manifest: PackManifest.PackManifest): string {
+  const { signing: _signing, ...unsigned } = manifest;
+  const entries = [`pack-manifest.json\0${canonicalStringify(unsigned)}`];
+  const walk = (directory: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name);
+      const relativePath = relative(root, absolute).replaceAll('\\', '/');
+      const stat = lstatSync(absolute);
+      if (stat.isSymbolicLink()) throw new Error(`pack contains symlink: ${relativePath}`);
+      if (stat.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      if (!stat.isFile()) throw new Error(`pack contains unsupported file: ${relativePath}`);
+      if (relativePath === 'pack.yaml' || relativePath === 'pack.yml') continue;
+      const digest = createHash('sha256').update(readFileSync(absolute)).digest('hex');
+      entries.push(`${relativePath}\0${digest}`);
+    }
+  };
+  walk(root);
+  return createHash('sha256').update(entries.join('\n')).digest('hex');
+}
+
+export function verifyPackContentDigest(
+  root: string,
+  manifest: PackManifest.PackManifest,
+): SignatureCheck {
+  const declared = manifest.signing?.content_sha256;
+  if (!declared) return { ok: true, reason: 'pack content digest is not declared' };
+  try {
+    const computed = packContentDigest(root, manifest);
+    return computed === declared
+      ? { ok: true, reason: 'all pack content matches signing.content_sha256' }
+      : { ok: false, reason: `pack content digest mismatch: computed ${computed.slice(0, 12)}…` };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   }
 }
 

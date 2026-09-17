@@ -809,3 +809,6 @@ Aggregating every probe response makes a scenario oracle non-local: a success fr
 # 2026-09-17 — migrate producers after strengthening a contract
 
 Adding a compatibility field without migrating first-party producers leaves the risky behavior dominant. After introducing typed oracle references, update every bundled pack and fixture so new installations exercise the precise contract; keep compatibility only at the external boundary.
+# 2026-09-17 — manifest signatures do not cover pack content
+
+Signing only `pack.yaml` leaves scenarios, probes and templates mutable after installation. A content-addressed pack digest must define a deterministic file set, include canonical unsigned manifest bytes, reject symlinks, and be enforced at the execution boundary—not merely exposed as a helper.

@@ -591,3 +591,7 @@
 
 - Migrated all first-party scenario packs with oracle steps to explicit `probe_id` references (API, web UI and LLM-agent packs). The legacy fallback remains only for third-party/older packs and is now visible as a migration concern rather than the default first-party contract.
 - Evidence: pack YAML remains schema-loadable and the full regression is the authoritative gate after this change.
+# 2026-09-17 — full pack content integrity
+
+- Added optional `signing.content_sha256`, a deterministic digest over the unsigned canonical manifest plus every regular pack file. Symlinks and unsupported file types fail closed. `aqa run` verifies this digest after loading a pack and refuses tampered scenario/probe content before execution.
+- Evidence: pack-scanner/CLI targeted tests 37/37, workspace typecheck and lint pass. Existing packs without `content_sha256` remain integrity-unpinned until a signing pipeline emits and verifies the field; Sigstore keyless publisher identity remains open.

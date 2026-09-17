@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   manifestDigest,
+  packContentDigest,
   scanPack,
   verifyManifestDigest,
+  verifyPackContentDigest,
   verifySignature,
   verifyTrustedManifestSignature,
 } from '../dist/index.js';
@@ -103,5 +108,19 @@ describe('verifyTrustedManifestSignature', () => {
       ).ok,
       false,
     );
+  });
+});
+
+describe('packContentDigest', () => {
+  it('detects tampering in a scenario file, not only the manifest', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-pack-digest-'));
+    mkdirSync(join(root, 'scenarios'));
+    writeFileSync(join(root, 'pack.yaml'), 'presentation', 'utf8');
+    writeFileSync(join(root, 'scenarios', 'one.yaml'), 'expected: 200\n', 'utf8');
+    const digest = packContentDigest(root, BASE);
+    const signed = { ...BASE, signing: { sha256: 'a'.repeat(64), content_sha256: digest } };
+    assert.equal(verifyPackContentDigest(root, signed).ok, true);
+    writeFileSync(join(root, 'scenarios', 'one.yaml'), 'expected: 500\n', 'utf8');
+    assert.equal(verifyPackContentDigest(root, signed).ok, false);
   });
 });

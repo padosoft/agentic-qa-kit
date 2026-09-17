@@ -37,6 +37,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
 import { type LoadedPack, appliesWhen, loadPack } from '@aqa/pack-loader';
+import { verifyPackContentDigest } from '@aqa/pack-scanner';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import {
   EventChainWriter,
@@ -520,6 +521,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     let pack: LoadedPack;
     try {
       pack = loadPack(packDir);
+      const contentIntegrity = verifyPackContentDigest(pack.root, pack.manifest);
+      if (!contentIntegrity.ok) {
+        packErrors.push(`${packDir}: ${contentIntegrity.reason}`);
+        continue;
+      }
     } catch (e) {
       packErrors.push(`${packDir}: ${e instanceof Error ? e.message : String(e)}`);
       continue;

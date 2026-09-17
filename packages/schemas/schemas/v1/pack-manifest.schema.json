@@ -121,6 +121,10 @@
               "type": "string",
               "pattern": "^[a-f0-9]{64}$"
             },
+            "content_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
             "key_id": {
               "type": "string",
               "minLength": 1,

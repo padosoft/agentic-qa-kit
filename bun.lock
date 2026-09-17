@@ -117,6 +117,7 @@
         "@aqa/observability": "workspace:*",
         "@aqa/pack-author": "workspace:*",
         "@aqa/pack-loader": "workspace:*",
+        "@aqa/pack-scanner": "workspace:*",
         "@aqa/reporter": "workspace:*",
         "@aqa/runner": "workspace:*",
         "@aqa/schemas": "workspace:*",
