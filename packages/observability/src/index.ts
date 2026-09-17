@@ -448,6 +448,12 @@ const SENSITIVE =
   /(authorization|cookie|token|secret|password|api[_-]?key|private[_-]?key|pan|cvv|iban)/i;
 
 function isLikelyPan(value: string): boolean {
+  // Structured identifiers (for example `run-YYYY-MM-DD-HH-mm-ss-xxx`)
+  // may contain 13–19 digits and accidentally satisfy Luhn. Accept only
+  // contiguous digits or conventional card grouping; this keeps immutable
+  // run/checkpoint keys stable while still covering real PAN formatting.
+  const separators = (value.match(/[ -]/g) ?? []).length;
+  if (separators > 3) return false;
   const digits = value.replace(/[^0-9]/g, '');
   if (digits.length < 13 || digits.length > 19) return false;
   let sum = 0;

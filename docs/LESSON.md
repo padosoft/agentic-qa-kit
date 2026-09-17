@@ -1309,3 +1309,11 @@ it only contains comments. Generated artifacts now use the same structured
 browser actions and read-only SQL parameter model as the runner; when a probe
 references an external spec that cannot be safely inlined, the artifact says
 so explicitly and remains skipped rather than claiming deterministic coverage.
+
+# 2026-09-17 — redaction must preserve artifact identity
+
+Luhn validation alone is not sufficient for arbitrary evidence strings: a
+timestamped run ID can contain 13–19 digits and accidentally look like a PAN.
+Redaction now rejects overly segmented identifier formats while preserving
+normal contiguous or conventionally grouped card-number detection. Checkpoint
+keys and audit hashes must never change as a side effect of DLP.

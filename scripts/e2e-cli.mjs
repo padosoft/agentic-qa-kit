@@ -105,6 +105,26 @@ profiles:
   'utf8',
 );
 
+// The runner resolves scenario risk/invariant references against the
+// project's risk map. Keep this fixture honest: a schema-valid scenario is
+// not executable coverage if its references cannot be resolved.
+writeFileSync(
+  join(SANDBOX, '.aqa', 'risk-map.yaml'),
+  `schema_version: "1"
+project: aqa-cli-e2e-fixture
+risks:
+  - id: r-smoke
+    category: integration
+    title: Smoke health endpoint risk
+    severity: medium
+    likelihood: unlikely
+    invariants:
+      - id: inv-smoke
+        statement: The health endpoint responds successfully.
+`,
+  'utf8',
+);
+
 // Add a local smoke pack with one HTTP scenario and wire the smoke profile
 // to it. This keeps the e2e deterministic and independent from bundled pack
 // evolution.

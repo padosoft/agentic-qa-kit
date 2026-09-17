@@ -1021,3 +1021,9 @@
 
 - Removed the wildcard CORS default from `aqa admin`. Cross-origin access is now opt-in through an explicit origin allowlist; allowed origins receive exact credentialed CORS headers, while disallowed preflights and state-changing requests return `403` before routing.
 - Evidence: kit build and **137 tests passed / 2 platform skips**, including a real HTTP allowlist/preflight/mutation contract. CSRF token strategy, production reverse-proxy headers and live browser deployment remain separate controls.
+
+# 2026-09-17 — CI regression fixes: CLI references and DLP-safe run IDs
+
+- Fixed the CLI smoke fixture so its scenario risk/invariant references are backed by the generated project risk map; the smoke now validates the same resolution path as a real project.
+- Fixed PAN redaction false positives for structured run/checkpoint identifiers whose timestamp digits happen to satisfy Luhn. Conventional contiguous/grouped card numbers remain redacted, while immutable artifact keys remain byte-stable.
+- Evidence: `@aqa/observability` **15 passed**, `@aqa/kit` **140 tests / 138 passed / 2 platform skips**, and `bun run test:e2e-cli` **5/5 passed** locally. The fix is ready for the next hosted CI run; production browser/provider, live merchant/payment atomicity and durable deployment evidence remain open by design.

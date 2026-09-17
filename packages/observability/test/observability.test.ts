@@ -123,6 +123,13 @@ describe('@aqa/observability', () => {
     );
   });
 
+  it('does not redact structured run identifiers that only resemble a Luhn PAN', () => {
+    const runId = 'run-2026-09-17-11-06-25-488-64b839';
+    const text = redactText(`checkpoints/${runId}.json`);
+    assert.match(text, new RegExp(runId));
+    assert.equal(redactText('card=4111-1111-1111-1111'), 'card=[REDACTED-PAN]');
+  });
+
   it('computes a bounded error budget with explicit reason codes', () => {
     const report = evaluateSlo({
       name: 'run_success',
