@@ -129,6 +129,27 @@ describe('makeApi', () => {
     assert.deepEqual(ok.body, { acknowledged: true });
   });
 
+  it('POST /api/runner/jobs/:id/fail records a bounded failure', async () => {
+    const c = ctx();
+    c.queue.enqueue({ id: 'job-fail', payload: {}, enqueued_at: '2026-05-17T10:00:00Z' });
+    const next = await c.queue.dequeue();
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/fail',
+    );
+    assert.ok(route);
+    const res = await route.handle(
+      {
+        headers: {},
+        params: { id: 'job-fail' },
+        body: { lease_token: next?.lease_token, reason: 'provider timeout' },
+      },
+      c,
+    );
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { failed: true });
+    assert.equal((await c.queue.snapshot()).find((job) => job.id === 'job-fail')?.status, 'failed');
+  });
+
   it('runner-only queue routes enforce the optional runner credential verifier', async () => {
     const c = {
       ...ctx(),

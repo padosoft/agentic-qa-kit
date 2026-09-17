@@ -11,6 +11,8 @@
 
 ## 2026-09-17
 
+- **Queue retry budget and DLQ implemented.** Memory and PostgreSQL queues now persist `attempts`, `max_attempts`, `failed`, and capped failure reason; lease expiry after the budget is terminal, explicit worker failures use `POST /api/runner/jobs/:id/fail`, and stale tokens remain fenced. Server suite: 100/100; PostgreSQL live migration behavior is queued for CI evidence.
+
 - **CI runtime findings fixed, not suppressed.** Run `35169917083` exposed two real integration issues: concurrent queue clients raced on `CREATE TABLE`, and the first Docker image pull exceeded Bun's default 5-second test timeout. PostgreSQL migration now uses an advisory lock; the OCI test has an explicit 120-second budget. The failed run is retained as negative evidence; a new run is required.
 - **Full acceptance after infrastructure fixes.** Run `35170349159` is green across typecheck/lint, build, Bun + Node 22, PostgreSQL store plus durable queue, real Docker sandbox, CLI smoke, and all 142 Playwright admin tests. This is the authoritative evidence for `e215871`.
 - **Playwright CI failure diagnosed as runner provisioning, not an application regression.** GitHub run `35167371462` passed typecheck/lint, workspace build, Bun + Node 22 unit tests, CLI smoke, and the real PostgreSQL 16 contract. The admin job failed before test execution because Playwright 1.60 downloaded Chromium but not its separately required `chromium-headless-shell-1223` executable. CI, root, and admin install commands now provision both browser artifacts explicitly. Next: rerun the gate, then add fresh-process/reconnect and concurrency evidence to the Postgres contract.

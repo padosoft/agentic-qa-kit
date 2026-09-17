@@ -1161,6 +1161,29 @@ export function makeApi(): ApiHandler[] {
         return asResponse({ acknowledged }, acknowledged ? 200 : 409);
       },
     },
+    {
+      method: 'POST',
+      path: '/api/runner/jobs/:id/fail',
+      requires: null,
+      async handle(req, ctx) {
+        if (ctx.runnerAuthorize && !(await ctx.runnerAuthorize(req.headers))) {
+          return { status: 401, body: { error: 'runner unauthorized' } };
+        }
+        const id = req.params.id;
+        const body = (req.body ?? {}) as { lease_token?: unknown; reason?: unknown };
+        if (
+          !id ||
+          typeof body.lease_token !== 'string' ||
+          !body.lease_token ||
+          typeof body.reason !== 'string' ||
+          !body.reason.trim()
+        ) {
+          return { status: 400, body: { error: 'job id, lease_token and reason are required' } };
+        }
+        const failed = await ctx.queue.fail(id, body.lease_token, body.reason);
+        return asResponse({ failed }, failed ? 200 : 409);
+      },
+    },
 
     // ============ Notifications ============
     {

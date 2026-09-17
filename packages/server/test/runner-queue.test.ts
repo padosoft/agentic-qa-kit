@@ -57,4 +57,18 @@ describe('RunnerQueue', () => {
     assert.equal(q.ack(JOB.id, first?.lease_token), false);
     assert.equal(q.ack(JOB.id, second?.lease_token), true);
   });
+
+  it('moves a repeatedly expired lease to the dead-letter state', () => {
+    const q = new RunnerQueue({ lease_ms: 100, max_attempts: 2 });
+    q.enqueue(JOB);
+    const first = q.dequeue(new Date('2026-05-17T10:00:00Z'));
+    const second = q.dequeue(new Date('2026-05-17T10:00:00.200Z'));
+    assert.equal(second?.attempts, 2);
+    assert.equal(q.dequeue(new Date('2026-05-17T10:00:00.400Z')), null);
+    const failed = q.snapshot().find((job) => job.id === JOB.id);
+    assert.equal(failed?.status, 'failed');
+    assert.match(failed?.failure_reason ?? '', /maximum attempts/i);
+    assert.equal(q.fail(JOB.id, second?.lease_token, 'late failure'), false);
+    assert.ok(first?.lease_token);
+  });
 });

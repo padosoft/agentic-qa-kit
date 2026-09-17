@@ -5,7 +5,10 @@ export interface RunnerJob {
 }
 
 export interface EnqueuedJob extends RunnerJob {
-  status: 'queued' | 'in_flight' | 'done';
+  status: 'queued' | 'in_flight' | 'done' | 'failed';
+  attempts: number;
+  max_attempts: number;
+  failure_reason?: string | undefined;
   leased_until?: string | undefined;
   lease_token?: string | undefined;
 }
@@ -15,6 +18,7 @@ export interface RunnerQueueLike {
   dequeue(now?: Date): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
   ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
+  fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
 }
 
 /**
@@ -30,12 +34,20 @@ export class RunnerQueue {
   private jobs: EnqueuedJob[] = [];
   private readonly leaseMs: number;
 
-  constructor(opts: { lease_ms?: number } = {}) {
+  private readonly maxAttempts: number;
+
+  constructor(opts: { lease_ms?: number; max_attempts?: number } = {}) {
     this.leaseMs = opts.lease_ms ?? 30_000;
+    this.maxAttempts = Math.max(1, opts.max_attempts ?? 5);
   }
 
   enqueue(job: RunnerJob): EnqueuedJob {
-    const enq: EnqueuedJob = { ...job, status: 'queued' };
+    const enq: EnqueuedJob = {
+      ...job,
+      status: 'queued',
+      attempts: 0,
+      max_attempts: this.maxAttempts,
+    };
     this.jobs.push(enq);
     return enq;
   }
@@ -44,7 +56,12 @@ export class RunnerQueue {
     // Promote stale leases back to queued before picking the next.
     for (const j of this.jobs) {
       if (j.status === 'in_flight' && j.leased_until && new Date(j.leased_until) < now) {
-        j.status = 'queued';
+        if (j.attempts >= j.max_attempts) {
+          j.status = 'failed';
+          j.failure_reason = 'lease expired after maximum attempts';
+        } else {
+          j.status = 'queued';
+        }
         j.leased_until = undefined;
         j.lease_token = undefined;
       }
@@ -52,6 +69,7 @@ export class RunnerQueue {
     const job = this.jobs.find((j) => j.status === 'queued');
     if (!job) return null;
     job.status = 'in_flight';
+    job.attempts += 1;
     job.leased_until = new Date(now.getTime() + this.leaseMs).toISOString();
     job.lease_token = randomUUID();
     // Never leak the mutable queue record: a later lease/requeue must not
@@ -68,8 +86,19 @@ export class RunnerQueue {
     return true;
   }
 
+  fail(id: string, leaseToken: string | undefined, reason: string): boolean {
+    const job = this.jobs.find((j) => j.id === id);
+    if (!job || job.status !== 'in_flight' || !leaseToken || job.lease_token !== leaseToken)
+      return false;
+    job.status = 'failed';
+    job.failure_reason = reason.slice(0, 1000);
+    job.leased_until = undefined;
+    job.lease_token = undefined;
+    return true;
+  }
+
   size(): number {
-    return this.jobs.filter((j) => j.status !== 'done').length;
+    return this.jobs.filter((j) => j.status === 'queued' || j.status === 'in_flight').length;
   }
 
   list(state?: EnqueuedJob['status']): ReadonlyArray<EnqueuedJob> {

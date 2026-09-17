@@ -309,3 +309,7 @@ Kubernetes YAML that looks hardened is not validated until rendered and linted b
 # 2026-09-17 — a durable queue needs an explicit completion API
 
 Lease storage alone is not a worker contract. If dequeue exists but ACK is not reachable through the server, every successful worker execution appears as an expired lease and is retried. Expose ACK with the lease token and a separate runner credential boundary; stale tokens must be fenced and observable as conflicts.
+
+# 2026-09-17 — retries need a terminal policy
+
+Visibility leases without a maximum-attempt policy create infinite poison-job loops and hide systemic failures. Persist attempts and failure reason, expose an explicit worker failure path, and make both expiry and explicit failure terminal after the configured budget. The DLQ is evidence for operator action, not silent success.
