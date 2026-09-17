@@ -95,6 +95,22 @@ describe('ContainerSandbox', () => {
     assert.match(timeout.error ?? '', /timed out/);
   });
 
+  it('fails closed when the executor reports an output limit breach', async () => {
+    const sb = new ContainerSandbox({
+      budget: { max_calls: 5, per_call_timeout_ms: 25 },
+      max_output_bytes: 12,
+      executor: async () => ({
+        code: 0,
+        stdout: 'truncated',
+        stderr: '',
+        output_limit_exceeded: true,
+      }),
+    });
+    const result = await sb.invoke({ tool: 'shell', args: { command: 'printf huge' } });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /12 bytes/);
+  });
+
   it(
     'executes a real OCI container when the integration runtime is enabled',
     { timeout: 120_000 },

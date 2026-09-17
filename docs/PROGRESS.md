@@ -442,3 +442,8 @@
 
 - Added `docs/operations/dr-runbook.md` with approved RPO/RTO inputs, Postgres/WAL and artifact-store backup contract, isolated restore sequence, digest/tenant/queue checks, quarterly drill criteria and explicit infrastructure boundary. Added ADR-052.
 - Evidence: documentation is present and scoped honestly; no live provider backup/restore was claimed. A real drill with KMS, WAL/PITR, object retention and measured RTO/RPO remains required.
+
+# 2026-09-17 — sandbox output bound
+
+- Added a combined stdout/stderr byte cap to `ContainerSandbox`, propagated through the executor, with child termination and explicit fail-closed result when exceeded. This closes an unbounded-memory path not covered by call count or timeout limits.
+- Evidence: sandbox typecheck and 11/11 tests; repository Biome check and diff check pass. Real OCI fault/output stress and VM-level hostile-tenant isolation remain deployment evidence.

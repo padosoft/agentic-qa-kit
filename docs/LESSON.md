@@ -600,6 +600,13 @@ as an idempotent deactivation until a reviewed retention/deletion contract exist
 preserve the resource ID and auditability, and require a dedicated bearer verifier
 separate from interactive user authentication.
 
+# 2026-09-17 — sandbox budgets must bound bytes as well as calls and time
+
+An attacker can consume memory with one successful, non-blocking command that
+prints indefinitely. Enforce a combined output cap in the real child-process
+path, kill on breach and return an explicit failure; a test-only truncation is
+not a resource guard.
+
 # 2026-09-17 — SCIM pagination must happen after tenant filtering
 
 Compute `totalResults` from the already tenant-scoped and filter-matched set,

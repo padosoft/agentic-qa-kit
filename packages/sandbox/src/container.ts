@@ -6,12 +6,14 @@ export interface ContainerRunResult {
   stdout: string;
   stderr: string;
   timed_out?: boolean;
+  output_limit_exceeded?: boolean;
 }
 
 export type ContainerExecutor = (
   runtime: string,
   args: string[],
   timeoutMs: number,
+  maxOutputBytes: number,
 ) => Promise<ContainerRunResult>;
 
 export interface ContainerSandboxOptions {
@@ -24,6 +26,8 @@ export interface ContainerSandboxOptions {
   network?: 'none' | 'bridge';
   /** Optional injected executor for deterministic unit tests. */
   executor?: ContainerExecutor;
+  /** Combined stdout/stderr cap per call. Defaults to 1 MiB. */
+  max_output_bytes?: number;
 }
 
 const DEFAULT_IMAGE = 'ubuntu:24.04';
@@ -43,6 +47,7 @@ export class ContainerSandbox implements Sandbox {
   private readonly image: string;
   private readonly network: 'none' | 'bridge';
   private readonly executor: ContainerExecutor;
+  private readonly maxOutputBytes: number;
 
   constructor(opts: ContainerSandboxOptions) {
     this.budgetCfg = { ...opts.budget };
@@ -50,6 +55,7 @@ export class ContainerSandbox implements Sandbox {
     this.image = opts.image ?? process.env.AQA_CONTAINER_IMAGE ?? DEFAULT_IMAGE;
     this.network = opts.network ?? 'none';
     this.executor = opts.executor ?? runContainer;
+    this.maxOutputBytes = positiveInteger(opts.max_output_bytes ?? 1_048_576, 'max_output_bytes');
   }
 
   async invoke(call: ToolCall): Promise<{ ok: boolean; output?: unknown; error?: string }> {
@@ -90,11 +96,22 @@ export class ContainerSandbox implements Sandbox {
       '-c',
       command,
     ];
-    const result = await this.executor(this.runtime, args, this.budgetCfg.per_call_timeout_ms);
+    const result = await this.executor(
+      this.runtime,
+      args,
+      this.budgetCfg.per_call_timeout_ms,
+      this.maxOutputBytes,
+    );
     if (result.timed_out) {
       return {
         ok: false,
         error: `container command timed out after ${this.budgetCfg.per_call_timeout_ms}ms`,
+      };
+    }
+    if (result.output_limit_exceeded) {
+      return {
+        ok: false,
+        error: `container output exceeded ${this.maxOutputBytes} bytes`,
       };
     }
     if (result.code !== 0) {
@@ -120,29 +137,58 @@ function runContainer(
   runtime: string,
   args: string[],
   timeoutMs: number,
+  maxOutputBytes: number,
 ): Promise<ContainerRunResult> {
   return new Promise((resolve) => {
     const child = spawn(runtime, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let outputLimitExceeded = false;
+    let outputBytes = 0;
+    const append = (target: 'stdout' | 'stderr', chunk: Buffer): void => {
+      if (outputLimitExceeded) return;
+      const remaining = maxOutputBytes - outputBytes;
+      const text = chunk.subarray(0, Math.max(0, remaining)).toString('utf8');
+      outputBytes += Buffer.byteLength(text, 'utf8');
+      if (target === 'stdout') stdout += text;
+      else stderr += text;
+      if (chunk.byteLength > remaining) {
+        outputLimitExceeded = true;
+        child.kill('SIGKILL');
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
     }, timeoutMs);
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
+    child.stdout?.on('data', (chunk: Buffer) => append('stdout', chunk));
+    child.stderr?.on('data', (chunk: Buffer) => append('stderr', chunk));
     child.on('error', (error: Error) => {
       clearTimeout(timer);
-      resolve({ code: null, stdout, stderr: `${stderr}${error.message}`, timed_out: timedOut });
+      resolve({
+        code: null,
+        stdout,
+        stderr: `${stderr}${error.message}`,
+        timed_out: timedOut,
+        output_limit_exceeded: outputLimitExceeded,
+      });
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ code, stdout, stderr, timed_out: timedOut });
+      resolve({
+        code,
+        stdout,
+        stderr,
+        timed_out: timedOut,
+        output_limit_exceeded: outputLimitExceeded,
+      });
     });
   });
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 1)
+    throw new Error(`container ${name} must be positive`);
+  return value;
 }
