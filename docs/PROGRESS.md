@@ -752,3 +752,8 @@
 
 - Applied the same realpath containment rule used for scenario files to pack-declared risk catalogs, rejecting symlinks that escape the pack root before parsing or execution.
 - Evidence: kit build/bundle and `run-cmd` suite **30 passed**, with the existing explicit platform symlink skip.
+
+# 2026-09-17 — HTTP dispatch policy hardening
+
+- Hardened the real HTTP probe boundary: configured origins are normalized and validated, credential-bearing base/target URLs are rejected, redirects are never followed automatically, and redirect targets are checked against the same allowlist before being reported. Private origins remain usable only when explicitly allowlisted.
+- Evidence: runner build and **18 tests passed**, including credential and off-origin redirect denial. DNS pinning/rebinding defense and browser network interception remain separate deployment controls.

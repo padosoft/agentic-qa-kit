@@ -50,14 +50,41 @@ export interface HttpProbeRunnerOptions {
   max_response_bytes?: number;
 }
 
+function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
+  const normalized = new Set<string>();
+  for (const raw of origins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw new Error(`invalid HTTP allowlist origin: ${raw}`);
+    }
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error(`HTTP allowlist entry must be an origin without credentials or path: ${raw}`);
+    }
+    normalized.add(parsed.origin);
+  }
+  if (normalized.size === 0) throw new Error('HTTP origin allowlist must not be empty');
+  return normalized;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
 
 export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
   const base = opts.baseUrl.replace(/\/+$/, '');
-  const baseOrigin = new URL(opts.baseUrl).origin;
-  const allowedOrigins = new Set(opts.allowed_origins ?? [baseOrigin]);
+  const baseUrl = new URL(opts.baseUrl);
+  if (baseUrl.username || baseUrl.password) {
+    throw new Error('HTTP baseUrl must not contain credentials');
+  }
+  const allowedOrigins = normalizeAllowedOrigins(opts.allowed_origins ?? [baseUrl.origin]);
   const maxResponseBytes = opts.max_response_bytes ?? 1_048_576;
   return async (probe) => {
     if (probe.kind !== 'http') {
@@ -82,7 +109,11 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
       : `${base}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
     let origin: string;
     try {
-      origin = new URL(url).origin;
+      const parsedUrl = new URL(url);
+      if (parsedUrl.username || parsedUrl.password) {
+        return { probe_id: probe.id, error: 'http probe URL must not contain credentials' };
+      }
+      origin = parsedUrl.origin;
     } catch {
       return { probe_id: probe.id, error: 'http probe URL is invalid' };
     }
@@ -102,6 +133,38 @@ export function makeHttpProbeRunner(opts: HttpProbeRunnerOptions): ProbeRunner {
         signal: controller.signal,
         redirect: 'manual',
       });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location');
+        if (location) {
+          try {
+            const redirectUrl = new URL(location, url);
+            if (
+              redirectUrl.username ||
+              redirectUrl.password ||
+              !allowedOrigins.has(redirectUrl.origin)
+            ) {
+              return {
+                probe_id: probe.id,
+                status: res.status,
+                headers: Object.fromEntries(res.headers.entries()),
+                error: 'http redirect target is not allowlisted; automatic redirects are disabled',
+              };
+            }
+          } catch {
+            return {
+              probe_id: probe.id,
+              status: res.status,
+              error: 'http redirect location is invalid',
+            };
+          }
+        }
+        return {
+          probe_id: probe.id,
+          status: res.status,
+          headers: Object.fromEntries(res.headers.entries()),
+          error: 'http redirects are disabled by policy',
+        };
+      }
       const reader = res.body?.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;

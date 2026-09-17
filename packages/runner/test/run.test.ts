@@ -442,4 +442,37 @@ describe('runScenario', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('makeHttpProbeRunner rejects credentialed URLs and unsafe redirects', async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'https://evil.example/steal' },
+      });
+    }) as typeof fetch;
+    try {
+      const runner = makeHttpProbeRunner({ baseUrl: 'https://shop.example' });
+      const credentialed = await runner({
+        id: 'credentialed',
+        kind: 'http',
+        with: { method: 'GET', url: 'https://user:pass@shop.example/private' },
+        timeout_ms: 1000,
+      });
+      assert.match(credentialed.error ?? '', /must not contain credentials/i);
+      assert.equal(calls, 0);
+      const redirected = await runner({
+        id: 'redirected',
+        kind: 'http',
+        with: { method: 'GET', url: '/login' },
+        timeout_ms: 1000,
+      });
+      assert.match(redirected.error ?? '', /redirect target is not allowlisted/i);
+      assert.equal(calls, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

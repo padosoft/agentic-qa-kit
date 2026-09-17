@@ -979,3 +979,10 @@ Checking `resolve(root, relativePath)` is insufficient when a manifest points
 to a symlink. Apply realpath containment to risk catalogs as well as scenarios;
 otherwise a signed/approved pack can still cause the runner to parse external
 files at execution time.
+
+# 2026-09-17 — redirect policy is part of the HTTP destination boundary
+
+An origin allowlist on the initial URL is not enough if a client follows a
+redirect. Use manual redirects, validate `Location` against the same explicit
+allowlist, reject credential-bearing URLs and surface the blocked response as
+execution evidence rather than silently following it.
