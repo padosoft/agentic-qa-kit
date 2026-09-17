@@ -24,9 +24,13 @@ state first, and consumers reconcile after reconnects. Payloads are bounded to
 7,500 UTF-8 bytes to stay below PostgreSQL notification limits; subscriber
 failures are isolated from publishers.
 
-`POST /api/runs` requires `x-aqa-org` and `x-aqa-project`. Clients may send
-`Idempotency-Key`; retries with the same tenant-qualified key and payload
-return the original queue job, while a changed payload returns `409`.
+All non-GET API mutations accept an optional `Idempotency-Key`. The route
+boundary binds it to tenant, method, route, parameters, request body and
+`If-Match`; concurrent identical requests share one result, while changed
+reuse returns `409`. `MemoryApiIdempotencyStore` is a single-process fallback.
+Multi-replica production must inject a shared durable `ApiIdempotencyStore`
+with atomic claim/insert and retention. `POST /api/runs` retains its queue-level
+deduplication as a second defense.
 
 The protected `POST /api/admin/migrate-legacy-configuration` endpoint performs
 the explicit legacy configuration migration using `x-aqa-org` and/or

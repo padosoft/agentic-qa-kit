@@ -22,6 +22,12 @@
   validate reference paths and return generic provider errors; otherwise
   rotation and failure handling can leak credentials into queue state or logs.
 
+- **API idempotency belongs at the route boundary.** Protecting only one queue
+  endpoint leaves profile, pack, tenant and SCIM mutations unsafe to retry.
+  Bind the key to tenant, route, parameters, body and conditional version;
+  coalesce concurrent requests; cache only final non-5xx responses; and make
+  the durable store an explicit boot dependency for multi-replica production.
+
 - **Driver absence must be checked before side effects.** In mixed-probe
   scenarios, discovering an unsupported browser/SQL/shell/LLM step during
   execution can leave earlier mutations behind. A capability declaration must

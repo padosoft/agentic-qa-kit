@@ -213,6 +213,7 @@ jobs:
         run: |
           bun test packages/store/test/store.test.ts
           bun test packages/server/test/postgres-queue.test.ts
+          bun test packages/server/test/postgres-idempotency.test.ts
           bun test packages/auth/test/oidc-session.test.ts
           bun test packages/auth/test/postgres-scim-token.test.ts
           bun test packages/integrations/test/webhook.test.ts
@@ -272,6 +273,7 @@ jobs:
           grep -q 'PersistentVolumeClaim' /tmp/aqa-production.yaml
           test "$(grep -c 'name: AQA_STORE_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_QUEUE_DSN' /tmp/aqa-production.yaml)" -eq 2
+          test "$(grep -c 'name: AQA_IDEMPOTENCY_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_OIDC_SESSION_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_EVENT_BUS_DSN' /tmp/aqa-production.yaml)" -eq 1
           test "$(grep -c 'name: AQA_SCIM_TOKEN_DSN' /tmp/aqa-production.yaml)" -eq 1

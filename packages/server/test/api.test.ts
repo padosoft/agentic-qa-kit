@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
 import {
+  MemoryApiIdempotencyStore,
   type QueueQuota,
   RunnerQueue,
   buildAsyncApiDocument,
@@ -341,6 +342,71 @@ describe('makeApi', () => {
       current: 1,
       requested: 1,
     });
+  });
+
+  it('applies the API idempotency contract to non-run mutations', async () => {
+    const c = ctx();
+    const route = makeApi().find((r) => r.method === 'POST' && r.path === '/api/orgs');
+    const headers = { ...TENANT_HEADERS, 'Idempotency-Key': 'org-create-1' };
+    const body = { id: 'org-1', name: 'Acme' };
+    const first = await route?.handle({ headers, params: {}, body }, c);
+    const retry = await route?.handle({ headers, params: {}, body }, c);
+    assert.equal(first?.status, 201);
+    assert.deepEqual(retry, first);
+    assert.deepEqual(await c.store.listOrgs(), [{ id: 'org-1', name: 'Acme' }]);
+    const conflict = await route?.handle(
+      { headers, params: {}, body: { id: 'org-1', name: 'Other' } },
+      c,
+    );
+    assert.equal(conflict?.status, 409);
+    const invalid = await route?.handle(
+      { headers: { ...TENANT_HEADERS, 'Idempotency-Key': ' ' }, params: {}, body },
+      c,
+    );
+    assert.equal(invalid?.status, 400);
+  });
+
+  it('coalesces concurrent idempotent operations and does not cache 5xx responses', async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new MemoryApiIdempotencyStore();
+    const operation = {
+      scope: 'org/project:POST:/api/orgs',
+      key: 'concurrent-1',
+      fingerprint: 'a',
+    };
+    const first = store.execute(operation, async () => {
+      calls += 1;
+      await gate;
+      return { status: 201, body: { ok: true } };
+    });
+    const second = store.execute(operation, async () => {
+      calls += 1;
+      return { status: 201, body: { ok: false } };
+    });
+    release();
+    assert.deepEqual(await Promise.all([first, second]), [
+      { status: 201, body: { ok: true } },
+      { status: 201, body: { ok: true } },
+    ]);
+    assert.equal(calls, 1);
+    const retry = await store.execute(operation, async () => ({
+      status: 500,
+      body: { ok: false },
+    }));
+    assert.equal(retry.status, 201);
+    const serverErrorStore = new MemoryApiIdempotencyStore();
+    let failures = 0;
+    const failing = () => {
+      failures += 1;
+      return Promise.resolve({ status: 503, body: { error: 'temporary' } });
+    };
+    await serverErrorStore.execute(operation, failing);
+    await serverErrorStore.execute(operation, failing);
+    assert.equal(failures, 2);
   });
 
   it('GET /api/runner/jobs/next pops from the queue', async () => {

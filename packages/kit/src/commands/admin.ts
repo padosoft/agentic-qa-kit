@@ -79,6 +79,10 @@ export interface AdminOptions {
   storeDsn?: string;
   /** Inject a store implementation (useful for host applications/tests). */
   store?: ApiContext['store'];
+  /** PostgreSQL DSN for shared API idempotency in HA deployments. */
+  idempotencyDsn?: string;
+  /** Inject an API idempotency store (useful for host applications/tests). */
+  idempotency?: ApiContext['idempotency'];
   /**
    * Override the directory the SPA is served from. Default is the
    * `dist/admin/` co-located with the running kit's dist. Tests use
@@ -199,9 +203,13 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   // earlier iteration was resolved by extracting `runPackNew` into
   // `@aqa/pack-author`; the dynamic import is now an optimisation, not
   // a workaround.)
-  const { makeApi, PostgresEventBus, PostgresRunnerQueue, RunnerQueue } = await import(
-    '@aqa/server'
-  );
+  const {
+    makeApi,
+    PostgresApiIdempotencyStore,
+    PostgresEventBus,
+    PostgresRunnerQueue,
+    RunnerQueue,
+  } = await import('@aqa/server');
   const { MemoryStore, PostgresStore } = await import('@aqa/store');
 
   if (opts.store && opts.storeDsn) {
@@ -209,6 +217,15 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   }
   const storeDsn = opts.storeDsn ?? process.env.AQA_STORE_DSN;
   const store = opts.store ?? (storeDsn ? new PostgresStore(storeDsn) : new MemoryStore());
+  if (opts.idempotency && opts.idempotencyDsn) {
+    await store.close();
+    return { ok: false, error: 'admin: pass idempotency or idempotencyDsn, not both' };
+  }
+  const idempotencyDsn =
+    opts.idempotencyDsn ?? process.env.AQA_IDEMPOTENCY_DSN ?? (storeDsn ? storeDsn : undefined);
+  const idempotency =
+    opts.idempotency ??
+    (idempotencyDsn ? new PostgresApiIdempotencyStore(idempotencyDsn) : undefined);
   const seedReport = await seedStoreFromRuns(
     store,
     opts.runsRoot ?? join(opts.root, '.aqa', 'runs'),
@@ -228,6 +245,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   if (hasRunnerJwtConfig && !runnerJwtComplete) {
     await store.close();
     await (queue as { close?: () => Promise<void> }).close?.();
+    await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
     return {
       ok: false,
       error:
@@ -244,6 +262,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   if (queueDsn && !opts.runnerAuthorize && !runnerToken && !runnerJwt) {
     await store.close();
     await (queue as { close?: () => Promise<void> }).close?.();
+    await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
     return {
       ok: false,
       error: 'admin: durable runner queue requires runnerAuthorize or AQA_RUNNER_TOKEN',
@@ -253,6 +272,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     await store.close();
     const closableQueue = queue as { close?: () => Promise<void> };
     await closableQueue.close?.();
+    await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
     return { ok: false, error: 'admin: pass eventBus or eventBusDsn, not both' };
   }
   const eventBusDsn = opts.eventBusDsn ?? process.env.AQA_EVENT_BUS_DSN;
@@ -302,6 +322,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     ...(opts.authorizeScope ? { authorizeScope: opts.authorizeScope } : {}),
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     ...(eventBus ? { eventBus } : {}),
+    ...(idempotency ? { idempotency } : {}),
     projectRoot: opts.root,
   };
 
@@ -369,6 +390,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       const closable = queue as { close?: () => Promise<void> };
       await closable.close?.();
       await store.close();
+      await (idempotency as { close?: () => Promise<void> } | undefined)?.close?.();
       await eventBus?.close();
       await scimTokenStore?.close();
       if ('close' in scimRateLimiter) await scimRateLimiter.close();

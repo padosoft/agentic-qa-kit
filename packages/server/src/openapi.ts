@@ -23,7 +23,7 @@ interface OpenApiOperation {
   'x-aqa-permission': string | null;
   parameters?: Array<{
     name: string;
-    in: 'path' | 'query';
+    in: 'header' | 'path' | 'query';
     required: boolean;
     schema: { type: 'string' };
   }>;
@@ -66,6 +66,16 @@ export function buildOpenApiDocument(routes: readonly ApiHandler[]): OpenApiDocu
     const parameters = [
       ...extractParameters(route.path, 'path'),
       ...(method === 'get' ? extractQueryParameters(route.path) : []),
+      ...(method === 'get'
+        ? []
+        : [
+            {
+              name: 'Idempotency-Key',
+              in: 'header' as const,
+              required: false,
+              schema: { type: 'string' as const },
+            },
+          ]),
     ];
     const operation: OpenApiOperation = {
       operationId: operationId(route.method, route.path),
@@ -93,6 +103,7 @@ export function buildOpenApiDocument(routes: readonly ApiHandler[]): OpenApiDocu
         '401': { description: 'Authentication required' },
         '403': { description: 'Insufficient permission or tenant scope' },
         '404': { description: 'Resource not found' },
+        '409': { description: 'Idempotency key conflict or resource conflict' },
       },
       ...(route.requires !== null ? { security: [{ bearerAuth: [] }] } : {}),
     };

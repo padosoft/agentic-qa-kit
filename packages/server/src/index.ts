@@ -7,6 +7,12 @@ export {
   type ApiResponse,
 } from './api.js';
 export {
+  MemoryApiIdempotencyStore,
+  type ApiIdempotencyOperation,
+  type ApiIdempotencyStore,
+  validateIdempotencyKey,
+} from './api-idempotency.js';
+export {
   RunnerQueue,
   assertQueueQuota,
   IdempotencyConflictError,
@@ -19,6 +25,7 @@ export {
   type RunnerQueueLike,
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
+export { PostgresApiIdempotencyStore } from './postgres-api-idempotency.js';
 export {
   RunnerWorker,
   type RunnerJobHandler,

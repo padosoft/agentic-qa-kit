@@ -42,6 +42,11 @@ import type {
 } from '@aqa/schemas';
 import type { StoreProvider } from '@aqa/store';
 import { parse as yamlParse } from 'yaml';
+import {
+  type ApiIdempotencyStore,
+  MemoryApiIdempotencyStore,
+  validateIdempotencyKey,
+} from './api-idempotency.js';
 import type { EventBus } from './event-bus.js';
 import { IdempotencyConflictError, ResourceQuotaExceededError } from './runner-queue.js';
 import {
@@ -80,6 +85,8 @@ export interface ApiContext {
    * unset rather than silently writing to cwd.
    */
   projectRoot?: string;
+  /** Shared idempotency state for mutating API requests. */
+  idempotency?: ApiIdempotencyStore;
 }
 
 export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -370,7 +377,8 @@ async function publishApiEvent(
  * The admin panel (`packages/admin`) consumes this surface end-to-end.
  */
 export function makeApi(): ApiHandler[] {
-  return [
+  const fallbackIdempotency = new MemoryApiIdempotencyStore();
+  const routes: ApiHandler[] = [
     // ============ Runs ============
     {
       method: 'GET',
@@ -1839,4 +1847,37 @@ export function makeApi(): ApiHandler[] {
       },
     },
   ];
+  return routes.map((route) => {
+    if (route.method === 'GET') return route;
+    const handler = route.handle;
+    return {
+      ...route,
+      async handle(req, ctx) {
+        let key: string | undefined;
+        try {
+          key = validateIdempotencyKey(
+            req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'],
+          );
+        } catch (error) {
+          return {
+            status: 400,
+            body: { error: error instanceof Error ? error.message : 'invalid idempotency key' },
+          };
+        }
+        if (!key) return handler(req, ctx);
+        const tenant = `${req.headers['x-aqa-org'] ?? req.headers['X-Aqa-Org'] ?? ''}/${req.headers['x-aqa-project'] ?? req.headers['X-Aqa-Project'] ?? ''}`;
+        const fingerprint = canonicalJson({
+          method: route.method,
+          path: route.path,
+          params: req.params,
+          body: req.body,
+          if_match: req.headers['if-match'] ?? req.headers['If-Match'],
+        });
+        return (ctx.idempotency ?? fallbackIdempotency).execute(
+          { scope: `${tenant}:${route.method}:${route.path}`, key, fingerprint },
+          () => handler(req, ctx),
+        );
+      },
+    };
+  });
 }

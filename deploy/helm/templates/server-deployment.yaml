@@ -41,6 +41,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-postgres
                   key: url
+            - name: AQA_IDEMPOTENCY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: url
             - name: AQA_QUEUE_DSN
               valueFrom:
                 secretKeyRef:
@@ -72,6 +77,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.urlSecretRef }}
                   key: url
+            - name: AQA_IDEMPOTENCY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.urlSecretRef }}
+                  key: url
             - name: AQA_QUEUE_DSN
               valueFrom:
                 secretKeyRef:
@@ -99,6 +109,8 @@ spec:
                   key: url
             {{- else if .Values.postgres.url }}
             - name: AQA_STORE_DSN
+              value: {{ .Values.postgres.url | quote }}
+            - name: AQA_IDEMPOTENCY_DSN
               value: {{ .Values.postgres.url | quote }}
             - name: AQA_QUEUE_DSN
               value: {{ .Values.postgres.url | quote }}

@@ -43,6 +43,18 @@
   readiness; it now points to the active v2.0 evidence matrix and distinguishes
   implemented, integrated and production-verified capabilities.
 
+- **Unified API mutation idempotency.** Every non-GET route now accepts a
+  validated `Idempotency-Key` through one route boundary. The key is scoped to
+  tenant/route, bound to params/body/conditional version, concurrent retries
+  share the in-flight response, and mismatched reuse returns `409` without
+  invoking the handler again. `MemoryApiIdempotencyStore` is explicitly a
+  single-process fallback; production multi-replica deployments must inject a
+  shared durable implementation. The contract is covered on an organization
+  mutation, not only on the existing runner queue path (ADR-149).
+  `PostgresApiIdempotencyStore` now provides the shared multi-replica claim and
+  response store; the PostgreSQL CI contract exercises two clients competing
+  for one mutation key. The local memory store remains an explicit fallback.
+
 - **Fixed the second PostgreSQL EventBus CI defect.** After the bootstrap race
   fix, the live replay query failed on PostgreSQL 16 when an optional project
   scope was absent because an untyped `NULL` parameter could not be inferred.
