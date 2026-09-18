@@ -2112,3 +2112,10 @@ Connection and replay checks are not proof of broker durability or exactly-once
 delivery. A realtime pack must declare buffer limits, slow-consumer behavior,
 cursor/gap detection and tenant isolation rather than hiding loss behind a
 passing happy-path stream.
+
+## 2026-09-18 — Localization needs semantic and human evidence boundaries
+
+Locale matrix and formatting checks can catch regressions in checkout values,
+but they cannot certify translation quality, tax law, regional compliance or
+device typography. Keep semantic format assertions, visual/device checks and
+human/legal review explicit.

@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-i18n-l10n`.** It adds opt-in, schema-valid contracts for
+  locale coverage, commerce formatting and safe translation fallback/RTL
+  behavior. Human linguistic, visual, tax and legal evidence remain separate;
+  next: validate and publish the pack.
+
 - **Started `pack-realtime`.** It adds opt-in, schema-valid contracts for
   connection lifecycle, bounded backpressure and cursor-based replay ordering.
   Broker, proxy, device and production-capacity evidence remain operator

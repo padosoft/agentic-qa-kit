@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-i18n-l10n
+risks:
+  - id: i18n-locale-coverage
+    category: integrity
+    title: A supported locale exposes untranslated, truncated or inaccessible customer-facing content.
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-locale-coverage-explicit
+        statement: Supported locales and translation completeness are measured across critical customer journeys.
+  - id: i18n-formatting-error
+    category: integrity
+    title: Currency, tax, date, number or plural formatting changes the meaning of commerce data.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-locale-formatting-correct
+        statement: Locale-aware money, dates, numbers and plural rules preserve semantic values and rounding policy.
+  - id: i18n-fallback-direction
+    category: confidentiality
+    title: Unsafe fallback or bidirectional layout leaks content or makes checkout unusable in RTL locales.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-locale-fallback-safe
+        statement: Missing translations fail to an approved fallback and directionality remains explicit and usable.

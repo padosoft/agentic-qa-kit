@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-i18n-locale-matrix
+title: Critical ecommerce journeys meet the declared locale coverage matrix
+risk_refs: [i18n-locale-coverage]
+invariant_refs: [inv-locale-coverage-explicit]
+preconditions:
+  - "a disposable storefront and declared locale matrix are available"
+steps:
+  - id: inspect-locales
+    kind: http
+    with: { method: "GET", url: "/i18n/coverage?journey=checkout" }
+oracles:
+  - id: o-locales
+    kind: response_contains
+    probe_id: inspect-locales
+    with: { jsonpath: "$.all_declared_locales_tested", equals: true }
+  - id: o-missing
+    kind: response_contains
+    probe_id: inspect-locales
+    with: { jsonpath: "$.critical_missing_translations", equals: 0 }
+tags: [i18n, l10n, locale, checkout]

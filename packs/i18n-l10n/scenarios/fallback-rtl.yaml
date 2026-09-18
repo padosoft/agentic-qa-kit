@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-i18n-fallback-rtl
+title: Translation fallback and RTL direction remain safe and usable
+risk_refs: [i18n-fallback-direction]
+invariant_refs: [inv-locale-fallback-safe]
+preconditions:
+  - "a disposable storefront with an RTL locale and an intentionally missing optional key is available"
+steps:
+  - id: inspect-fallback
+    kind: http
+    with: { method: "GET", url: "/i18n/fallback?locale=ar-SA&fixture=missing-optional" }
+oracles:
+  - id: o-fallback
+    kind: response_contains
+    probe_id: inspect-fallback
+    with: { jsonpath: "$.fallback_is_approved", equals: true }
+  - id: o-direction
+    kind: response_contains
+    probe_id: inspect-fallback
+    with: { jsonpath: "$.direction", equals: "rtl" }
+  - id: o-no-keys
+    kind: response_contains
+    probe_id: inspect-fallback
+    with: { jsonpath: "$.raw_translation_keys_visible", equals: false }
+tags: [i18n, rtl, fallback, accessibility]
