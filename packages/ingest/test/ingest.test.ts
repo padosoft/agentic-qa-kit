@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import {
+  evaluateMutationCoverage,
   evaluateMutationThreshold,
   evaluatePerformanceThresholds,
   parseJunit,
   parseK6Summary,
   parseLocustSummary,
+  parseMutationCoverageManifest,
   parseMutationSummary,
   parsePlaywrightTrace,
   parseSast,
@@ -288,6 +290,62 @@ describe('mutation evidence', () => {
           1.1,
         ),
       /between 0 and 1/,
+    );
+  });
+});
+
+describe('mutation to regression coverage', () => {
+  it('requires reviewed mutant-to-risk/scenario links and reports per-risk kill rates', () => {
+    const report = parseMutationSummary({
+      mutants: [
+        { id: 'm-1', file: 'src/cart.ts', operator: 'A', status: 'Killed' },
+        { id: 'm-2', file: 'src/cart.ts', operator: 'B', status: 'Survived' },
+      ],
+    });
+    const manifest = parseMutationCoverageManifest({
+      schema_version: '1',
+      links: [
+        { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+        { mutation_id: 'm-2', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      ],
+    });
+    const result = evaluateMutationCoverage(report, manifest, {
+      min_mapped_rate: 1,
+      min_killed_rate: 0.5,
+    });
+    assert.equal(result.passed, true);
+    assert.equal(result.risk_coverage[0]?.mutation_score, 0.5);
+  });
+
+  it('fails closed for unmapped mutants, unknown links and invalid manifests', () => {
+    const report = parseMutationSummary({
+      mutants: [
+        { id: 'm-1', file: 'src/cart.ts', operator: 'A', status: 'Killed' },
+        { id: 'm-2', file: 'src/cart.ts', operator: 'B', status: 'Survived' },
+      ],
+    });
+    const manifest = parseMutationCoverageManifest({
+      schema_version: '1',
+      links: [{ mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] }],
+    });
+    const result = evaluateMutationCoverage(report, manifest, {
+      min_mapped_rate: 1,
+      min_killed_rate: 1,
+    });
+    assert.equal(result.passed, false);
+    assert.deepEqual(result.unmapped_mutant_ids, ['m-2']);
+    assert.throws(() => parseMutationCoverageManifest({ schema_version: '1', links: [] }), /links/);
+    assert.throws(
+      () =>
+        evaluateMutationCoverage(
+          report,
+          {
+            schema_version: '1',
+            links: [{ mutation_id: 'missing', risk_ids: ['r'], scenario_ids: ['s'] }],
+          },
+          { min_mapped_rate: 0, min_killed_rate: 0 },
+        ),
+      /unknown mutant/,
     );
   });
 });

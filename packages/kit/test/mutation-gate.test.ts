@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { runMutationGate } from '../dist/commands/mutation-gate.js';
+import { runMutationCoverageGate, runMutationGate } from '../dist/commands/mutation-gate.js';
 
 function report(statuses: string[]): string {
   return JSON.stringify({
@@ -40,4 +40,28 @@ test('mutation gate fails closed for malformed evidence', () => {
   const result = runMutationGate({ root, inputFile: 'mutation.json', minScore: 0.5 });
   assert.equal(result.ok, false);
   assert.equal(result.gate_ok, false);
+});
+
+test('mutation coverage gate binds mutants to regression scenarios', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Survived']));
+  writeFileSync(
+    join(root, 'manifest.json'),
+    JSON.stringify({
+      schema_version: '1',
+      links: [
+        { mutation_id: 'm-0', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+        { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      ],
+    }),
+  );
+  const result = runMutationCoverageGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    minMappedRate: 1,
+    minKilledRate: 0.5,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.gate_ok, true);
 });

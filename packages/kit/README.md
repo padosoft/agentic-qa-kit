@@ -49,6 +49,10 @@ Commands
   validate      Validate .aqa/* against @aqa/schemas
   risk coverage  Show fail-closed risk coverage from persisted run evidence
   oracle calibrate <corpus.json>  Calculate Brier/ECE metrics from a reviewed gold corpus
+  mutation gate <report.json> --min-score X
+                Gate an externally-produced mutation score
+  mutation coverage <report.json> <manifest.json> --min-mapped-rate X --min-killed-rate X
+                Gate mutant mapping to risk-linked regression scenarios
   dr inventory <file> [--public-key <pem>]
                 Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>]
@@ -64,6 +68,15 @@ Common options
 ```
 
 Exit codes: `0` success, `1` validation failure or unknown command, `2` unhandled error.
+
+### Mutation-to-regression coverage
+
+`aqa mutation coverage` consumes the normalized external mutation report plus
+a reviewed manifest linking every mutant to one or more risk and regression
+scenario IDs. It reports mapping completeness and mapped kill rate, and fails
+closed when the configured thresholds are not met. The command does not run
+Stryker, mutmut or project code; the producer workflow must bind its report to
+the source revision and artifact checkpoint separately.
 
 ### Oracle calibration
 

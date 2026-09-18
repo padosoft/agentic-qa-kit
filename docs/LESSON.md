@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-19 — Aggregate mutation score hides uncovered risks
+
+Mutation testing becomes useful for release assurance only when each evaluated
+mutant is linked to the risk and regression scenario that should kill it. Gate
+mapping completeness and per-risk kill rates separately; do not let a strong
+global score conceal an unmapped critical control.
+
 # 2026-09-18 — Semantic edges must survive component materialization
 
 It is easy to calculate similarity edges correctly and then accidentally call
