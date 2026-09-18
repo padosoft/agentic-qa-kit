@@ -1601,6 +1601,47 @@ export function makeApi(): ApiHandler[] {
       },
     },
     {
+      method: 'GET',
+      path: '/api/runner/jobs/:id',
+      requires: null,
+      async handle(req, ctx) {
+        const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
+        if (authorization === false) return { status: 401, body: { error: 'runner unauthorized' } };
+        const id = req.params.id;
+        if (!id) return { status: 400, body: { error: 'job id is required' } };
+        const job = await ctx.queue.get(id);
+        if (
+          authorization !== true &&
+          (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
+        )
+          return { status: 404, body: { error: 'job not found' } };
+        return job
+          ? { status: 200, body: { job } }
+          : { status: 404, body: { error: 'job not found' } };
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/runner/jobs/:id/renew',
+      requires: null,
+      async handle(req, ctx) {
+        const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
+        if (authorization === false) return { status: 401, body: { error: 'runner unauthorized' } };
+        const body = (req.body ?? {}) as { lease_token?: unknown };
+        const id = req.params.id;
+        if (!id || typeof body.lease_token !== 'string' || !body.lease_token)
+          return { status: 400, body: { error: 'job id and lease_token are required' } };
+        const job = await ctx.queue.get(id);
+        if (
+          authorization !== true &&
+          (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
+        )
+          return { status: 404, body: { error: 'job not found' } };
+        const renewed = await ctx.queue.renew(id, body.lease_token);
+        return asResponse({ renewed }, renewed ? 200 : 409);
+      },
+    },
+    {
       method: 'POST',
       path: '/api/runner/jobs/:id/ack',
       requires: null,

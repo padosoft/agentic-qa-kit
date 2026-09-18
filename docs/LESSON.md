@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Remote runners need a token source, not a boot-time token
+
+An HTTP queue adapter that captures one bearer token at construction silently
+turns short-lived JWT rotation into a restart requirement. Resolve the token on
+every request, keep control-plane mutations outside the runner surface, and
+apply the authenticated scopes again on get/renew/ack/fail—not only on dequeue.
+
 # 2026-09-18 — Optional integration tests must skip at registration time
 
 `node:test`'s `t.skip()` is not interpreted identically by every supported
