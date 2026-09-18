@@ -134,7 +134,7 @@ export class S3ArtifactStore implements ArtifactStore {
         ...retention,
       }),
     );
-    if (this.verifyRetention) await this.assertRetention(clean);
+    if (this.verifyRetention) await this.assertRetention(this.objectKey(clean));
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -149,10 +149,9 @@ export class S3ArtifactStore implements ArtifactStore {
     return ref;
   }
 
+  /** Verify the exact provider object key; callers pass an already-prefixed key. */
   private async assertRetention(key: string): Promise<void> {
-    const result = await this.client.send(
-      new HeadObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) }),
-    );
+    const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
     const actualMode = result.ObjectLockMode;
     const actualUntil = result.ObjectLockRetainUntilDate;
     if (actualMode !== this.retentionMode) {

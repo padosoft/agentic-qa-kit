@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Provider keys must have one ownership boundary
+
+When an artifact store owns prefix normalization, internal verification helpers
+must receive either clean logical keys or fully qualified provider keys, never a
+mixture. The mixed contract caused a double prefix for metadata retention
+checks. Name the boundary explicitly and test both data and metadata objects.
+
 # 2026-09-18 — Configured concurrency must be observable and bounded
 
 An accepted `parallelism` field that is ignored is worse than an explicit
