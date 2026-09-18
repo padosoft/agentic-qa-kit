@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Closed the Stripe webhook side-effect safety gap.** Added
+  `StripeWebhookProcessor` for signature verification, body-size bounds,
+  supported-event allowlisting and order/provider linkage before invoking a
+  business effect. Hardened both webhook ledgers with processing/completed
+  state and release-on-failure semantics, fixing the lost-retry case where an
+  effect could fail after its claim was stored. Commerce suite: **44 passed,
+  0 failed**; hosted CI is required before this migration is marked complete.
+
 - **Added a real Stripe payment boundary.** `StripePaymentGateway` now creates
   and retrieves PaymentIntents and creates refunds through Stripe's REST API,
   with strict secret-key/HTTPS validation, bounded response parsing, minor-unit

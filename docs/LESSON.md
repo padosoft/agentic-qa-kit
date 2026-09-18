@@ -32,6 +32,14 @@ responses and enforces idempotency, but does not claim to implement the whole
 CommerceAdapter. Keeping that boundary explicit prevents a REST wrapper from
 being mistaken for live checkout, webhook or settlement evidence.
 
+# 2026-09-18 — Claim-before-effect needs recovery state
+
+Persisting a webhook effect key before executing the business effect prevents
+duplicates, but without processing/completed state and release-on-failure a
+transient merchant error permanently turns the next provider retry into a
+false duplicate. Durable webhook ledgers must model recovery, not only
+deduplication.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or

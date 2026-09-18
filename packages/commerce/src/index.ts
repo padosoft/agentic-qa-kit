@@ -20,6 +20,12 @@ export {
   type StripeWebhookVerificationOptions,
 } from './stripe-webhook.js';
 export {
+  StripeWebhookProcessor,
+  type StripeWebhookEvent,
+  type StripeWebhookProcessResult,
+  type StripeWebhookProcessorOptions,
+} from './stripe-webhook-processor.js';
+export {
   applyWebhookEffectOnce,
   InMemoryWebhookEffectLedger,
   PostgresWebhookEffectLedger,
