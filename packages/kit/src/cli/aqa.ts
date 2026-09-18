@@ -57,6 +57,7 @@ const VALUE_FLAGS = new Set([
   'fixture-id',
   'target',
   'public-key',
+  'public-key-id',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -125,7 +126,7 @@ ${bold('Commands')}
   fixtures restore <fixture> <dir>  Verify and restore a fixture (use --force to overwrite)
   dr inventory <file> [--public-key <pem>] Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>] Validate a restore drill against RPO/RTO
-  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>
+  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem> --public-key-id <id>
                                     Verify signed production evidence is bound to this restore drill
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
   risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
@@ -521,6 +522,7 @@ async function main(): Promise<number> {
       printHeader('dr');
       const subcommand = args.positionals[0];
       const publicKeyFile = args.values.get('public-key');
+      const publicKeyId = args.values.get('public-key-id');
       if (args.flags.has('public-key') && !args.values.has('public-key')) {
         console.error(red('aqa dr: --public-key requires a value'));
         return 1;
@@ -534,6 +536,7 @@ async function main(): Promise<number> {
         const result = runDrInventory({
           inventoryFile,
           ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+          ...(publicKeyId !== undefined ? { publicKeyId } : {}),
         });
         if (!result.ok) {
           console.error(red(`aqa dr inventory: ${result.error ?? 'verification failed'}`));
@@ -555,6 +558,7 @@ async function main(): Promise<number> {
           inventoryFile,
           evidenceFile,
           ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+          ...(publicKeyId !== undefined ? { publicKeyId } : {}),
         });
         if (!result.ok) {
           console.error(red(`aqa dr restore: ${result.error ?? 'verification failed'}`));
@@ -582,6 +586,7 @@ async function main(): Promise<number> {
           evidenceFile,
           productionEvidenceFile,
           ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+          ...(publicKeyId !== undefined ? { publicKeyId } : {}),
         });
         if (!result.ok) {
           console.error(red(`aqa dr release-gate: ${result.error ?? 'verification failed'}`));
