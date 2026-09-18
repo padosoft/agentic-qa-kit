@@ -2015,3 +2015,8 @@ execute it. Keep the injected contract for deterministic tests and add a
 separate live journey in the OCI-enabled CI job with a resolved immutable test
 image. A local skip must remain visible and cannot be reported as deployment
 evidence.
+
+Bun's `node:test` compatibility currently exposes `t.skip()` but throws a
+`NotImplementedError` when it is called. For optional platform journeys, use
+the repository's explicit skip message + return convention in the shared unit
+suite, and keep the actual required live assertion in the OCI-specific CI job.
