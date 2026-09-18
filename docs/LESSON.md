@@ -17,6 +17,13 @@ actor sessions, authoritative observers, temporal deadlines and cleanup
 evidence; otherwise a generated path can look complete while no effect was
 actually observed.
 
+# 2026-09-18 — Semantic thresholds need reviewed-pair calibration
+
+A similarity score is not a safe merge policy by itself. Keep a human-reviewed
+pair corpus, report the confusion matrix and gate precision/recall/false
+positive rate explicitly. Calibration still does not replace a holdout set or
+independent review of the clustering method.
+
 # 2026-09-18 — Mutation score is evidence only at an explicit boundary
 
 Stryker/mutmut reports are external observations, not proof that the intended

@@ -20,6 +20,12 @@
   threshold calibration/governance, persistent root-cause lifecycle and bulk
   fix/verify orchestration.
 
+- **Added semantic threshold calibration.** Reviewed finding pairs can now be
+  scored into a bounded confusion-matrix report with precision, recall, F1 and
+  false-positive rate, then evaluated against an explicit policy. Added
+  ADR-269, docs and a 9/9 clustering suite. Holdout/independent methodology
+  validation remains external governance, not an unearned green state.
+
 - **Added the bounded stateful journey graph contract.** `@aqa/methodology`
   now validates versioned states/transitions, reachability, terminal states,
   non-terminal dead ends and legal transition paths without executing side
