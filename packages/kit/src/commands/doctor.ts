@@ -8,6 +8,7 @@ import {
   verifyProductionEvidenceRestoreBinding,
 } from '@aqa/compliance';
 import { type ProjectProfile, profileRepo } from '../profiler.js';
+import { oidcEnvironmentConfig } from './admin.js';
 import { runValidate } from './validate.js';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
@@ -142,6 +143,7 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   const restoreEvidencePath = process.env.AQA_PRODUCTION_DR_EVIDENCE_PATH?.trim();
   const evidenceMaxAgeRaw = process.env.AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS?.trim();
   const evidenceMaxAge = evidenceMaxAgeRaw ? Number(evidenceMaxAgeRaw) : undefined;
+  const oidc = oidcEnvironmentConfig();
 
   checks.push({
     id: 'production-store',
@@ -186,6 +188,21 @@ function addProductionChecks(checks: DoctorCheck[]): void {
       hasQueue && (runnerJwt || runnerToken)
         ? undefined
         : 'Configure the complete AQA_RUNNER_JWT_* set (preferred) or an explicit AQA_RUNNER_TOKEN.',
+  });
+  checks.push({
+    id: 'production-admin-auth',
+    title: 'Enterprise admin identity configured',
+    status: oidc.config ? 'pass' : 'fail',
+    detail: oidc.config
+      ? oidc.config.sessionDsn
+        ? 'OIDC configured with shared PostgreSQL session state (values hidden)'
+        : 'OIDC configured with process-local session state (values hidden)'
+      : (oidc.error ?? 'AQA_OIDC_* is missing; admin would use the local development identity'),
+    suggestion: oidc.config
+      ? oidc.config.sessionDsn
+        ? undefined
+        : 'Configure AQA_OIDC_SESSION_DSN for multi-replica session continuity.'
+      : 'Configure complete AQA_OIDC_* settings and a Secret-backed client secret before production boot.',
   });
   checks.push({
     id: 'production-audit-checkpoint',
