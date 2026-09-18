@@ -39,6 +39,20 @@ export type StripeCreateRefund = {
   idempotency_key: string;
 };
 
+export type StripeRefundReconciliationInput = {
+  payment_id: string;
+  expected_captured: Money;
+  expected_refunded: Money;
+};
+
+export type StripeRefundReconciliation = {
+  provider: 'stripe';
+  payment: StripePaymentIntentObservation;
+  refunds: readonly StripeRefundObservation[];
+  refunded_amount: Money;
+  observed_at: string;
+};
+
 /**
  * Minimal REST boundary for Stripe PaymentIntents and refunds.
  *
@@ -103,6 +117,19 @@ export class StripePaymentGateway {
     return parseRefund(response, paymentId);
   }
 
+  /** Read the complete bounded refund ledger for one PaymentIntent. */
+  async listRefunds(paymentId: string): Promise<StripeRefundObservation[]> {
+    const id = providerId(paymentId, 'payment_id');
+    const response = record(
+      await this.request(`refunds?payment_intent=${encodeURIComponent(id)}&limit=100`),
+    );
+    if (response.object !== 'list' || !Array.isArray(response.data))
+      throw new Error('[commerce/stripe] refund list response is invalid');
+    if (response.has_more === true)
+      throw new Error('[commerce/stripe] refund list exceeds the bounded reconciliation page');
+    return response.data.map((item) => parseRefund(item, id));
+  }
+
   private async request(
     path: string,
     body?: URLSearchParams,
@@ -130,6 +157,46 @@ export class StripePaymentGateway {
       throw new Error('[commerce/stripe] provider returned invalid JSON');
     }
   }
+}
+
+/**
+ * Reconcile merchant-authoritative payment/refund totals with Stripe's live
+ * read-back. Disputes and payouts remain separate provider observations.
+ */
+export async function reconcileStripeRefunds(
+  gateway: StripePaymentGateway,
+  input: StripeRefundReconciliationInput,
+): Promise<StripeRefundReconciliation> {
+  const paymentId = providerId(input.payment_id, 'payment_id');
+  const expectedCaptured = validateMoney(input.expected_captured, 'expected_captured');
+  const expectedRefunded = validateMoney(input.expected_refunded, 'expected_refunded');
+  if (expectedCaptured.currency !== expectedRefunded.currency)
+    throw new Error('[commerce/stripe] expected totals use different currencies');
+  const payment = await gateway.retrievePaymentIntent(paymentId);
+  if (payment.status !== 'succeeded')
+    throw new Error('[commerce/stripe] payment is not provider-captured');
+  if (payment.amount.currency !== expectedCaptured.currency)
+    throw new Error('[commerce/stripe] provider payment currency mismatch');
+  if (BigInt(payment.amount_received.amount_minor) !== BigInt(expectedCaptured.amount_minor))
+    throw new Error('[commerce/stripe] provider captured amount does not reconcile');
+  const refunds = await gateway.listRefunds(paymentId);
+  let refundedMinor = 0n;
+  for (const refund of refunds) {
+    if (refund.status !== 'succeeded')
+      throw new Error('[commerce/stripe] refund ledger contains a non-successful refund');
+    if (refund.amount.currency !== expectedRefunded.currency)
+      throw new Error('[commerce/stripe] provider refund currency mismatch');
+    refundedMinor += BigInt(refund.amount.amount_minor);
+  }
+  if (refundedMinor !== BigInt(expectedRefunded.amount_minor))
+    throw new Error('[commerce/stripe] provider refund total does not reconcile');
+  return {
+    provider: 'stripe',
+    payment,
+    refunds,
+    refunded_amount: expectedRefunded,
+    observed_at: new Date().toISOString(),
+  };
 }
 
 function parsePaymentIntent(value: unknown): StripePaymentIntentObservation {
@@ -179,6 +246,15 @@ function minorUnits(value: Money): number {
   if (!/^[A-Z]{3}$/.test(value.currency) || !Number.isSafeInteger(parsed) || parsed < 0)
     throw new Error('[commerce/stripe] amount must contain an ISO currency and safe minor units');
   return parsed;
+}
+
+function validateMoney(value: Money, field: string): Money {
+  if (!/^[A-Z]{3}$/.test(value.currency) || !/^\d+$/.test(value.amount_minor))
+    throw new Error(`[commerce/stripe] ${field} is invalid`);
+  const amount = BigInt(value.amount_minor);
+  if (amount < 0n || amount > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error(`[commerce/stripe] ${field} is out of range`);
+  return { currency: value.currency, amount_minor: value.amount_minor };
 }
 
 function currencyCode(value: unknown): string {

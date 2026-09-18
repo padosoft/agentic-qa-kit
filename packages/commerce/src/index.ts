@@ -35,11 +35,14 @@ export {
 } from './webhook-ledger.js';
 export { HttpCommerceAdapter, type HttpCommerceAdapterOptions } from './http-adapter.js';
 export {
+  reconcileStripeRefunds,
   StripePaymentGateway,
   type StripeCreatePaymentIntent,
   type StripeCreateRefund,
   type StripePaymentGatewayOptions,
   type StripePaymentIntentObservation,
+  type StripeRefundReconciliation,
+  type StripeRefundReconciliationInput,
   type StripeRefundObservation,
 } from './stripe-payment.js';
 export {

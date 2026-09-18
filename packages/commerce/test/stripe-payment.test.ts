@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { StripePaymentGateway } from '../dist/index.js';
+import { StripePaymentGateway, reconcileStripeRefunds } from '../dist/index.js';
 
 const paymentIntent = {
   object: 'payment_intent',
@@ -122,6 +122,92 @@ describe('StripePaymentGateway', () => {
         fetch: async () => new Response('x'.repeat(20), { status: 200 }),
       }).retrievePaymentIntent('pi'),
       /invalid JSON/,
+    );
+  });
+
+  it('reconciles the provider refund ledger against merchant totals', async () => {
+    const urls: string[] = [];
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) => {
+        const url = String(input);
+        urls.push(url);
+        return jsonResponse(
+          url.includes('/refunds?')
+            ? {
+                object: 'list',
+                has_more: false,
+                data: [
+                  {
+                    object: 'refund',
+                    id: 're_1',
+                    amount: 500,
+                    currency: 'eur',
+                    status: 'succeeded',
+                  },
+                ],
+              }
+            : paymentIntent,
+        );
+      },
+    });
+    const result = await reconcileStripeRefunds(gateway, {
+      payment_id: 'pi_test_123',
+      expected_captured: { currency: 'EUR', amount_minor: '1099' },
+      expected_refunded: { currency: 'EUR', amount_minor: '500' },
+    });
+    assert.equal(result.refunded_amount.amount_minor, '500');
+    assert.equal(result.refunds.length, 1);
+    assert.match(urls[1] ?? '', /refunds\?payment_intent=pi_test_123&limit=100/);
+  });
+
+  it('fails closed on incomplete provider pagination and total drift', async () => {
+    const paginated = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) =>
+        jsonResponse(
+          String(input).includes('/refunds?')
+            ? { object: 'list', has_more: true, data: [] }
+            : paymentIntent,
+        ),
+    });
+    await assert.rejects(
+      reconcileStripeRefunds(paginated, {
+        payment_id: 'pi_test_123',
+        expected_captured: { currency: 'EUR', amount_minor: '1099' },
+        expected_refunded: { currency: 'EUR', amount_minor: '0' },
+      }),
+      /bounded reconciliation page/,
+    );
+
+    const drifted = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) =>
+        jsonResponse(
+          String(input).includes('/refunds?')
+            ? {
+                object: 'list',
+                has_more: false,
+                data: [
+                  {
+                    object: 'refund',
+                    id: 're_1',
+                    amount: 600,
+                    currency: 'eur',
+                    status: 'succeeded',
+                  },
+                ],
+              }
+            : paymentIntent,
+        ),
+    });
+    await assert.rejects(
+      reconcileStripeRefunds(drifted, {
+        payment_id: 'pi_test_123',
+        expected_captured: { currency: 'EUR', amount_minor: '1099' },
+        expected_refunded: { currency: 'EUR', amount_minor: '500' },
+      }),
+      /refund total does not reconcile/,
     );
   });
 });
