@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { productionEvidenceFreshness, verifyProductionEvidence } from '@aqa/compliance';
+import {
+  parseBackupInventory,
+  productionEvidenceFreshness,
+  verifyBackupInventory,
+  verifyProductionEvidence,
+  verifyProductionEvidenceRestoreBinding,
+} from '@aqa/compliance';
 import { type ProjectProfile, profileRepo } from '../profiler.js';
 import { runValidate } from './validate.js';
 
@@ -131,6 +137,8 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   const sandboxImagePinned = /^.+@sha256:[0-9a-f]{64}$/u.test(sandboxImage);
   const evidencePath = process.env.AQA_PRODUCTION_EVIDENCE_PATH?.trim();
   const evidenceKey = process.env.AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM;
+  const restoreInventoryPath = process.env.AQA_PRODUCTION_DR_INVENTORY_PATH?.trim();
+  const restoreEvidencePath = process.env.AQA_PRODUCTION_DR_EVIDENCE_PATH?.trim();
   const evidenceMaxAgeRaw = process.env.AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS?.trim();
   const evidenceMaxAge = evidenceMaxAgeRaw ? Number(evidenceMaxAgeRaw) : undefined;
 
@@ -284,6 +292,113 @@ function addProductionChecks(checks: DoctorCheck[]): void {
       });
     }
   }
+
+  addProductionRestoreBindingCheck(checks, {
+    evidencePath,
+    evidenceKey,
+    restoreInventoryPath,
+    restoreEvidencePath,
+  });
+}
+
+interface ProductionRestoreBindingOptions {
+  evidencePath: string | undefined;
+  evidenceKey: string | undefined;
+  restoreInventoryPath: string | undefined;
+  restoreEvidencePath: string | undefined;
+}
+
+function addProductionRestoreBindingCheck(
+  checks: DoctorCheck[],
+  opts: ProductionRestoreBindingOptions,
+): void {
+  const configured = Boolean(opts.restoreInventoryPath || opts.restoreEvidencePath);
+  if (!configured) {
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: 'warn',
+      detail: 'restore inventory and drill evidence paths are not configured',
+      suggestion:
+        'Configure AQA_PRODUCTION_DR_INVENTORY_PATH and AQA_PRODUCTION_DR_EVIDENCE_PATH for the release binding gate.',
+    });
+    return;
+  }
+  if (!opts.restoreInventoryPath || !opts.restoreEvidencePath) {
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: 'fail',
+      detail: 'restore inventory and drill evidence paths must be configured together',
+      suggestion:
+        'Configure both AQA_PRODUCTION_DR_INVENTORY_PATH and AQA_PRODUCTION_DR_EVIDENCE_PATH.',
+    });
+    return;
+  }
+  if (!opts.evidencePath || !existsSync(opts.evidencePath)) {
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: 'fail',
+      detail: 'signed production evidence is required before the restore binding can be checked',
+      suggestion: 'Configure AQA_PRODUCTION_EVIDENCE_PATH with the signed production envelope.',
+    });
+    return;
+  }
+  if (!opts.evidenceKey?.trim()) {
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: 'fail',
+      detail: 'the trusted public key is required before the restore binding can be checked',
+      suggestion: 'Configure AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM from the approved trust root.',
+    });
+    return;
+  }
+  try {
+    const productionEvidence = readJsonFile(opts.evidencePath);
+    const inventoryInput = readJsonFile(opts.restoreInventoryPath);
+    const inventory = unwrapInventory(inventoryInput, opts.evidenceKey);
+    const restoreEvidence = readJsonFile(opts.restoreEvidencePath);
+    const result = verifyProductionEvidenceRestoreBinding(
+      productionEvidence,
+      restoreEvidence,
+      inventory,
+      opts.evidenceKey,
+    );
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: result.ok ? 'pass' : 'fail',
+      detail: result.ok
+        ? 'signed production evidence matches the validated restore drill digest'
+        : 'production evidence does not match the restore inventory/drill chain',
+      suggestion: result.ok
+        ? undefined
+        : 'Regenerate and re-sign the production evidence from the exact approved restore drill.',
+    });
+  } catch {
+    checks.push({
+      id: 'production-evidence-restore-binding',
+      title: 'Production evidence is bound to a restore drill',
+      status: 'fail',
+      detail: 'restore binding inputs are unreadable or invalid',
+      suggestion:
+        'Provide redacted JSON inventory and restore evidence validated by `aqa dr restore`.',
+    });
+  }
+}
+
+function readJsonFile(path: string): unknown {
+  return JSON.parse(readFileSync(path, 'utf8')) as unknown;
+}
+
+function unwrapInventory(input: unknown, trustedPublicKeyPem: string): unknown {
+  if (!isRecord(input) || !('inventory' in input || 'signature' in input))
+    return parseBackupInventory(input);
+  const verification = verifyBackupInventory(input, trustedPublicKeyPem);
+  if (!verification.ok) throw new Error(verification.reason ?? 'backup inventory signature failed');
+  return parseBackupInventory(input.inventory);
 }
 
 function agentFilesPresent(root: string): boolean {
@@ -293,4 +408,8 @@ function agentFilesPresent(root: string): boolean {
     existsSync(join(root, 'GEMINI.md')) ||
     existsSync(join(root, '.github', 'copilot-instructions.md'))
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -2337,6 +2337,15 @@ memory-queue scope test is not sufficient evidence for the durable adapter.
 When building dynamic PostgreSQL predicates, never append an unused NULL
 placeholder: PostgreSQL cannot infer its type even if the branch does not
 reference it. Derive placeholder indexes from the values actually appended.
+# 2026-09-18 — Production doctor must enforce evidence joins
+
+A signed production evidence pack can be valid, complete and fresh while its
+restore-drill files are absent or substituted. Treat the cross-document digest
+as a separate release-policy check: missing paths are visible warnings,
+partial configuration and invalid/mismatched inputs fail closed, and the
+existing signature/freshness check remains separate. This preserves the
+distinction between provenance and provider execution evidence.
+
 # 2026-09-18 — Release gates must reuse canonical evidence verifiers
 
 When a compliance library has a cross-document verifier, exposing only the

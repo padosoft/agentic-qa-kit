@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Connected restore-drill binding to `aqa doctor --production`.** When
+  `AQA_PRODUCTION_DR_INVENTORY_PATH` and `AQA_PRODUCTION_DR_EVIDENCE_PATH`
+  are present, doctor now revalidates the inputs and reuses the canonical
+  signed cross-document verifier; partial, unreadable or mismatched inputs
+  fail, while absent paths remain an explicit warning. Kit suite: **172
+  passed, 0 failed, 2 platform skips**; package typecheck and Biome pass.
+  This closes a release-policy blind spot but still does not prove provider
+  execution. Next: continue provider-backed KMS/WORM/PITR and identity proof.
+
 - **Promoted the production-evidence release gate to `main`.** Macro PR #156
   merged as **`141de9a`** after rerun **35337503239** passed every technical
   gate, including 144 Playwright tests, CLI E2E, live Prometheus/OTLP,

@@ -18,6 +18,23 @@ function makeTempProject(files: Record<string, string>): string {
   return dir;
 }
 
+function withEnvironment(values: Record<string, string | undefined>, fn: () => void): void {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(values)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 describe('aqa init', () => {
   it('creates the four .aqa/ scaffolding files in a fresh repo', async () => {
     const root = makeTempProject({
@@ -122,6 +139,60 @@ describe('aqa doctor', () => {
     assert.equal(d.checks.find((c) => c.id === 'production-sandbox-image')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-evidence')?.status, 'warn');
     assert.ok(d.checks.every((c) => !c.detail.includes('postgres://')));
+  });
+
+  it('warns when the production evidence pack has no restore binding inputs', () => {
+    const root = makeTempProject({ 'package.json': '{}' });
+    withEnvironment(
+      {
+        AQA_PRODUCTION_EVIDENCE_PATH: undefined,
+        AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: undefined,
+        AQA_PRODUCTION_DR_INVENTORY_PATH: undefined,
+        AQA_PRODUCTION_DR_EVIDENCE_PATH: undefined,
+      },
+      () => {
+        const d = runDoctor({ root, production: true });
+        const binding = d.checks.find((c) => c.id === 'production-evidence-restore-binding');
+        assert.equal(binding?.status, 'warn');
+        assert.match(binding?.detail ?? '', /paths are not configured/);
+      },
+    );
+  });
+
+  it('fails production doctor when only one restore binding path is configured', () => {
+    const root = makeTempProject({ 'package.json': '{}' });
+    withEnvironment(
+      {
+        AQA_PRODUCTION_EVIDENCE_PATH: undefined,
+        AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: undefined,
+        AQA_PRODUCTION_DR_INVENTORY_PATH: 'inventory.json',
+        AQA_PRODUCTION_DR_EVIDENCE_PATH: undefined,
+      },
+      () => {
+        const d = runDoctor({ root, production: true });
+        const binding = d.checks.find((c) => c.id === 'production-evidence-restore-binding');
+        assert.equal(binding?.status, 'fail');
+        assert.match(binding?.detail ?? '', /configured together/);
+      },
+    );
+  });
+
+  it('fails production doctor for unreadable restore binding inputs', () => {
+    const root = makeTempProject({ 'package.json': '{}' });
+    withEnvironment(
+      {
+        AQA_PRODUCTION_EVIDENCE_PATH: 'production-evidence.json',
+        AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: '-----BEGIN PUBLIC KEY-----',
+        AQA_PRODUCTION_DR_INVENTORY_PATH: 'inventory.json',
+        AQA_PRODUCTION_DR_EVIDENCE_PATH: 'restore.json',
+      },
+      () => {
+        const d = runDoctor({ root, production: true });
+        const binding = d.checks.find((c) => c.id === 'production-evidence-restore-binding');
+        assert.equal(binding?.status, 'fail');
+        assert.match(binding?.detail ?? '', /signed production evidence is required/);
+      },
+    );
   });
 });
 
