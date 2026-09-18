@@ -495,6 +495,77 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(webhook.outcome.evidence_complete, true);
   });
 
+  it('rejects tax quotes from another cart and shipping quotes for another destination', async () => {
+    const base = {
+      context: {
+        schema_version: '1' as const,
+        merchant: 'provider',
+        environment: 'sandbox' as const,
+        tenant: 'shop-a',
+        run_id: 'run-quote-binding',
+        policy_revision: 'policy-1',
+        capabilities: {},
+      },
+      identity: { tenant: 'shop-a', customer_id: 'customer-a' },
+      sku: 'sku-quote-binding',
+      quantity: 1,
+      idempotencyKey: 'quote-binding-checkout',
+    };
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-quote-binding',
+      price: { currency: 'EUR', amount_minor: '100' },
+      on_hand: 2,
+    });
+    const service = merchant.asAdapter();
+    const wrongTaxAdapter = {
+      ...service,
+      capabilities: async () => ({
+        ...(await service.capabilities(base.context)),
+        tax_quote: true,
+        shipping_quote: false,
+      }),
+      quoteTax: async () => ({
+        schema_version: '1',
+        cart_id: 'cart-other',
+        provider: 'tax-provider',
+        jurisdiction: 'IT',
+        amount: { currency: 'EUR', amount_minor: '10' },
+        observed_at: '2026-09-18T00:00:00Z',
+      }),
+    } as never;
+    const wrongTax = await verifyTaxJourney(wrongTaxAdapter, base);
+    assert.equal(wrongTax.outcome.status, 'error');
+    const wrongShippingAdapter = {
+      ...wrongTaxAdapter,
+      capabilities: async () => ({
+        ...(await service.capabilities(base.context)),
+        tax_quote: false,
+        shipping_quote: true,
+      }),
+      quoteShipping: async () => ({
+        schema_version: '1',
+        cart_id: 'cart-1',
+        destination: { country_code: 'DE', postal_code: '10115', city: 'Berlin' },
+        rates: [
+          {
+            id: 'standard',
+            carrier: 'carrier',
+            service: 'standard',
+            amount: { currency: 'EUR', amount_minor: '10' },
+            estimated_days: 3,
+          },
+        ],
+        observed_at: '2026-09-18T00:00:00Z',
+      }),
+    } as never;
+    const wrongShipping = await verifyShippingJourney(wrongShippingAdapter, {
+      ...base,
+      destination: { country_code: 'IT', postal_code: '00100', city: 'Rome' },
+    });
+    assert.equal(wrongShipping.outcome.status, 'error');
+  });
+
   it('verifies checkout-linked loyalty earning and ledger reconciliation', async () => {
     const merchant = new InMemoryCommerceReference();
     merchant.seedProduct({

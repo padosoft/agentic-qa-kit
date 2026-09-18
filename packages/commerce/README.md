@@ -30,8 +30,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyCheckoutJourney()` checks capability preflight, exact inventory effects,
   snapshot integrity and idempotent checkout retries with structured evidence.
 - `verifyTaxJourney()` and `verifyShippingJourney()` validate observable,
-  currency-safe tax quotes and unique bounded shipping rates, returning
-  `unsupported` when a real provider cannot expose the required evidence.
+  currency-safe tax quotes and unique bounded shipping rates. Quotes must carry
+  the exact cart ID under test; shipping quotes must also echo the requested
+  destination. Stale, cross-cart or cross-destination provider responses fail
+  closed, while missing provider capability returns `unsupported`.
 - `verifyWebhookJourney()` checks order linkage, delivered state, valid
   signatures and bounded delivery attempts; it never treats an absent webhook
   observer as a pass.

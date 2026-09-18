@@ -11,6 +11,14 @@
 
 ## 2026-09-18
 
+- **Hardened ecommerce quote binding.** Tax and shipping schemas now require
+  `cart_id`; the journey rejects cross-cart tax/shipping observations and
+  shipping destinations that differ from the requested address. Added ADR-243
+  and regression coverage. Commerce suite: **54 passed, 0 failed**, with the
+  PostgreSQL-dependent contract skipped locally without DSN. This closes a
+  false-green gap in provider-backed commerce evidence; tax-law correctness,
+  final checkout price and real provider execution remain separate evidence.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
