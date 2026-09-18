@@ -23,7 +23,7 @@ export interface BudgetAdapterEvent {
   ts: string;
   provider: LlmAdapter['provider'];
   model: string;
-  status: 'completed' | 'denied';
+  status: 'completed' | 'denied' | 'exhausted';
   tokens_in?: number;
   tokens_out?: number;
   cost_usd?: number;
@@ -119,8 +119,18 @@ export class BudgetedLlmAdapter implements LlmAdapter {
         tokens_out: output.tokens_out,
       }),
     });
-    if (state.exhausted)
-      throw new BudgetDispatchBlockedError(state.halted_reason ?? 'budget exhausted after call');
+    if (state.exhausted) {
+      const reason = state.halted_reason ?? 'budget exhausted after call';
+      this.emit({
+        kind: 'budget_exceeded',
+        ts: new Date().toISOString(),
+        provider: this.provider,
+        model: input.model,
+        status: 'exhausted',
+        reason,
+      });
+      throw new BudgetDispatchBlockedError(reason);
+    }
     return output;
   }
 

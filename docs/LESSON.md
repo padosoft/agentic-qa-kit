@@ -17,6 +17,14 @@ that persists the hash chain so every consumer sees the same event boundary.
 Keep labels low-cardinality and never promote the event payload to labels,
 because payloads may contain tenant/user data or model text.
 
+# 2026-09-18 — charge-time exhaustion is also a budget event
+
+Pre-dispatch denial is not the only budget boundary. Provider usage can exceed
+the estimate and hit the limit on the successful call itself; if the adapter
+raises immediately without an event, a short run loses the only durable signal
+that caused it to stop. Emit the terminal exhaustion event after settlement,
+without retrying the provider call or logging prompt content.
+
 # 2026-09-18 — legacy mutation APIs must preserve the audited invariant
 
 The server route already used the atomic finding transition, but the public

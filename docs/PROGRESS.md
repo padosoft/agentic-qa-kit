@@ -35,6 +35,12 @@
   observability tests passed. Live Prometheus scrape and collector delivery
   remain deployment evidence.
 
+- **Closed the exact-budget finalization edge case.** When authoritative
+  provider usage reaches the limit after admission, `BudgetedLlmAdapter` now
+  emits an explicit `budget_exceeded` event before raising, so a run that stops
+  immediately cannot lose the terminal cost signal. Adapter suite: 6 passed,
+  0 failed.
+
 - **M6 enterprise pack batch is complete and merged through PR #137.** The
   desktop pack was the final originally missing M6 baseline; PRs #121–#137
   passed the repository integrity, lint, build and unit gates. The pack

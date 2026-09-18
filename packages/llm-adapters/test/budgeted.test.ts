@@ -4,6 +4,35 @@ import { BudgetTracker, MemoryBudgetLedger } from '@aqa/cost';
 import { BudgetedLlmAdapter, FixtureAdapter, makeFixtureKey } from '../dist/index.js';
 
 describe('BudgetedLlmAdapter', () => {
+  it('emits exhaustion when authoritative usage reaches the budget', async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const input = {
+      provider: 'fixture' as const,
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user' as const, content: 'hello' }],
+    };
+    const adapter = new BudgetedLlmAdapter(
+      new FixtureAdapter([
+        {
+          key: makeFixtureKey(input),
+          output: { text: 'ok', tokens_in: 100, tokens_out: 200, finish_reason: 'stop' },
+        },
+      ]),
+      new BudgetTracker({ budget_usd: 0.0033 }),
+      {
+        estimate: () => ({ model: input.model, tokens_in: 100, tokens_out: 100 }),
+        onEvent: (event) => events.push(event),
+      },
+    );
+
+    await assert.rejects(() => adapter.call(input), /budget exhausted after call/);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['llm_call', 'budget_exceeded'],
+    );
+    assert.equal(events[1]?.status, 'exhausted');
+  });
+
   it('emits bounded usage and budget-denied events without prompt content', async () => {
     const events: Array<Record<string, unknown>> = [];
     const input = {
