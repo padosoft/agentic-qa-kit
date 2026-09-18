@@ -22,6 +22,7 @@ import {
   verifyBackupInventory,
   verifyEventChain,
   verifyProductionEvidence,
+  verifyProductionEvidenceRestoreBinding,
 } from '../dist/index.js';
 
 const ZERO = '0'.repeat(64);
@@ -447,6 +448,55 @@ describe('production evidence contract', () => {
           },
         }),
       /restore_drill_sha256.*SHA-256 digest/,
+    );
+  });
+
+  it('verifies the signed envelope against the exact inventory and drill', () => {
+    const drill = {
+      schema_version: '1' as const,
+      drill_id: 'drill-2026-q3',
+      source_backup_id: inventory.backup_id,
+      source_manifest_sha256: inventory.artifacts.manifest_sha256,
+      restored_manifest_sha256: inventory.artifacts.manifest_sha256,
+      target_environment: 'recovery-cluster',
+      started_at: '2026-09-17T10:00:00Z',
+      completed_at: '2026-09-17T10:20:00Z',
+      observed_rpo_minutes: 5,
+      observed_rto_minutes: 20,
+      checks: {
+        tenant_isolation: true,
+        audit_chain: true,
+        queue_fencing: true,
+        secret_redaction: true,
+      },
+    };
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const boundEvidence = {
+      ...evidence,
+      controls: {
+        ...evidence.controls,
+        database_recovery: {
+          ...evidence.controls.database_recovery,
+          restore_drill_sha256: restoreDrillEvidenceSha256(drill, inventory),
+        },
+      },
+    };
+    const signed = signProductionEvidence(boundEvidence, {
+      key_id: 'prod-evidence-key-1',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const result = verifyProductionEvidenceRestoreBinding(signed, drill, inventory, publicKeyPem);
+    assert.equal(result.ok, true);
+    assert.equal(result.restore_drill_sha256, restoreDrillEvidenceSha256(drill, inventory));
+    assert.equal(
+      verifyProductionEvidenceRestoreBinding(
+        signed,
+        { ...drill, drill_id: 'other-drill' },
+        inventory,
+        publicKeyPem,
+      ).ok,
+      false,
     );
   });
 });

@@ -49,9 +49,11 @@ export {
   productionEvidenceSha256,
   signProductionEvidence,
   verifyProductionEvidence,
+  verifyProductionEvidenceRestoreBinding,
   type ProductionEvidence,
   type ProductionEvidenceCompleteness,
   type ProductionEvidenceFreshness,
+  type ProductionEvidenceRestoreBindingResult,
   type ProductionEvidenceSigner,
   type SignedProductionEvidence,
 } from './production-evidence.js';
