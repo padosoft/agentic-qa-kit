@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Merged PR #154 (`762e8ee`) with the hosted production-evidence binding gate.**
+  CI run **35335845194** completed successfully across typecheck/lint, build,
+  Bun and Node 22 tests, PostgreSQL, OCI, S3-compatible storage, CLI E2E,
+  live Prometheus/OTLP telemetry, Playwright admin E2E and Helm validation.
+  Copilot review was intentionally not used per the task instruction. The
+  next roadmap gap is provider/deployment execution evidence, not another
+  local contract-only claim.
+
 - **Added the complete production-evidence/restore-drill join verifier.**
   `verifyProductionEvidenceRestoreBinding` now verifies the trusted signature,
   backup inventory, restore-drill contract, drill reference and recomputed
