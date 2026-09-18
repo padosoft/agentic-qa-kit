@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Optional integration tests must skip at registration time
+
+`node:test`'s `t.skip()` is not interpreted identically by every supported
+runner when a test is discovered through a workspace-wide Bun command. For
+endpoint-gated provider journeys, put the skip reason in the test options at
+registration time and retain the explicit CI job as the authoritative path.
+
 # 2026-09-18 — numeric token counters are not credentials
 
 The common JSON redactor matched the word `token` at the key level and turned
@@ -2230,3 +2237,11 @@ memory-queue scope test is not sufficient evidence for the durable adapter.
 When building dynamic PostgreSQL predicates, never append an unused NULL
 placeholder: PostgreSQL cannot infer its type even if the branch does not
 reference it. Derive placeholder indexes from the values actually appended.
+# 2026-09-18 — Injected S3 clients are not provider evidence
+
+An injected S3 client can prove adapter logic but cannot prove bucket-level
+Object Lock enablement, provider retention read-back, or metadata persistence.
+Keep the deterministic unit tests and add an endpoint-gated integration job
+against an ephemeral S3-compatible provider. Create a unique locked bucket per
+run, use CI-only environment credentials, and do not claim AWS/KMS/replication
+or restore behavior from a MinIO contract.
