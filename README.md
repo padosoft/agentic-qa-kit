@@ -324,22 +324,20 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.8` | **Live ecosystem e2e — shipped** | Real HTTP probe runner, release-gate finding enforcement, single-command ecosystem stack (`bun run e2e:ecosystem`), Playwright admin-against-live-API smoke, audit-chain canonical reconciliation |
 | `v1.9` | **Junior quick-start truthing — shipped** | `aqa install-agent-files` + `aqa report` + `aqa admin` CLI verbs (previously documented but unwired), `@aqa/pack-author` extracted to break kit↔server build cycle, esbuild bundled `dist/cli.cjs`, GitHub Packages publish workflow on `v*` tags, README quick-start rewritten to match the actually-shipped CLI surface |
 | `v2.0` | **Enterprise truth and safety — in progress** | Fail-closed runner/oracles, canonical outcomes, durable persistence, scoped authorization, SLO/coverage evidence, external-result ingestion, risk discovery, sandbox and secret-redaction hardening; live deployment proofs remain required |
-| `v2.1` | **Commerce Assurance pilot — planned** | Commerce pack, money/order/payment/inventory contracts, provider and merchant adapters, webhook/retry/race journeys, refund reconciliation and safe synthetic fixtures |
-| `v2.2` | **Stateful agentic QA — planned** | Evidence graph, stateful journey engine, capability preflight, temporal assertions, multi-actor sessions, mutation testing and trace-to-regression workflows |
+| `v2.1` | **Commerce Assurance pilot — contracts shipped** | Commerce pack, money/order/payment/inventory contracts, provider and merchant adapters, webhook/retry/race journeys, refund reconciliation and safe synthetic fixtures; live provider evidence remains deployment-scoped |
+| `v2.2` | **Stateful agentic QA — partial** | Capability preflight, temporal assertions and multi-actor context are present; evidence graph federation, mutation-to-regression automation and trace federation remain open |
 
 ## Status
 
-**Pre-production review (`v1.9` current).** The repository contains schemas, CLI,
-baseline packs, multi-agent adapters, runner/reporter, admin UI and deployment
-artifacts. Several enterprise capabilities are currently partial, declarative or
-not wired through the complete journey. The review reproduced false-green
-outcomes, audit-verification gaps, volatile admin state, authorization gaps and
-published-bundle failures; these are release blockers until fixed and re-tested.
-
-The intended enterprise target remains: durable multi-tenant storage, SSO/RBAC,
-signed packs, sandboxed execution, cost governance, evidence-grade audit,
-replay, and safe agent integrations. “Implemented in the roadmap” is not treated
-as evidence that the capability is production-operational.
+**Enterprise truth status (2026-09-18).** The repository has moved beyond the
+historical `v1.9` review: the enterprise control-plane, commerce contracts,
+runner fencing, observability and protected provider-evidence handoffs are now
+implemented and covered by hosted technical CI. Production readiness is still
+conditional on executing the protected workflows against operator-owned
+providers and completing the independent security/compliance work. See the
+[roadmap completion audit](docs/internal/roadmap-completion-audit-2026-09-18.md)
+for the requirement-by-requirement status; “implemented” is never treated as
+live provider evidence.
 
 Release notes per tag: [Releases page](https://github.com/padosoft/agentic-qa-kit/releases).
 Live state: [`docs/PROGRESS.md`](docs/PROGRESS.md). Architectural
