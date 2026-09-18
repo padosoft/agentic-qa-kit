@@ -4,6 +4,7 @@ import { createAuditCheckpointStore } from '../artifacts.js';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
 import { runDrInventory, runDrRestore } from '../commands/dr.js';
+import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js';
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
@@ -53,6 +54,8 @@ const VALUE_FLAGS = new Set([
   'method',
   'scope',
   'otlp-endpoint',
+  'fixture-id',
+  'target',
   'public-key',
 ]);
 
@@ -118,6 +121,8 @@ ${bold('Commands')}
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
   ingest <junit|sast|k6|locust|playwright> <file> Normalize external results into redacted evidence
+  fixtures snapshot <dir>       Create a bounded, versioned JSON fixture snapshot
+  fixtures restore <fixture> <dir>  Verify and restore a fixture (use --force to overwrite)
   dr inventory <file> [--public-key <pem>] Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>] Validate a restore drill against RPO/RTO
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
@@ -142,6 +147,8 @@ ${bold('Common options')}
   --public-key <pem>     (dr) trusted Ed25519 public key for signed backup inventories
   --attempts <n>         (verify) attempts, 1..10 (default: 3)
   --base-url <url>       (verify) allowlisted HTTP SUT base URL
+  --fixture-id <slug>    (fixtures snapshot) explicit fixture id
+  --target <dir>         (fixtures restore) destination under the project root
   --port <n>             (admin) HTTP port to listen on (default 5173; 0 = OS-assigned)
   --host <h>             (admin) bind host (default 127.0.0.1 — recommended)
                          WARNING: \`aqa admin\` runs WITHOUT real authentication.
@@ -414,6 +421,55 @@ async function main(): Promise<number> {
       console.info(`    ${dim('attempts: ')}${result.successes}/${result.attempts}`);
       console.info(`    ${dim('evidence: ')}${result.verificationPath}`);
       return result.deterministic ? 0 : 2;
+    }
+    case 'fixtures': {
+      printHeader('fixtures');
+      const action = args.positionals[0];
+      if (action !== 'snapshot' && action !== 'restore') {
+        console.error(red('aqa fixtures: action must be snapshot or restore'));
+        return 1;
+      }
+      if (action === 'snapshot') {
+        const source = args.positionals[1];
+        if (!source) {
+          console.error(red('aqa fixtures snapshot: missing <dir>'));
+          return 1;
+        }
+        const result = runFixturesSnapshot({
+          root: cwd,
+          source,
+          ...(args.values.has('fixture-id') && args.values.get('fixture-id')
+            ? { fixtureId: args.values.get('fixture-id') as string }
+            : {}),
+          anonymize: args.flags.has('anonymize'),
+        });
+        if (!result.ok) {
+          console.error(red(`  ✗ ${result.error}`));
+          return 1;
+        }
+        console.info(`  ${green('✓')} ${result.fixturePath}`);
+        console.info(`    ${dim('files: ')}${result.files}`);
+        console.info(`    ${dim('bytes: ')}${result.bytes}`);
+        return 0;
+      }
+      const fixture = args.positionals[1];
+      const target = args.values.get('target') ?? args.positionals[2];
+      if (!fixture || !target) {
+        console.error(red('aqa fixtures restore: usage <fixture> <target> (or --target <dir>)'));
+        return 1;
+      }
+      const result = runFixturesRestore({
+        root: cwd,
+        fixture,
+        target,
+        force: args.flags.has('force'),
+      });
+      if (!result.ok) {
+        console.error(red(`  ✗ ${result.error}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} restored ${result.files} file(s) to ${target}`);
+      return 0;
     }
     case 'ingest': {
       printHeader('ingest');
