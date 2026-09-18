@@ -2035,3 +2035,11 @@ policy an old production observation can remain green forever. Keep freshness
 as a separate bounded policy (`1`–`8760` hours) and report stale/future-dated
 documents distinctly; do not imply that timestamp validation contacts or
 re-validates the provider.
+## 2026-09-18 — A replay result must close a durable lifecycle
+
+Replaying a scenario and writing a JSON artifact is not enough for production:
+the finding state must change atomically with the evidence and audit event.
+Require the original fingerprint when recording a reproduced regression, and
+persist inconclusive evidence without changing status. Keep execution of the
+replay, durable state transition, and PR/scheduled-retest integrations as
+separate evidence boundaries.

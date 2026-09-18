@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Closed the durable finding fix-verification loop (M5 core).** Findings now
+  retain a bounded `last_verification` record and support `fixed` →
+  `regressed` transitions only when deterministic replay evidence matches the
+  original failure fingerprint. Added tenant-scoped
+  `POST /api/findings/:id/verification`, atomic Memory/PostgreSQL persistence,
+  hash-chained verification events, generated JSON Schema updates and complete
+  API/store regression coverage. This records evidence but does not claim that
+  the API itself executed a replay; CI/PR automation and scheduled retests
+  remain open integrations. Next: continue M6/M7 and live provider evidence.
+
 - **Added freshness enforcement for signed production evidence.** The
   compliance package now evaluates the bounded `captured_at` timestamp against
   an operator-selected `AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS` budget.

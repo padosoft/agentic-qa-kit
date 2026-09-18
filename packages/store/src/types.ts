@@ -106,6 +106,12 @@ export interface StoreProvider {
     actor: string,
     reason: string,
   ): Promise<{ finding: Finding.Finding; event: Event.Event } | null>;
+  /** Persist replay evidence and apply the deterministic fix/regression transition. */
+  recordFindingVerification(
+    id: string,
+    verification: Finding.FindingVerification,
+    actor: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null>;
   listFindings(opts: {
     run_id?: string;
     severity?: Finding.Finding['severity'];

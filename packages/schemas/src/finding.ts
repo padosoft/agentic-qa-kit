@@ -46,6 +46,68 @@ export type Reproducibility = z.infer<typeof Reproducibility>;
 
 export const VerificationFloor = z.enum(['bug_level', 'scenario_level', 'agent_level']);
 
+export const FindingVerification = z
+  .object({
+    schema_version: z.literal('1'),
+    verification_id: LongSlug,
+    observed_at: IsoDateTime,
+    outcome: z.enum(['fixed', 'reproduced', 'inconclusive']),
+    attempts: z.number().int().min(1).max(10),
+    successes: z.number().int().min(0).max(10),
+    deterministic: z.boolean(),
+    fingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    expected_fingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    evidence_path: z.string().min(1).max(512),
+    actor: z.string().min(1).max(128),
+  })
+  .superRefine((v, ctx) => {
+    if (v.successes > v.attempts) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['successes'],
+        message: 'successes cannot exceed attempts',
+      });
+    }
+    if (v.deterministic && v.successes !== v.attempts) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['deterministic'],
+        message: 'deterministic=true requires every verification attempt to succeed',
+      });
+    }
+    if (v.outcome === 'reproduced' && !v.fingerprint) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fingerprint'],
+        message: 'reproduced verification requires a failure fingerprint',
+      });
+    }
+    if (v.outcome === 'reproduced' && !v.expected_fingerprint) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expected_fingerprint'],
+        message: 'reproduced verification requires the original failure fingerprint',
+      });
+    }
+  });
+export type FindingVerification = z.infer<typeof FindingVerification>;
+
+export function statusAfterVerification(
+  current: Status,
+  verification: FindingVerification,
+): Status | null {
+  if (!verification.deterministic) return null;
+  if (verification.outcome === 'fixed' && current !== 'fixed') return 'fixed';
+  if (verification.outcome === 'reproduced' && current === 'fixed') return 'regressed';
+  return null;
+}
+
 export const ConfidenceComponents = z.object({
   oracle_agreement: z.number().min(0).max(1).optional(),
   agent_self_reported: z.number().min(0).max(1).optional(),
@@ -77,6 +139,7 @@ export const Finding = z
       .optional(),
     reproducibility: Reproducibility.default({}),
     verification_floor: VerificationFloor,
+    last_verification: FindingVerification.optional(),
     evidence: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     duplicate_of: FindingId.optional(),
@@ -117,7 +180,8 @@ const ALLOWED_STATUS_TRANSITIONS: Readonly<
   verified: ['rejected', 'duplicate', 'fixed'],
   rejected: ['draft', 'fixed'],
   duplicate: ['draft', 'fixed'],
-  fixed: ['draft'],
+  fixed: ['draft', 'regressed'],
+  regressed: ['draft', 'verified', 'fixed'],
 };
 
 /** Validate a status transition at the write boundary, not only in the API. */

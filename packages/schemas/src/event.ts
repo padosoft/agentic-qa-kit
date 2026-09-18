@@ -17,6 +17,8 @@ export const EventKind = z.enum([
   'replay_finished',
   'error',
   'info',
+  'finding_status_changed',
+  'finding_verification_recorded',
 ]);
 export type EventKind = z.infer<typeof EventKind>;
 

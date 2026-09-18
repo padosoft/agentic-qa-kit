@@ -56,7 +56,8 @@
             "verified",
             "rejected",
             "duplicate",
-            "fixed"
+            "fixed",
+            "regressed"
           ]
         },
         "execution_mode": {
@@ -284,6 +285,76 @@
             "scenario_level",
             "agent_level"
           ]
+        },
+        "last_verification": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "1"
+            },
+            "verification_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "fixed",
+                "reproduced",
+                "inconclusive"
+              ]
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "successes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "deterministic": {
+              "type": "boolean"
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "expected_fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "evidence_path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "actor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "verification_id",
+            "observed_at",
+            "outcome",
+            "attempts",
+            "successes",
+            "deterministic",
+            "evidence_path",
+            "actor"
+          ],
+          "additionalProperties": false
         },
         "evidence": {
           "type": "array",
