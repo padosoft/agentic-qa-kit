@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Bound production recovery evidence to the exact restore drill.**
+  `database_recovery` now requires a validated lowercase SHA-256 digest of the
+  canonical restore-drill record in addition to the operator reference ID;
+  changing the referenced drill therefore invalidates the signed production
+  envelope. Compliance suite: **22 passed, 0 failed**; ADR-230 and the
+  production-evidence example document the new contract. This improves
+  provenance but still does not claim that the underlying PITR/object restore
+  actually ran; that remains deployment evidence.
+
 - **Hardened recovery evidence against unsigned metadata.** Backup inventories,
   restore-drill records, signed production-evidence envelopes and signature
   objects now reject unsupported fields at every nesting level before

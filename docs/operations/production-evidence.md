@@ -39,6 +39,7 @@ tokens.
       "pitr_enabled": true,
       "wal_archiving_verified": true,
       "restore_drill_ref": "drill-2026-q3",
+      "restore_drill_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "observed_at": "2026-09-18T09:10:00Z"
     },
     "identity": {

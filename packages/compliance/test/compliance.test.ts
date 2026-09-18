@@ -10,6 +10,7 @@ import {
   controlsCoverage,
   createAuditCheckpoint,
   parseBackupInventory,
+  parseProductionEvidence,
   parseEventLines,
   productionEvidenceCompleteness,
   productionEvidenceFreshness,
@@ -309,6 +310,7 @@ describe('production evidence contract', () => {
         pitr_enabled: true,
         wal_archiving_verified: true,
         restore_drill_ref: 'drill-2026-q3',
+        restore_drill_sha256: 'c'.repeat(64),
         observed_at: '2026-09-18T09:10:00Z',
       },
       identity: {
@@ -399,6 +401,23 @@ describe('production evidence contract', () => {
     assert.throws(
       () => productionEvidenceFreshness(evidence, { now, max_age_hours: 8761 }),
       /at most 8760/,
+    );
+  });
+
+  it('requires a cryptographic binding to the restore drill record', () => {
+    assert.throws(
+      () =>
+        parseProductionEvidence({
+          ...evidence,
+          controls: {
+            ...evidence.controls,
+            database_recovery: {
+              ...evidence.controls.database_recovery,
+              restore_drill_sha256: 'not-a-digest',
+            },
+          },
+        }),
+      /restore_drill_sha256.*SHA-256 digest/,
     );
   });
 });

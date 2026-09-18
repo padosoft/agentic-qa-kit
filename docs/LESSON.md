@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — References are not evidence bindings
+
+An operator reference such as `restore_drill_ref` is searchable metadata, not
+integrity proof. Production recovery evidence now carries the SHA-256 digest
+of the canonical restore-drill record, so changing the reviewed drill requires
+re-signing the production envelope.
+
 # 2026-09-18 — Signed evidence must reject unknown fields
 
 Canonicalizing only known properties is not enough for an audit document: an
