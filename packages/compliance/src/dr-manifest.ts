@@ -133,6 +133,7 @@ export function signBackupInventory(
 export function verifyBackupInventory(
   signed: unknown,
   trustedPublicKeyPem?: string,
+  expectedKeyId?: string,
 ): { ok: boolean; reason?: string } {
   try {
     if (!isRecord(signed) || !isRecord(signed.signature))
@@ -145,6 +146,8 @@ export function verifyBackupInventory(
       throw new Error('unsupported backup inventory signature');
     if (typeof signature.key_id !== 'string' || !signature.key_id.trim())
       throw new Error('backup inventory signature key_id is required');
+    if (expectedKeyId !== undefined && signature.key_id !== expectedKeyId)
+      throw new Error('backup inventory signature key_id is not trusted');
     if (typeof signature.signature !== 'string' || !signature.signature)
       throw new Error('backup inventory signature value is required');
     if (!trustedPublicKeyPem) throw new Error('backup inventory has no trusted public key');

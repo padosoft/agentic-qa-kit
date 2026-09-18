@@ -147,6 +147,7 @@ describe('aqa doctor', () => {
       {
         AQA_PRODUCTION_EVIDENCE_PATH: undefined,
         AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: undefined,
+        AQA_PRODUCTION_EVIDENCE_KEY_ID: undefined,
         AQA_PRODUCTION_DR_INVENTORY_PATH: undefined,
         AQA_PRODUCTION_DR_EVIDENCE_PATH: undefined,
       },
@@ -165,6 +166,7 @@ describe('aqa doctor', () => {
       {
         AQA_PRODUCTION_EVIDENCE_PATH: undefined,
         AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: undefined,
+        AQA_PRODUCTION_EVIDENCE_KEY_ID: undefined,
         AQA_PRODUCTION_DR_INVENTORY_PATH: 'inventory.json',
         AQA_PRODUCTION_DR_EVIDENCE_PATH: undefined,
       },
@@ -183,6 +185,7 @@ describe('aqa doctor', () => {
       {
         AQA_PRODUCTION_EVIDENCE_PATH: 'production-evidence.json',
         AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM: '-----BEGIN PUBLIC KEY-----',
+        AQA_PRODUCTION_EVIDENCE_KEY_ID: undefined,
         AQA_PRODUCTION_DR_INVENTORY_PATH: 'inventory.json',
         AQA_PRODUCTION_DR_EVIDENCE_PATH: 'restore.json',
       },

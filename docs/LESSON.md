@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — A trusted public key still needs an explicit key identity
+
+Signature verification proves that a document was signed by the supplied key,
+but it does not prove that the envelope's declared identity is the one approved
+by release policy. Production paths now pin `signature.key_id` exactly and
+apply the same identity to signed inventory joins. Key rotation remains a
+separate operational concern: the approved public key and key ID must be
+updated together.
+
 # 2026-09-18 — Evidence chains need a cross-document verifier
 
 Having a signed parent document and a digest field is not enough unless the

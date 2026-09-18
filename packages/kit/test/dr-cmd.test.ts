@@ -185,6 +185,7 @@ describe('aqa dr command boundary', () => {
       evidenceFile: tempFile('restore.json', restoreEvidence),
       productionEvidenceFile: tempFile('production-evidence.json', productionEvidence),
       publicKeyFile,
+      publicKeyId: 'production-evidence-key-2026',
     });
     assert.equal(result.ok, true);
     assert.equal(result.production_signature, 'verified');
@@ -245,6 +246,7 @@ describe('aqa dr command boundary', () => {
         'public.pem',
         publicKey.export({ type: 'spki', format: 'pem' }).toString(),
       ),
+      publicKeyId: 'production-evidence-key-2026',
     });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /restore drill reference/);

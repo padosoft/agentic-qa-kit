@@ -12,6 +12,7 @@ import { safeErrorMessage } from '@aqa/observability';
 export interface DrInventoryOptions {
   inventoryFile: string;
   publicKeyFile?: string;
+  publicKeyId?: string;
 }
 
 export interface DrRestoreOptions extends DrInventoryOptions {
@@ -78,6 +79,7 @@ export function runDrRestore(opts: DrRestoreOptions): DrRestoreResult {
 export function runDrReleaseGate(opts: DrReleaseGateOptions): DrReleaseGateResult {
   try {
     if (!opts.publicKeyFile) throw new Error('signed production evidence requires --public-key');
+    if (!opts.publicKeyId) throw new Error('signed production evidence requires --public-key-id');
     const { inventory, signature } = readInventory(opts);
     const evidenceInput = readJson(opts.evidenceFile);
     const evidence = assertRestoreDrillEvidence(evidenceInput, inventory);
@@ -88,6 +90,7 @@ export function runDrReleaseGate(opts: DrReleaseGateOptions): DrReleaseGateResul
       evidence,
       inventory,
       publicKey,
+      opts.publicKeyId,
     );
     if (!binding.ok)
       throw new Error(binding.reason ?? 'production evidence restore binding failed');
@@ -117,7 +120,7 @@ function readInventory(opts: DrInventoryOptions): {
   if (isRecord(value) && ('inventory' in value || 'signature' in value)) {
     if (!opts.publicKeyFile) throw new Error('signed backup inventory requires --public-key');
     const publicKey = readFileSync(opts.publicKeyFile, 'utf8');
-    const verified = verifyBackupInventory(value, publicKey);
+    const verified = verifyBackupInventory(value, publicKey, opts.publicKeyId);
     if (!verified.ok) throw new Error(verified.reason ?? 'backup inventory signature failed');
     return { inventory: parseBackupInventory(value.inventory), signature: 'verified' };
   }

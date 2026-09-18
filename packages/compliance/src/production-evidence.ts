@@ -280,6 +280,7 @@ export function signProductionEvidence(
 export function verifyProductionEvidence(
   input: unknown,
   trustedPublicKeyPem?: string,
+  expectedKeyId?: string,
 ): { ok: boolean; reason?: string; completeness?: ProductionEvidenceCompleteness } {
   try {
     if (!isRecord(input) || !isRecord(input.signature))
@@ -292,6 +293,8 @@ export function verifyProductionEvidence(
       throw new Error('unsupported production evidence signature');
     if (typeof signature.key_id !== 'string' || !IDENTIFIER.test(signature.key_id))
       throw new Error('production evidence signature key_id is invalid');
+    if (expectedKeyId !== undefined && signature.key_id !== expectedKeyId)
+      throw new Error('production evidence signature key_id is not trusted');
     if (typeof signature.signature !== 'string' || signature.signature.length === 0)
       throw new Error('production evidence signature value is required');
     if (!trustedPublicKeyPem) throw new Error('production evidence has no trusted public key');
@@ -314,9 +317,10 @@ export function verifyProductionEvidenceRestoreBinding(
   restoreDrillInput: unknown,
   inventoryInput: unknown,
   trustedPublicKeyPem: string,
+  expectedKeyId?: string,
 ): ProductionEvidenceRestoreBindingResult {
   try {
-    const verified = verifyProductionEvidence(input, trustedPublicKeyPem);
+    const verified = verifyProductionEvidence(input, trustedPublicKeyPem, expectedKeyId);
     if (!verified.ok) throw new Error(verified.reason ?? 'production evidence signature failed');
     if (!isRecord(input) || !isRecord(input.evidence))
       throw new Error('production evidence payload is missing');

@@ -158,6 +158,8 @@ describe('backup inventory contract', () => {
     });
     const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
     assert.deepEqual(verifyBackupInventory(signed, publicKeyPem), { ok: true });
+    assert.equal(verifyBackupInventory(signed, publicKeyPem, 'another-dr-key').ok, false);
+    assert.deepEqual(verifyBackupInventory(signed, publicKeyPem, 'dr-key-2026'), { ok: true });
     assert.equal(verifyBackupInventory(signed).ok, false);
     assert.equal(
       verifyBackupInventory(
@@ -362,6 +364,11 @@ describe('production evidence contract', () => {
     const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
     const result = verifyProductionEvidence(signed, publicKeyPem);
     assert.equal(result.ok, true);
+    assert.equal(
+      verifyProductionEvidence(signed, publicKeyPem, 'another-production-key').ok,
+      false,
+    );
+    assert.equal(verifyProductionEvidence(signed, publicKeyPem, 'prod-evidence-key-1').ok, true);
     assert.deepEqual(result.completeness, { complete: true, missing: [] });
     assert.deepEqual(productionEvidenceCompleteness(evidence), { complete: true, missing: [] });
   });
