@@ -2434,3 +2434,14 @@
   checkpoint. Added regression coverage for a transforming/drifting store and
   ADR-237. This proves cross-store content identity, not provider Object Lock
   or IAM configuration.
+
+# 2026-09-18 — Stripe provider dispute reconciliation in progress
+
+- Added `listDisputes()` and `reconcileStripeDisputes()` to the Stripe
+  boundary. The implementation verifies exact PaymentIntent linkage, bounded
+  pagination, known dispute lifecycle states, evidence deadlines, currency and
+  total exposure. Commerce suite now passes **49/49** locally; ADR-239 and the
+  package README document the boundary.
+- This proves provider-observed dispute exposure only. Won/open disputes are
+  not treated as settled chargebacks; payout timing, fees, representment and
+  durable merchant joins remain separate production evidence requirements.
