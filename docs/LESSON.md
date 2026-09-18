@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Optional integration tests must skip at registration time
+
+`node:test`'s `t.skip()` is not interpreted identically by every supported
+runner when a test is discovered through a workspace-wide Bun command. For
+endpoint-gated provider journeys, put the skip reason in the test options at
+registration time and retain the explicit CI job as the authoritative path.
+
 # 2026-09-18 — numeric token counters are not credentials
 
 The common JSON redactor matched the word `token` at the key level and turned
