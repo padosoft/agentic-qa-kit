@@ -117,6 +117,17 @@ release-gate profiles keep container-sandbox precedence for shell probes.
 The same `AQA_PROBE_*` policy is applied by `aqa worker`; queued job payloads
 cannot override it.
 
+### Enterprise OIDC admin sessions
+
+`aqa admin` can construct its OIDC login boundary directly from operator-owned
+environment variables. Set `AQA_OIDC_ENABLED=true`, `AQA_OIDC_ISSUER`,
+`AQA_OIDC_CLIENT_ID`, `AQA_OIDC_REDIRECT_URI` and a secret in
+`AQA_OIDC_CLIENT_SECRET` (or the variable named by
+`AQA_OIDC_CLIENT_SECRET_ENV`). `AQA_OIDC_SESSION_DSN` enables the shared
+PostgreSQL PKCE/session store for HA replicas. Partial configuration fails
+closed and never falls back to the local admin identity; the secret and DSN
+are never included in evidence or error messages.
+
 ## Durable artifact backend
 
 Runs use the local filesystem by default. For AWS S3, MinIO or another

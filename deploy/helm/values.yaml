@@ -31,6 +31,20 @@ server:
   # below; disabling persistence is an explicit non-production choice.
   auditLogPath: /var/lib/aqa/events.jsonl
 
+auth:
+  oidc:
+    # OIDC is opt-in. When enabled, the chart also wires the shared PostgreSQL
+    # session backend so replicas do not keep login state in process memory.
+    enabled: false
+    issuer: ""
+    clientId: ""
+    redirectUri: ""
+    clientSecretSecretRef: ""
+    clientSecretKey: client-secret
+    clientSecretEnv: AQA_OIDC_CLIENT_SECRET
+    rolesClaim: roles
+    mfaClaim: amr
+
 runner:
   worker:
     # The source repo's runner image must contain `aqa worker`. Keep disabled
