@@ -224,6 +224,13 @@ jobs:
           bun test packages/runner/test/postgres-trajectory.test.ts
           AQA_TEST_POSTGRES_DSN="$AQA_TEST_POSTGRES_DSN" bun test packages/kit/test/run-cmd.test.ts
 
+      - name: Test and run PostgreSQL backup/restore journey
+        env:
+          AQA_TEST_POSTGRES_DSN: postgres://aqa:aqa-ci-only@127.0.0.1:5432/aqa_test
+        run: |
+          node --test scripts/postgres-backup-restore-journey.test.mjs
+          node scripts/postgres-backup-restore-journey.mjs
+
   test-s3:
     name: Integration (S3-compatible artifact store)
     runs-on: ubuntu-latest

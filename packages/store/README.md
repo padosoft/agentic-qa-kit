@@ -20,5 +20,8 @@ identity data.
 
 Set `AQA_TEST_POSTGRES_DSN` to run the optional integration contract against a
 real PostgreSQL instance. Without that variable the default test command does
-not invent a database. Production readiness still requires a PostgreSQL 16 CI
-job, restart/backup drills, and an operational migration policy.
+not invent a database. The PostgreSQL CI job also runs a real `pg_dump` →
+isolated database → `pg_restore` → fresh-read digest journey using synthetic
+data. This proves restore integrity for that CI PostgreSQL boundary; it does
+not prove cloud PITR/WAL archiving, KMS, Object Lock, replication or production
+RTO/RPO.

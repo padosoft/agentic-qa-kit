@@ -2470,3 +2470,11 @@ customer as well as the order ID. A provider or migration can reuse an ID
 outside its scope; quantity and tracking checks alone would then produce a
 false pass. Physical carrier delivery and warehouse state remain separate
 claims.
+
+# 2026-09-18 — Backup restore needs a fresh read, not a successful dump
+
+An exit code from `pg_dump` is not restore evidence. The CI journey now restores
+into a uniquely named isolated database and compares a canonical digest through
+a new connection, with cleanup on failure. This is still bounded to the CI
+PostgreSQL provider; it must not be presented as cloud PITR, KMS, WORM or
+production RTO/RPO proof.

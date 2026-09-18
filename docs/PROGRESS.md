@@ -33,6 +33,15 @@
   a regression test. Commerce suite: **55 passed, 0 failed** locally; carrier,
   warehouse and physical-delivery evidence remain external boundaries.
 
+- **Added a provider-backed PostgreSQL backup/restore journey.** The hosted
+  PostgreSQL job now creates a unique synthetic canary, runs `pg_dump`, restores
+  with `pg_restore` into an isolated database, and compares the canonical data
+  digest through a fresh connection, with bounded cleanup and no DSN/payload
+  logging. Local execution is intentionally unavailable without a live
+  PostgreSQL client/service; the hosted job is authoritative. This closes
+  restore-integrity evidence for the CI provider but does not claim managed
+  cloud PITR/WAL, KMS/WORM, replication or production RTO/RPO.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
