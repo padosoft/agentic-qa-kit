@@ -24,6 +24,14 @@ false negative after successful delivery. Capture both streams when asserting
 provider-side evidence, while keeping the actual scrape/query assertion
 independent.
 
+# 2026-09-18 — A payment adapter must stop at provider observations
+
+Stripe owns payment state, while the merchant owns carts, inventory and order
+ownership. The adapter therefore maps authoritative PaymentIntent/refund
+responses and enforces idempotency, but does not claim to implement the whole
+CommerceAdapter. Keeping that boundary explicit prevents a REST wrapper from
+being mistaken for live checkout, webhook or settlement evidence.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or

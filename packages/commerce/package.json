@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/contracts.test.ts test/promotion-ledger.test.ts"
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/contracts.test.ts test/promotion-ledger.test.ts test/stripe-payment.test.ts"
   },
   "dependencies": { "postgres": "^3.4.9", "zod": "^3.24.0" }
 }
