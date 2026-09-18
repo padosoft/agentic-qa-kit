@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Hardened recovery evidence against unsigned metadata.** Backup inventories,
+  restore-drill records, signed production-evidence envelopes and signature
+  objects now reject unsupported fields at every nesting level before
+  canonicalization or verification. This closes an audit ambiguity where
+  ignored properties could appear alongside a valid signed record without
+  being covered by its signature. Compliance suite: **21 passed, 0 failed**;
+  ADR-229 records the fail-closed schema-evolution rule. This remains a
+  contract hardening change: real PostgreSQL PITR, object-store restore, KMS
+  and WORM provider evidence are still deployment obligations.
+
 - **Closed the webhook crash-recovery gap at the ledger boundary.** Processing
   claims now carry a bounded lease; an abandoned in-memory or PostgreSQL claim
   can be atomically reclaimed, while completed effects remain duplicate-safe.

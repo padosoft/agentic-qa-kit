@@ -32,6 +32,28 @@ export function assertRestoreDrillEvidence(
   if (!isRecord(input) || input.schema_version !== '1')
     throw new Error('restore drill schema_version must be 1');
   const checks = record(input.checks, 'checks');
+  exactKeys(
+    input,
+    [
+      'schema_version',
+      'drill_id',
+      'source_backup_id',
+      'source_manifest_sha256',
+      'restored_manifest_sha256',
+      'target_environment',
+      'started_at',
+      'completed_at',
+      'observed_rpo_minutes',
+      'observed_rto_minutes',
+      'checks',
+    ],
+    'restore drill',
+  );
+  exactKeys(
+    checks,
+    ['tenant_isolation', 'audit_chain', 'queue_fencing', 'secret_redaction'],
+    'restore drill checks',
+  );
   const evidence: RestoreDrillEvidence = {
     schema_version: '1',
     drill_id: identifier(input.drill_id, 'drill_id'),
@@ -79,6 +101,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`restore drill ${label} must be an object`);
   return value;
+}
+
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(expected);
+  const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0)
+    throw new Error(`${label} contains unsupported field(s): ${unexpected.join(', ')}`);
 }
 
 function identifier(value: unknown, label: string): string {
