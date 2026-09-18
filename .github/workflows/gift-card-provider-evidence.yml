@@ -1,0 +1,57 @@
+name: Gift-card provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-journey:
+    name: Read-only live gift-card provider journey
+    runs-on: ubuntu-latest
+    environment: commerce-provider-evidence
+    timeout-minutes: 10
+    env:
+      AQA_TEST_GIFT_CARD_PROVIDER_URL: ${{ vars.AQA_TEST_GIFT_CARD_PROVIDER_URL }}
+      AQA_TEST_GIFT_CARD_TENANT: ${{ vars.AQA_TEST_GIFT_CARD_TENANT }}
+      AQA_TEST_GIFT_CARD_ID: ${{ vars.AQA_TEST_GIFT_CARD_ID }}
+      AQA_TEST_GIFT_CARD_BALANCE_CURRENCY: ${{ vars.AQA_TEST_GIFT_CARD_BALANCE_CURRENCY }}
+      AQA_TEST_GIFT_CARD_BALANCE_MINOR: ${{ vars.AQA_TEST_GIFT_CARD_BALANCE_MINOR }}
+      AQA_TEST_GIFT_CARD_EXPECTED_STATUS: ${{ vars.AQA_TEST_GIFT_CARD_EXPECTED_STATUS }}
+      AQA_TEST_GIFT_CARD_ALLOWED_ORIGINS: ${{ vars.AQA_TEST_GIFT_CARD_ALLOWED_ORIGINS }}
+      AQA_TEST_GIFT_CARD_PATH: ${{ vars.AQA_TEST_GIFT_CARD_PATH }}
+      AQA_TEST_GIFT_CARD_NOW: ${{ vars.AQA_TEST_GIFT_CARD_NOW }}
+      AQA_TEST_GIFT_CARD_AUTHORIZATION: ${{ secrets.AQA_TEST_GIFT_CARD_AUTHORIZATION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require operator-owned provider configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            AQA_TEST_GIFT_CARD_PROVIDER_URL \
+            AQA_TEST_GIFT_CARD_TENANT \
+            AQA_TEST_GIFT_CARD_ID \
+            AQA_TEST_GIFT_CARD_BALANCE_CURRENCY \
+            AQA_TEST_GIFT_CARD_BALANCE_MINOR \
+            AQA_TEST_GIFT_CARD_EXPECTED_STATUS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing provider evidence configuration::$name is required in the commerce-provider-evidence environment"
+              exit 1
+            fi
+          done
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Run live gift-card provider journey
+        run: bun test packages/commerce/test/gift-card-provider-live.test.ts
