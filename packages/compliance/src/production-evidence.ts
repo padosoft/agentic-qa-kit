@@ -28,6 +28,7 @@ export interface ProductionEvidence {
       pitr_enabled: boolean;
       wal_archiving_verified: boolean;
       restore_drill_ref: string;
+      restore_drill_sha256: string;
       observed_at: string;
     };
     identity: {
@@ -112,6 +113,7 @@ export function parseProductionEvidence(input: unknown): ProductionEvidence {
       'pitr_enabled',
       'wal_archiving_verified',
       'restore_drill_ref',
+      'restore_drill_sha256',
       'observed_at',
     ],
     'production evidence database_recovery',
@@ -164,6 +166,10 @@ export function parseProductionEvidence(input: unknown): ProductionEvidence {
         restore_drill_ref: identifier(
           recovery.restore_drill_ref,
           'controls.database_recovery.restore_drill_ref',
+        ),
+        restore_drill_sha256: digest(
+          recovery.restore_drill_sha256,
+          'controls.database_recovery.restore_drill_sha256',
         ),
         observed_at: timestamp(recovery.observed_at, 'controls.database_recovery.observed_at'),
       },
@@ -329,6 +335,12 @@ function timestamp(value: unknown, label: string): string {
 function imageDigest(value: unknown): string {
   if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/u.test(value))
     throw new Error('production evidence application_image_digest must be a SHA-256 digest');
+  return value;
+}
+
+function digest(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value))
+    throw new Error(`production evidence ${label} must be a lowercase SHA-256 digest`);
   return value;
 }
 
