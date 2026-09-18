@@ -1934,3 +1934,12 @@ fail while the scenario still produces a superficially similar finding. Persist
 a stable digest of the failed-oracle set on the original finding and pass it as
 the expected replay fingerprint. Legacy findings without that field remain
 replay-compatible but cannot claim identity stronger than the older contract.
+
+# 2026-09-18 — supply-chain policy must cross the execution boundary
+
+Verifying a pack during administrative import does not protect a CLI run that
+discovers a modified local or vendored copy later. Enterprise execution needs
+the same policy at the last responsible moment: trusted signer, canonical
+manifest digest and content digest of every referenced file, before scenario
+dispatch. Keep this strict path opt-in until first-party packs are signed, so
+developer authoring does not silently become impossible.

@@ -133,6 +133,7 @@ ${bold('Common options')}
   --dry-run              (init / install-agent-files) don't write to disk; print what would happen
   --profile <name>       (run) profile key from .aqa/profiles.yaml
   --seed <string>        (run) deterministic run_id seed — useful for replay
+  --require-signed-packs (run) require trusted Ed25519 pack signatures + full content digests
   --targets <list>       (install-agent-files) comma-separated targets: claude,codex,gemini,copilot
   --project-name <name>  (install-agent-files) override the slug embedded in instruction files
   --run-id <id>          (report) target a specific run; default = latest
@@ -278,6 +279,37 @@ async function main(): Promise<number> {
       if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
       if (args.values.has('otlp-endpoint'))
         runOpts.otlpEndpoint = args.values.get('otlp-endpoint') ?? '';
+      if (args.flags.has('require-signed-packs')) {
+        const rawTrustRoot = process.env.AQA_PACK_TRUSTED_KEYS_JSON;
+        if (!rawTrustRoot) {
+          console.error(red('aqa run: --require-signed-packs requires AQA_PACK_TRUSTED_KEYS_JSON'));
+          return 1;
+        }
+        try {
+          const parsed: unknown = JSON.parse(rawTrustRoot);
+          if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            Array.isArray(parsed) ||
+            Object.values(parsed as Record<string, unknown>).some(
+              (value) => typeof value !== 'string' || value.trim() === '',
+            )
+          ) {
+            throw new Error('trust root must map key ids to non-empty public-key PEM strings');
+          }
+          runOpts.requireSignedPacks = true;
+          runOpts.packTrustedKeys = parsed as Record<string, string>;
+        } catch (error) {
+          console.error(
+            red(
+              `aqa run: AQA_PACK_TRUSTED_KEYS_JSON is invalid: ${
+                error instanceof Error ? error.message : 'invalid JSON'
+              }`,
+            ),
+          );
+          return 1;
+        }
+      }
       const checkpointKeyId = process.env.AQA_AUDIT_CHECKPOINT_KEY_ID?.trim();
       const checkpointPrivateKey = process.env.AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM;
       if (checkpointKeyId || checkpointPrivateKey) {

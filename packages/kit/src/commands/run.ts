@@ -50,7 +50,12 @@ import {
   loadPackResources,
   resolvePackScenario,
 } from '@aqa/pack-loader';
-import { verifyPackContentDigest } from '@aqa/pack-scanner';
+import {
+  scanPack,
+  verifyManifestDigest,
+  verifyPackContentDigest,
+  verifyTrustedManifestSignature,
+} from '@aqa/pack-scanner';
 import { buildReplayArtifacts } from '@aqa/reporter';
 import {
   EventChainWriter,
@@ -102,6 +107,10 @@ export interface RunOptions {
   httpSecrets?: Readonly<Record<string, string>>;
   /** Optional capability declaration forwarded to runner preflight. */
   supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
+  /** Require trusted Ed25519 signatures and a full pack content digest before execution. */
+  requireSignedPacks?: boolean;
+  /** Operator trust root keyed by the manifest signing key_id. */
+  packTrustedKeys?: Readonly<Record<string, string>>;
   /** Optional operator key used to sign the final audit completeness checkpoint. */
   auditCheckpointSigner?: AuditCheckpointSigner;
   /** Independent store for the final checkpoint; failure blocks the run. */
@@ -579,6 +588,37 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     let resources: ReturnType<typeof loadPackResources>;
     try {
       pack = loadPack(packDir);
+      if (opts.requireSignedPacks) {
+        const scan = scanPack(pack.manifest, { requireSignature: true });
+        const blocking = scan.issues.filter(
+          (issue) => issue.severity === 'critical' || issue.severity === 'high',
+        );
+        if (blocking.length > 0) {
+          packErrors.push(`${packDir}: ${blocking.map((issue) => issue.rule).join(', ')}`);
+          continue;
+        }
+        const manifestSignature = verifyManifestDigest(pack.manifest);
+        if (!manifestSignature.ok) {
+          packErrors.push(`${packDir}: ${manifestSignature.reason}`);
+          continue;
+        }
+        if (!pack.manifest.signing?.content_sha256) {
+          packErrors.push(`${packDir}: signed execution requires signing.content_sha256`);
+          continue;
+        }
+        if (!opts.packTrustedKeys || Object.keys(opts.packTrustedKeys).length === 0) {
+          packErrors.push(`${packDir}: signed execution requires an operator trust root`);
+          continue;
+        }
+        const trustedSignature = verifyTrustedManifestSignature(
+          pack.manifest,
+          opts.packTrustedKeys,
+        );
+        if (!trustedSignature.ok) {
+          packErrors.push(`${packDir}: ${trustedSignature.reason}`);
+          continue;
+        }
+      }
       const contentIntegrity = verifyPackContentDigest(pack.root, pack.manifest);
       if (!contentIntegrity.ok) {
         packErrors.push(`${packDir}: ${contentIntegrity.reason}`);
