@@ -19,6 +19,14 @@
   risk-coverage projection. Evidence: server integration regression plus full
   local gate suite. Next: operational evidence and real infrastructure drills.
 
+- **Added an explicit production-readiness doctor mode.** `aqa doctor
+  --production` now checks only configuration prerequisites for durable store,
+  queue, S3/Object Lock retention, runner authentication, audit checkpoints and
+  OTLP, never prints values and never confuses configuration with live provider
+  evidence. Missing prerequisites fail (or warn for checkpoint/observability)
+  with actionable remediation. Next: execute this contract against a real
+  deployment and retain provider evidence.
+
 - **Hardened enterprise pack supply-chain enforcement.** The scanner now has an
   explicit `requireSignature` policy; the admin/server import boundary enables
   it by default, rejects unsigned manifests before persistence, and preserves

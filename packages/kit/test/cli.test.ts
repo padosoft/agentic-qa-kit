@@ -113,6 +113,14 @@ describe('aqa doctor', () => {
     const v = d.checks.find((c) => c.id === 'aqa-validate');
     assert.equal(v?.status, 'fail');
   });
+
+  it('reports explicit production prerequisites without exposing environment values', () => {
+    const root = makeTempProject({ 'package.json': '{}' });
+    const d = runDoctor({ root, production: true });
+    assert.equal(d.checks.find((c) => c.id === 'production-store')?.status, 'fail');
+    assert.equal(d.checks.find((c) => c.id === 'production-artifacts')?.status, 'fail');
+    assert.ok(d.checks.every((c) => !c.detail.includes('postgres://')));
+  });
 });
 
 describe('aqa validate', () => {

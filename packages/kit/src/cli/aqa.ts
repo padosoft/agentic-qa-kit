@@ -110,7 +110,7 @@ ${bold('Usage')}
 
 ${bold('Commands')}
   init [name]                       Scaffold .aqa/{project,risk-map,profiles}.yaml + testing.md
-  doctor                            Report kit health (runtime, .aqa, agent docs, validation)
+  doctor [--production]             Report kit health and production prerequisites
   validate                          Validate .aqa/* against @aqa/schemas
   install-agent-files --targets …   Write CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md
                                     plus per-agent skills under .claude/ .agents/ .gemini/ .github/
@@ -195,7 +195,7 @@ async function main(): Promise<number> {
     }
     case 'doctor': {
       printHeader('doctor');
-      const result = runDoctor({ root: cwd });
+      const result = runDoctor({ root: cwd, production: args.flags.has('production') });
       for (const c of result.checks) {
         console.info(`  ${STATUS_BADGE[c.status]}  ${c.title}  ${dim(`— ${c.detail}`)}`);
         if (c.suggestion) console.info(`         ${dim(c.suggestion)}`);

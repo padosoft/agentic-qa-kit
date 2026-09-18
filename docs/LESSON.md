@@ -1918,3 +1918,11 @@ Verifying audit chains only inside one projection is insufficient: an events
 viewer can become a false-green evidence export. Every endpoint that serves
 stored run events must verify the complete ordered chain before serialization,
 with the same bounded error code used by derived coverage projections.
+
+# 2026-09-18 — readiness checks must not impersonate live evidence
+
+An operator-facing production doctor is useful only if it distinguishes local
+configuration from provider proof. Check the presence and completeness of
+required settings, redact all values, and label the result as prerequisites;
+Postgres connectivity, Object Lock enforcement, key rotation and SLO delivery
+still require a real deployment exercise.
