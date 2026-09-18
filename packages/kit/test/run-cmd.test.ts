@@ -818,6 +818,22 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /agentRunner|agent mode/i);
   });
 
+  it('rejects unsigned packs before execution when signed execution is required', async () => {
+    const { root, packDir } = fixtureProject();
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      requireSignedPacks: true,
+      packTrustedKeys: {
+        'release-key': '-----BEGIN PUBLIC KEY-----\ninvalid\n-----END PUBLIC KEY-----',
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.scenariosRun, 0);
+    assert.match(result.error ?? '', /unsigned-pack|did not load|signature/i);
+  });
+
   it('runs agent mode through the explicit host-owned driver boundary', async () => {
     const { root, packDir } = fixtureProject();
     const profilesPath = join(root, '.aqa', 'profiles.yaml');

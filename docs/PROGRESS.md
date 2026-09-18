@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Connected signed-pack policy to execution.** `aqa run --require-signed-packs`
+  now refuses every discovered pack unless its canonical manifest digest,
+  trusted Ed25519 signature and full file content digest all verify before any
+  scenario runs. The CLI accepts only an operator public-key trust root from
+  `AQA_PACK_TRUSTED_KEYS_JSON`; local authoring remains opt-in. Kit typecheck,
+  lint and targeted complete run tests pass. Next: continue deployment-grade
+  evidence and real provider drills.
+
 - **Anchored replay to the original defect identity.** Findings now persist a
   SHA-256 `failure_fingerprint` of the failed-oracle set, and `aqa verify`
   passes it into every retry. A different oracle failure can no longer be
