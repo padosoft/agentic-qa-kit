@@ -11,6 +11,16 @@
 
 ## 2026-09-19
 
+- **Added bounded OTLP trace federation.** `@aqa/ingest` now normalizes OTLP
+  JSON span metadata with ID/time/size limits, redacts credential-like
+  attributes and URLs, accepts optional OTLP status, and federates multiple
+  sources with deterministic deduplication plus orphan/conflict reporting.
+  Added regression coverage and ADR-272. Local ingest build, 21 ingest tests,
+  lint and diff checks pass. This is a repository contract only; exporter
+  integrity, sampling, clock quality, retention and production provenance
+  still require protected deployment evidence. Next: implement runtime
+  stateful journey compilation/execution.
+
 - **Added the protected mutation evidence workflow.** The reusable
   `mutation-evidence-gate.yml` accepts producer-uploaded mutation and reviewed
   coverage artifacts, enforces safe relative paths, runs in a protected GitHub

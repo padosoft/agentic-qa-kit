@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-19 — Trace deduplication must ignore collector identity
+
+When federating telemetry, the same span observed by two collectors is not a
+conflict merely because its `source` differs. Compare semantic span content
+while retaining source on the winning observation; otherwise multi-collector
+federation produces false conflicts. OTLP status is optional, numeric
+nanosecond timestamps must be safe integers, and zero parent IDs are invalid.
+
 # 2026-09-19 — Aggregate mutation score hides uncovered risks
 
 Mutation testing becomes useful for release assurance only when each evaluated

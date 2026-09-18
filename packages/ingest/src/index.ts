@@ -93,6 +93,15 @@ export {
   type MutationCoveragePolicy,
   type MutationCoverageResult,
 } from './mutation-coverage.js';
+export {
+  federateTraceSources,
+  parseOtlpTrace,
+  type FederatedSpan,
+  type FederatedTrace,
+  type FederatedTraceSource,
+  type TraceAttribute,
+  type TraceFederationReport,
+} from './trace-federation.js';
 
 function fingerprint(parts: string[]): string {
   return createHash('sha256')
