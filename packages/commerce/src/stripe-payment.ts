@@ -390,8 +390,9 @@ export async function reconcileStripePayout(
     const seen = new Set<string>();
     for (const source of expectedSources) {
       const normalized = providerId(source, 'expected_balance_transaction_source');
-      if (!seen.add(normalized))
+      if (seen.has(normalized))
         throw new Error('[commerce/stripe] expected payout sources contain duplicates');
+      seen.add(normalized);
       if (!payout.balance_transactions.some((item) => item.source === normalized))
         throw new Error(
           '[commerce/stripe] expected balance transaction source is absent from payout',
