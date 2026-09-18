@@ -333,6 +333,52 @@ describe('aqa run', () => {
     assert.equal(maximum, 2, 'configured parallelism=2 must execute two scenarios concurrently');
   });
 
+  it('serializes scenarios that declare the same isolation group', async () => {
+    const { root, packDir } = fixtureProject();
+    writeFileSync(
+      join(packDir, 'pack.yaml'),
+      SMOKE_PACK_MANIFEST.replace(
+        '  - scenarios/smoke-noop.yaml\n',
+        '  - scenarios/smoke-noop.yaml\n  - scenarios/smoke-second.yaml\n',
+      ),
+      'utf8',
+    );
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      `${SMOKE_SCENARIO}isolation_group: shared-cart\n`,
+      'utf8',
+    );
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-second.yaml'),
+      `${SMOKE_SCENARIO.replace('scn-smoke-noop', 'scn-smoke-second')}isolation_group: shared-cart\n`,
+      'utf8',
+    );
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, Record<string, unknown>>;
+    };
+    profiles.profiles.smoke = { ...profiles.profiles.smoke, isolation: 'grouped' };
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+
+    let active = 0;
+    let maximum = 0;
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      probeRunner: async (probe) => {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        active -= 1;
+        return { probe_id: probe.id, status: 200 };
+      },
+    });
+    assert.equal(result.ok, true, `grouped run must succeed: ${JSON.stringify(result)}`);
+    assert.equal(result.scenariosRun, 2);
+    assert.equal(maximum, 1, 'scenarios in one isolation group must not overlap');
+  });
+
   it('boots from a fresh project, runs scenarios from the manifest, and writes events + findings to .aqa/runs/<run_id>/', async () => {
     const { root, packDir } = fixtureProject();
     const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });

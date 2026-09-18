@@ -118,6 +118,7 @@ function profilesYaml(profile: ProjectProfile): string {
         llm_usage: ['scenario_generation'],
         llm_budget_usd: 5,
         parallelism: 2,
+        isolation: 'parallel',
         require_deterministic_replay: false,
         packs,
       },
@@ -128,6 +129,7 @@ function profilesYaml(profile: ProjectProfile): string {
         llm_usage: ['scenario_generation'],
         llm_budget_usd: 50,
         parallelism: 4,
+        isolation: 'grouped',
         require_deterministic_replay: true,
         // Same scenario set as smoke for now. The "release-gate fails on
         // findings" semantic depends on a real probe runner — until that

@@ -245,6 +245,13 @@ describe('Scenario oracle probe references', () => {
     assert.equal(Scenario.Scenario.safeParse(base).success, true);
   });
 
+  it('accepts an isolation group slug', () => {
+    assert.equal(
+      Scenario.Scenario.safeParse({ ...base, isolation_group: 'shared-cart' }).success,
+      true,
+    );
+  });
+
   it('accepts executable preconditions and rejects an oracle bound to another probe', () => {
     const executable = {
       id: 'ready',

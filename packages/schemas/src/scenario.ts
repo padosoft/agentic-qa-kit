@@ -56,6 +56,8 @@ export const Scenario = z
     steps: z.array(Probe).min(1, 'a scenario must have at least one probe step'),
     oracles: z.array(Oracle).min(1, 'a scenario must have at least one oracle'),
     cleanup: z.array(Probe).default([]),
+    /** Scenarios sharing this key are serialized when the profile uses grouped isolation. */
+    isolation_group: Slug.optional(),
     tags: z.array(z.string()).default([]),
     seed: z.string().optional(),
   })

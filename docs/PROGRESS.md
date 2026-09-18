@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Added an explicit scenario isolation policy.** Profiles now support
+  `parallel`, `grouped` and `serial` scheduler modes; scenarios can declare an
+  `isolation_group`, and grouped scenarios are serialized while independent
+  groups retain bounded parallelism. Start events record the effective policy
+  and key. This prevents a scheduler-level shared-state race but is explicitly
+  not container/VM isolation or a tenant reset. Evidence: real `aqa run`
+  complete journey proves two scenarios in one group never overlap; schema and
+  kit tests **79 passed / 0 failed**. Next: continue the remaining provider and
+  deployment evidence (sandbox wiring, KMS/WORM, PITR/restore, IdP/mTLS).
+
 - **Fixed prefixed S3 Object Lock verification.** Retention verification now
   checks the exact provider key for both the artifact and its metadata object;
   a configured prefix is no longer applied twice to the metadata check. The

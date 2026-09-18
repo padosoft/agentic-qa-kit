@@ -56,6 +56,15 @@
           "maximum": 64,
           "default": 1
         },
+        "isolation": {
+          "type": "string",
+          "enum": [
+            "parallel",
+            "grouped",
+            "serial"
+          ],
+          "default": "parallel"
+        },
         "require_deterministic_replay": {
           "type": "boolean",
           "default": false

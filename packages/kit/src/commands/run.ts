@@ -706,6 +706,30 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   // discovery order so deterministic consumers do not depend on timing.
   let nextScenario = 0;
   let scenarioSequence = 0;
+  const isolationTails = new Map<string, Promise<void>>();
+  const isolationKey = (scenario: Scenario.Scenario): string | undefined => {
+    if (profile.isolation === 'serial') return '__all__';
+    if (profile.isolation === 'grouped') return scenario.isolation_group ?? scenario.id;
+    return undefined;
+  };
+  const withIsolation = async <T>(scenario: Scenario.Scenario, operation: () => Promise<T>) => {
+    const key = isolationKey(scenario);
+    if (!key) return operation();
+    const previous = isolationTails.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    isolationTails.set(key, tail);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (isolationTails.get(key) === tail) isolationTails.delete(key);
+    }
+  };
   const executeNextScenario = async () => {
     while (true) {
       const order = nextScenario++;
@@ -729,64 +753,71 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       const findingIdSeed = ++scenarioSequence;
       executedScenarios.push(scenario);
       try {
-        events.append({
-          ts: new Date().toISOString(),
-          run_id: runId,
-          kind: 'scenario_started',
-          actor: { type: 'orchestrator', id: 'kit' },
-          scenario_id: scenario.id,
-          payload: { dispatch_order: order, parallelism: profile.parallelism },
-        });
-        if (budgetDeadline !== undefined && now() >= budgetDeadline) {
-          budgetExceeded = true;
-          scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'not_run' });
+        await withIsolation(scenario, async () => {
+          events.append({
+            ts: new Date().toISOString(),
+            run_id: runId,
+            kind: 'scenario_started',
+            actor: { type: 'orchestrator', id: 'kit' },
+            scenario_id: scenario.id,
+            payload: {
+              dispatch_order: order,
+              parallelism: profile.parallelism,
+              isolation: profile.isolation,
+              ...(isolationKey(scenario) ? { isolation_key: isolationKey(scenario) } : {}),
+            },
+          });
+          if (budgetDeadline !== undefined && now() >= budgetDeadline) {
+            budgetExceeded = true;
+            scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'not_run' });
+            events.append({
+              ts: new Date().toISOString(),
+              run_id: runId,
+              kind: 'scenario_finished',
+              actor: { type: 'orchestrator', id: 'aqa-cli' },
+              scenario_id: scenario.id,
+              payload: {
+                outcome: 'not_run',
+                execution_status: 'not_started',
+                reason: 'budget_exceeded',
+              },
+            });
+            return;
+          }
+          const scenarioResult = await runScenario({
+            scenario,
+            run_id: runId,
+            execution_mode: profile.execution_mode,
+            events,
+            findings,
+            ...(probeRunner ? { probeRunner } : {}),
+            ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
+            findingIdSeed,
+            ...(risk ? { risk } : {}),
+            ...(opts.signal ? { signal: opts.signal } : {}),
+          });
+          scenarioOutcomesByOrder.set(order, {
+            scenario_id: scenario.id,
+            outcome: scenarioResult.outcome,
+          });
           events.append({
             ts: new Date().toISOString(),
             run_id: runId,
             kind: 'scenario_finished',
-            actor: { type: 'orchestrator', id: 'aqa-cli' },
+            actor: { type: 'orchestrator', id: 'kit' },
             scenario_id: scenario.id,
             payload: {
-              outcome: 'not_run',
-              execution_status: 'not_started',
-              reason: 'budget_exceeded',
+              outcome: scenarioResult.outcome,
+              execution_status: scenarioResult.execution_status,
+              findings: scenarioResult.finding ? 1 : 0,
             },
           });
-          continue;
-        }
-        const scenarioResult = await runScenario({
-          scenario,
-          run_id: runId,
-          execution_mode: profile.execution_mode,
-          events,
-          findings,
-          ...(probeRunner ? { probeRunner } : {}),
-          ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
-          findingIdSeed,
-          ...(risk ? { risk } : {}),
-          ...(opts.signal ? { signal: opts.signal } : {}),
+          if (scenarioResult.execution_status === 'failed') {
+            executionErrors.push(
+              `${scenario.id}: ${scenarioResult.execution_error ?? 'probe execution failed'}`,
+            );
+          }
         });
-        scenarioOutcomesByOrder.set(order, {
-          scenario_id: scenario.id,
-          outcome: scenarioResult.outcome,
-        });
-        events.append({
-          ts: new Date().toISOString(),
-          run_id: runId,
-          kind: 'scenario_finished',
-          actor: { type: 'orchestrator', id: 'kit' },
-          scenario_id: scenario.id,
-          payload: {
-            outcome: scenarioResult.outcome,
-            execution_status: scenarioResult.execution_status,
-            findings: scenarioResult.finding ? 1 : 0,
-          },
-        });
-        if (scenarioResult.execution_status === 'failed') {
-          executionErrors.push(
-            `${scenario.id}: ${scenarioResult.execution_error ?? 'probe execution failed'}`,
-          );
-        }
       } catch (e) {
         scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'error' });
         events.append({
@@ -802,7 +833,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       if (opts.signal?.aborted) cancelled = true;
     }
   };
-  const workerCount = Math.min(profile.parallelism, pendingScenarios.length);
+  const workerCount = Math.min(
+    profile.isolation === 'serial' ? 1 : profile.parallelism,
+    pendingScenarios.length,
+  );
   await Promise.all(Array.from({ length: workerCount }, () => executeNextScenario()));
   const scenarioOutcomes = [...scenarioOutcomesByOrder.entries()]
     .sort(([left], [right]) => left - right)

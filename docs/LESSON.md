@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — bounded parallelism is not state isolation
+
+Limiting worker count does not stop two scenarios from mutating the same cart,
+tenant or fixture concurrently. Add an explicit scheduler policy: `grouped`
+serializes declared `isolation_group` keys and `serial` disables overlap for
+the whole run. Record the effective policy in audit events. Keep this distinct
+from container/VM isolation, database reset and provider idempotency; claiming
+one from another creates a false production guarantee.
+
 # 2026-09-18 — Provider keys must have one ownership boundary
 
 When an artifact store owns prefix normalization, internal verification helpers
