@@ -27,6 +27,14 @@
   The adapter and cost suite pass; host wiring to the durable run event chain
   remains an explicit integration boundary rather than an implicit side effect.
 
+- **Wired audit metrics through the real run boundary.** `aqa run` now accepts
+  an injected bounded `MetricsRegistry`; persisted audit events map to
+  low-cardinality run, scenario, finding, LLM usage and budget-denial counters,
+  while OTLP tracing remains composable. The complete fixture run proves
+  `run_started`/`run_finished` reach metrics state: 40 run tests and 16
+  observability tests passed. Live Prometheus scrape and collector delivery
+  remain deployment evidence.
+
 - **Started `pack-desktop`.** It closes the M6 pack gap for Electron/Tauri with
   schema-valid IPC sandbox, signed auto-update and authenticated protocol
   contracts. Platform signing and OS evidence remain separate; next: validate

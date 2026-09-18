@@ -9,6 +9,14 @@ sink; the host can then append it to the run chain and metrics. Observer
 failures must not turn a governed call into an application retry or reveal
 prompt/provider secrets.
 
+# 2026-09-18 — wire observability at the audit writer, not beside the runner
+
+Metrics updated by a separate summary pass can miss early failures, denials,
+or finalization events. Attach a bounded observer to the same event writer
+that persists the hash chain so every consumer sees the same event boundary.
+Keep labels low-cardinality and never promote the event payload to labels,
+because payloads may contain tenant/user data or model text.
+
 # 2026-09-18 — legacy mutation APIs must preserve the audited invariant
 
 The server route already used the atomic finding transition, but the public
