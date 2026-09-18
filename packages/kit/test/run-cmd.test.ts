@@ -570,7 +570,10 @@ describe('aqa run', () => {
     const result = await runRun({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, false);
     assert.equal(result.findingsCount, 0);
-    assert.match(result.error ?? '', /could not execute|no probe runner/i);
+    assert.match(
+      result.error ?? '',
+      /could not execute|no probe runner|pinned by immutable sha256/i,
+    );
 
     const events = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8')
       .trim()
@@ -991,7 +994,10 @@ describe('aqa run', () => {
     const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
     assert.equal(result.findingsCount, 0);
     assert.equal(result.ok, false);
-    assert.match(result.error ?? '', /could not execute|no probe runner/i);
+    assert.match(
+      result.error ?? '',
+      /could not execute|no probe runner|pinned by immutable sha256/i,
+    );
   });
 
   it('smoke profile reports an execution gap instead of a false finding', async () => {

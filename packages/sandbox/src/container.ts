@@ -26,6 +26,8 @@ export interface ContainerSandboxOptions {
   network?: 'none' | 'bridge';
   /** Optional injected executor for deterministic unit tests. */
   executor?: ContainerExecutor;
+  /** Refuse mutable tags; required for production profile auto-selection. */
+  require_pinned_image?: boolean;
   /** Combined stdout/stderr cap per call. Defaults to 1 MiB. */
   max_output_bytes?: number;
 }
@@ -53,6 +55,9 @@ export class ContainerSandbox implements Sandbox {
     this.budgetCfg = { ...opts.budget };
     this.runtime = opts.runtime ?? process.env.AQA_CONTAINER_RUNTIME ?? 'docker';
     this.image = opts.image ?? process.env.AQA_CONTAINER_IMAGE ?? DEFAULT_IMAGE;
+    if (opts.require_pinned_image && !/^.+@sha256:[0-9a-f]{64}$/u.test(this.image)) {
+      throw new Error('container image must be pinned by immutable sha256 digest');
+    }
     this.network = opts.network ?? 'none';
     this.executor = opts.executor ?? runContainer;
     this.maxOutputBytes = positiveInteger(opts.max_output_bytes ?? 1_048_576, 'max_output_bytes');

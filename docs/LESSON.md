@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — hardened flags do not pin the image supply chain
+
+`--read-only`, dropped capabilities and `no-new-privileges` protect the
+container invocation, but a mutable image tag can change the executable bytes
+between runs. Hardened profile auto-selection must require an immutable digest
+and fail before dispatch when the operator has not supplied one; do not print
+the image value in the error or audit output.
+
 # 2026-09-18 — a sandbox package is not a sandboxed execution path
 
 Having a tested container adapter in a package does not protect scenarios until
