@@ -298,6 +298,10 @@
       "name": "@aqa/pack-performance",
       "version": "0.1.0",
     },
+    "packs/realtime": {
+      "name": "@padosoft/aqa-pack-realtime",
+      "version": "0.1.0",
+    },
     "packs/security": {
       "name": "@aqa/pack-security",
       "version": "0.1.0",
@@ -504,6 +508,8 @@
     "@oxc-project/types": ["@oxc-project/types@0.150.0", "", {}, "sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw=="],
 
     "@padosoft/aqa-pack-data-pipeline": ["@padosoft/aqa-pack-data-pipeline@workspace:packs/data-pipeline"],
+
+    "@padosoft/aqa-pack-realtime": ["@padosoft/aqa-pack-realtime@workspace:packs/realtime"],
 
     "@playwright/test": ["@playwright/test@1.60.0", "", { "dependencies": { "playwright": "1.60.0" }, "bin": { "playwright": "cli.js" } }, "sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag=="],
 

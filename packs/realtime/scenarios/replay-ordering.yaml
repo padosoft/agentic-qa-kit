@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-realtime-replay-ordering
+title: Reconnect replay preserves cursor ordering and exposes duplicates or gaps
+risk_refs: [realtime-replay-ordering]
+invariant_refs: [inv-realtime-replay-consistent]
+preconditions:
+  - "a disposable event stream with a bounded cursor fixture is available"
+steps:
+  - id: inspect-replay
+    kind: http
+    with: { method: "GET", url: "/realtime/replay?channel=order-status&cursor=fixture-42" }
+oracles:
+  - id: o-order
+    kind: response_contains
+    probe_id: inspect-replay
+    with: { jsonpath: "$.strictly_ordered", equals: true }
+  - id: o-cursor
+    kind: response_contains
+    probe_id: inspect-replay
+    with: { jsonpath: "$.cursor_advance_declared", equals: true }
+  - id: o-gaps
+    kind: response_contains
+    probe_id: inspect-replay
+    with: { jsonpath: "$.gaps_detectable", equals: true }
+tags: [realtime, replay, ordering, sse]

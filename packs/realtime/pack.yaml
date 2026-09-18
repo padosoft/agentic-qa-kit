@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-realtime
+version: 0.1.0
+description: "Opt-in realtime baseline for connection lifecycle, ordering, replay and backpressure."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [realtime, websocket, websockets, sse, streaming, grpc-streaming]
+templates: []
+scenarios:
+  - scenarios/connection-lifecycle.yaml
+  - scenarios/backpressure.yaml
+  - scenarios/replay-ordering.yaml
+risks:
+  - risks/realtime.yaml
+oracles: []
+probes: []

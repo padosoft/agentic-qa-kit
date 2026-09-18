@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-realtime`.** It adds opt-in, schema-valid contracts for
+  connection lifecycle, bounded backpressure and cursor-based replay ordering.
+  Broker, proxy, device and production-capacity evidence remain operator
+  supplied; next: validate and publish the pack.
+
 - **Started `pack-data-pipeline`.** It adds opt-in, schema-valid contracts for
   producer/consumer compatibility, data-quality promotion gates and bounded
   idempotent replay. Orchestrator, warehouse, lineage and provider recovery

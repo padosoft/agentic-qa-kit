@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-realtime-backpressure
+title: Slow realtime consumers receive an explicit bounded backpressure outcome
+risk_refs: [realtime-backpressure-loss]
+invariant_refs: [inv-realtime-backpressure-safe]
+preconditions:
+  - "a disposable realtime endpoint with a bounded slow-consumer fixture is available"
+steps:
+  - id: inspect-backpressure
+    kind: http
+    with: { method: "GET", url: "/realtime/backpressure?channel=inventory&fixture=slow-consumer" }
+oracles:
+  - id: o-policy
+    kind: response_contains
+    probe_id: inspect-backpressure
+    with: { jsonpath: "$.policy", equals: "bounded" }
+  - id: o-buffer
+    kind: response_contains
+    probe_id: inspect-backpressure
+    with: { jsonpath: "$.buffer_limit_declared", equals: true }
+  - id: o-tenant
+    kind: response_contains
+    probe_id: inspect-backpressure
+    with: { jsonpath: "$.tenant_isolation_preserved", equals: true }
+tags: [realtime, backpressure, streaming]

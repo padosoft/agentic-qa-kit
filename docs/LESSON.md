@@ -2105,3 +2105,10 @@ Schema compatibility, freshness and replay checks are useful release contracts,
 but a passing fixture cannot prove warehouse lineage, access controls,
 retention, exactly-once delivery or provider recovery. Keep bounded fixtures and
 provider-backed evidence as separate boundaries.
+
+## 2026-09-18 — Realtime contracts must make loss semantics explicit
+
+Connection and replay checks are not proof of broker durability or exactly-once
+delivery. A realtime pack must declare buffer limits, slow-consumer behavior,
+cursor/gap detection and tenant isolation rather than hiding loss behind a
+passing happy-path stream.
