@@ -13,13 +13,15 @@
 
 ## 2026-09-18
 
-- **Started executable remote-worker token rotation.** `aqa worker` now selects
+- **Closed executable remote-worker token rotation.** `aqa worker` now selects
   `HttpRunnerQueue` whenever `AQA_SERVER_URL` is set, requires a token or
   token-file credential, and reads the token file for every queue request.
   Helm now requires `runner.worker.tokenSecretRef`, mounts the projected key,
   and fails closed during render when it is absent. Worker configuration tests:
-  **4 passed**; Helm CI validation is required before marking deployment wiring
-  complete. ADR-227 records the decision.
+  **4 passed**; CI run **35326324592** passed Helm, Bun, Node 22, PostgreSQL,
+  S3, OCI, build, CLI and Playwright gates. ADR-227 records the decision.
+  Kubernetes Secret propagation timing, TLS/mTLS and issuer revocation remain
+  operator/deployment evidence.
 
 - **Closed authenticated remote-runner identity evidence.** Added
   `HttpRunnerQueue`, which keeps enqueue/reaping/cancellation on the control
