@@ -52,7 +52,7 @@ Commands
                 Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>]
                 Validate a restore drill against RPO/RTO and security checks
-  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>
+  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem> --public-key-id <id>
                 Verify signed production evidence is bound to this restore drill
 
 Common options
@@ -162,7 +162,7 @@ RPO/RTO objectives and required security checks must all match. This is an
 operator evidence gate, not a substitute for actually running PostgreSQL PITR
 or object-store restore in an isolated environment.
 
-`aqa dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>`
+`aqa dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem> --public-key-id <id>`
 validates all three documents, verifies the signed production envelope, and
 requires both its restore-drill reference and canonical SHA-256 digest to match
 the exact drill record. It fails closed on missing signatures or substitutions.

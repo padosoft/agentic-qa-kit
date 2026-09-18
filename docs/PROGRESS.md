@@ -13,6 +13,17 @@
 
 ## 2026-09-18
 
+- **Implemented signing-identity pinning for production evidence.** Compliance
+  verifiers now optionally require an exact `signature.key_id`; the release gate
+  requires `--public-key-id`, and `aqa doctor --production` requires
+  `AQA_PRODUCTION_EVIDENCE_KEY_ID` whenever signed production evidence is
+  configured. The restore-binding path applies the same pin to signed backup
+  inventories. Added ADR-233, operational README updates and mismatch tests.
+  Local evidence: **782 tests, 781 passed, 1 S3 platform skip**, full workspace
+  typecheck passed, Biome lint passed, build passed, CLI E2E passed and
+  `git diff --check` passed. Next: commit/push this slice, then continue with
+  provider-backed KMS/WORM/PITR and identity execution evidence.
+
 - **Promoted production doctor binding policy to `main`.** Macro PR #158
   merged as **`abf2466`** after CI run **35339493234** passed every technical
   gate, including Playwright, CLI E2E, live Prometheus/OTLP, PostgreSQL, S3,

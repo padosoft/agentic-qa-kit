@@ -137,6 +137,7 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   const sandboxImagePinned = /^.+@sha256:[0-9a-f]{64}$/u.test(sandboxImage);
   const evidencePath = process.env.AQA_PRODUCTION_EVIDENCE_PATH?.trim();
   const evidenceKey = process.env.AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM;
+  const evidenceKeyId = process.env.AQA_PRODUCTION_EVIDENCE_KEY_ID?.trim();
   const restoreInventoryPath = process.env.AQA_PRODUCTION_DR_INVENTORY_PATH?.trim();
   const restoreEvidencePath = process.env.AQA_PRODUCTION_DR_EVIDENCE_PATH?.trim();
   const evidenceMaxAgeRaw = process.env.AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS?.trim();
@@ -245,7 +246,9 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   } else {
     try {
       const parsed: unknown = JSON.parse(readFileSync(evidencePath, 'utf8'));
-      const verification = verifyProductionEvidence(parsed, evidenceKey);
+      const verification = evidenceKeyId
+        ? verifyProductionEvidence(parsed, evidenceKey, evidenceKeyId)
+        : { ok: false, reason: 'trusted production evidence key id is missing' };
       const completeness = verification.completeness;
       const freshness =
         verification.ok && evidenceMaxAge !== undefined
@@ -296,6 +299,7 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   addProductionRestoreBindingCheck(checks, {
     evidencePath,
     evidenceKey,
+    evidenceKeyId,
     restoreInventoryPath,
     restoreEvidencePath,
   });
@@ -304,6 +308,7 @@ function addProductionChecks(checks: DoctorCheck[]): void {
 interface ProductionRestoreBindingOptions {
   evidencePath: string | undefined;
   evidenceKey: string | undefined;
+  evidenceKeyId: string | undefined;
   restoreInventoryPath: string | undefined;
   restoreEvidencePath: string | undefined;
 }
@@ -345,12 +350,13 @@ function addProductionRestoreBindingCheck(
     });
     return;
   }
-  if (!opts.evidenceKey?.trim()) {
+  if (!opts.evidenceKey?.trim() || !opts.evidenceKeyId) {
     checks.push({
       id: 'production-evidence-restore-binding',
       title: 'Production evidence is bound to a restore drill',
       status: 'fail',
-      detail: 'the trusted public key is required before the restore binding can be checked',
+      detail:
+        'the trusted public key and pinned key id are required before the restore binding can be checked',
       suggestion: 'Configure AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM from the approved trust root.',
     });
     return;
@@ -358,13 +364,14 @@ function addProductionRestoreBindingCheck(
   try {
     const productionEvidence = readJsonFile(opts.evidencePath);
     const inventoryInput = readJsonFile(opts.restoreInventoryPath);
-    const inventory = unwrapInventory(inventoryInput, opts.evidenceKey);
+    const inventory = unwrapInventory(inventoryInput, opts.evidenceKey, opts.evidenceKeyId);
     const restoreEvidence = readJsonFile(opts.restoreEvidencePath);
     const result = verifyProductionEvidenceRestoreBinding(
       productionEvidence,
       restoreEvidence,
       inventory,
       opts.evidenceKey,
+      opts.evidenceKeyId,
     );
     checks.push({
       id: 'production-evidence-restore-binding',
@@ -393,10 +400,14 @@ function readJsonFile(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
-function unwrapInventory(input: unknown, trustedPublicKeyPem: string): unknown {
+function unwrapInventory(
+  input: unknown,
+  trustedPublicKeyPem: string,
+  expectedKeyId: string,
+): unknown {
   if (!isRecord(input) || !('inventory' in input || 'signature' in input))
     return parseBackupInventory(input);
-  const verification = verifyBackupInventory(input, trustedPublicKeyPem);
+  const verification = verifyBackupInventory(input, trustedPublicKeyPem, expectedKeyId);
   if (!verification.ok) throw new Error(verification.reason ?? 'backup inventory signature failed');
   return parseBackupInventory(input.inventory);
 }
