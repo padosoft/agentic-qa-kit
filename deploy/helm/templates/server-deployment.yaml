@@ -30,6 +30,12 @@ spec:
       {{- if not .Values.auth.oidc.clientSecretSecretRef }}
       {{- fail "auth.oidc.clientSecretSecretRef is required when auth.oidc.enabled is true" }}
       {{- end }}
+      {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" .Values.auth.oidc.clientSecretEnv) }}
+      {{- fail "auth.oidc.clientSecretEnv must be a valid environment variable name" }}
+      {{- end }}
+      {{- if not .Values.auth.oidc.clientSecretKey }}
+      {{- fail "auth.oidc.clientSecretKey is required when auth.oidc.enabled is true" }}
+      {{- end }}
       {{- if not (or .Values.postgres.subchart.enabled .Values.postgres.urlSecretRef .Values.postgres.url) }}
       {{- fail "a PostgreSQL source is required for shared OIDC sessions when auth.oidc.enabled is true" }}
       {{- end }}
@@ -63,6 +69,8 @@ spec:
               value: {{ .Values.auth.oidc.redirectUri | quote }}
             - name: AQA_OIDC_CLIENT_SECRET_ENV
               value: {{ .Values.auth.oidc.clientSecretEnv | quote }}
+            - name: AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS
+              value: {{ join "," .Values.auth.oidc.allowedEndpointOrigins | quote }}
             - name: AQA_OIDC_ROLES_CLAIM
               value: {{ .Values.auth.oidc.rolesClaim | quote }}
             - name: AQA_OIDC_MFA_CLAIM

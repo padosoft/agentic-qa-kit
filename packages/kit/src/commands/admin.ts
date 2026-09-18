@@ -129,6 +129,7 @@ export type AdminOidcEnvironment = {
   clientId: string;
   redirectUri: string;
   clientSecretEnv: string;
+  allowedEndpointOrigins?: readonly string[];
   rolesClaim?: string;
   mfaClaim?: string;
   sessionDsn?: string;
@@ -174,12 +175,20 @@ export function oidcEnvironmentConfig(
   if (!env[clientSecretEnv]) {
     return { error: `admin: OIDC client secret is missing from ${clientSecretEnv}` };
   }
+  const rawAllowedOrigins = env.AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS?.trim() ?? '';
+  const allowedEndpointOrigins = rawAllowedOrigins
+    ? rawAllowedOrigins.split(',').map((origin) => origin.trim())
+    : [];
+  if (allowedEndpointOrigins.some((origin) => !origin)) {
+    return { error: 'admin: AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS contains an empty origin' };
+  }
   return {
     config: {
       issuer: values.issuer,
       clientId: values.clientId,
       redirectUri: values.redirectUri,
       clientSecretEnv,
+      ...(allowedEndpointOrigins.length > 0 ? { allowedEndpointOrigins } : {}),
       ...(env.AQA_OIDC_ROLES_CLAIM?.trim() ? { rolesClaim: env.AQA_OIDC_ROLES_CLAIM.trim() } : {}),
       ...(env.AQA_OIDC_MFA_CLAIM?.trim() ? { mfaClaim: env.AQA_OIDC_MFA_CLAIM.trim() } : {}),
       ...(env.AQA_OIDC_SESSION_DSN?.trim() ? { sessionDsn: env.AQA_OIDC_SESSION_DSN.trim() } : {}),
@@ -307,6 +316,9 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
             client_id: oidcEnvironment.config.clientId,
             redirect_uri: oidcEnvironment.config.redirectUri,
             client_secret_env: oidcEnvironment.config.clientSecretEnv,
+            ...(oidcEnvironment.config.allowedEndpointOrigins
+              ? { allowed_endpoint_origins: oidcEnvironment.config.allowedEndpointOrigins }
+              : {}),
             ...(oidcEnvironment.config.rolesClaim
               ? { roles_claim: oidcEnvironment.config.rolesClaim }
               : {}),

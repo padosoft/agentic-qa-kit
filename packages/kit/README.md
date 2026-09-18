@@ -127,6 +127,9 @@ environment variables. Set `AQA_OIDC_ENABLED=true`, `AQA_OIDC_ISSUER`,
 PostgreSQL PKCE/session store for HA replicas. Partial configuration fails
 closed and never falls back to the local admin identity; the secret and DSN
 are never included in evidence or error messages.
+If the provider's discovery, token, UserInfo or JWKS endpoints use additional
+HTTPS origins, list them in comma-separated
+`AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS`; endpoint origins remain deny-by-default.
 
 `aqa doctor --production` reuses this exact parser and fails when the admin
 would otherwise use the local development identity; it reports process-local
