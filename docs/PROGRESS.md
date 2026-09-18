@@ -18,7 +18,8 @@
   can be atomically reclaimed, while completed effects remain duplicate-safe.
   The contract explicitly retains the requirement that business effects are
   idempotent across a crash/reclaim race. Commerce suite: **45 passed, 0
-  failed** locally; hosted CI is required for this increment.
+  failed** locally; PR #150 merged after hosted CI run **35332684961** passed
+  PostgreSQL, Node 22, live observability and all E2E gates.
 
 - **Closed the Stripe webhook side-effect safety gap.** Added
   `StripeWebhookProcessor` for signature verification, body-size bounds,
