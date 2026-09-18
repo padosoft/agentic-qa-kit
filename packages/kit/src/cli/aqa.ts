@@ -117,7 +117,7 @@ ${bold('Commands')}
   run [--profile <p>]               Execute scenarios for the given profile; write events + findings
   report [--run-id <id>]            Render the latest (or specified) run as report.md + report.json
   verify <finding-id>               Re-run a finding with bounded attempts and record evidence
-  ingest <junit|sast|k6|locust> <file> Normalize external results into redacted evidence
+  ingest <junit|sast|k6|locust|playwright> <file> Normalize external results into redacted evidence
   dr inventory <file> [--public-key <pem>] Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>] Validate a restore drill against RPO/RTO
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
@@ -424,9 +424,12 @@ async function main(): Promise<number> {
         kind !== 'sast' &&
         kind !== 'semgrep' &&
         kind !== 'k6' &&
-        kind !== 'locust'
+        kind !== 'locust' &&
+        kind !== 'playwright'
       ) {
-        console.error(red('aqa ingest: kind must be junit, sast, semgrep, k6, or locust'));
+        console.error(
+          red('aqa ingest: kind must be junit, sast, semgrep, k6, locust, or playwright'),
+        );
         return 1;
       }
       if (!file) {
