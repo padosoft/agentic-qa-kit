@@ -233,6 +233,29 @@ describe('@aqa/commerce contracts', () => {
     assert.deepEqual(calls[0]?.body, undefined);
   });
 
+  it('HttpCommerceAdapter rejects insecure external origins but allows explicit loopback HTTP', () => {
+    assert.throws(
+      () => new HttpCommerceAdapter({ baseUrl: 'http://merchant.example.test' }),
+      /must use HTTPS/,
+    );
+    assert.throws(
+      () =>
+        new HttpCommerceAdapter({
+          baseUrl: 'https://merchant.example.test',
+          allowedOrigins: ['http://attacker.example.test'],
+        }),
+      /must use HTTPS/,
+    );
+    assert.doesNotThrow(
+      () =>
+        new HttpCommerceAdapter({ baseUrl: 'http://127.0.0.1:8080', allowInsecureLocalHttp: true }),
+    );
+    assert.throws(
+      () => new HttpCommerceAdapter({ baseUrl: 'https://user:password@merchant.example.test' }),
+      /must not contain credentials/,
+    );
+  });
+
   it('runs the complete checkout journey through a real local HTTP boundary', async () => {
     const merchant = new InMemoryCommerceReference();
     merchant.seedProduct({
@@ -295,7 +318,10 @@ describe('@aqa/commerce contracts', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as { port: number }).port;
     try {
-      const adapter = new HttpCommerceAdapter({ baseUrl: `http://127.0.0.1:${port}` });
+      const adapter = new HttpCommerceAdapter({
+        baseUrl: `http://127.0.0.1:${port}`,
+        allowInsecureLocalHttp: true,
+      });
       const journey = await verifyCheckoutJourney(adapter, {
         context,
         identity,
