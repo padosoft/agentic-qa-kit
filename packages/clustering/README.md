@@ -8,12 +8,18 @@ Cross-run findings dedup + clustering for the admin panel's Findings Kanban
 - `clusterFindings(findings)` — groups by signature; chooses the earliest
   member as the representative; reports the worst severity, a stable
   `root_cause_id`, and an explainable priority score in the cluster.
+- `clusterFindingsBySimilarity(findings, options)` — creates explicit,
+  explainable semantic candidate links across scenarios of the same risk.
+  It uses bounded deterministic token similarity by default or an
+  operator-owned embedding callback, and retains every edge (score, method,
+  member IDs) that caused a connected component.
 - `priorityOf(finding)` — computes bounded severity × confidence × blast radius
   / fix cost. Missing optional business estimates use neutral value `1`.
 
-Clustering is deliberately conservative: root causes are linked only for the
-same deterministic fingerprint. Embedding similarity is not used to merge
-unrelated bugs.
+Clustering is deliberately conservative: similarity links never cross risk
+boundaries, require an explicit threshold, and never persist raw embedding
+vectors. Embedding similarity is opt-in; an ambiguous result remains a
+separate finding until a caller supplies a suitable threshold and policy.
 
 This is intentionally a small static layer; the in-run dedup already lives
 in `@aqa/runner`'s `FindingsWriter`. Clustering across runs is purely

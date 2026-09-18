@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Semantic edges must survive component materialization
+
+It is easy to calculate similarity edges correctly and then accidentally call
+the exact-fingerprint reducer, losing every semantically linked member. Build
+the connected component first, retain the complete member set, and preserve
+the edge list (IDs, score and method) in the output so semantic grouping stays
+auditable and reversible.
+
 # 2026-09-18 — Mutation score is evidence only at an explicit boundary
 
 Stryker/mutmut reports are external observations, not proof that the intended
