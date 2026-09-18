@@ -2496,6 +2496,24 @@
   org/project cannot mutate the lease. Existing hosted PostgreSQL CI remains
   required before declaring the durable migration path promoted.
 
+# 2026-09-18 — explicit CLI probe-driver composition
+
+- Closed the default CLI wiring gap for the drivers that already had bounded
+  implementations: `runRun` now composes HTTP, SQL/PostgreSQL, Playwright and
+  controlled shell drivers through an explicit host-owned `probeDrivers`
+  boundary, derives capability preflight, and closes lifecycle-aware drivers.
+- The CLI exposes opt-in environment configuration for PostgreSQL DSN,
+  Playwright origin policy and shell executable allowlists. Packs cannot enable
+  these capabilities; security/release-gate profiles retain sandbox precedence
+  for shell execution.
+- Evidence: kit typecheck, runner build, **175 kit tests passed / 0 failed**;
+  new real orchestration journeys cover injected read-only SQL and direct argv
+  shell execution. A Windows path-separator regression was found and fixed in
+  the shell allowlist comparison.
+- Next: complete provider-backed production evidence (PITR/KMS/IdP/PSP/tax/
+  carrier/WMS) and run the protected evidence workflow in a configured GitHub
+  Environment.
+
 # 2026-09-18 — Stripe provider refund reconciliation in progress
 
 - Added `reconcileStripeRefunds()` to the Stripe boundary. It reads back the

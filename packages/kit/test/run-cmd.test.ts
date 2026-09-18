@@ -35,7 +35,7 @@ import { ContainerSandbox } from '@aqa/sandbox';
 import { PostgresRunnerQueue, RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
-import { runRun } from '../dist/commands/run.js';
+import { probeDriversFromEnvironment, runRun } from '../dist/commands/run.js';
 import { makeKitWorker } from '../dist/worker.js';
 
 /**
@@ -187,6 +187,94 @@ function runFixture(options: Parameters<typeof runRun>[0]): ReturnType<typeof ru
 }
 
 describe('aqa run', () => {
+  it('reads only explicit operator driver switches and keeps values out of diagnostics', () => {
+    const previous = {
+      dsn: process.env.AQA_PROBE_POSTGRES_DSN,
+      browser: process.env.AQA_PROBE_PLAYWRIGHT_ENABLED,
+      origins: process.env.AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS,
+      shell: process.env.AQA_PROBE_SHELL_ENABLED,
+      commands: process.env.AQA_PROBE_SHELL_ALLOWED_COMMANDS,
+    };
+    try {
+      process.env.AQA_PROBE_POSTGRES_DSN = 'postgres://operator@example.test/qa';
+      process.env.AQA_PROBE_PLAYWRIGHT_ENABLED = 'true';
+      process.env.AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS = 'https://shop.example.test';
+      process.env.AQA_PROBE_SHELL_ENABLED = 'yes';
+      process.env.AQA_PROBE_SHELL_ALLOWED_COMMANDS = 'node, npm';
+      const drivers = probeDriversFromEnvironment('/workspace/project');
+      assert.equal(drivers?.postgres?.connectionString, 'postgres://operator@example.test/qa');
+      assert.deepEqual(drivers?.shell?.allowedCommands, ['node', 'npm']);
+      assert.deepEqual(drivers?.playwright?.allowedOrigins, ['https://shop.example.test']);
+    } finally {
+      for (const [key, value] of Object.entries({
+        AQA_PROBE_POSTGRES_DSN: previous.dsn,
+        AQA_PROBE_PLAYWRIGHT_ENABLED: previous.browser,
+        AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS: previous.origins,
+        AQA_PROBE_SHELL_ENABLED: previous.shell,
+        AQA_PROBE_SHELL_ALLOWED_COMMANDS: previous.commands,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('composes an explicitly injected SQL driver into the real CLI orchestration boundary', async () => {
+    const { root, packDir } = fixtureProject();
+    const sqlScenario = SMOKE_SCENARIO.replace(
+      'kind: http\n    with: { method: "GET", url: "/healthz" }',
+      'kind: sql\n    with:\n      query: "SELECT 1 AS value"',
+    ).replace(
+      'kind: http_status\n    with: { expected: 200 }',
+      'kind: response_contains\n    probe_id: probe-noop\n    with: { value: "ok" }',
+    );
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), sqlScenario, 'utf8');
+    let queryCalled = false;
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      probeDrivers: {
+        sql: {
+          query: async (query, params, signal) => {
+            queryCalled = true;
+            assert.equal(query, 'SELECT 1 AS value');
+            assert.deepEqual(params, []);
+            assert.equal(signal?.aborted, false);
+            return [{ value: 'ok' }];
+          },
+        },
+      },
+    });
+    assert.equal(queryCalled, true);
+    assert.equal(result.ok, true, `SQL driver journey must succeed: ${JSON.stringify(result)}`);
+  });
+
+  it('composes an explicitly allowlisted shell driver without a shell interpreter', async () => {
+    const { root, packDir } = fixtureProject();
+    const shellScenario = SMOKE_SCENARIO.replace(
+      'kind: http\n    with: { method: "GET", url: "/healthz" }',
+      `kind: shell\n    with:\n      command: "${process.execPath.replaceAll('\\', '/')}"\n      args: ["-e", "process.stdout.write(\\"ok\\")"]`,
+    ).replace(
+      'kind: http_status\n    with: { expected: 200 }',
+      'kind: response_contains\n    probe_id: probe-noop\n    with: { value: "ok" }',
+    );
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), shellScenario, 'utf8');
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      probeDrivers: {
+        shell: {
+          allowShell: true,
+          cwd: root,
+          allowedCommands: [process.execPath],
+        },
+      },
+    });
+    assert.equal(result.ok, true, `shell driver journey must succeed: ${JSON.stringify(result)}`);
+  });
+
   it('wires audit events from the real run boundary into injected metrics', async () => {
     const { root, packDir } = fixtureProject();
     const metrics = new MetricsRegistry();

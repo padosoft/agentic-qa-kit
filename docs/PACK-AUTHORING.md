@@ -117,7 +117,17 @@ oracles:
 tags: [api, idempotency]
 ```
 
-`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. Today `aqa run` executes `http` probes with a real fetch-based runner using `project.sut.base_url` from `.aqa/project.yaml` (relative URLs in scenario probes are resolved against that base URL). Other probe kinds (`shell`, `sql`, `playwright`, `llm_eval`, `fs`, `custom`) are still scaffolding-level for the default CLI runner and should be treated as advanced follow-ups unless you inject a custom runner programmatically.
+`steps` is an ordered list of probes. Each probe has an `id`, a `kind`, and a `with` payload. `aqa run` executes `http` probes with a real fetch-based runner using `project.sut.base_url` from `.aqa/project.yaml` (relative URLs in scenario probes are resolved against that base URL). SQL/PostgreSQL, Playwright and shell probes are now available through an explicit host-owned driver boundary: programmatic callers pass `runRun({ probeDrivers: ... })`, while the CLI reads opt-in operator environment variables. They are never enabled by pack content alone. `llm_eval`, `fs` and `custom` remain host/provider-specific contracts and must be injected by the embedding host.
+
+### Explicit CLI drivers
+
+The default CLI remains HTTP-only. To enable additional drivers, configure them in the trusted process environment before `aqa run`:
+
+- `AQA_PROBE_POSTGRES_DSN` enables bounded, read-only PostgreSQL SQL probes. The DSN is never written to evidence or logs.
+- `AQA_PROBE_PLAYWRIGHT_ENABLED=true` enables the headless browser driver. Set `AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS` to a comma-separated origin allowlist; otherwise the project SUT origin is used.
+- `AQA_PROBE_SHELL_ENABLED=true` enables the direct-argv shell driver only when `AQA_PROBE_SHELL_ALLOWED_COMMANDS` is a non-empty comma-separated executable allowlist. `AQA_PROBE_SHELL_CWD` may set the working directory and defaults to the project root.
+
+These switches are operator configuration, not pack configuration. In `security` and `release-gate` profiles shell probes continue to use the container sandbox when one is selected. SQL remains read-only and bounded; browser navigation is origin-scoped; shell commands are never passed through a shell interpreter. Missing or malformed opt-in configuration fails closed before scenario execution.
 
 `oracles` is an ordered list of pass/fail checks evaluated against the recorded probe results. The kit ships three built-in oracle kinds in `@aqa/runner.builtInOracles`:
 

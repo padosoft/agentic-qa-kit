@@ -95,6 +95,26 @@ findings are marked with agent provenance. The CLI does not choose an LLM,
 provider, MCP server, credentials, or tool policy implicitly. Hosts inject
 those policies and keep model/trajectory evidence in their integration adapter.
 
+### Explicit non-HTTP probe drivers
+
+The CLI is HTTP-only unless an operator opts in to additional host-owned
+drivers. Configure these before `aqa run` when the project pack contains the
+corresponding probe kinds:
+
+```text
+AQA_PROBE_POSTGRES_DSN=                       # read-only, bounded SQL probes
+AQA_PROBE_PLAYWRIGHT_ENABLED=true             # headless browser probes
+AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS=https://shop.example.test
+AQA_PROBE_SHELL_ENABLED=true                  # direct argv only
+AQA_PROBE_SHELL_ALLOWED_COMMANDS=node,npm     # required executable allowlist
+AQA_PROBE_SHELL_CWD=/workspace/project        # optional; defaults to cwd
+```
+
+These values belong in the CI/runner secret and policy store, never in a pack.
+The PostgreSQL DSN is not written to evidence; browser requests are restricted
+to the configured origins; shell execution uses `shell: false`. Security and
+release-gate profiles keep container-sandbox precedence for shell probes.
+
 ## Durable artifact backend
 
 Runs use the local filesystem by default. For AWS S3, MinIO or another
