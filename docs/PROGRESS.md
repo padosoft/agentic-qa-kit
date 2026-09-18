@@ -18,9 +18,10 @@
   with strict secret-key/HTTPS validation, bounded response parsing, minor-unit
   money checks, mandatory write idempotency keys and typed provider
   observations. Commerce suite: **41 passed, 0 failed**; no credentials are
-  used in tests. This closes the repository adapter gap, but a live Stripe
-  test-mode journey, signed webhook ingress, settlement/payout reconciliation
-  and provider fault drills remain deployment evidence.
+  used in tests. PR #148 merged after hosted CI run **35330815340** passed the
+  full technical matrix. This closes the repository adapter gap, but a live
+  Stripe test-mode journey, signed webhook ingress, settlement/payout
+  reconciliation and provider fault drills remain deployment evidence.
 
 - **Added the provider-neutral observability deployment bundle.** Versioned an
   OpenTelemetry Collector pipeline, Prometheus recording/alert rules and a
