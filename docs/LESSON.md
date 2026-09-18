@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Signed evidence must reject unknown fields
+
+Canonicalizing only known properties is not enough for an audit document: an
+unknown property can still be shown to operators or consumed by a downstream
+tool without being covered by the signature. Recovery inventories, restore
+drills, production evidence and their envelopes now use strict field sets;
+schema evolution must be explicit.
+
 # 2026-09-18 — Deployment assets are not runtime evidence
 
 Prometheus, Grafana and Collector files can be structurally validated and

@@ -131,6 +131,21 @@ describe('backup inventory contract', () => {
     );
   });
 
+  it('rejects unsupported fields instead of leaving unsigned metadata in evidence', () => {
+    assert.throws(
+      () => parseBackupInventory({ ...inventory, operator_note: 'not signed' }),
+      /unsupported field.*operator_note/,
+    );
+    assert.throws(
+      () =>
+        parseBackupInventory({
+          ...inventory,
+          database: { ...inventory.database, provider: 'postgres' },
+        }),
+      /unsupported field.*provider/,
+    );
+  });
+
   it('signs and verifies the canonical inventory with an explicit trust root', () => {
     const { privateKey, publicKey } = generateKeyPairSync('ed25519');
     const signed = signBackupInventory(inventory, {
@@ -232,6 +247,39 @@ describe('restore drill evidence contract', () => {
       /security checks are incomplete/,
     );
   });
+
+  it('rejects unsupported fields in the drill and its security checks', () => {
+    const base = {
+      schema_version: '1' as const,
+      drill_id: 'drill-1',
+      source_backup_id: inventory.backup_id,
+      source_manifest_sha256: inventory.artifacts.manifest_sha256,
+      restored_manifest_sha256: inventory.artifacts.manifest_sha256,
+      target_environment: 'recovery-cluster',
+      started_at: '2026-09-17T10:00:00Z',
+      completed_at: '2026-09-17T10:20:00Z',
+      observed_rpo_minutes: 5,
+      observed_rto_minutes: 20,
+      checks: {
+        tenant_isolation: true,
+        audit_chain: true,
+        queue_fencing: true,
+        secret_redaction: true,
+      },
+    };
+    assert.throws(
+      () => assertRestoreDrillEvidence({ ...base, operator_note: 'not signed' }, inventory),
+      /unsupported field.*operator_note/,
+    );
+    assert.throws(
+      () =>
+        assertRestoreDrillEvidence(
+          { ...base, checks: { ...base.checks, provider_payload: true } },
+          inventory,
+        ),
+      /unsupported field.*provider_payload/,
+    );
+  });
 });
 
 describe('production evidence contract', () => {
@@ -307,6 +355,29 @@ describe('production evidence contract', () => {
     assert.equal(
       verifyProductionEvidence(
         tampered,
+        publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      ).ok,
+      false,
+    );
+  });
+
+  it('rejects unsupported fields before signing or verification', () => {
+    assert.throws(
+      () =>
+        signProductionEvidence(
+          { ...evidence, operator_note: 'not signed' },
+          { key_id: 'prod-evidence-key-1', private_key_pem: 'invalid' },
+        ),
+      /unsupported field.*operator_note/,
+    );
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const signed = signProductionEvidence(evidence, {
+      key_id: 'prod-evidence-key-1',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    assert.equal(
+      verifyProductionEvidence(
+        { ...signed, operator_note: 'not signed' },
         publicKey.export({ type: 'spki', format: 'pem' }).toString(),
       ).ok,
       false,

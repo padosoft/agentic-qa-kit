@@ -48,10 +48,32 @@ export function parseBackupInventory(input: unknown): BackupInventory {
     throw new Error('backup inventory envelope keys are reserved');
   if (!isRecord(input) || input.schema_version !== '1')
     throw new Error('backup inventory schema_version must be 1');
+  exactKeys(
+    input,
+    [
+      'schema_version',
+      'backup_id',
+      'created_at',
+      'database',
+      'artifacts',
+      'application',
+      'operator_run_id',
+      'objectives',
+    ],
+    'backup inventory',
+  );
   const database = record(input.database, 'database');
   const artifacts = record(input.artifacts, 'artifacts');
   const application = record(input.application, 'application');
   const objectives = record(input.objectives, 'objectives');
+  exactKeys(database, ['pitr_target', 'lsn', 'schema_version'], 'backup inventory database');
+  exactKeys(
+    artifacts,
+    ['snapshot_id', 'manifest_sha256', 'object_count'],
+    'backup inventory artifacts',
+  );
+  exactKeys(application, ['image_digest', 'schema_version'], 'backup inventory application');
+  exactKeys(objectives, ['rpo_minutes', 'rto_minutes'], 'backup inventory objectives');
   const inventory: BackupInventory = {
     schema_version: '1',
     backup_id: identifier(input.backup_id, 'backup_id'),
@@ -115,8 +137,10 @@ export function verifyBackupInventory(
   try {
     if (!isRecord(signed) || !isRecord(signed.signature))
       throw new Error('backup inventory signature is missing');
+    exactKeys(signed, ['inventory', 'signature'], 'backup inventory envelope');
     const inventory = parseBackupInventory(signed.inventory);
     const signature = signed.signature;
+    exactKeys(signature, ['algorithm', 'key_id', 'signature'], 'backup inventory signature');
     if (signature.algorithm !== 'ed25519')
       throw new Error('unsupported backup inventory signature');
     if (typeof signature.key_id !== 'string' || !signature.key_id.trim())
@@ -144,6 +168,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`backup inventory ${label} must be an object`);
   return value;
+}
+
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(expected);
+  const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0)
+    throw new Error(`${label} contains unsupported field(s): ${unexpected.join(', ')}`);
 }
 
 function identifier(value: unknown, label: string): string {

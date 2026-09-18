@@ -77,6 +77,50 @@ export function parseProductionEvidence(input: unknown): ProductionEvidence {
   const immutability = record(controls.artifact_immutability, 'controls.artifact_immutability');
   const recovery = record(controls.database_recovery, 'controls.database_recovery');
   const identity = record(controls.identity, 'controls.identity');
+  exactKeys(
+    input,
+    [
+      'schema_version',
+      'evidence_id',
+      'captured_at',
+      'environment',
+      'application_image_digest',
+      'controls',
+    ],
+    'production evidence',
+  );
+  exactKeys(
+    controls,
+    ['key_custody', 'artifact_immutability', 'database_recovery', 'identity'],
+    'production evidence controls',
+  );
+  exactKeys(
+    keyCustody,
+    ['provider', 'key_ref', 'rotation_verified', 'observed_at'],
+    'production evidence key_custody',
+  );
+  exactKeys(
+    immutability,
+    ['provider', 'store_ref', 'versioning_enabled', 'retention_verified', 'observed_at'],
+    'production evidence artifact_immutability',
+  );
+  exactKeys(
+    recovery,
+    [
+      'provider',
+      'cluster_ref',
+      'pitr_enabled',
+      'wal_archiving_verified',
+      'restore_drill_ref',
+      'observed_at',
+    ],
+    'production evidence database_recovery',
+  );
+  exactKeys(
+    identity,
+    ['provider', 'oidc_verified', 'mtls_verified', 'runner_rotation_verified', 'observed_at'],
+    'production evidence identity',
+  );
   return {
     schema_version: '1',
     evidence_id: identifier(input.evidence_id, 'evidence_id'),
@@ -226,8 +270,10 @@ export function verifyProductionEvidence(
   try {
     if (!isRecord(input) || !isRecord(input.signature))
       throw new Error('production evidence signature is missing');
+    exactKeys(input, ['evidence', 'signature'], 'production evidence envelope');
     const evidence = parseProductionEvidence(input.evidence);
     const signature = input.signature;
+    exactKeys(signature, ['algorithm', 'key_id', 'signature'], 'production evidence signature');
     if (signature.algorithm !== 'ed25519')
       throw new Error('unsupported production evidence signature');
     if (typeof signature.key_id !== 'string' || !IDENTIFIER.test(signature.key_id))
@@ -255,6 +301,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`production evidence ${label} must be an object`);
   return value;
+}
+
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(expected);
+  const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0)
+    throw new Error(`${label} contains unsupported field(s): ${unexpected.join(', ')}`);
 }
 
 function identifier(value: unknown, label: string): string {
