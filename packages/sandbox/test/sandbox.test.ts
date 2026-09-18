@@ -77,6 +77,29 @@ describe('ContainerSandbox', () => {
     assert.ok(seen?.args.includes('registry.example/aqa@sha256:abc'));
   });
 
+  it('rejects mutable image tags when pinning is required', () => {
+    assert.throws(
+      () =>
+        new ContainerSandbox({
+          budget: { max_calls: 1, per_call_timeout_ms: 1000 },
+          image: 'ubuntu:24.04',
+          require_pinned_image: true,
+        }),
+      /pinned by immutable sha256 digest/,
+    );
+  });
+
+  it('accepts a valid immutable image digest', () => {
+    assert.doesNotThrow(
+      () =>
+        new ContainerSandbox({
+          budget: { max_calls: 1, per_call_timeout_ms: 1000 },
+          image: `registry.example/aqa@sha256:${'a'.repeat(64)}`,
+          require_pinned_image: true,
+        }),
+    );
+  });
+
   it('reports container failures and timeout results without throwing', async () => {
     const sb = new ContainerSandbox({
       budget: { max_calls: 5, per_call_timeout_ms: 25 },

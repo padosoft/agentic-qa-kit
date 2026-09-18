@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Required immutable images for auto-hardened sandbox profiles.** The
+  automatically selected OCI sandbox for `security`/`release-gate` now rejects
+  mutable tags and requires `AQA_CONTAINER_IMAGE` (or an injected equivalent)
+  with a full SHA-256 digest. Invalid configuration returns a bounded run
+  error before dispatch and never prints the digest. Evidence: sandbox pinning
+  tests plus complete kit journey; live OCI execution remains hosted
+  deployment evidence. Next: continue KMS/WORM, PITR/restore and IdP/mTLS.
+
 - **Connected hardened shell probes to the sandbox boundary.** Orchestrator
   `security` and `release-gate` runs now create a `ContainerSandbox` when the
   host has not supplied a driver; shell probes execute through the bounded OCI

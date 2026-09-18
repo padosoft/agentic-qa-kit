@@ -578,13 +578,25 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       })
     : undefined;
   const hardenedProfile = profileKey === 'security' || profileKey === 'release-gate';
-  const sandbox =
-    explicitRunner || profile.execution_mode === 'agent'
-      ? opts.sandbox
-      : (opts.sandbox ??
-        (hardenedProfile
-          ? new ContainerSandbox({ budget: { max_calls: 200, per_call_timeout_ms: 60_000 } })
-          : undefined));
+  let sandbox: Sandbox | undefined;
+  try {
+    sandbox =
+      explicitRunner || profile.execution_mode === 'agent'
+        ? opts.sandbox
+        : (opts.sandbox ??
+          (hardenedProfile
+            ? new ContainerSandbox({
+                budget: { max_calls: 200, per_call_timeout_ms: 60_000 },
+                require_pinned_image: true,
+              })
+            : undefined));
+  } catch (error) {
+    return makeError(
+      `profile "${profileKey}" sandbox configuration is invalid: ${
+        error instanceof Error ? error.message : 'invalid sandbox configuration'
+      }`,
+    );
+  }
   const probeRunner: ClosableProbeRunner | undefined = explicitRunner
     ? explicitRunner
     : sandbox
