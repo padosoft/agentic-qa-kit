@@ -33,6 +33,15 @@ operators.
   controlled `postgres.url`. The chart maps the same database endpoint to the
   control-plane store, runner queue, shared OIDC sessions and EventBus; the
   application still owns migrations and least-privilege database roles.
+- OIDC is disabled by default. To enable the enterprise login boundary, set
+  `auth.oidc.enabled=true`, provide `issuer`, `clientId`, `redirectUri` and a
+  Secret reference for `clientSecretSecretRef`/`clientSecretKey`, and configure
+  a PostgreSQL source. The chart projects the secret into the named
+  `clientSecretEnv` without printing it; `aqa admin` then constructs the
+  provider-neutral OIDC adapter and `PostgresOidcSessionStore` from the
+  environment. Partial OIDC configuration fails closed, and an OIDC-enabled
+  deployment never falls back to the local admin identity. The redirect URI
+  must point to `/auth/callback` on the public HTTPS origin.
 - Enable the real worker in production with
   `runner.worker.enabled=true`, set `runner.worker.scopes` to explicit
   `org/project` or `org/*` entries, and use `runner.worker.queueDsnSecretRef`

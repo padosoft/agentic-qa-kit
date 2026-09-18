@@ -25,7 +25,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import {
+  OidcAdapter,
   OidcSessionManager,
+  PostgresOidcSessionStore,
   PostgresScimRateLimiter,
   PostgresScimTokenStore,
   RunnerJwtAuthorizer,
@@ -122,6 +124,69 @@ export interface AdminErr {
   error: string;
 }
 
+export type AdminOidcEnvironment = {
+  issuer: string;
+  clientId: string;
+  redirectUri: string;
+  clientSecretEnv: string;
+  rolesClaim?: string;
+  mfaClaim?: string;
+  sessionDsn?: string;
+};
+
+/**
+ * Resolve the operator-owned OIDC boundary without ever returning a secret.
+ * Partial configuration is an error: a production pod must not silently fall
+ * back to the local admin identity when an OIDC deployment is half-configured.
+ */
+export function oidcEnvironmentConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): { config?: AdminOidcEnvironment; error?: string } {
+  const enabled = env.AQA_OIDC_ENABLED?.trim().toLowerCase();
+  const values = {
+    issuer: env.AQA_OIDC_ISSUER?.trim() ?? '',
+    clientId: env.AQA_OIDC_CLIENT_ID?.trim() ?? '',
+    redirectUri: env.AQA_OIDC_REDIRECT_URI?.trim() ?? '',
+  };
+  const hasConfiguration = Boolean(
+    enabled === 'true' || values.issuer || values.clientId || values.redirectUri,
+  );
+  if (!hasConfiguration) return {};
+  if (enabled && enabled !== 'true' && enabled !== 'false') {
+    return { error: 'admin: AQA_OIDC_ENABLED must be true or false' };
+  }
+  if (enabled === 'false') {
+    if (values.issuer || values.clientId || values.redirectUri) {
+      return { error: 'admin: OIDC fields must be empty when AQA_OIDC_ENABLED=false' };
+    }
+    return {};
+  }
+  const missing = Object.entries(values)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+  if (missing.length > 0) {
+    return { error: `admin: OIDC configuration missing ${missing.join(', ')}` };
+  }
+  const clientSecretEnv = env.AQA_OIDC_CLIENT_SECRET_ENV?.trim() || 'AQA_OIDC_CLIENT_SECRET';
+  if (!/^[A-Z][A-Z0-9_]*$/.test(clientSecretEnv)) {
+    return { error: 'admin: AQA_OIDC_CLIENT_SECRET_ENV must be an environment variable name' };
+  }
+  if (!env[clientSecretEnv]) {
+    return { error: `admin: OIDC client secret is missing from ${clientSecretEnv}` };
+  }
+  return {
+    config: {
+      issuer: values.issuer,
+      clientId: values.clientId,
+      redirectUri: values.redirectUri,
+      clientSecretEnv,
+      ...(env.AQA_OIDC_ROLES_CLAIM?.trim() ? { rolesClaim: env.AQA_OIDC_ROLES_CLAIM.trim() } : {}),
+      ...(env.AQA_OIDC_MFA_CLAIM?.trim() ? { mfaClaim: env.AQA_OIDC_MFA_CLAIM.trim() } : {}),
+      ...(env.AQA_OIDC_SESSION_DSN?.trim() ? { sessionDsn: env.AQA_OIDC_SESSION_DSN.trim() } : {}),
+    },
+  };
+}
+
 export type AdminBootResult = ({ ok: true } & AdminHandle) | AdminErr;
 
 const DEFAULT_PORT = 5173;
@@ -158,6 +223,9 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? DEFAULT_HOST;
   const loopbackHosts = new Set(['127.0.0.1', '::1', 'localhost']);
+  const oidcEnvironment = opts.oidc ? {} : oidcEnvironmentConfig();
+  if (oidcEnvironment.error) return { ok: false, error: oidcEnvironment.error };
+  const oidcConfigured = Boolean(opts.oidc || oidcEnvironment.config);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     return { ok: false, error: `admin: --port must be an integer 0..65535, got ${port}` };
   }
@@ -167,13 +235,13 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       error: 'admin: metricsAuthorize is required when metrics are exposed off loopback',
     };
   }
-  if (!loopbackHosts.has(host) && !opts.authenticate && !opts.oidc) {
+  if (!loopbackHosts.has(host) && !opts.authenticate && !oidcConfigured) {
     return {
       ok: false,
       error: 'admin: non-loopback bind requires an explicit authenticate callback (OIDC/JWT)',
     };
   }
-  if (opts.authenticate && opts.oidc) {
+  if (opts.authenticate && oidcConfigured) {
     return { ok: false, error: 'admin: pass authenticate or oidc, not both' };
   }
   let corsOrigins: ReadonlySet<string>;
@@ -229,6 +297,30 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     RunnerQueue,
   } = await import('@aqa/server');
   const { MemoryStore, PostgresStore } = await import('@aqa/store');
+
+  const oidc =
+    opts.oidc ??
+    (oidcEnvironment.config
+      ? new OidcSessionManager(
+          new OidcAdapter({
+            issuer: oidcEnvironment.config.issuer,
+            client_id: oidcEnvironment.config.clientId,
+            redirect_uri: oidcEnvironment.config.redirectUri,
+            client_secret_env: oidcEnvironment.config.clientSecretEnv,
+            ...(oidcEnvironment.config.rolesClaim
+              ? { roles_claim: oidcEnvironment.config.rolesClaim }
+              : {}),
+            ...(oidcEnvironment.config.mfaClaim
+              ? { mfa_claim: oidcEnvironment.config.mfaClaim }
+              : {}),
+          }),
+          {
+            ...(oidcEnvironment.config.sessionDsn
+              ? { store: new PostgresOidcSessionStore(oidcEnvironment.config.sessionDsn) }
+              : {}),
+          },
+        )
+      : undefined);
 
   if (opts.store && opts.storeDsn) {
     return { ok: false, error: 'admin: pass store or storeDsn, not both' };
@@ -321,7 +413,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
     queue,
     authenticate:
       opts.authenticate ??
-      (opts.oidc ? async (headers) => opts.oidc?.authenticateAsync(headers) ?? null : undefined) ??
+      (oidc ? async (headers) => oidc.authenticateAsync(headers) ?? null : undefined) ??
       (async () => ({
         id: 'usr-local',
         email: 'local@aqa.test',
@@ -364,8 +456,8 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       ctx,
       adminDistDir,
       indexHtmlPath,
-      ...(opts.oidc ? { oidc: opts.oidc } : {}),
-      ...(opts.oidc ? { oidcSecureCookie: opts.oidcSecureCookie ?? !loopbackHosts.has(host) } : {}),
+      ...(oidc ? { oidc } : {}),
+      ...(oidc ? { oidcSecureCookie: opts.oidcSecureCookie ?? !loopbackHosts.has(host) } : {}),
       corsOrigins,
       ...(opts.metrics ? { metrics: opts.metrics } : {}),
       ...(opts.metricsAuthorize ? { metricsAuthorize: opts.metricsAuthorize } : {}),
@@ -429,7 +521,7 @@ export async function runAdmin(opts: AdminOptions): Promise<AdminBootResult> {
       await eventBus?.close();
       await scimTokenStore?.close();
       if ('close' in scimRateLimiter) await scimRateLimiter.close();
-      await opts.oidc?.close();
+      await oidc?.close();
     },
   };
 }

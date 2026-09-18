@@ -2546,3 +2546,12 @@ Secret-backed, keep shell/browser policy declarative and reviewable, validate
 enabled configurations at render time, and require network egress as a separate
 operator decision. When the local platform lacks Helm, do not claim rendering
 evidence; leave the authoritative CI gate visible.
+
+# 2026-09-18 — Deployment environment must compose the security boundary
+
+Projecting `AQA_OIDC_SESSION_DSN` into a Helm pod is not enough if the runtime
+never constructs the OIDC manager from that environment. Keep deployment
+configuration and host composition connected: validate complete public
+settings, require the secret without printing it, and use a shared session
+store for replicas. An injected manager remains the explicit programmatic
+override; provider login and rotation still require live IdP evidence.

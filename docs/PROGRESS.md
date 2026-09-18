@@ -11,6 +11,16 @@
 
 ## 2026-09-18
 
+- **Closed the OIDC deployment composition gap.** `aqa admin` now resolves
+  explicit `AQA_OIDC_*` settings, constructs the provider-neutral adapter and
+  uses `AQA_OIDC_SESSION_DSN` for the shared PostgreSQL PKCE/session store;
+  partial settings or a missing secret fail closed and never fall back to the
+  local identity. Helm now exposes Secret-backed OIDC settings with render-time
+  validation and requires a PostgreSQL source for HA sessions. Evidence:
+  environment parser regressions plus a non-loopback OIDC-configured admin
+  boot test; local full gates and Helm CI are required before merge. ADR-254
+  records the boundary.
+
 - **Hardened ecommerce quote binding.** Tax and shipping schemas now require
   `cart_id`; the journey rejects cross-cart tax/shipping observations and
   shipping destinations that differ from the requested address. Added ADR-243

@@ -16,7 +16,7 @@ import { type OidcAdapter, OidcSessionManager, ScimTokenManager } from '@aqa/aut
 import { MetricsRegistry } from '@aqa/observability';
 import { MemoryEventBus } from '@aqa/server';
 import { MemoryStore } from '@aqa/store';
-import { runAdmin } from '../dist/commands/admin.js';
+import { oidcEnvironmentConfig, runAdmin } from '../dist/commands/admin.js';
 
 function makeTempRoot(): string {
   return mkdtempSync(join(tmpdir(), 'aqa-admin-cmd-'));
@@ -52,6 +52,71 @@ async function fetchText(
 }
 
 describe('aqa admin — boot + smoke', () => {
+  it('parses OIDC environment configuration fail-closed without exposing the secret', () => {
+    assert.deepEqual(oidcEnvironmentConfig({}), {});
+    assert.deepEqual(
+      oidcEnvironmentConfig({
+        AQA_OIDC_ENABLED: 'true',
+        AQA_OIDC_ISSUER: 'https://idp.example.test',
+        AQA_OIDC_CLIENT_ID: 'aqa-admin',
+        AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
+        AQA_OIDC_CLIENT_SECRET: 'secret-value',
+        AQA_OIDC_SESSION_DSN: 'postgres://user:password@db.example.test/aqa',
+      }),
+      {
+        config: {
+          issuer: 'https://idp.example.test',
+          clientId: 'aqa-admin',
+          redirectUri: 'https://aqa.example.test/auth/callback',
+          clientSecretEnv: 'AQA_OIDC_CLIENT_SECRET',
+          sessionDsn: 'postgres://user:password@db.example.test/aqa',
+        },
+      },
+    );
+    const incomplete = oidcEnvironmentConfig({
+      AQA_OIDC_ENABLED: 'true',
+      AQA_OIDC_ISSUER: 'https://idp.example.test',
+      AQA_OIDC_CLIENT_ID: 'aqa-admin',
+      AQA_OIDC_CLIENT_SECRET: 'secret-value',
+    });
+    assert.match(incomplete.error ?? '', /redirectUri/);
+    assert.doesNotMatch(JSON.stringify(incomplete), /secret-value/);
+  });
+
+  it('treats environment OIDC as the explicit identity boundary for a non-loopback boot', async () => {
+    const keys = [
+      'AQA_OIDC_ENABLED',
+      'AQA_OIDC_ISSUER',
+      'AQA_OIDC_CLIENT_ID',
+      'AQA_OIDC_REDIRECT_URI',
+      'AQA_OIDC_CLIENT_SECRET',
+    ] as const;
+    const previous = new Map(keys.map((key) => [key, process.env[key]]));
+    for (const key of keys) delete process.env[key];
+    Object.assign(process.env, {
+      AQA_OIDC_ENABLED: 'true',
+      AQA_OIDC_ISSUER: 'https://idp.example.test',
+      AQA_OIDC_CLIENT_ID: 'aqa-admin',
+      AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
+      AQA_OIDC_CLIENT_SECRET: 'test-only-secret',
+    });
+    const boot = await runAdmin({
+      root: makeTempRoot(),
+      port: 0,
+      host: '0.0.0.0',
+      adminDistDir: makeFakeAdminDist(),
+    });
+    try {
+      assert.equal(boot.ok, true, `expected OIDC-configured boot, got ${JSON.stringify(boot)}`);
+    } finally {
+      if (boot.ok) await boot.close();
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('runs OIDC login, callback, authenticated API request, and logout', async () => {
     const root = makeTempRoot();
     const adminDistDir = makeFakeAdminDist();
