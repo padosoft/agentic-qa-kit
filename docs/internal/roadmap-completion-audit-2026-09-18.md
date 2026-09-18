@@ -40,7 +40,9 @@ Environment configuration is absent:
 - `oidc-provider-evidence.yml` — authorization-code, PKCE, JWKS and UserInfo;
 - `mtls-runner-rotation-evidence.yml` — mTLS plus old/new runner token behavior;
 - `gift-card-provider-evidence.yml` — read-only issuer reconciliation;
-- `stripe-provider-evidence.yml` — read-only Stripe test-mode PaymentIntent.
+- `stripe-provider-evidence.yml` — read-only Stripe test-mode PaymentIntent;
+- `mutation-evidence-gate.yml` — protected reusable gate for producer-uploaded
+  mutation and reviewed coverage artifacts.
 
 The workflows are not evidence merely because they are present in Git. The
 operator must run them in their protected environments and retain the redacted

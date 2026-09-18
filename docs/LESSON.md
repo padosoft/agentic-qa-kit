@@ -7,6 +7,13 @@ mutant is linked to the risk and regression scenario that should kill it. Gate
 mapping completeness and per-risk kill rates separately; do not let a strong
 global score conceal an unmapped critical control.
 
+# 2026-09-19 — Keep mutation execution outside the report gate
+
+There is no safe generic command string for every Stryker/mutmut project. Let
+the caller own the bounded producer job, then pass immutable artifacts to a
+protected fixed-command AQA gate. This preserves tool flexibility without
+turning a release workflow into an arbitrary shell executor.
+
 # 2026-09-18 — Semantic edges must survive component materialization
 
 It is easy to calculate similarity edges correctly and then accidentally call
