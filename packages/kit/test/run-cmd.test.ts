@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { type ArtifactStore, FileArtifactStore } from '@aqa/artifacts';
+import { compileStatefulJourney } from '@aqa/methodology';
 import { MetricsRegistry } from '@aqa/observability';
 import { ContainerSandbox } from '@aqa/sandbox';
 import { PostgresRunnerQueue, RunnerQueue } from '@aqa/server';
@@ -283,6 +284,52 @@ describe('aqa run', () => {
     const exposition = metrics.renderPrometheus();
     assert.match(exposition, /aqa_runs_started_total 1/);
     assert.match(exposition, /aqa_runs_finished_total\{outcome="succeeded"\} 1/);
+  });
+
+  it('executes an actor-bound stateful journey through the real CLI lifecycle', async () => {
+    const { root, packDir } = fixtureProject();
+    const plan = compileStatefulJourney({
+      schema_version: '1',
+      id: 'checkout-journey',
+      graph: {
+        schema_version: '1',
+        id: 'checkout-lifecycle',
+        initial_state: 'cart',
+        states: [{ id: 'cart' }, { id: 'paid', terminal: true }],
+        transitions: [
+          { id: 'pay', from: 'cart', to: 'paid', actor: 'customer', action: 'authorize payment' },
+        ],
+      },
+      transition_path: ['pay'],
+      actors: [{ id: 'customer' }],
+    });
+    const calls: string[] = [];
+    const result = await runRun({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      statefulJourneys: {
+        'scn-smoke-noop': {
+          plan,
+          contexts: { customer: { session: 'host-owned' } },
+          action: async ({ actor_id, transition }) => {
+            calls.push(`${actor_id}:${transition.id}`);
+            return { ok: true, observed_state: transition.to };
+          },
+          cleanup: async () => undefined,
+        },
+      },
+    });
+    assert.equal(result.ok, true, `stateful run must succeed: ${JSON.stringify(result)}`);
+    assert.deepEqual(calls, ['customer:pay']);
+    const runDir = result.runDir;
+    assert.ok(runDir);
+    const lines = readFileSync(join(runDir, 'events.jsonl'), 'utf8').trim().split('\n');
+    const journeyEvent = lines
+      .map((line) => JSON.parse(line) as { payload?: Record<string, unknown> })
+      .find((event) => event.payload?.stateful_journey === 'transition');
+    assert.equal(journeyEvent?.payload?.transition_id, 'pay');
+    assert.equal(JSON.stringify(lines).includes('host-owned'), false);
   });
 
   it('executes a queued job through the real worker and HTTP run lifecycle', async () => {

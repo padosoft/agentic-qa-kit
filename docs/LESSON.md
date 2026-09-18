@@ -7,6 +7,13 @@ needs actor-bound contexts, an authoritative observed-state read-back after
 each action, temporal observers and cleanup on failure. Keep callback errors
 as safe reason codes: provider exception text can contain credentials or PII.
 
+# 2026-09-19 — Runtime journey bindings must be host-owned
+
+Queue payloads and pack files may select a scenario but must never supply actor
+contexts, callbacks or credentials. Pass compiled journey bindings through the
+embedding host/worker configuration, and write only digest plus bounded
+transition metadata to the canonical audit chain.
+
 # 2026-09-19 — Trace deduplication must ignore collector identity
 
 When federating telemetry, the same span observed by two collectors is not a
