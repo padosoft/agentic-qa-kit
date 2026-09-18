@@ -11,21 +11,24 @@
 
 ## 2026-09-18
 
-- **Added the atomic gift-card ledger boundary.** `@aqa/commerce` now
+- **Merged the atomic gift-card ledger boundary.** PR #191 merged as
+  `59d4e4a` after the full technical matrix, including both Playwright admin
+  journeys, CLI smoke, Postgres/S3/OCI integrations and live telemetry.
+  `@aqa/commerce` now
   provides deterministic Memory and PostgreSQL implementations for
   tenant-scoped credit, idempotent redeem and balance observation. Conflicting
   operation reuse, currency mixing and concurrent overspend fail closed;
   provider gift-card settlement/expiry remains separate evidence. Targeted
   suite: **4 passed, 0 failed**, with the live PostgreSQL concurrency contract
   explicitly skipped without `AQA_TEST_POSTGRES_DSN`. ADR-255 records the
-  boundary. Next: run the full matrix and continue the remaining provider
-  execution evidence.
+  boundary. Provider gift-card settlement/expiry and the missing
+  production-evidence environment remain external next steps.
 
-- **Removed silent CI placeholder passes.** Unit, Node, build and Playwright
-  jobs now execute their real commands unconditionally; a missing workspace or
-  admin Playwright setup fails the job instead of printing a green skip notice.
-  This closes a false-green governance gap in the enterprise release gate.
-  Next: run the full local matrix, then promote the CI hardening increment.
+- **Merged CI fail-closed hardening.** PR #190 merged as `283d100`. Unit, Node,
+  build and Playwright jobs now execute their real commands unconditionally; a
+  missing workspace or admin Playwright setup fails the job instead of
+  printing a green skip notice. This closes a false-green governance gap in
+  the enterprise release gate.
 
 - **Merged OIDC origin-policy hardening.** PR #188 merged as `a466cfa` after
   the full technical matrix: Bun/Node tests, typecheck/lint, build, Helm,
