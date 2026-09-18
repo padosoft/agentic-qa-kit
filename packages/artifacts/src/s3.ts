@@ -13,6 +13,12 @@ import { redactJson, redactText } from './index.js';
 export interface S3ArtifactStoreOptions {
   bucket: string;
   prefix?: string;
+  /** Server-side encryption requested for every artifact and metadata object. */
+  serverSideEncryption?: 'AES256' | 'aws:kms' | 'aws:kms:dsse';
+  /** Exact customer-managed KMS key identity expected from HeadObject. */
+  sseKmsKeyId?: string;
+  /** Read back encryption state after each write and fail closed on mismatch. */
+  verifyEncryption?: boolean;
   /** Optional Object Lock retention applied to newly written objects. */
   retainUntil?: Date;
   retentionMode?: 'GOVERNANCE' | 'COMPLIANCE';
@@ -27,6 +33,9 @@ export class S3ArtifactStore implements ArtifactStore {
   private readonly client: S3ArtifactClient;
   private readonly bucket: string;
   private readonly prefix: string;
+  private readonly serverSideEncryption: 'AES256' | 'aws:kms' | 'aws:kms:dsse' | undefined;
+  private readonly sseKmsKeyId: string | undefined;
+  private readonly verifyEncryption: boolean;
   private readonly retainUntil: Date | undefined;
   private readonly retentionMode: 'GOVERNANCE' | 'COMPLIANCE' | undefined;
   private readonly verifyRetention: boolean;
@@ -42,9 +51,22 @@ export class S3ArtifactStore implements ArtifactStore {
     this.client = options.client ?? new S3Client(options.clientConfig ?? {});
     this.bucket = options.bucket;
     this.prefix = normalizePrefix(options.prefix);
+    this.serverSideEncryption = options.serverSideEncryption;
+    this.sseKmsKeyId = options.sseKmsKeyId?.trim() || undefined;
+    this.verifyEncryption = options.verifyEncryption ?? false;
     this.retainUntil = options.retainUntil;
     this.retentionMode = options.retentionMode;
     this.verifyRetention = options.verifyRetention ?? false;
+    if (
+      this.sseKmsKeyId &&
+      this.serverSideEncryption !== 'aws:kms' &&
+      this.serverSideEncryption !== 'aws:kms:dsse'
+    ) {
+      throw new Error('sseKmsKeyId requires aws:kms or aws:kms:dsse server-side encryption');
+    }
+    if (this.verifyEncryption && !this.serverSideEncryption) {
+      throw new Error('serverSideEncryption is required when verifyEncryption is configured');
+    }
     if (this.retainUntil && !this.retentionMode) {
       throw new Error('retentionMode is required when retainUntil is configured');
     }
@@ -124,6 +146,10 @@ export class S3ArtifactStore implements ArtifactStore {
       ObjectLockMode: this.retentionMode,
       ObjectLockRetainUntilDate: this.retainUntil,
     };
+    const encryption = {
+      ServerSideEncryption: this.serverSideEncryption,
+      SSEKMSKeyId: this.sseKmsKeyId,
+    };
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -132,9 +158,11 @@ export class S3ArtifactStore implements ArtifactStore {
         ContentType: contentType,
         Metadata: { sha256, artifact_id: ref.id },
         ...retention,
+        ...encryption,
       }),
     );
-    if (this.verifyRetention) await this.assertRetention(this.objectKey(clean));
+    if (this.verifyRetention || this.verifyEncryption)
+      await this.assertProviderState(this.objectKey(clean));
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -143,27 +171,39 @@ export class S3ArtifactStore implements ArtifactStore {
         ContentType: 'application/json',
         Metadata: { artifact: Buffer.from(JSON.stringify(ref), 'utf8').toString('base64') },
         ...retention,
+        ...encryption,
       }),
     );
-    if (this.verifyRetention) await this.assertRetention(this.metadataKey(clean));
+    if (this.verifyRetention || this.verifyEncryption)
+      await this.assertProviderState(this.metadataKey(clean));
     return ref;
   }
 
-  /** Verify the exact provider object key; callers pass an already-prefixed key. */
-  private async assertRetention(key: string): Promise<void> {
+  /** Verify provider retention and encryption for the exact object key. */
+  private async assertProviderState(key: string): Promise<void> {
     const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
-    const actualMode = result.ObjectLockMode;
-    const actualUntil = result.ObjectLockRetainUntilDate;
-    if (actualMode !== this.retentionMode) {
+    if (this.verifyRetention) {
+      const actualMode = result.ObjectLockMode;
+      const actualUntil = result.ObjectLockRetainUntilDate;
+      if (actualMode !== this.retentionMode) {
+        throw new Error(
+          `S3 Object Lock mode mismatch for ${key}: expected ${this.retentionMode}, got ${actualMode ?? 'none'}`,
+        );
+      }
+      if (
+        !(actualUntil instanceof Date) ||
+        actualUntil.getTime() < (this.retainUntil?.getTime() ?? 0)
+      ) {
+        throw new Error(`S3 Object Lock retention is missing or too short for ${key}`);
+      }
+    }
+    if (this.verifyEncryption && result.ServerSideEncryption !== this.serverSideEncryption) {
       throw new Error(
-        `S3 Object Lock mode mismatch for ${key}: expected ${this.retentionMode}, got ${actualMode ?? 'none'}`,
+        `S3 server-side encryption mismatch for ${key}: expected ${this.serverSideEncryption}, got ${result.ServerSideEncryption ?? 'none'}`,
       );
     }
-    if (
-      !(actualUntil instanceof Date) ||
-      actualUntil.getTime() < (this.retainUntil?.getTime() ?? 0)
-    ) {
-      throw new Error(`S3 Object Lock retention is missing or too short for ${key}`);
+    if (this.verifyEncryption && this.sseKmsKeyId && result.SSEKMSKeyId !== this.sseKmsKeyId) {
+      throw new Error(`S3 KMS key identity mismatch for ${key}`);
     }
   }
 

@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — A write request is not encryption evidence
+
+S3-compatible APIs can accept an encryption option without proving that the
+provider applied the requested mode or KMS key. The artifact store now supports
+explicit server-side encryption and optional `HeadObject` read-back verification
+for both the payload and metadata sidecar. AWS KMS policy, rotation and
+replication still require provider/deployment evidence.
+
 # 2026-09-18 — A trusted public key still needs an explicit key identity
 
 Signature verification proves that a document was signed by the supplied key,
