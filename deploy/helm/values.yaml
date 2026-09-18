@@ -40,6 +40,9 @@ runner:
     scopes: []
     queueDsnSecretRef: ""
     queueDsnSecretKey: url
+    tokenSecretRef: ""
+    tokenSecretKey: token
+    tokenFile: /var/run/secrets/aqa/runner-token
     command: ["aqa", "worker"]
   reaper:
     # Reclaims expired worker leases even while the worker fleet is stopped.
