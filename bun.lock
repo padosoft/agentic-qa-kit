@@ -250,6 +250,10 @@
         "postgres": "^3.4.9",
       },
     },
+    "packs/accessibility-wcag": {
+      "name": "@aqa/pack-accessibility-wcag",
+      "version": "0.1.0",
+    },
     "packs/api-core": {
       "name": "@aqa/pack-api-core",
       "version": "0.1.0",
@@ -322,6 +326,8 @@
     "@aqa/methodology": ["@aqa/methodology@workspace:packages/methodology"],
 
     "@aqa/observability": ["@aqa/observability@workspace:packages/observability"],
+
+    "@aqa/pack-accessibility-wcag": ["@aqa/pack-accessibility-wcag@workspace:packs/accessibility-wcag"],
 
     "@aqa/pack-api-core": ["@aqa/pack-api-core@workspace:packs/api-core"],
 

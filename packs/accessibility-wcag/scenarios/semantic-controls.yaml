@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-wcag-semantic-controls
+title: Interactive controls expose names, roles and states
+risk_refs: [wcag-unnamed-control]
+invariant_refs: [inv-semantic-control]
+preconditions:
+  - "a disposable browser session can inspect the rendered accessibility tree"
+steps:
+  - id: inspect-controls
+    kind: http
+    with: { method: "GET", url: "/accessibility/semantics?surface=checkout" }
+oracles:
+  - id: o-named-controls
+    kind: response_contains
+    probe_id: inspect-controls
+    with: { jsonpath: "$.unnamed_controls", equals: 0 }
+  - id: o-invalid-roles
+    kind: response_contains
+    probe_id: inspect-controls
+    with: { jsonpath: "$.invalid_roles", equals: 0 }
+tags: [accessibility, wcag, semantics]

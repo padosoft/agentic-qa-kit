@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-wcag-keyboard-navigation
+title: Checkout and dialog flows are keyboard operable without a focus trap
+risk_refs: [wcag-keyboard-trap]
+invariant_refs: [inv-keyboard-operable]
+preconditions:
+  - "a disposable browser session and accessibility probe are available"
+steps:
+  - id: keyboard-checkout
+    kind: http
+    with: { method: "GET", url: "/accessibility/keyboard?journey=checkout" }
+oracles:
+  - id: o-keyboard-complete
+    kind: response_contains
+    probe_id: keyboard-checkout
+    with: { jsonpath: "$.keyboard_operable", equals: true }
+  - id: o-no-trap
+    kind: response_contains
+    probe_id: keyboard-checkout
+    with: { jsonpath: "$.focus_trap", equals: false }
+tags: [accessibility, wcag, keyboard]

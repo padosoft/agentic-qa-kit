@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-accessibility-wcag
+risks:
+  - id: wcag-keyboard-trap
+    category: ui_ux
+    title: A keyboard user cannot reach, operate or leave an interactive control.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-keyboard-operable
+        statement: All actionable flows are reachable and operable with a keyboard, with no focus trap.
+  - id: wcag-unnamed-control
+    category: ui_ux
+    title: A control has no accessible name, role or state exposed to assistive technology.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-semantic-control
+        statement: Every interactive control exposes a stable accessible name, role and applicable state.
+  - id: wcag-missing-status
+    category: ui_ux
+    title: Dynamic updates are not announced to assistive technology users.
+    severity: medium
+    likelihood: likely
+    invariants:
+      - id: inv-live-status
+        statement: Important asynchronous status and error changes are exposed through an appropriate live region.
