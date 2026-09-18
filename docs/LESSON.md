@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — OIDC live evidence needs a fresh code, not a fixture
+
+Discovery and JWT fixtures do not prove that the configured IdP, client,
+redirect URI, PKCE verifier, client secret and UserInfo endpoint work together.
+Use a protected workflow with a freshly issued one-time authorization code and
+never log the code, token or secret. Keep the claim narrow: one successful code
+path is not evidence for SCIM, mTLS, logout, rotation or failover.
+
 # 2026-09-18 — A backup script needs a disposable provider boundary
 
 `pg_dump` and `pg_restore` can provide useful provider evidence, but running a

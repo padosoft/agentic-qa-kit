@@ -1,0 +1,53 @@
+name: OIDC provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-oidc-journey:
+    name: Full live OIDC identity journey
+    runs-on: ubuntu-latest
+    environment: production-identity-evidence
+    timeout-minutes: 15
+    env:
+      AQA_TEST_OIDC_ISSUER: ${{ vars.AQA_TEST_OIDC_ISSUER }}
+      AQA_TEST_OIDC_CLIENT_ID: ${{ vars.AQA_TEST_OIDC_CLIENT_ID }}
+      AQA_TEST_OIDC_REDIRECT_URI: ${{ vars.AQA_TEST_OIDC_REDIRECT_URI }}
+      AQA_TEST_OIDC_ALLOWED_ENDPOINT_ORIGINS: ${{ vars.AQA_TEST_OIDC_ALLOWED_ENDPOINT_ORIGINS }}
+      AQA_TEST_OIDC_EXPECTED_ROLE: ${{ vars.AQA_TEST_OIDC_EXPECTED_ROLE }}
+      AQA_TEST_OIDC_EXPECT_MFA: ${{ vars.AQA_TEST_OIDC_EXPECT_MFA }}
+      AQA_TEST_OIDC_AUTHORIZATION_CODE: ${{ secrets.AQA_TEST_OIDC_AUTHORIZATION_CODE }}
+      AQA_TEST_OIDC_NONCE: ${{ secrets.AQA_TEST_OIDC_NONCE }}
+      AQA_TEST_OIDC_CODE_VERIFIER: ${{ secrets.AQA_TEST_OIDC_CODE_VERIFIER }}
+      AQA_TEST_OIDC_CLIENT_SECRET: ${{ secrets.AQA_TEST_OIDC_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Require operator-owned OIDC evidence configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            AQA_TEST_OIDC_ISSUER \
+            AQA_TEST_OIDC_CLIENT_ID \
+            AQA_TEST_OIDC_REDIRECT_URI \
+            AQA_TEST_OIDC_AUTHORIZATION_CODE \
+            AQA_TEST_OIDC_NONCE \
+            AQA_TEST_OIDC_CODE_VERIFIER \
+            AQA_TEST_OIDC_CLIENT_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing OIDC provider configuration::$name is required in the production-identity-evidence environment"
+              exit 1
+            fi
+          done
+      - name: Build workspace
+        run: bun run build:workspace
+      - name: Run full live OIDC identity journey
+        run: bun test packages/auth/test/oidc-provider-live.test.ts

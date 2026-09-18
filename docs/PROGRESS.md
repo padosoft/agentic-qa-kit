@@ -11,6 +11,18 @@
 
 ## 2026-09-18
 
+- **Added protected full OIDC provider evidence.** The manual
+  `oidc-provider-evidence.yml` workflow requires an operator-issued,
+  single-use authorization code, PKCE verifier/nonce and client secret in the
+  `production-identity-evidence` Environment. It exercises discovery, exact
+  endpoint policy, PKCE URL construction, token exchange, RS256/JWKS
+  validation, UserInfo subject binding, role and optional MFA claims without
+  logging credentials or tokens.
+- **Kept identity evidence explicit.** The workflow proves only the configured
+  authorization-code path at execution time; SCIM, mTLS, session persistence,
+  rotation, failover and availability remain separate. Next: validate/merge
+  this slice, then perform the final roadmap requirement audit.
+
 - **Added protected live PostgreSQL provider evidence.** The manual
   `postgres-provider-evidence.yml` workflow requires a disposable
   `production-database-evidence` Environment secret, refuses missing DSNs,
