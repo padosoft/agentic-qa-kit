@@ -13,6 +13,45 @@
 
 ## 2026-09-18
 
+- **Closed the finding-transition audit gap.** `MemoryStore` and
+  `PostgresStore` now route the legacy `updateFindingStatus` API through the
+  atomic transition path, preserving the operator reason in the hash-chained
+  `finding_status_changed` event. Added a regression test and corrected the
+  admin/audit documentation that still claimed this was missing. Store suite:
+  16 passed, 0 failed. Next: audit cost-admission wiring and prove the
+  remaining production journeys.
+
+- **Hardened the governed LLM boundary.** `BudgetedLlmAdapter` now exposes a
+  bounded, prompt-free event sink for completed calls and budget denials,
+  including authoritative usage and cost without leaking prompts or secrets.
+  The adapter and cost suite pass; host wiring to the durable run event chain
+  remains an explicit integration boundary rather than an implicit side effect.
+
+- **Wired audit metrics through the real run boundary.** `aqa run` now accepts
+  an injected bounded `MetricsRegistry`; persisted audit events map to
+  low-cardinality run, scenario, finding, LLM usage and budget-denial counters,
+  while OTLP tracing remains composable. The complete fixture run proves
+  `run_started`/`run_finished` reach metrics state: 40 run tests and 16
+  observability tests passed. Live Prometheus scrape and collector delivery
+  remain deployment evidence.
+
+- **Closed the exact-budget finalization edge case.** When authoritative
+  provider usage reaches the limit after admission, `BudgetedLlmAdapter` now
+  emits an explicit `budget_exceeded` event before raising, so a run that stops
+  immediately cannot lose the terminal cost signal. Adapter suite: 6 passed,
+  0 failed.
+
+- **M6 enterprise pack batch is complete and merged through PR #137.** The
+  desktop pack was the final originally missing M6 baseline; PRs #121–#137
+  passed the repository integrity, lint, build and unit gates. The pack
+  contracts are now available on `main`. Provider, cluster, OS and regulated
+  production evidence remains intentionally operator/deployment-specific and
+  is not conflated with pack schema validation.
+
+> The individual `Started pack-*` bullets below are historical work-start
+> notes retained for traceability. They are not current “next” items; the
+> consolidated completion status above is authoritative.
+
 - **Started `pack-desktop`.** It closes the M6 pack gap for Electron/Tauri with
   schema-valid IPC sandbox, signed auto-update and authenticated protocol
   contracts. Platform signing and OS evidence remain separate; next: validate

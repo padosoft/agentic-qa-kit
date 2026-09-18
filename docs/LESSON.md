@@ -1,5 +1,39 @@
 # Lessons
 
+# 2026-09-18 — budget enforcement needs an observable boundary
+
+Admission and settlement can be correct while production operators still have
+no trustworthy event to explain a denied or completed provider call. Keep the
+adapter independent of the runner, but expose a bounded prompt-free event
+sink; the host can then append it to the run chain and metrics. Observer
+failures must not turn a governed call into an application retry or reveal
+prompt/provider secrets.
+
+# 2026-09-18 — wire observability at the audit writer, not beside the runner
+
+Metrics updated by a separate summary pass can miss early failures, denials,
+or finalization events. Attach a bounded observer to the same event writer
+that persists the hash chain so every consumer sees the same event boundary.
+Keep labels low-cardinality and never promote the event payload to labels,
+because payloads may contain tenant/user data or model text.
+
+# 2026-09-18 — charge-time exhaustion is also a budget event
+
+Pre-dispatch denial is not the only budget boundary. Provider usage can exceed
+the estimate and hit the limit on the successful call itself; if the adapter
+raises immediately without an event, a short run loses the only durable signal
+that caused it to stop. Emit the terminal exhaustion event after settlement,
+without retrying the provider call or logging prompt content.
+
+# 2026-09-18 — legacy mutation APIs must preserve the audited invariant
+
+The server route already used the atomic finding transition, but the public
+store compatibility method still mutated status directly and discarded the
+reason. Every mutation entry point must delegate to the same transition
+primitive; otherwise a caller outside the HTTP route can bypass audit and
+produce a state that looks valid but cannot be reconstructed. A focused test
+must assert both durable state and the corresponding audit payload.
+
 # 2026-09-18 — runtime security prerequisites belong in deployment gates
 
 Pinning an image in application code is insufficient if Helm can deploy a

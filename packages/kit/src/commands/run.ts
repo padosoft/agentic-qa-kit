@@ -45,7 +45,13 @@ import {
   createAuditCheckpoint,
   parseEventLines,
 } from '@aqa/compliance';
-import { OtlpHttpSpanExporter, Tracer, makeEventSpanObserver } from '@aqa/observability';
+import {
+  type MetricsRegistry,
+  OtlpHttpSpanExporter,
+  Tracer,
+  makeEventMetricsObserver,
+  makeEventSpanObserver,
+} from '@aqa/observability';
 import {
   type LoadedPack,
   appliesWhen,
@@ -104,6 +110,8 @@ export interface RunOptions {
   packsRoot?: string[];
   /** Optional OTLP/HTTP endpoint; defaults to AQA_OTLP_ENDPOINT when set. */
   otlpEndpoint?: string;
+  /** Optional bounded metrics sink for the same audit events written by the run. */
+  metrics?: MetricsRegistry;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ClosableProbeRunner;
   /** Optional host-owned sandbox; hardened profiles create a container sandbox when omitted. */
@@ -497,6 +505,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   let telemetryError: string | undefined;
   let telemetry: OtlpHttpSpanExporter | undefined;
   let onEvent: ((event: Event.Event) => void) | undefined;
+  const observers: Array<(event: Event.Event) => void> = [];
+  if (opts.metrics) observers.push(makeEventMetricsObserver(opts.metrics));
   const otlpEndpoint = opts.otlpEndpoint ?? process.env.AQA_OTLP_ENDPOINT;
   if (otlpEndpoint) {
     try {
@@ -504,11 +514,15 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         endpoint: otlpEndpoint,
         service_name: process.env.AQA_OTLP_SERVICE_NAME ?? 'aqa-kit',
       });
-      onEvent = makeEventSpanObserver(new Tracer((span) => telemetry?.export(span)));
+      observers.push(makeEventSpanObserver(new Tracer((span) => telemetry?.export(span))));
     } catch (error) {
       telemetryError = `OTLP configuration rejected: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
+  if (observers.length)
+    onEvent = (event) => {
+      for (const observer of observers) observer(event);
+    };
   const events = new EventChainWriter(eventsPath, onEvent ? { onEvent } : {});
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,

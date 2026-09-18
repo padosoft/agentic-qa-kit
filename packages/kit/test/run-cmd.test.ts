@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { FileArtifactStore } from '@aqa/artifacts';
+import { MetricsRegistry } from '@aqa/observability';
 import { ContainerSandbox } from '@aqa/sandbox';
 import { RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
@@ -186,6 +187,16 @@ function runFixture(options: Parameters<typeof runRun>[0]): ReturnType<typeof ru
 }
 
 describe('aqa run', () => {
+  it('wires audit events from the real run boundary into injected metrics', async () => {
+    const { root, packDir } = fixtureProject();
+    const metrics = new MetricsRegistry();
+    const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir], metrics });
+    assert.equal(result.ok, true, `instrumented run must succeed: ${JSON.stringify(result)}`);
+    const exposition = metrics.renderPrometheus();
+    assert.match(exposition, /aqa_runs_started_total 1/);
+    assert.match(exposition, /aqa_runs_finished_total\{outcome="succeeded"\} 1/);
+  });
+
   it('executes a queued job through the real worker and HTTP run lifecycle', async () => {
     const { root, packDir } = fixtureProject();
     const target = createServer((_req, res) => {

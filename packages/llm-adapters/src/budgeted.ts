@@ -14,6 +14,20 @@ export interface BudgetedLlmAdapterOptions {
   budget_usd?: number | null;
   /** Admission estimate; production hosts should use model/tokenizer metadata. */
   estimate?: (input: LlmCallInput) => LlmCall;
+  /** Bounded, prompt-free usage/deny events for the host audit/metrics sink. */
+  onEvent?: (event: BudgetAdapterEvent) => void;
+}
+
+export interface BudgetAdapterEvent {
+  kind: 'llm_call' | 'budget_exceeded';
+  ts: string;
+  provider: LlmAdapter['provider'];
+  model: string;
+  status: 'completed' | 'denied' | 'exhausted';
+  tokens_in?: number;
+  tokens_out?: number;
+  cost_usd?: number;
+  reason?: string;
 }
 
 /** Enforces per-run LLM admission and charges authoritative provider usage. */
@@ -33,22 +47,35 @@ export class BudgetedLlmAdapter implements LlmAdapter {
     this.ledger = opts.ledger;
     this.ledgerKey = opts.ledger_key;
     this.budgetUsd = opts.budget_usd ?? null;
+    this.onEvent = opts.onEvent;
   }
 
   private readonly ledger: BudgetLedger | undefined;
   private readonly ledgerKey: string | undefined;
   private readonly budgetUsd: number | null;
+  private readonly onEvent: ((event: BudgetAdapterEvent) => void) | undefined;
 
   async call(input: LlmCallInput): Promise<LlmCallOutput> {
-    this.tracker.assertCanDispatch(this.estimate(input));
+    try {
+      this.tracker.assertCanDispatch(this.estimate(input));
+    } catch (error) {
+      this.emitDenied(input, error);
+      throw error;
+    }
     const estimate = this.estimate(input);
-    const reservation = this.ledger
-      ? await this.ledger.reserve(
-          this.ledgerKey as string,
-          this.budgetUsd,
-          this.tracker.costOf(estimate),
-        )
-      : undefined;
+    let reservation: string | undefined;
+    try {
+      reservation = this.ledger
+        ? await this.ledger.reserve(
+            this.ledgerKey as string,
+            this.budgetUsd,
+            this.tracker.costOf(estimate),
+          )
+        : undefined;
+    } catch (error) {
+      this.emitDenied(input, error);
+      throw error;
+    }
     let output: LlmCallOutput;
     try {
       output = await this.inner.call(input);
@@ -78,13 +105,57 @@ export class BudgetedLlmAdapter implements LlmAdapter {
         },
       );
     }
-    if (state.exhausted)
-      throw new BudgetDispatchBlockedError(state.halted_reason ?? 'budget exhausted after call');
+    this.emit({
+      kind: 'llm_call',
+      ts: new Date().toISOString(),
+      provider: this.provider,
+      model: input.model,
+      status: 'completed',
+      tokens_in: output.tokens_in,
+      tokens_out: output.tokens_out,
+      cost_usd: this.tracker.costOf({
+        model: input.model,
+        tokens_in: output.tokens_in,
+        tokens_out: output.tokens_out,
+      }),
+    });
+    if (state.exhausted) {
+      const reason = state.halted_reason ?? 'budget exhausted after call';
+      this.emit({
+        kind: 'budget_exceeded',
+        ts: new Date().toISOString(),
+        provider: this.provider,
+        model: input.model,
+        status: 'exhausted',
+        reason,
+      });
+      throw new BudgetDispatchBlockedError(reason);
+    }
     return output;
   }
 
   snapshot(): BudgetState {
     return this.tracker.snapshot();
+  }
+
+  private emitDenied(input: LlmCallInput, error: unknown): void {
+    this.emit({
+      kind: 'budget_exceeded',
+      ts: new Date().toISOString(),
+      provider: this.provider,
+      model: input.model,
+      status: 'denied',
+      reason: (error instanceof Error ? error.message : 'budget dispatch denied').slice(0, 200),
+    });
+  }
+
+  private emit(event: BudgetAdapterEvent): void {
+    try {
+      this.onEvent?.(event);
+    } catch {
+      // Audit/metrics observers must not turn an already governed provider
+      // call into an ungoverned retry or a false application failure.
+    }
   }
 }
 

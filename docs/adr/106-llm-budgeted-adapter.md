@@ -20,9 +20,11 @@ estimate and versioned pricing for production governance.
 - Direct callers can no longer accidentally bypass per-run USD admission when
   they use the decorator.
 - Actual provider usage remains the source of truth for aggregation.
-- This is currently an in-process tracker. Durable org/project rollups,
-  distributed reservation, provider reconciliation and budget events remain
-  integration work.
+- This is currently an in-process tracker for local admission. Durable
+  org/project rollups and distributed reservation are supplied by
+  `BudgetLedger`; the adapter now exposes bounded, prompt-free `llm_call` and
+  `budget_exceeded` events through an injected sink. Hosts still must connect
+  that sink to their hash-chain/event bus and reconcile it with provider billing.
 
 ## Verification
 

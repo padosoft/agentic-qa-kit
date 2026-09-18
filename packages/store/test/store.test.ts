@@ -108,6 +108,24 @@ describe('MemoryStore', () => {
     assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
   });
 
+  it('routes the legacy status update API through the audited transition', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+
+    const updated = await s.updateFindingStatus(
+      FINDING.id,
+      'rejected',
+      'qa-user',
+      'not reproducible after verification',
+    );
+
+    assert.equal(updated?.status, 'rejected');
+    const events = await s.listEvents(FINDING.run_id);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.payload.action, 'finding_status_changed');
+    assert.equal(events[0]?.payload.reason, 'not reproducible after verification');
+  });
+
   it('records deterministic fix evidence and reopens a fixed finding on regression', async () => {
     const s = new MemoryStore();
     await s.appendFinding(FINDING);

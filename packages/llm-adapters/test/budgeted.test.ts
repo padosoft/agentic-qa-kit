@@ -4,6 +4,68 @@ import { BudgetTracker, MemoryBudgetLedger } from '@aqa/cost';
 import { BudgetedLlmAdapter, FixtureAdapter, makeFixtureKey } from '../dist/index.js';
 
 describe('BudgetedLlmAdapter', () => {
+  it('emits exhaustion when authoritative usage reaches the budget', async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const input = {
+      provider: 'fixture' as const,
+      model: 'claude-sonnet-4-6',
+      messages: [{ role: 'user' as const, content: 'hello' }],
+    };
+    const adapter = new BudgetedLlmAdapter(
+      new FixtureAdapter([
+        {
+          key: makeFixtureKey(input),
+          output: { text: 'ok', tokens_in: 100, tokens_out: 200, finish_reason: 'stop' },
+        },
+      ]),
+      new BudgetTracker({ budget_usd: 0.0033 }),
+      {
+        estimate: () => ({ model: input.model, tokens_in: 100, tokens_out: 100 }),
+        onEvent: (event) => events.push(event),
+      },
+    );
+
+    await assert.rejects(() => adapter.call(input), /budget exhausted after call/);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['llm_call', 'budget_exceeded'],
+    );
+    assert.equal(events[1]?.status, 'exhausted');
+  });
+
+  it('emits bounded usage and budget-denied events without prompt content', async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const input = {
+      provider: 'fixture' as const,
+      model: 'claude-sonnet-4-6',
+      system: 'Authorization: Bearer do-not-leak',
+      messages: [{ role: 'user' as const, content: 'customer@example.com' }],
+    };
+    const inner = new FixtureAdapter([
+      {
+        key: makeFixtureKey(input),
+        output: { text: 'ok', tokens_in: 100, tokens_out: 100, finish_reason: 'stop' },
+      },
+    ]);
+    const adapter = new BudgetedLlmAdapter(inner, new BudgetTracker({ budget_usd: 0.002 }), {
+      estimate: () => ({ model: input.model, tokens_in: 100, tokens_out: 100 }),
+      onEvent: (event) => events.push(event),
+    });
+
+    await adapter.call(input);
+    await assert.rejects(() => adapter.call(input), /budget exhausted/);
+
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['llm_call', 'budget_exceeded'],
+    );
+    assert.equal(events[0]?.tokens_in, 100);
+    assert.equal(events[0]?.tokens_out, 100);
+    assert.equal(events[1]?.model, input.model);
+    assert.equal(JSON.stringify(events).includes('do-not-leak'), false);
+    assert.equal(JSON.stringify(events).includes('customer@example.com'), false);
+  });
+
   it('admits, charges authoritative usage and blocks the next call', async () => {
     const input = {
       provider: 'fixture' as const,

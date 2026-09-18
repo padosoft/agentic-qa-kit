@@ -7,6 +7,7 @@ import {
   Tracer,
   evaluateSlo,
   formatTraceParent,
+  makeEventMetricsObserver,
   makeEventSpanObserver,
   parseTraceParent,
   redactText,
@@ -74,6 +75,43 @@ describe('@aqa/observability', () => {
     assert.match(text, /aqa_runs_total\{project="shop"\} 2/);
     assert.match(text, /aqa_run_duration_seconds_bucket\{project="shop",le="1"\} 1/);
     assert.match(text, /aqa_run_duration_seconds_count\{project="shop"\} 1/);
+  });
+
+  it('maps bounded audit events to cost and run Prometheus metrics without payload labels', () => {
+    const metrics = new MetricsRegistry();
+    const observe = makeEventMetricsObserver(metrics, { project: 'shop' });
+    observe({
+      kind: 'llm_call',
+      run_id: 'run-1',
+      seq: 1,
+      actor: { type: 'agent' },
+      payload: {
+        provider: 'fixture',
+        model: 'model-1',
+        tokens_in: 12,
+        tokens_out: 8,
+        cost_usd: 0.04,
+      },
+    });
+    observe({
+      kind: 'budget_exceeded',
+      run_id: 'run-1',
+      seq: 2,
+      actor: { type: 'system' },
+      payload: { provider: 'fixture', model: 'model-1' },
+    });
+    const text = metrics.renderPrometheus();
+    assert.match(
+      text,
+      /aqa_llm_calls_total\{model="model-1",project="shop",provider="fixture"\} 1/,
+    );
+    assert.match(
+      text,
+      /aqa_llm_tokens_total\{direction="in",project="shop",provider="fixture"\} 12/,
+    );
+    assert.match(text, /aqa_llm_cost_usd_total\{project="shop",provider="fixture"\} 0\.04/);
+    assert.match(text, /aqa_llm_budget_exceeded_total\{project="shop",provider="fixture"\} 1/);
+    assert.doesNotMatch(text, /run-1|model-1.*payload/);
   });
 
   it('fails closed on unbounded metric series', () => {

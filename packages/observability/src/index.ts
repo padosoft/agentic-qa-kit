@@ -282,6 +282,90 @@ export function makeEventSpanObserver(tracer: Tracer): (event: {
   };
 }
 
+export interface MetricAuditEvent {
+  kind: string;
+  run_id: string;
+  seq: number;
+  actor: { type: string };
+  payload?: Record<string, unknown> | undefined;
+  scenario_id?: string | undefined;
+  finding_id?: string | undefined;
+}
+
+/**
+ * Map the stable, bounded portions of the audit contract to Prometheus
+ * counters. Payloads are never exported as labels: only provider/model and
+ * caller-supplied low-cardinality dimensions are allowed.
+ */
+export function makeEventMetricsObserver(
+  metrics: MetricsRegistry,
+  baseLabels: Record<string, string> = {},
+): (event: MetricAuditEvent) => void {
+  const labels = Object.fromEntries(
+    Object.entries(baseLabels).map(([key, value]) => [key, boundedLabel(value)]),
+  );
+  return (event) => {
+    const payload = event.payload ?? {};
+    if (event.kind === 'run_started') {
+      metrics.counter('aqa_runs_started_total', labels);
+      return;
+    }
+    if (event.kind === 'run_finished') {
+      metrics.counter('aqa_runs_finished_total', {
+        ...labels,
+        outcome: boundedLabel(
+          stringValue(payload.outcome ?? payload.status ?? payload.run_state ?? 'unknown'),
+        ),
+      });
+      return;
+    }
+    if (event.kind === 'scenario_finished') {
+      metrics.counter('aqa_scenario_outcome_total', {
+        ...labels,
+        outcome: boundedLabel(stringValue(payload.outcome ?? 'unknown')),
+      });
+      return;
+    }
+    if (event.kind === 'finding_emitted') {
+      metrics.counter('aqa_findings_created_total', {
+        ...labels,
+        severity: boundedLabel(stringValue(payload.severity ?? 'unknown')),
+      });
+      return;
+    }
+    if (event.kind === 'llm_call' || event.kind === 'budget_exceeded') {
+      const provider = boundedLabel(stringValue(payload.provider ?? 'unknown'));
+      const model = boundedLabel(stringValue(payload.model ?? 'unknown'));
+      if (event.kind === 'budget_exceeded') {
+        metrics.counter('aqa_llm_budget_exceeded_total', { ...labels, provider });
+        return;
+      }
+      metrics.counter('aqa_llm_calls_total', { ...labels, provider, model });
+      const input = nonNegativeNumber(payload.tokens_in);
+      const output = nonNegativeNumber(payload.tokens_out);
+      const cost = nonNegativeNumber(payload.cost_usd);
+      if (input !== undefined)
+        metrics.counter('aqa_llm_tokens_total', { ...labels, provider, direction: 'in' }, input);
+      if (output !== undefined)
+        metrics.counter('aqa_llm_tokens_total', { ...labels, provider, direction: 'out' }, output);
+      if (cost !== undefined)
+        metrics.counter('aqa_llm_cost_usd_total', { ...labels, provider }, cost);
+    }
+  };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value : 'unknown';
+}
+
+function boundedLabel(value: string): string {
+  return value.replace(/[\r\n"\\]/g, '_').slice(0, 64) || 'unknown';
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 type LabelValues = Record<string, string>;
 interface MetricSeries {
   value: number;

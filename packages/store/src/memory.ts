@@ -155,14 +155,11 @@ export class MemoryStore implements StoreProvider {
   async updateFindingStatus(
     id: string,
     status: Finding.Finding['status'],
-    _actor: string,
-    _reason: string,
+    actor: string,
+    reason: string,
   ): Promise<Finding.Finding | null> {
-    const f = this.findings.get(id);
-    if (!f) return null;
-    const updated = { ...f, status } as Finding.Finding;
-    this.findings.set(id, updated);
-    return updated;
+    const transitioned = await this.transitionFindingStatus(id, status, actor, reason);
+    return transitioned?.finding ?? null;
   }
   async transitionFindingStatus(
     id: string,
