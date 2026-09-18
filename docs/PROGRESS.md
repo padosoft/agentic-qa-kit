@@ -11,6 +11,14 @@
 
 ## 2026-09-18
 
+- **Merged OIDC origin-policy hardening.** PR #188 merged as `a466cfa` after
+  the full technical matrix: Bun/Node tests, typecheck/lint, build, Helm,
+  CLI smoke, Playwright admin UI, Postgres/S3/OCI integrations and live
+  Prometheus/OTLP telemetry all passed. Copilot remained the intentionally
+  excluded failing check. The remaining production-evidence gap is external:
+  the GitHub `production-evidence` Environment is missing/inaccessible, so
+  live IdP issuance/rotation cannot be claimed.
+
 - **Exposed the enterprise OIDC endpoint-origin policy.** The runtime now
   accepts `AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS` for providers whose discovery,
   token, UserInfo or JWKS endpoints use additional HTTPS origins; the default
