@@ -35,7 +35,33 @@ export interface MutationCoverageResult {
   violations: ReadonlyArray<string>;
 }
 
+export interface MutationRegressionObservation {
+  mutation_id: string;
+  scenario_id: string;
+  run_id: string;
+  outcome: 'killed' | 'survived';
+}
+
+export interface MutationRegressionEvidence {
+  schema_version: '1';
+  source_revision: string;
+  observations: ReadonlyArray<MutationRegressionObservation>;
+}
+
+export interface MutationRegressionCoverageResult {
+  passed: boolean;
+  expected_pairs: number;
+  observed_pairs: number;
+  killed_mutants: number;
+  evaluated_mutants: number;
+  missing_pairs: ReadonlyArray<string>;
+  mismatched_mutant_ids: ReadonlyArray<string>;
+  kill_rate: number;
+  violations: ReadonlyArray<string>;
+}
+
 const MAX_LINKS = 100_000;
+const MAX_OBSERVATIONS = 100_000;
 
 function boundedId(value: unknown, field: string): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(value))
@@ -49,6 +75,12 @@ function ids(value: unknown, field: string): string[] {
   const output = value.map((item, index) => boundedId(item, `${field}[${index}]`));
   if (new Set(output).size !== output.length) throw new Error(`${field} contains duplicates`);
   return output;
+}
+
+function boundedRevision(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 256)
+    throw new Error('mutation regression source_revision must be bounded');
+  return value;
 }
 
 function ratio(numerator: number, denominator: number): number {
@@ -138,6 +170,120 @@ export function evaluateMutationCoverage(
       mutation_score: ratio(value.killed, value.total),
       scenario_ids: [...value.scenarios].sort(),
     })),
+    violations,
+  };
+}
+
+/** Parse metadata-only evidence produced by an actual regression execution. */
+export function parseMutationRegressionEvidence(value: unknown): MutationRegressionEvidence {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('mutation regression evidence must be an object');
+  const root = value as Record<string, unknown>;
+  if (root.schema_version !== '1')
+    throw new Error('mutation regression evidence schema_version must be "1"');
+  if (
+    !Array.isArray(root.observations) ||
+    root.observations.length === 0 ||
+    root.observations.length > MAX_OBSERVATIONS
+  )
+    throw new Error(`mutation regression observations must contain 1..${MAX_OBSERVATIONS} items`);
+  const seen = new Set<string>();
+  const observations = root.observations.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      throw new Error(`mutation regression observation ${index} must be an object`);
+    const item = raw as Record<string, unknown>;
+    const mutationId = boundedId(
+      item.mutation_id,
+      `mutation regression observation ${index} mutation_id`,
+    );
+    const scenarioId = boundedId(
+      item.scenario_id,
+      `mutation regression observation ${index} scenario_id`,
+    );
+    const key = `${mutationId}:${scenarioId}`;
+    if (seen.has(key)) throw new Error(`duplicate mutation regression observation: ${key}`);
+    seen.add(key);
+    if (item.outcome !== 'killed' && item.outcome !== 'survived')
+      throw new Error(
+        `mutation regression observation ${index} outcome must be killed or survived`,
+      );
+    const runId = boundedId(item.run_id, `mutation regression observation ${index} run_id`);
+    return {
+      mutation_id: mutationId,
+      scenario_id: scenarioId,
+      run_id: runId,
+      outcome: item.outcome as 'killed' | 'survived',
+    };
+  });
+  return {
+    schema_version: '1',
+    source_revision: boundedRevision(root.source_revision),
+    observations,
+  };
+}
+
+/** Require every reviewed mutant/scenario pair to have an execution result. */
+export function evaluateMutationRegressionEvidence(
+  report: MutationReport,
+  manifest: MutationCoverageManifest,
+  evidence: MutationRegressionEvidence,
+  minKillRate: number,
+): MutationRegressionCoverageResult {
+  if (!Number.isFinite(minKillRate) || minKillRate < 0 || minKillRate > 1)
+    throw new Error('mutation regression minimum kill rate must be between 0 and 1');
+  const records = report.records.filter((record) => record.status !== 'ignored');
+  const recordMap = new Map(records.map((record) => [record.id, record]));
+  const links = new Map(manifest.links.map((link) => [link.mutation_id, link]));
+  for (const link of manifest.links) {
+    if (!recordMap.has(link.mutation_id))
+      throw new Error(`mutation coverage references unknown mutant: ${link.mutation_id}`);
+  }
+  const observed = new Map(
+    evidence.observations.map((item) => [`${item.mutation_id}:${item.scenario_id}`, item]),
+  );
+  for (const item of evidence.observations) {
+    const link = links.get(item.mutation_id);
+    if (!link || !link.scenario_ids.includes(item.scenario_id))
+      throw new Error(
+        `mutation regression evidence references an unreviewed pair: ${item.mutation_id}:${item.scenario_id}`,
+      );
+  }
+  const expected: string[] = [];
+  const missing: string[] = [];
+  const mismatched = new Set<string>();
+  let killed = 0;
+  for (const record of records) {
+    const link = links.get(record.id);
+    if (!link) continue;
+    let mutantKilled = false;
+    for (const scenarioId of link.scenario_ids) {
+      const key = `${record.id}:${scenarioId}`;
+      expected.push(key);
+      const item = observed.get(key);
+      if (!item) missing.push(key);
+      else if (item.outcome === 'killed') mutantKilled = true;
+    }
+    if (mutantKilled) killed += 1;
+    if ((record.status === 'killed') !== mutantKilled) mismatched.add(record.id);
+  }
+  const killRate = ratio(killed, records.length);
+  const violations: string[] = [];
+  if (missing.length > 0)
+    violations.push('mutation regression evidence is missing expected scenario executions');
+  if (mismatched.size > 0)
+    violations.push('mutation report outcomes disagree with regression evidence');
+  if (killRate < minKillRate)
+    violations.push('mutation regression kill rate is below the configured minimum');
+  if (records.length === 0) violations.push('no mutants were evaluated');
+  return {
+    passed: violations.length === 0,
+    expected_pairs: expected.length,
+    observed_pairs: expected.length - missing.length,
+    killed_mutants: killed,
+    evaluated_mutants: records.length,
+    missing_pairs: missing,
+    mismatched_mutant_ids: [...mismatched].sort(),
+    kill_rate: killRate,
     violations,
   };
 }

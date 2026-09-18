@@ -78,6 +78,12 @@ closed when the configured thresholds are not met. The command does not run
 Stryker, mutmut or project code; the producer workflow must bind its report to
 the source revision and artifact checkpoint separately.
 
+`aqa mutation regression <report.json> <manifest.json> <evidence.json>
+--min-kill-rate X` adds the execution boundary. The evidence file must contain
+one bounded observation for every reviewed mutant/scenario pair, including a
+run ID and source revision. Missing, unreviewed or contradictory observations
+produce a non-zero gate; the command still never executes project code.
+
 ### Oracle calibration
 
 Create a reviewed, redacted corpus with this shape:

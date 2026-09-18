@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Added mutation-to-regression execution evidence.** `@aqa/ingest` now
+  validates bounded evidence containing source revision, run ID and observed
+  killed/survived outcome for every reviewed mutant/scenario pair. The new
+  `aqa mutation regression` gate fails closed on missing, unreviewed or
+  contradictory observations and is covered by ingest and kit tests. This
+  closes the repository-side mutation-to-regression automation contract; a
+  protected producer job and scale execution remain deployment work. ADR-276.
+
 - **Added runtime stateful journey execution.** `@aqa/methodology` now compiles
   legal graph paths into stable actor-bound plans and executes them through
   injected actor actions with authoritative state read-back, transition-bound

@@ -2763,3 +2763,11 @@ but it also lets an unrelated tenant create a denial/conflict by reusing the
 same harmless key. Idempotency must be unique within the business ownership
 boundary (tenant plus account/resource), and the durable unique index and
 lookup must use that same scope.
+
+# 2026-09-19 — Mutation scores need observed regression pairs
+
+A reviewed mutant-to-scenario mapping and a declared mutation report are not
+execution evidence. Keep one bounded observation per pair, require its run ID
+and source revision, and compare the observed outcome with the report. Missing
+or contradictory pairs must fail closed; the protected producer remains a
+separate deployment concern.

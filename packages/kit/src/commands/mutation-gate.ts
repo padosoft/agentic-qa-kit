@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   type MutationCoverageResult,
+  type MutationRegressionCoverageResult,
   type MutationReport,
   type MutationThresholdResult,
   evaluateMutationCoverage,
+  evaluateMutationRegressionEvidence,
   evaluateMutationThreshold,
   parseMutationCoverageManifest,
+  parseMutationRegressionEvidence,
   parseMutationSummary,
 } from '@aqa/ingest';
 
@@ -39,6 +42,24 @@ export interface MutationCoverageGateResult {
   input_path: string;
   manifest_path: string;
   coverage?: MutationCoverageResult;
+  error?: string;
+}
+
+export interface MutationRegressionGateOptions {
+  root: string;
+  inputFile: string;
+  manifestFile: string;
+  evidenceFile: string;
+  minKillRate: number;
+}
+
+export interface MutationRegressionGateResult {
+  ok: boolean;
+  gate_ok: boolean;
+  input_path: string;
+  manifest_path: string;
+  evidence_path: string;
+  regression?: MutationRegressionCoverageResult;
   error?: string;
 }
 
@@ -94,6 +115,50 @@ export function runMutationCoverageGate(
       input_path: inputPath,
       manifest_path: manifestPath,
       error: error instanceof Error ? error.message : 'invalid mutation coverage input',
+    };
+  }
+}
+
+/** Gate an external mutation report against observed regression executions. */
+export function runMutationRegressionGate(
+  options: MutationRegressionGateOptions,
+): MutationRegressionGateResult {
+  const inputPath = resolve(options.root, options.inputFile);
+  const manifestPath = resolve(options.root, options.manifestFile);
+  const evidencePath = resolve(options.root, options.evidenceFile);
+  try {
+    const report = parseMutationSummary(
+      JSON.parse(readFileSync(inputPath, 'utf8')) as unknown,
+      options.inputFile,
+    );
+    const manifest = parseMutationCoverageManifest(
+      JSON.parse(readFileSync(manifestPath, 'utf8')) as unknown,
+    );
+    const evidence = parseMutationRegressionEvidence(
+      JSON.parse(readFileSync(evidencePath, 'utf8')) as unknown,
+    );
+    const regression = evaluateMutationRegressionEvidence(
+      report,
+      manifest,
+      evidence,
+      options.minKillRate,
+    );
+    return {
+      ok: true,
+      gate_ok: regression.passed,
+      input_path: inputPath,
+      manifest_path: manifestPath,
+      evidence_path: evidencePath,
+      regression,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      gate_ok: false,
+      input_path: inputPath,
+      manifest_path: manifestPath,
+      evidence_path: evidencePath,
+      error: error instanceof Error ? error.message : 'invalid mutation regression evidence',
     };
   }
 }
