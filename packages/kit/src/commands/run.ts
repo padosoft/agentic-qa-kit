@@ -113,13 +113,16 @@ function envEnabled(value: string | undefined): boolean {
  * are returned only in memory and are never included in diagnostics.
  * Disabled by default; malformed opt-in configuration throws a safe message.
  */
-export function probeDriversFromEnvironment(root: string): RunProbeDrivers | undefined {
+export function probeDriversFromEnvironment(
+  root: string,
+  env: NodeJS.ProcessEnv = process.env,
+): RunProbeDrivers | undefined {
   const drivers: RunProbeDrivers = {};
-  const postgresDsn = process.env.AQA_PROBE_POSTGRES_DSN?.trim();
+  const postgresDsn = env.AQA_PROBE_POSTGRES_DSN?.trim();
   if (postgresDsn) drivers.postgres = { connectionString: postgresDsn };
 
-  if (envEnabled(process.env.AQA_PROBE_SHELL_ENABLED)) {
-    const allowedCommands = (process.env.AQA_PROBE_SHELL_ALLOWED_COMMANDS ?? '')
+  if (envEnabled(env.AQA_PROBE_SHELL_ENABLED)) {
+    const allowedCommands = (env.AQA_PROBE_SHELL_ALLOWED_COMMANDS ?? '')
       .split(',')
       .map((command) => command.trim())
       .filter(Boolean);
@@ -130,13 +133,13 @@ export function probeDriversFromEnvironment(root: string): RunProbeDrivers | und
     }
     drivers.shell = {
       allowShell: true,
-      cwd: process.env.AQA_PROBE_SHELL_CWD?.trim() || root,
+      cwd: env.AQA_PROBE_SHELL_CWD?.trim() || root,
       allowedCommands,
     };
   }
 
-  if (envEnabled(process.env.AQA_PROBE_PLAYWRIGHT_ENABLED)) {
-    const allowedOrigins = (process.env.AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS ?? '')
+  if (envEnabled(env.AQA_PROBE_PLAYWRIGHT_ENABLED)) {
+    const allowedOrigins = (env.AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean);
