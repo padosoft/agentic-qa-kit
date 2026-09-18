@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-hipaa-access-audit
+title: PHI access is purpose-bound, tenant-scoped and auditable
+risk_refs: [hipaa-unauthorized-access]
+invariant_refs: [inv-phi-access-controlled]
+preconditions:
+  - "a seeded non-production subject and users with allowed, denied and break-glass roles are available"
+steps:
+  - id: inspect-access
+    kind: http
+    with: { method: "GET", url: "/hipaa/phi/access?subject=seeded&fixture=purpose-bound" }
+oracles:
+  - id: o-deny
+    kind: response_contains
+    probe_id: inspect-access
+    with: { jsonpath: "$.unauthorized_denied", equals: true }
+  - id: o-audit
+    kind: response_contains
+    probe_id: inspect-access
+    with: { jsonpath: "$.access_event_audited", equals: true }
+  - id: o-break-glass
+    kind: response_contains
+    probe_id: inspect-access
+    with: { jsonpath: "$.break_glass_requires_reason", equals: true }
+tags: [hipaa, phi, authorization, audit]

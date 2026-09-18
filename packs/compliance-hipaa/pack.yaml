@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-compliance-hipaa
+version: 0.1.0
+description: "Opt-in HIPAA-oriented baseline for PHI minimization, access control and incident evidence."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [hipaa, phi, healthcare, health-data, regulated-health]
+templates: []
+scenarios:
+  - scenarios/phi-minimization.yaml
+  - scenarios/access-audit.yaml
+  - scenarios/incident-evidence.yaml
+risks:
+  - risks/hipaa.yaml
+oracles: []
+probes: []

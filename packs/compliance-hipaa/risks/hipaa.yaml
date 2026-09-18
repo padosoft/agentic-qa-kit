@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-compliance-hipaa
+risks:
+  - id: hipaa-phi-overcollection
+    category: confidentiality
+    title: PHI is collected, copied or retained beyond the minimum necessary purpose.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-phi-minimum-necessary
+        statement: PHI fields, retention and downstream propagation are limited to the declared purpose.
+  - id: hipaa-unauthorized-access
+    category: confidentiality
+    title: A user, service or support workflow accesses PHI without purpose-bound authorization.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-phi-access-controlled
+        statement: PHI access is tenant-, role-, purpose- and break-glass-audited, with denied access failing closed.
+  - id: hipaa-incident-unproven
+    category: integrity
+    title: A suspected PHI incident cannot be reconstructed, contained or reported from trustworthy evidence.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-phi-incident-evidence
+        statement: PHI access and incident evidence is tamper-evident, time-bounded and linked to response ownership.
