@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-realtime
+risks:
+  - id: realtime-connection-leak
+    category: availability
+    title: Reconnect storms or half-open sessions exhaust connection, memory or subscription limits.
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-realtime-lifecycle-bounded
+        statement: Reconnect, heartbeat, shutdown and subscription lifecycles are bounded and observable.
+  - id: realtime-backpressure-loss
+    category: integrity
+    title: Slow consumers cause unbounded buffers, silent drops or cross-tenant event delivery.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-realtime-backpressure-safe
+        statement: Slow-consumer policy is explicit, bounded and preserves tenant isolation and loss semantics.
+  - id: realtime-replay-ordering
+    category: integrity
+    title: Reconnect replay duplicates, reorders or skips events needed by a customer journey.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-realtime-replay-consistent
+        statement: Event cursors, ordering and replay boundaries make duplicate and missing delivery detectable.

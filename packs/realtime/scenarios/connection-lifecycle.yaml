@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-realtime-connection-lifecycle
+title: Realtime connection lifecycle remains bounded through reconnect and shutdown
+risk_refs: [realtime-connection-leak]
+invariant_refs: [inv-realtime-lifecycle-bounded]
+preconditions:
+  - "a disposable realtime endpoint and bounded connection budget are available"
+steps:
+  - id: inspect-lifecycle
+    kind: http
+    with: { method: "GET", url: "/realtime/lifecycle?channel=order-status" }
+oracles:
+  - id: o-heartbeat
+    kind: response_contains
+    probe_id: inspect-lifecycle
+    with: { jsonpath: "$.heartbeat_bounded", equals: true }
+  - id: o-reconnect
+    kind: response_contains
+    probe_id: inspect-lifecycle
+    with: { jsonpath: "$.reconnect_backoff_bounded", equals: true }
+  - id: o-shutdown
+    kind: response_contains
+    probe_id: inspect-lifecycle
+    with: { jsonpath: "$.subscriptions_released_on_shutdown", equals: true }
+tags: [realtime, lifecycle, websocket]
