@@ -27,6 +27,7 @@ export {
   type QueueReapResult,
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
+export { HttpRunnerQueue, type RunnerTokenSource } from './http-runner-queue.js';
 export { PostgresApiIdempotencyStore } from './postgres-api-idempotency.js';
 export {
   RunnerWorker,

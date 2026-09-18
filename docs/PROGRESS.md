@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Started authenticated remote-runner identity evidence.** Added
+  `HttpRunnerQueue`, which keeps enqueue/reaping/cancellation on the control
+  plane and invokes a token source for every dequeue/get/renew/ACK/fail request.
+  Added scope-checked HTTP get/renew routes and a real `runAdmin` HTTP journey
+  proving RS256 issuer/audience validation, tenant isolation, lease renewal,
+  ACK fencing and JWT rotation without restarting the runner. Local journey:
+  **1 passed**; hosted CI still must prove the package/runtime matrix.
+
 - **Closed the real remote-artifact evidence slice.** Added an ephemeral
   MinIO CI service and an endpoint-gated integration journey that creates an
   Object Lock-enabled bucket, writes a redacted tenant/run artifact through
