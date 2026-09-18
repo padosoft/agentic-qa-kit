@@ -41,7 +41,12 @@ operators.
   provider-neutral OIDC adapter and `PostgresOidcSessionStore` from the
   environment. Partial OIDC configuration fails closed, and an OIDC-enabled
   deployment never falls back to the local admin identity. The redirect URI
-  must point to `/auth/callback` on the public HTTPS origin.
+  must point to `/auth/callback` on the public HTTPS origin. Discovery,
+  token, UserInfo and JWKS calls are restricted to the issuer origin by
+  default; set `auth.oidc.allowedEndpointOrigins` only for additional
+  explicitly trusted HTTPS origins required by the provider. The chart also
+  validates the projected Secret environment variable name and key at render
+  time.
 - Enable the real worker in production with
   `runner.worker.enabled=true`, set `runner.worker.scopes` to explicit
   `org/project` or `org/*` entries, and use `runner.worker.queueDsnSecretRef`

@@ -2564,3 +2564,12 @@ configuration parser in the doctor, fail on partial OIDC or local fallback, and
 keep shared-session state visible as a separate HA warning/requirement. This
 remains configuration evidence, not proof of live issuer or certificate
 rotation.
+
+# 2026-09-18 — OIDC discovery origins are an explicit trust policy
+
+The issuer origin is not always the origin used by discovery, token, UserInfo
+or JWKS endpoints in enterprise identity providers. Keep the secure default
+issuer-only, but expose a reviewed HTTPS origin allowlist through both runtime
+environment and Helm. Validate dynamic Secret environment names at chart
+render time so an operator typo cannot silently produce an unusable or
+ambiguous deployment.

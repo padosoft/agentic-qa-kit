@@ -19,7 +19,10 @@ explicit `AQA_OIDC_*` configuration from the operator environment. Required
 issuer, client, redirect and secret settings are validated before boot;
 partial configuration fails closed. `AQA_OIDC_SESSION_DSN` creates
 `PostgresOidcSessionStore` so PKCE state and sessions are shared across
-replicas. An explicitly injected manager remains the host-owned override.
+replicas. Endpoint calls default to the issuer origin; additional HTTPS
+origins must be explicitly allowlisted through
+`AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS` (or the Helm equivalent). An explicitly
+injected manager remains the host-owned override.
 
 The Helm chart enables this path only with `auth.oidc.enabled=true`, requires
 all public settings, a Secret-backed client secret and a PostgreSQL source, and

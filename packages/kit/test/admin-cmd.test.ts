@@ -61,6 +61,7 @@ describe('aqa admin — boot + smoke', () => {
         AQA_OIDC_CLIENT_ID: 'aqa-admin',
         AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
         AQA_OIDC_CLIENT_SECRET: 'secret-value',
+        AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS: 'https://login.example.test, https://keys.example.test',
         AQA_OIDC_SESSION_DSN: 'postgres://user:password@db.example.test/aqa',
       }),
       {
@@ -69,6 +70,7 @@ describe('aqa admin — boot + smoke', () => {
           clientId: 'aqa-admin',
           redirectUri: 'https://aqa.example.test/auth/callback',
           clientSecretEnv: 'AQA_OIDC_CLIENT_SECRET',
+          allowedEndpointOrigins: ['https://login.example.test', 'https://keys.example.test'],
           sessionDsn: 'postgres://user:password@db.example.test/aqa',
         },
       },
@@ -81,6 +83,17 @@ describe('aqa admin — boot + smoke', () => {
     });
     assert.match(incomplete.error ?? '', /redirectUri/);
     assert.doesNotMatch(JSON.stringify(incomplete), /secret-value/);
+    assert.match(
+      oidcEnvironmentConfig({
+        AQA_OIDC_ENABLED: 'true',
+        AQA_OIDC_ISSUER: 'https://idp.example.test',
+        AQA_OIDC_CLIENT_ID: 'aqa-admin',
+        AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
+        AQA_OIDC_CLIENT_SECRET: 'secret-value',
+        AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS: 'https://login.example.test,,https://keys.example.test',
+      }).error ?? '',
+      /empty origin/,
+    );
   });
 
   it('treats environment OIDC as the explicit identity boundary for a non-loopback boot', async () => {

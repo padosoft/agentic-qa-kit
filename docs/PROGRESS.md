@@ -11,12 +11,20 @@
 
 ## 2026-09-18
 
+- **Exposed the enterprise OIDC endpoint-origin policy.** The runtime now
+  accepts `AQA_OIDC_ALLOWED_ENDPOINT_ORIGINS` for providers whose discovery,
+  token, UserInfo or JWKS endpoints use additional HTTPS origins; the default
+  remains issuer-origin-only. Helm exposes the same policy through
+  `auth.oidc.allowedEndpointOrigins` and validates the projected Secret env
+  name/key at render time. Parser regressions and package gates pass; full
+  repository gates and CI are the next evidence step.
+
 - **Production doctor now enforces the admin identity boundary.** It reuses
   the same fail-closed OIDC environment parser as `aqa admin`, reports whether
   sessions are shared, and fails when the CLI deployment would fall back to the
   local identity or has partial OIDC settings. Added complete/partial secret
   redaction regressions; the check still does not claim live IdP issuance or
-  rotation. Next: run full gates and promote after CI.
+  rotation. PR #187 merged as `d28249c` after the technical CI matrix.
 
 - **Closed the OIDC deployment composition gap.** `aqa admin` now resolves
   explicit `AQA_OIDC_*` settings, constructs the provider-neutral adapter and
