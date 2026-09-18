@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Made profile parallelism operational.** `aqa run` now discovers scenarios
+  before scheduling them through a bounded worker pool capped by the profile's
+  `parallelism`, while preserving unique finding seeds, cooperative
+  cancellation, budget checks, and discovery-ordered run summaries. Audit
+  events may interleave by completion time and retain `dispatch_order` so the
+  concurrency trade-off is explicit. Evidence: complete kit parallelism
+  journey, workspace typecheck/build/lint and 729-test suite pass. Next:
+  continue production evidence and external-provider validation.
+
 - **Added executable scenario preconditions.** `Scenario.preconditions` now
   accepts a backwards-compatible structured `{ id, probe, oracle }` contract.
   `runScenario()` executes those checks before scenario steps, records their

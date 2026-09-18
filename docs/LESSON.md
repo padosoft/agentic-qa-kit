@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — Configured concurrency must be observable and bounded
+
+An accepted `parallelism` field that is ignored is worse than an explicit
+unsupported feature: it creates false capacity expectations. Schedule from a
+discovered immutable list through a bounded worker pool, reserve unique
+identities before awaiting work, and preserve discovery order in summaries.
+Completion-time audit events can interleave, so record dispatch order and keep
+the concurrency/determinism trade-off documented.
+
 # 2026-09-18 — Preconditions must be executable or explicitly descriptive
 
 A string such as `user logged in` is useful documentation but cannot protect
