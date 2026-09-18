@@ -13,6 +13,12 @@
 
 ## 2026-09-18
 
+- **Started the next M6 enterprise pack: `pack-database-migrations`.** It adds
+  opt-in, schema-valid contracts for expand/contract compatibility, rolling
+  deploys and rollback/backfill reconciliation. Provider-specific migration
+  runner, backup/PITR and production-database evidence remain intentionally
+  outside this baseline; next: validate the pack through the loader and gates.
+
 - **Added the opt-in `pack-compliance-gdpr` enterprise pack (M6).** It ships
   schema-valid DSAR access, consent withdrawal and erasure scenarios with
   privacy risks, bounded HTTP oracles, a junior-friendly README and loader

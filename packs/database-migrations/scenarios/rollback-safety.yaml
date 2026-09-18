@@ -1,0 +1,24 @@
+schema_version: "1"
+id: scn-db-rollback-safety
+title: Failed migration leaves an explicit rollback boundary and no silent success
+risk_refs: [db-migration-rollback, db-migration-data-loss]
+invariant_refs: [inv-rollback-compatible, inv-backfill-reconciled]
+preconditions:
+  - "migration status and reconciliation endpoints are available in a disposable environment"
+steps:
+  - id: migration-status
+    kind: http
+    with: { method: "GET", url: "/migration/status" }
+  - id: reconciliation
+    kind: http
+    with: { method: "GET", url: "/migration/reconciliation" }
+oracles:
+  - id: o-status-bounded
+    kind: response_contains
+    probe_id: migration-status
+    with: { jsonpath: "$.rollback_supported", equals: true }
+  - id: o-reconciliation-clean
+    kind: response_contains
+    probe_id: reconciliation
+    with: { jsonpath: "$.status", equals: "reconciled" }
+tags: [database, migration, rollback, backfill]

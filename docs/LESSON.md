@@ -2056,3 +2056,10 @@ A privacy pack should provide executable contracts without presenting a passing
 fixture as legal certification. Keep it opt-in, use seeded non-production
 subjects, name the downstream/provider gaps, and make endpoint placeholders
 visible so operators must adapt and review them before use.
+
+## 2026-09-18 — Migration packs must separate contracts from migration engines
+
+Expand/contract and rollback scenarios can prove application compatibility only
+when bound to a disposable migration environment. They must not imply that an
+HTTP fixture proves backup, PITR, replication, locking, or production schema
+safety; those require provider-specific evidence and restore drills.

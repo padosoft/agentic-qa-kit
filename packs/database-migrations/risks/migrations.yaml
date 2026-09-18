@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-database-migrations
+risks:
+  - id: db-migration-breaking-change
+    category: integrity
+    title: A schema change breaks an older or newer application during rollout.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-expand-contract
+        statement: Every destructive schema change is preceded by a compatible expand phase and delayed cleanup.
+  - id: db-migration-rollback
+    category: availability
+    title: A failed deployment cannot safely recover database compatibility.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-rollback-compatible
+        statement: The previous application version remains operable until the migration rollback boundary is proven.
+  - id: db-migration-data-loss
+    category: integrity
+    title: Backfill or cleanup mutates data without bounded verification.
+    severity: critical
+    likelihood: unlikely
+    invariants:
+      - id: inv-backfill-reconciled
+        statement: Backfills are idempotent, bounded and reconciled against source and target counts before cleanup.
