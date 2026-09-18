@@ -45,6 +45,27 @@ describe('EventChainWriter', () => {
     assert.doesNotMatch(JSON.stringify(events), /prompt|completion|secret/i);
   });
 
+  it('fails closed for malformed accounting values and redacts reason text', () => {
+    const writer = new EventChainWriter('/tmp/_ignore', { persist: false });
+    const sink = makeBudgetEventSink({ events: writer, run_id: 'run-budget-bounds' });
+    sink({
+      kind: 'llm_call',
+      ts: '2026-09-18T10:00:00.000Z',
+      provider: 'fixture',
+      model: 'model-1',
+      status: 'completed',
+      tokens_in: Number.MAX_SAFE_INTEGER,
+      tokens_out: -1,
+      cost_usd: Number.POSITIVE_INFINITY,
+      reason: 'authorization: Bearer super-secret',
+    });
+    const payload = writer.snapshot()[0]?.payload;
+    assert.equal(payload?.tokens_in, 1_000_000_000_000);
+    assert.equal(payload?.tokens_out, undefined);
+    assert.equal(payload?.cost_usd, undefined);
+    assert.equal(payload?.reason, 'authorization: Bearer [REDACTED]');
+  });
+
   it('invokes a non-blocking observer without allowing telemetry failure to break the chain', () => {
     const observed: string[] = [];
     const writer = new EventChainWriter('/tmp/_ignore', {

@@ -1,4 +1,8 @@
+import { redactText } from '@aqa/observability';
 import type { EventChainWriter } from './events.js';
+
+const MAX_ACCOUNTING_COUNTER = 1_000_000_000_000;
+const MAX_ACCOUNTING_COST_USD = 1_000_000_000;
 
 /** The prompt-free event contract emitted by @aqa/llm-adapters. */
 export interface BudgetAuditEvent {
@@ -36,10 +40,13 @@ export function makeBudgetEventSink(
       model: event.model.slice(0, 160),
       status: event.status,
     };
-    if (event.tokens_in !== undefined) payload.tokens_in = event.tokens_in;
-    if (event.tokens_out !== undefined) payload.tokens_out = event.tokens_out;
-    if (event.cost_usd !== undefined) payload.cost_usd = event.cost_usd;
-    if (event.reason !== undefined) payload.reason = event.reason.slice(0, 200);
+    const tokensIn = boundedCounter(event.tokens_in);
+    const tokensOut = boundedCounter(event.tokens_out);
+    const costUsd = boundedCost(event.cost_usd);
+    if (tokensIn !== undefined) payload.tokens_in = tokensIn;
+    if (tokensOut !== undefined) payload.tokens_out = tokensOut;
+    if (costUsd !== undefined) payload.cost_usd = costUsd;
+    if (event.reason !== undefined) payload.reason = redactText(event.reason).slice(0, 200);
     opts.events.append({
       ts: event.ts,
       run_id: opts.run_id,
@@ -52,4 +59,16 @@ export function makeBudgetEventSink(
       payload,
     });
   };
+}
+
+function boundedCounter(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0
+    ? Math.min(value, MAX_ACCOUNTING_COUNTER)
+    : undefined;
+}
+
+function boundedCost(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value >= 0
+    ? Math.min(value, MAX_ACCOUNTING_COST_USD)
+    : undefined;
 }

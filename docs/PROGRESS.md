@@ -58,6 +58,13 @@
   wiring still must explicitly provide the sink, and provider billing
   reconciliation remains deployment evidence.
 
+- **Hardened the budget audit boundary against malformed host input.** The
+  runner bridge now caps counters/costs, drops invalid numeric values and runs
+  reason text through the central redactor before appending to the chain. Added
+  regression coverage for overflow, negative/NaN/Infinity values and bearer
+  leakage. Runner suite: 72 passed. This protects the audit artifact; provider
+  billing reconciliation and distributed usage truth remain separate evidence.
+
 > The individual `Started pack-*` bullets below are historical work-start
 > notes retained for traceability. They are not current “next” items; the
 > consolidated completion status above is authoritative.
