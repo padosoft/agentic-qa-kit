@@ -11,6 +11,13 @@
 
 ## 2026-09-19
 
+- **Added the protected mutation evidence workflow.** The reusable
+  `mutation-evidence-gate.yml` accepts producer-uploaded mutation and reviewed
+  coverage artifacts, enforces safe relative paths, runs in a protected GitHub
+  Environment and invokes the fixed AQA coverage gate. Operations docs and
+  ADR-271 define the producer/provenance boundary; a completed operator run is
+  still required before this becomes live evidence.
+
 - **Added mutation-to-regression coverage.** The reviewed manifest contract
   maps evaluated mutants to risk and regression scenario IDs, while
   `aqa mutation coverage` gates mapping completeness and mapped kill rate and

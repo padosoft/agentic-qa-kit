@@ -1,0 +1,101 @@
+name: Protected mutation evidence gate
+
+on:
+  workflow_call:
+    inputs:
+      report_artifact:
+        description: Artifact name containing the external mutation report
+        required: true
+        type: string
+      manifest_artifact:
+        description: Artifact name containing the reviewed mutation coverage manifest
+        required: true
+        type: string
+      report_file:
+        description: Relative JSON path inside the downloaded report artifact
+        required: true
+        type: string
+      manifest_file:
+        description: Relative JSON path inside the downloaded manifest artifact
+        required: true
+        type: string
+      min_mapped_rate:
+        description: Minimum evaluated-mutant mapping rate
+        required: true
+        type: string
+      min_killed_rate:
+        description: Minimum kill rate among mapped mutants
+        required: true
+        type: string
+    secrets: inherit
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    name: Verify mutation-to-regression evidence
+    runs-on: ubuntu-latest
+    environment: methodology-mutation-evidence
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Download external mutation report
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.report_artifact }}
+          path: .aqa/mutation/report
+
+      - name: Download reviewed coverage manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.manifest_artifact }}
+          path: .aqa/mutation/manifest
+
+      - name: Validate bounded paths and required files
+        shell: bash
+        env:
+          REPORT_FILE: ${{ inputs.report_file }}
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+        run: |
+          set -euo pipefail
+          case "$REPORT_FILE" in /*|*..*|*\\*) echo '::error::unsafe report_file'; exit 1;; esac
+          case "$MANIFEST_FILE" in /*|*..*|*\\*) echo '::error::unsafe manifest_file'; exit 1;; esac
+          test -f ".aqa/mutation/report/$REPORT_FILE"
+          test -f ".aqa/mutation/manifest/$MANIFEST_FILE"
+
+      - name: Run AQA mutation coverage gate
+        shell: bash
+        env:
+          REPORT_FILE: ${{ inputs.report_file }}
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+          MIN_MAPPED_RATE: ${{ inputs.min_mapped_rate }}
+          MIN_KILLED_RATE: ${{ inputs.min_killed_rate }}
+        run: |
+          set -euo pipefail
+          mkdir -p .aqa/mutation/evidence
+          bun packages/kit/dist/cli.cjs mutation coverage \
+            ".aqa/mutation/report/$REPORT_FILE" \
+            ".aqa/mutation/manifest/$MANIFEST_FILE" \
+            --min-mapped-rate "$MIN_MAPPED_RATE" \
+            --min-killed-rate "$MIN_KILLED_RATE" 2>&1 | tee .aqa/mutation/evidence/gate.log
+
+      - name: Upload redacted gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqa-mutation-gate-${{ github.run_id }}
+          path: .aqa/mutation/evidence/gate.log
+          retention-days: 14
