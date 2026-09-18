@@ -13,14 +13,17 @@
 
 ## 2026-09-18
 
-- **Started the real remote-artifact evidence slice.** Added an ephemeral
+- **Closed the real remote-artifact evidence slice.** Added an ephemeral
   MinIO CI service and an endpoint-gated integration journey that creates an
   Object Lock-enabled bucket, writes a redacted tenant/run artifact through
   `S3ArtifactStore`, verifies provider retention read-back on content and
   metadata, downloads with SHA-256 verification, and validates the metadata
-  reference. ADR-225 records the boundary. Local package tests skip this
-  provider journey when `AQA_TEST_S3_ENDPOINT` is absent; hosted CI is required
-  before calling it complete.
+  reference. ADR-225 records the boundary. CI run **35324437934** passed the
+  real S3-compatible job plus Bun, Node 22, PostgreSQL, OCI, build, Helm, CLI
+  and Playwright gates. Local package tests skip this provider journey when
+  `AQA_TEST_S3_ENDPOINT` is absent. AWS-specific KMS, replication, backup and
+  restore evidence remains deployment-specific. Next: authenticate separate
+  runner processes and prove identity rotation across the queue boundary.
 
 - **Closed the finding-transition audit gap.** `MemoryStore` and
   `PostgresStore` now route the legacy `updateFindingStatus` API through the
