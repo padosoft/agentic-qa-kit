@@ -29,7 +29,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { FileArtifactStore } from '@aqa/artifacts';
+import { type ArtifactStore, FileArtifactStore } from '@aqa/artifacts';
 import { MetricsRegistry } from '@aqa/observability';
 import { ContainerSandbox } from '@aqa/sandbox';
 import { PostgresRunnerQueue, RunnerQueue } from '@aqa/server';
@@ -657,6 +657,29 @@ describe('aqa run', () => {
     ) as { external_checkpoint?: { key: string; sha256: string } };
     assert.equal(manifest.external_checkpoint?.key, `checkpoints/${result.runId}.json`);
     assert.equal(manifest.external_checkpoint?.sha256.length, 64);
+  });
+
+  it('fails closed when the independent checkpoint store returns a different digest', async () => {
+    const { root, packDir } = fixtureProject();
+    const backing = new FileArtifactStore(mkdtempSync(join(tmpdir(), 'aqa-checkpoint-drift-')));
+    const drifted: ArtifactStore = {
+      putText: (...args) => backing.putText(...args),
+      putBytes: (...args) => backing.putBytes(...args),
+      get: (...args) => backing.get(...args),
+      delete: (...args) => backing.delete(...args),
+      async putJson(...args) {
+        const ref = await backing.putJson(...args);
+        return { ...ref, sha256: '0'.repeat(64) };
+      },
+    };
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      auditCheckpointStore: drifted,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /independent checkpoint digest\/size/);
   });
 
   it('closes a lifecycle-aware probe driver before publishing the run', async () => {
