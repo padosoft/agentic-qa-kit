@@ -52,6 +52,39 @@ export interface PerformanceThresholdResult {
   violations: PerformanceThresholdViolation[];
 }
 
+export type MutationStatus =
+  | 'killed'
+  | 'survived'
+  | 'no_coverage'
+  | 'timeout'
+  | 'runtime_error'
+  | 'compile_error'
+  | 'ignored';
+
+export interface MutationRecord {
+  id: string;
+  file: string;
+  operator: string;
+  status: MutationStatus;
+}
+
+export interface MutationReport {
+  schema_version: '1';
+  source: string;
+  observed_at: string;
+  records: MutationRecord[];
+  totals: Record<MutationStatus, number>;
+  mutation_score: number;
+}
+
+export interface MutationThresholdResult {
+  passed: boolean;
+  minimum_score: number;
+  mutation_score: number;
+  evaluated_mutants: number;
+  violations: string[];
+}
+
 function fingerprint(parts: string[]): string {
   return createHash('sha256')
     .update(parts.map((part) => part.toLowerCase().replace(/\s+/g, ' ').trim()).join('|'))
@@ -62,6 +95,113 @@ function boundedText(value: string, field: string): string {
   if (Buffer.byteLength(value, 'utf8') > MAX_INPUT_BYTES)
     throw new Error(`${field} exceeds size limit`);
   return value;
+}
+
+function object(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${field} must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function mutationText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '' || value.length > 2_000)
+    throw new Error(`mutation ${field} must be a bounded non-empty string`);
+  return value.trim();
+}
+
+function normalizeMutationStatus(value: unknown): MutationStatus {
+  if (typeof value !== 'string') throw new Error('mutation status is required');
+  const normalized = value.replace(/[-\s]/gu, '_').toLowerCase();
+  const statuses: Record<string, MutationStatus> = {
+    killed: 'killed',
+    survived: 'survived',
+    nocoverage: 'no_coverage',
+    no_coverage: 'no_coverage',
+    timeout: 'timeout',
+    runtimeerror: 'runtime_error',
+    runtime_error: 'runtime_error',
+    compileerror: 'compile_error',
+    compile_error: 'compile_error',
+    ignored: 'ignored',
+  };
+  const status = statuses[normalized];
+  if (!status) throw new Error(`unsupported mutation status: ${value}`);
+  return status;
+}
+
+/** Normalize bounded Stryker/mutmut-style JSON; execution stays outside this boundary. */
+export function parseMutationSummary(value: unknown, source = 'mutation.json'): MutationReport {
+  const root = object(value, 'mutation report');
+  const rawMutants = Array.isArray(root.mutants)
+    ? root.mutants.map((item, index) => ({ item, file: undefined, index }))
+    : Object.entries(object(root.files, 'mutation files')).flatMap(([file, fileValue]) => {
+        const fileObject = object(fileValue, `mutation file ${file}`);
+        if (!Array.isArray(fileObject.mutants))
+          throw new Error(`mutation file ${file} must contain mutants`);
+        return fileObject.mutants.map((item, index) => ({ item, file, index }));
+      });
+  if (rawMutants.length === 0 || rawMutants.length > 100_000)
+    throw new Error('mutation report must contain between 1 and 100000 mutants');
+
+  const seen = new Set<string>();
+  const records: MutationRecord[] = [];
+  for (const entry of rawMutants) {
+    const mutant = object(entry.item, `mutation ${entry.index}`);
+    const id = mutationText(
+      mutant.id ?? mutant.mutantId ?? `${entry.file ?? 'unknown'}:${entry.index}`,
+      'id',
+    );
+    if (seen.has(id)) throw new Error(`duplicate mutation id: ${id}`);
+    seen.add(id);
+    records.push({
+      id,
+      file: mutationText(mutant.file ?? entry.file, 'file'),
+      operator: mutationText(mutant.operator ?? mutant.mutatorName ?? 'unknown', 'operator'),
+      status: normalizeMutationStatus(mutant.status ?? mutant.state),
+    });
+  }
+  const totals = Object.fromEntries(
+    (
+      [
+        'killed',
+        'survived',
+        'no_coverage',
+        'timeout',
+        'runtime_error',
+        'compile_error',
+        'ignored',
+      ] as const
+    ).map((status) => [status, records.filter((record) => record.status === status).length]),
+  ) as Record<MutationStatus, number>;
+  const evaluated = records.length - totals.ignored;
+  const score = evaluated === 0 ? 0 : totals.killed / evaluated;
+  return {
+    schema_version: '1',
+    source,
+    observed_at: new Date().toISOString(),
+    records,
+    totals,
+    mutation_score: Number(score.toFixed(6)),
+  };
+}
+
+export function evaluateMutationThreshold(
+  report: MutationReport,
+  minimumScore: number,
+): MutationThresholdResult {
+  if (!Number.isFinite(minimumScore) || minimumScore < 0 || minimumScore > 1)
+    throw new Error('mutation minimum score must be between 0 and 1');
+  const evaluated = report.records.length - report.totals.ignored;
+  const passed = report.mutation_score >= minimumScore && evaluated > 0;
+  return {
+    passed,
+    minimum_score: minimumScore,
+    mutation_score: report.mutation_score,
+    evaluated_mutants: evaluated,
+    violations: passed
+      ? []
+      : ['mutation score is below the configured minimum or no mutants were evaluated'],
+  };
 }
 
 /**

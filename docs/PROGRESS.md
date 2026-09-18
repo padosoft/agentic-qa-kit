@@ -11,6 +11,14 @@
 
 ## 2026-09-18
 
+- **Added the first mutation-evidence release gate.** `@aqa/ingest` now
+  normalizes bounded flat/Stryker-style reports, preserves non-killed outcomes
+  and computes a deterministic score; `aqa mutation gate <report.json>
+  --min-score X` applies the explicit threshold without executing mutators.
+  Added malformed/duplicate/status regression tests, package documentation and
+  ADR-266. Local ingest and kit typecheck/build/test gates pass; next is full
+  repository validation, PR/CI and then semantic root-cause clustering.
+
 - **Closed the operational oracle-calibration gap.** Added
   `aqa oracle calibrate <corpus.json>` with a versioned, bounded and
   fail-closed gold-corpus parser, Brier/ECE/reliability-bin output and an
