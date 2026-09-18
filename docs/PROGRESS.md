@@ -42,6 +42,14 @@
   restore-integrity evidence for the CI provider but does not claim managed
   cloud PITR/WAL, KMS/WORM, replication or production RTO/RPO.
 
+- **Hardened commerce HTTP transport.** `HttpCommerceAdapter` now rejects
+  external plaintext HTTP and embedded URL credentials, while allowing
+  loopback HTTP only with explicit `allowInsecureLocalHttp: true`. Added ADR-247
+  and regressions for insecure external origins, unsafe allowlists and local
+  journey compatibility. Commerce contract: **39 passed, 0 failed** locally
+  with the existing PostgreSQL-dependent skip. Merchant TLS, certificate
+  rotation and network egress remain deployment evidence.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes

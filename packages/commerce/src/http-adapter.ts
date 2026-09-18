@@ -35,6 +35,8 @@ import {
 export interface HttpCommerceAdapterOptions {
   baseUrl: string;
   allowedOrigins?: readonly string[];
+  /** Permit HTTP only for loopback test/dev endpoints; external origins always require HTTPS. */
+  allowInsecureLocalHttp?: boolean;
   maxResponseBytes?: number;
   fetch?: typeof globalThis.fetch;
   headers?: (
@@ -71,6 +73,24 @@ function pathTemplate(template: string, values: Record<string, string>): string 
   });
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function assertSafeOrigin(value: string, allowInsecureLocalHttp: boolean, label: string): string {
+  const url = new URL(value);
+  if (url.username || url.password)
+    throw new Error(`commerce ${label} must not contain credentials`);
+  if (
+    url.protocol !== 'https:' &&
+    !(allowInsecureLocalHttp && url.protocol === 'http:' && isLoopbackHost(url.hostname))
+  )
+    throw new Error(
+      `commerce ${label} must use HTTPS unless it is an explicitly allowed loopback HTTP endpoint`,
+    );
+  return url.origin;
+}
+
 /** Provider-neutral HTTP adapter for live commerce systems under test. */
 export class HttpCommerceAdapter implements CommerceAdapter {
   private readonly baseUrl: string;
@@ -81,8 +101,15 @@ export class HttpCommerceAdapter implements CommerceAdapter {
   private readonly paths: Required<NonNullable<HttpCommerceAdapterOptions['paths']>>;
 
   constructor(opts: HttpCommerceAdapterOptions) {
-    this.baseUrl = new URL(opts.baseUrl).toString().replace(/\/$/, '');
-    this.allowedOrigins = new Set(opts.allowedOrigins ?? [new URL(this.baseUrl).origin]);
+    const allowInsecureLocalHttp = opts.allowInsecureLocalHttp ?? false;
+    const base = new URL(opts.baseUrl);
+    const baseOrigin = assertSafeOrigin(base.toString(), allowInsecureLocalHttp, 'baseUrl');
+    this.baseUrl = base.toString().replace(/\/$/, '');
+    this.allowedOrigins = new Set(
+      (opts.allowedOrigins ?? [baseOrigin]).map((origin) =>
+        assertSafeOrigin(origin, allowInsecureLocalHttp, 'allowed origin'),
+      ),
+    );
     this.maxResponseBytes = opts.maxResponseBytes ?? 1_048_576;
     if (!Number.isInteger(this.maxResponseBytes) || this.maxResponseBytes < 1)
       throw new Error('commerce maxResponseBytes must be a positive integer');

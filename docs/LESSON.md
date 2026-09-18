@@ -2478,3 +2478,12 @@ into a uniquely named isolated database and compares a canonical digest through
 a new connection, with cleanup on failure. This is still bounded to the CI
 PostgreSQL provider; it must not be presented as cloud PITR, KMS, WORM or
 production RTO/RPO proof.
+
+# 2026-09-18 — Commerce transport policy must fail closed before fetch
+
+Provider-neutral HTTP adapters are still production mutation boundaries. A
+successful schema parse does not compensate for sending credentials or payment
+mutations over external plaintext HTTP. Enforce HTTPS at construction time,
+allow only explicitly opted-in loopback HTTP for local journeys, reject URL
+credentials, and keep redirects manual so the origin allowlist remains
+effective.
