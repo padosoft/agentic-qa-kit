@@ -2397,3 +2397,12 @@ target, including `pg_is_in_recovery`, replay position and transaction
 read-only state. Keep this record free of DSNs and payloads, fail closed on a
 writable target, and continue to distinguish database observation from provider
 PITR, object-store restore and KMS/WORM evidence.
+
+# 2026-09-18 — Provider read-back must be complete before reconciliation
+
+For payment/refund assurance, a successful create call is not settlement
+evidence. Re-read the provider payment, reject non-captured states, reject
+unbounded/incomplete refund pagination, and compare currency plus integer minor
+unit totals with the merchant ledger. Keep disputes and payouts as explicit
+additional joins rather than silently reporting a partial reconciliation as
+complete.

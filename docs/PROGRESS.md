@@ -2415,3 +2415,14 @@
 - Added API and queue regressions proving a different runner in the same
   org/project cannot mutate the lease. Existing hosted PostgreSQL CI remains
   required before declaring the durable migration path promoted.
+
+# 2026-09-18 — Stripe provider refund reconciliation in progress
+
+- Added `reconcileStripeRefunds()` to the Stripe boundary. It reads back the
+  PaymentIntent and bounded refund ledger, verifies provider capture state,
+  currency and captured/refunded totals, and fails closed on incomplete
+  pagination, non-successful refunds or drift. Evidence: commerce suite
+  **47 passed / 0 failed** locally; ADR-238 and package README updated.
+- This closes only provider payment/refund reconciliation. Disputes, payouts,
+  taxes, fulfillment and durable merchant transaction joins remain separate
+  production evidence requirements.

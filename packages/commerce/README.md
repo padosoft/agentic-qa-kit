@@ -70,6 +70,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   HTTPS (except localhost test servers), write idempotency keys, bounded
   responses and typed provider observations; it deliberately does not pretend
   to own merchant carts, inventory or fulfillment.
+- `reconcileStripeRefunds()` reads back the provider PaymentIntent and bounded
+  refund list, then fails closed when captured or successful-refund totals do
+  not match merchant-authoritative values. Disputes and payout settlement
+  remain separate provider observations.
 - `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
   the business side effect idempotent across retries and replicas, rejecting
   reuse of one logical effect key by a different event.
