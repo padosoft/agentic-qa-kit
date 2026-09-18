@@ -64,6 +64,19 @@ export interface SimilarityCalibrationGate {
   violations: ReadonlyArray<string>;
 }
 
+export interface SimilarityCalibrationHoldout {
+  train: ReadonlyArray<SimilarityCalibrationSample>;
+  holdout: ReadonlyArray<SimilarityCalibrationSample>;
+  split_digest: string;
+}
+
+export interface SimilarityHoldoutCalibrationReport {
+  train: SimilarityCalibrationReport;
+  holdout: SimilarityCalibrationReport;
+  gate: SimilarityCalibrationGate;
+  split_digest: string;
+}
+
 const SEV_RANK: Record<Finding.Finding['severity'], number> = {
   critical: 0,
   high: 1,
@@ -347,4 +360,61 @@ export function evaluateSimilarityCalibration(
   )
     violations.push('false-positive rate exceeds the configured maximum');
   return { passed: violations.length === 0, violations };
+}
+
+/**
+ * Deterministically split reviewed pairs before threshold calibration. The
+ * holdout is never used to choose the threshold; the digest makes the split
+ * reproducible and auditable without persisting private labels beyond the
+ * caller's reviewed corpus.
+ */
+export function splitSimilarityCalibrationHoldout(
+  samples: ReadonlyArray<SimilarityCalibrationSample>,
+  holdout_fraction: number,
+  seed: string,
+): SimilarityCalibrationHoldout {
+  if (samples.length < 4 || samples.length > 100_000)
+    throw new Error('similarity holdout requires 4..100000 samples');
+  if (!Number.isFinite(holdout_fraction) || holdout_fraction <= 0 || holdout_fraction >= 1)
+    throw new Error('similarity holdout fraction must be between 0 and 1');
+  if (typeof seed !== 'string' || seed.trim() === '' || seed.length > 128)
+    throw new Error('similarity holdout seed must be bounded and non-empty');
+  const ranked = samples.map((sample, index) => ({
+    sample,
+    index,
+    rank: createHash('sha256').update(`${seed}\u0000${index}`).digest('hex'),
+  }));
+  ranked.sort((left, right) => left.rank.localeCompare(right.rank) || left.index - right.index);
+  const holdoutCount = Math.min(
+    samples.length - 1,
+    Math.max(1, Math.round(samples.length * holdout_fraction)),
+  );
+  const holdoutIndexes = new Set(ranked.slice(0, holdoutCount).map(({ index }) => index));
+  const train = samples.filter((_, index) => !holdoutIndexes.has(index));
+  const holdout = samples.filter((_, index) => holdoutIndexes.has(index));
+  const split_digest = createHash('sha256')
+    .update(
+      JSON.stringify({
+        seed,
+        holdout_fraction,
+        holdout: [...holdoutIndexes].sort((a, b) => a - b),
+      }),
+    )
+    .digest('hex');
+  return { train, holdout, split_digest };
+}
+
+/** Calibrate on train data and apply the release policy only to unseen holdout data. */
+export function calibrateSimilarityHoldout(
+  samples: ReadonlyArray<SimilarityCalibrationSample>,
+  threshold: number,
+  holdout_fraction: number,
+  seed: string,
+  policy: SimilarityCalibrationPolicy,
+): SimilarityHoldoutCalibrationReport {
+  const split = splitSimilarityCalibrationHoldout(samples, holdout_fraction, seed);
+  const train = calibrateSimilarityThreshold(split.train, threshold);
+  const holdout = calibrateSimilarityThreshold(split.holdout, threshold);
+  const gate = evaluateSimilarityCalibration(holdout, policy);
+  return { train, holdout, gate, split_digest: split.split_digest };
 }

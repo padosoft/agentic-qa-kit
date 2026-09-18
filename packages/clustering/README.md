@@ -17,6 +17,10 @@ Cross-run findings dedup + clustering for the admin panel's Findings Kanban
   `evaluateSimilarityCalibration(report, policy)` — measure precision, recall
   and false-positive rate on human-reviewed pairs before enabling a semantic
   grouping threshold in release policy.
+- `splitSimilarityCalibrationHoldout(...)` and
+  `calibrateSimilarityHoldout(...)` — create a deterministic, digest-bound
+  train/holdout split and apply release policy to unseen reviewed pairs rather
+  than only to the corpus used for threshold tuning.
 - `priorityOf(finding)` — computes bounded severity × confidence × blast radius
   / fix cost. Missing optional business estimates use neutral value `1`.
 
@@ -24,6 +28,10 @@ Clustering is deliberately conservative: similarity links never cross risk
 boundaries, require an explicit threshold, and never persist raw embedding
 vectors. Embedding similarity is opt-in; an ambiguous result remains a
 separate finding until a caller supplies a suitable threshold and policy.
+
+Holdout calibration improves methodological hygiene but is not independent
+validation: labels still come from the operator's reviewed corpus and need
+external governance for production claims.
 
 This is intentionally a small static layer; the in-run dedup already lives
 in `@aqa/runner`'s `FindingsWriter`. Clustering across runs is purely
