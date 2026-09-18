@@ -9,6 +9,8 @@ export interface RunnerWorkerOptions {
   on_error?: (error: unknown, job: EnqueuedJob) => void;
   /** Tenant scopes assigned to this worker; undefined means legacy unscoped mode. */
   scopes?: readonly RunnerScope[];
+  /** Stable runner identity used to fence lease mutation calls. */
+  runner_id?: string;
 }
 
 export interface WorkerRunResult {
@@ -34,17 +36,19 @@ export class RunnerWorker {
     this.pollMs = Math.max(10, opts.poll_ms ?? 250);
     this.onError = opts.on_error;
     this.scopes = opts.scopes;
+    this.runnerId = opts.runner_id?.trim() || undefined;
   }
 
   private readonly onError: RunnerWorkerOptions['on_error'];
   private readonly scopes: RunnerWorkerOptions['scopes'];
+  private readonly runnerId: string | undefined;
 
   stop(): void {
     this.stopped = true;
   }
 
   async runOnce(): Promise<WorkerRunResult> {
-    const job = await this.queue.dequeue(undefined, this.scopes);
+    const job = await this.queue.dequeue(undefined, this.scopes, this.runnerId);
     if (!job) return { status: 'idle' };
     const controller = new AbortController();
     let cancelled = false;
@@ -65,7 +69,7 @@ export class RunnerWorker {
           controller.abort();
           return;
         }
-        const renewed = await this.queue.renew(job.id, job.lease_token);
+        const renewed = await this.queue.renew(job.id, job.lease_token, undefined, this.runnerId);
         if (!renewed) {
           leaseLost = true;
           controller.abort();
@@ -89,7 +93,7 @@ export class RunnerWorker {
       if (cancelled || current?.status === 'cancelled')
         return { status: 'cancelled', job_id: job.id };
       if (leaseLost) return { status: 'lease_lost', job_id: job.id };
-      const acknowledged = await this.queue.ack(job.id, job.lease_token);
+      const acknowledged = await this.queue.ack(job.id, job.lease_token, this.runnerId);
       return { status: acknowledged ? 'completed' : 'lease_lost', job_id: job.id };
     } catch (error) {
       const current = await this.queue.get(job.id);
@@ -97,7 +101,7 @@ export class RunnerWorker {
         return { status: 'cancelled', job_id: job.id };
       if (leaseLost) return { status: 'lease_lost', job_id: job.id };
       this.onError?.(error, job);
-      await this.queue.fail(job.id, job.lease_token, boundedError(error));
+      await this.queue.fail(job.id, job.lease_token, boundedError(error), this.runnerId);
       return { status: 'failed', job_id: job.id };
     } finally {
       watcherActive = false;

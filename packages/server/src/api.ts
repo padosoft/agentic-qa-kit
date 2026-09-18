@@ -1596,7 +1596,8 @@ export function makeApi(): ApiHandler[] {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
         const scopes = authorization === true ? undefined : authorization.scopes;
-        const next = await ctx.queue.dequeue(undefined, scopes);
+        const runnerId = authorization === true ? undefined : authorization.runner_id;
+        const next = await ctx.queue.dequeue(undefined, scopes, runnerId);
         return { status: next ? 200 : 204, body: next ? { job: next } : null };
       },
     },
@@ -1627,6 +1628,7 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
         if (authorization === false) return { status: 401, body: { error: 'runner unauthorized' } };
+        const runnerId = authorization === true ? undefined : authorization.runner_id;
         const body = (req.body ?? {}) as { lease_token?: unknown };
         const id = req.params.id;
         if (!id || typeof body.lease_token !== 'string' || !body.lease_token)
@@ -1637,7 +1639,7 @@ export function makeApi(): ApiHandler[] {
           (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
         )
           return { status: 404, body: { error: 'job not found' } };
-        const renewed = await ctx.queue.renew(id, body.lease_token);
+        const renewed = await ctx.queue.renew(id, body.lease_token, undefined, runnerId);
         return asResponse({ renewed }, renewed ? 200 : 409);
       },
     },
@@ -1650,6 +1652,7 @@ export function makeApi(): ApiHandler[] {
         if (authorization === false) {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
+        const runnerId = authorization === true ? undefined : authorization.runner_id;
         const id = req.params.id;
         const body = (req.body ?? {}) as { lease_token?: unknown };
         if (!id || typeof body.lease_token !== 'string' || !body.lease_token) {
@@ -1661,7 +1664,7 @@ export function makeApi(): ApiHandler[] {
           (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
         )
           return { status: 404, body: { error: 'job not found' } };
-        const acknowledged = await ctx.queue.ack(id, body.lease_token);
+        const acknowledged = await ctx.queue.ack(id, body.lease_token, runnerId);
         return asResponse({ acknowledged }, acknowledged ? 200 : 409);
       },
     },
@@ -1674,6 +1677,7 @@ export function makeApi(): ApiHandler[] {
         if (authorization === false) {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
+        const runnerId = authorization === true ? undefined : authorization.runner_id;
         const id = req.params.id;
         const body = (req.body ?? {}) as { lease_token?: unknown; reason?: unknown };
         if (
@@ -1691,7 +1695,7 @@ export function makeApi(): ApiHandler[] {
           (!job || !matchesRunnerScopes(job.payload, authorization.scopes))
         )
           return { status: 404, body: { error: 'job not found' } };
-        const failed = await ctx.queue.fail(id, body.lease_token, body.reason);
+        const failed = await ctx.queue.fail(id, body.lease_token, body.reason, runnerId);
         return asResponse({ failed }, failed ? 200 : 409);
       },
     },

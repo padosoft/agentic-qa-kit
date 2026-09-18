@@ -8,8 +8,10 @@ Multi-team API server scaffold (Task 19 of the durable plan).
 - `RunnerQueue` is an in-memory FIFO with visibility-timeout leases for local
   development. `PostgresRunnerQueue` provides the production boundary with
   row-locking, `SKIP LOCKED`, durable leases, reconnect recovery, and fencing
-  tokens so a stale worker cannot acknowledge a reassigned job. The API accepts
-  either implementation through `RunnerQueueLike`.
+  tokens so a stale worker cannot acknowledge a reassigned job. When a verified
+  runner identity is available, the lease is also fenced to that `runner_id`,
+  preventing a different runner in the same project scope from renewing or
+  ACKing it. The API accepts either implementation through `RunnerQueueLike`.
 
 Permission gates use `@aqa/auth`'s `allows()` predicate. Storage uses
 `@aqa/store`'s `StoreProvider` — MemoryStore in tests, PostgresStore in

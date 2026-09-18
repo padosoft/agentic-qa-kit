@@ -653,6 +653,36 @@ describe('makeApi', () => {
     assert.equal(crossTenant.status, 404);
   });
 
+  it('runner identity fences lease mutation even inside the same project scope', async () => {
+    let identity = 'runner-a';
+    const c = ctx({
+      runnerAuthorize: async () => ({
+        runner_id: identity,
+        scopes: [{ org: 'padosoft', project: 'shop' }],
+      }),
+    });
+    c.queue.enqueue({
+      id: 'identity-job',
+      payload: { org: 'padosoft', project: 'shop' },
+      enqueued_at: '2026-05-17T10:00:00Z',
+    });
+    const nextRoute = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/runner/jobs/next',
+    );
+    const ackRoute = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/runner/jobs/:id/ack',
+    );
+    assert.ok(nextRoute && ackRoute);
+    const next = await nextRoute.handle({ headers: {}, params: {} }, c);
+    const token = (next.body as { job: { lease_token?: string } }).job.lease_token;
+    identity = 'runner-b';
+    const rejected = await ackRoute.handle(
+      { headers: {}, params: { id: 'identity-job' }, body: { lease_token: token } },
+      c,
+    );
+    assert.equal(rejected.status, 409);
+  });
+
   it('GET /api/queue snapshots the queue', async () => {
     const c = ctx();
     c.queue.enqueue({ id: 'job-a', payload: {}, enqueued_at: '2026-05-18T00:00:00Z' });

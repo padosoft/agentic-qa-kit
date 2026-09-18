@@ -8,6 +8,7 @@ export type RunnerWorkerConfig = {
   server_url?: string;
   runner_token?: string;
   runner_token_file?: string;
+  runner_id?: string;
   root: string;
   poll_ms: number;
   scopes: readonly { org: string; project?: string }[];
@@ -38,6 +39,7 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
   const serverUrl = env.AQA_SERVER_URL?.trim();
   const runnerToken = env.AQA_RUNNER_TOKEN?.trim();
   const runnerTokenFile = env.AQA_RUNNER_TOKEN_FILE?.trim();
+  const runnerId = env.AQA_RUNNER_ID?.trim();
   const root = env.AQA_RUNNER_ROOT?.trim();
   const scopes = env.AQA_RUNNER_SCOPES?.trim();
   if (!queueDsn && !serverUrl)
@@ -59,6 +61,7 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
     ...(serverUrl ? { server_url: serverUrl } : {}),
     ...(runnerToken ? { runner_token: runnerToken } : {}),
     ...(runnerTokenFile ? { runner_token_file: resolve(runnerTokenFile) } : {}),
+    ...(runnerId ? { runner_id: runnerId } : {}),
     root: resolve(root),
     poll_ms: pollMs,
     scopes: parseRunnerScopes(scopes),
@@ -78,6 +81,7 @@ export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
     root: config.root,
     poll_ms: config.poll_ms,
     scopes: config.scopes,
+    ...(config.runner_id ? { runner_id: config.runner_id } : {}),
   });
   const stop = () => worker.stop();
   process.once('SIGTERM', stop);

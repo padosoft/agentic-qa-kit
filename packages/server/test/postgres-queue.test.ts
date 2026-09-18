@@ -67,6 +67,30 @@ describe('PostgresRunnerQueue', () => {
     }
   });
 
+  it('fences same-scope PostgreSQL lease mutations by runner identity', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const queue = new PostgresRunnerQueue(dsn, { lease_ms: 5_000 });
+    const id = `queue-identity-${randomUUID()}`;
+    try {
+      await queue.enqueue({
+        id,
+        payload: { org: 'identity-org', project: 'identity-project' },
+        enqueued_at: new Date().toISOString(),
+      });
+      const lease = await queue.dequeue(undefined, [{ org: 'identity-org' }], 'runner-a');
+      assert.equal(lease?.leased_by, 'runner-a');
+      assert.equal(await queue.renew(id, lease?.lease_token, undefined, 'runner-b'), false);
+      assert.equal(await queue.ack(id, lease?.lease_token, 'runner-b'), false);
+      assert.equal(await queue.ack(id, lease?.lease_token, 'runner-a'), true);
+    } finally {
+      await queue.close();
+    }
+  });
+
   it('deduplicates the same idempotency key across queue clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {
