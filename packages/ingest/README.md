@@ -2,6 +2,12 @@
 
 Bounded ingestion contracts for external QA and security tooling.
 
+Supported inputs include JUnit XML, Semgrep-compatible SAST JSON, k6 and
+Locust performance summaries, and Playwright `trace.zip` files. Playwright
+trace ingestion extracts only action names, bounded IDs, timing and error
+messages; URLs, headers, request bodies and screenshots are deliberately not
+copied into the normalized report.
+
 - `parseJunit(xml)` normalizes Jest, Vitest, Pytest and CI JUnit XML results.
 - `parseSast(json)` normalizes Semgrep-compatible results.
 - Inputs are size bounded; JUnit external entities are rejected to prevent

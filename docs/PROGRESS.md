@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Added bounded Playwright trace ingestion.** `aqa ingest playwright
+  <trace.zip>` now reads only the `trace.trace` JSONL member, rejects encrypted
+  or traversal ZIP entries, bounds decompression, and persists action-level
+  metadata without URLs, headers, payloads or screenshots. Added ADR-204 and
+  parser tests for compressed traces and unsafe archives. This proves the
+  ingestion boundary; it does not claim browser replay or provider runtime
+  evidence.
+
 - **Propagated sandbox image readiness into operations.** `aqa doctor
   --production` now checks for a full immutable `AQA_CONTAINER_IMAGE` digest
   without exposing its value. The Helm runner values/template expose the

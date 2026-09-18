@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { deflateRawSync } from 'node:zlib';
 import {
   evaluatePerformanceThresholds,
   parseJunit,
   parseK6Summary,
   parseLocustSummary,
+  parsePlaywrightTrace,
   parseSast,
 } from '../dist/index.js';
+
+function traceZip(content: string, method: 0 | 8 = 8): Uint8Array {
+  const name = Buffer.from('trace.trace');
+  const raw = Buffer.from(content, 'utf8');
+  const body = method === 0 ? raw : deflateRawSync(raw);
+  const header = Buffer.alloc(30 + name.length);
+  header.writeUInt32LE(0x04034b50, 0);
+  header.writeUInt16LE(20, 4);
+  header.writeUInt16LE(8, 6);
+  header.writeUInt16LE(method, 8);
+  header.writeUInt32LE(body.length, 18);
+  header.writeUInt32LE(raw.length, 22);
+  header.writeUInt16LE(name.length, 26);
+  name.copy(header, 30);
+  return Buffer.concat([header, body]);
+}
 
 describe('JUnit ingestion', () => {
   it('normalizes pass, failure, error and skipped cases', () => {
@@ -124,6 +142,47 @@ describe('Locust ingestion', () => {
       () => parseLocustSummary({ stats: [{ name: '/health', num_requests: -1, num_failures: 0 }] }),
       /num_requests/,
     );
+  });
+});
+
+describe('Playwright trace ingestion', () => {
+  it('normalizes action metadata and failure state without retaining URLs or payloads', () => {
+    const report = parsePlaywrightTrace(
+      traceZip(
+        [
+          JSON.stringify({
+            type: 'action',
+            metadata: { id: 'call-1', apiName: 'page.goto', wallTime: 10 },
+          }),
+          JSON.stringify({
+            type: 'after',
+            metadata: {
+              id: 'call-1',
+              startTime: 10,
+              endTime: 25,
+              error: {
+                message: 'assertion failed at https://secret.example/token=secret-value',
+              },
+              url: 'https://secret.example/token=redacted',
+            },
+          }),
+        ].join('\n'),
+      ),
+    );
+    assert.equal(report.framework, 'playwright');
+    assert.equal(report.records.length, 1);
+    assert.equal(report.records[0]?.status, 'failed');
+    assert.equal(report.records[0]?.duration_ms, 15);
+    assert.equal(report.records[0]?.message, 'assertion failed at [redacted-url]');
+    assert.equal(JSON.stringify(report).includes('secret.example'), false);
+  });
+
+  it('rejects malformed or unsafe trace archives', () => {
+    assert.throws(() => parsePlaywrightTrace(Buffer.from('not a zip')), /missing trace\.trace/i);
+    const unsafe = traceZip(JSON.stringify({ type: 'action', metadata: { id: 'x' } }));
+    const unsafeBuffer = Buffer.from(unsafe);
+    unsafeBuffer.write('..\\trace.tr', 30, 'utf8');
+    assert.throws(() => parsePlaywrightTrace(unsafeBuffer), /unsafe entry name/i);
   });
 });
 

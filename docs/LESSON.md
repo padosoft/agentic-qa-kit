@@ -2000,3 +2000,10 @@ the same policy at the last responsible moment: trusted signer, canonical
 manifest digest and content digest of every referenced file, before scenario
 dispatch. Keep this strict path opt-in until first-party packs are signed, so
 developer authoring does not silently become impossible.
+# 2026-09-18 — Playwright traces are sensitive ZIP evidence
+
+Playwright traces are not ordinary test-result text: they can contain URLs,
+headers, request bodies, browser storage and screenshots. A safe ingestion
+path must parse only the action metadata needed for QA evidence, enforce input
+and decompression bounds, reject encrypted/traversal entries, and preserve the
+distinction between “trace ingested” and “browser journey replayed”.

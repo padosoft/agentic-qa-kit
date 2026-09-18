@@ -10,12 +10,13 @@ import {
   parseJunit,
   parseK6Summary,
   parseLocustSummary,
+  parsePlaywrightTrace,
   parseSast,
 } from '@aqa/ingest';
 
 export interface IngestOptions {
   root: string;
-  kind: 'junit' | 'sast' | 'semgrep' | 'k6' | 'locust';
+  kind: 'junit' | 'sast' | 'semgrep' | 'k6' | 'locust' | 'playwright';
   file: string;
   tool?: string;
   threshold_file?: string;
@@ -32,15 +33,21 @@ export interface IngestResult {
 
 export function runIngest(opts: IngestOptions): IngestResult {
   try {
-    const input = readFileSync(opts.file, 'utf8');
+    const input = readFileSync(opts.file);
     const report =
       opts.kind === 'junit'
-        ? parseJunit(input, opts.file)
-        : opts.kind === 'k6'
-          ? parseK6Summary(JSON.parse(input) as unknown, opts.file)
-          : opts.kind === 'locust'
-            ? parseLocustSummary(JSON.parse(input) as unknown, opts.file)
-            : parseSast(JSON.parse(input) as unknown, opts.file, opts.tool ?? opts.kind);
+        ? parseJunit(input.toString('utf8'), opts.file)
+        : opts.kind === 'playwright'
+          ? parsePlaywrightTrace(input, opts.file)
+          : opts.kind === 'k6'
+            ? parseK6Summary(JSON.parse(input.toString('utf8')) as unknown, opts.file)
+            : opts.kind === 'locust'
+              ? parseLocustSummary(JSON.parse(input.toString('utf8')) as unknown, opts.file)
+              : parseSast(
+                  JSON.parse(input.toString('utf8')) as unknown,
+                  opts.file,
+                  opts.tool ?? opts.kind,
+                );
     if (opts.threshold_file && opts.kind !== 'k6' && opts.kind !== 'locust')
       throw new Error('threshold_file is supported only for k6 or locust ingestion');
     const store = new FileArtifactStore(join(opts.root, '.aqa', 'ingest'));

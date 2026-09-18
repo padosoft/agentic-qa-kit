@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 
-export type IngestFramework = 'junit' | 'sast' | 'k6' | 'locust';
+export type IngestFramework = 'junit' | 'sast' | 'k6' | 'locust' | 'playwright';
 export type IngestStatus = 'passed' | 'failed' | 'error' | 'skipped';
 
 export interface IngestRecord {
@@ -61,6 +62,134 @@ function boundedText(value: string, field: string): string {
   if (Buffer.byteLength(value, 'utf8') > MAX_INPUT_BYTES)
     throw new Error(`${field} exceeds size limit`);
   return value;
+}
+
+/**
+ * Read the small, metadata-only part of a Playwright trace ZIP. Trace files
+ * can contain URLs, headers, request bodies and screenshots; none of those
+ * are copied into the normalized report. The ZIP reader intentionally accepts
+ * only local entries and bounded deflate/store members so ingestion cannot
+ * become an archive extraction primitive.
+ */
+function traceEntry(zip: Uint8Array, wanted: string): string {
+  if (zip.byteLength > MAX_INPUT_BYTES) throw new Error('Playwright trace exceeds size limit');
+  const bytes = Buffer.from(zip);
+  let offset = 0;
+  while (offset + 30 <= bytes.length) {
+    const signature = bytes.readUInt32LE(offset);
+    if (signature !== 0x04034b50) {
+      offset += 1;
+      continue;
+    }
+    const flags = bytes.readUInt16LE(offset + 6);
+    const method = bytes.readUInt16LE(offset + 8);
+    const compressedSize = bytes.readUInt32LE(offset + 18);
+    const uncompressedSize = bytes.readUInt32LE(offset + 22);
+    const nameLength = bytes.readUInt16LE(offset + 26);
+    const extraLength = bytes.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    if (dataStart > bytes.length || dataStart + compressedSize > bytes.length)
+      throw new Error('Playwright trace ZIP entry is truncated');
+    const name = bytes.subarray(nameStart, nameStart + nameLength).toString('utf8');
+    if (flags & 0x1) throw new Error('encrypted Playwright trace entries are forbidden');
+    if (name.includes('..') || name.startsWith('/') || name.includes('\\'))
+      throw new Error('Playwright trace contains an unsafe entry name');
+    if (uncompressedSize > MAX_INPUT_BYTES)
+      throw new Error('Playwright trace entry exceeds size limit');
+    if (name === wanted) {
+      const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+      let content: Buffer;
+      if (method === 0) content = compressed;
+      else if (method === 8)
+        content = inflateRawSync(compressed, { maxOutputLength: MAX_INPUT_BYTES });
+      else throw new Error(`unsupported Playwright trace compression method: ${method}`);
+      if (content.byteLength !== uncompressedSize)
+        throw new Error('Playwright trace entry size mismatch');
+      return content.toString('utf8');
+    }
+    offset = dataStart + compressedSize;
+  }
+  throw new Error(`Playwright trace is missing ${wanted}`);
+}
+
+function traceString(value: unknown, max = 200): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, max) : undefined;
+}
+
+function safeTraceMessage(value: unknown): string | undefined {
+  const message = traceString(value, 2_000);
+  return message?.replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s]+/giu, '[redacted-url]');
+}
+
+/** Normalize Playwright's `trace.trace` JSONL into safe action-level evidence. */
+export function parsePlaywrightTrace(zip: Uint8Array, source = 'trace.zip'): IngestReport {
+  const trace = traceEntry(zip, 'trace.trace');
+  const records: IngestRecord[] = [];
+  const pending = new Map<string, IngestRecord>();
+  for (const [lineIndex, line] of trace.split(/\r?\n/u).entries()) {
+    if (line.trim() === '') continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line) as unknown;
+    } catch {
+      throw new Error(`Playwright trace line ${lineIndex + 1} is invalid JSON`);
+    }
+    if (!event || typeof event !== 'object' || Array.isArray(event)) continue;
+    const item = event as Record<string, unknown>;
+    if (item.type !== 'action') continue;
+    const metadata = item.metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+    const data = metadata as Record<string, unknown>;
+    const callId = traceString(data.id, 200) ?? `line-${lineIndex + 1}`;
+    const apiName = traceString(data.apiName, 200) ?? 'playwright action';
+    const action: IngestRecord = {
+      id: `playwright-${records.length + 1}`,
+      framework: 'playwright',
+      external_id: callId,
+      name: apiName,
+      status: 'passed',
+      ...(typeof data.wallTime === 'number' && Number.isFinite(data.wallTime)
+        ? { measurements: { wall_time_ms: data.wallTime } }
+        : {}),
+      fingerprint: fingerprint(['playwright', apiName, callId]),
+    };
+    records.push(action);
+    pending.set(callId, action);
+  }
+  for (const line of trace.split(/\r?\n/u)) {
+    if (line.trim() === '') continue;
+    const item = JSON.parse(line) as unknown;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const event = item as Record<string, unknown>;
+    if (event.type !== 'after') continue;
+    const metadata = event.metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+    const data = metadata as Record<string, unknown>;
+    const callId = traceString(data.id, 200);
+    const action = callId ? pending.get(callId) : undefined;
+    if (!action) continue;
+    const error = data.error;
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      const message = safeTraceMessage((error as Record<string, unknown>).message);
+      action.status = 'failed';
+      if (message) action.message = message;
+    }
+    if (typeof data.endTime === 'number' && typeof data.startTime === 'number') {
+      const duration = data.endTime - data.startTime;
+      if (Number.isFinite(duration) && duration >= 0)
+        action.duration_ms = Number(duration.toFixed(3));
+    }
+  }
+  if (records.length === 0) throw new Error('Playwright trace contains no action events');
+  return {
+    schema_version: '1',
+    framework: 'playwright',
+    source,
+    ingested_at: new Date().toISOString(),
+    records,
+    warnings: [],
+  };
 }
 
 function decodeXml(value: string): string {
