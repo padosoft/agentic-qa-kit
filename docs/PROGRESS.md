@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Promoted production doctor binding policy to `main`.** Macro PR #158
+  merged as **`abf2466`** after CI run **35339493234** passed every technical
+  gate, including Playwright, CLI E2E, live Prometheus/OTLP, PostgreSQL, S3,
+  OCI, Bun/Node, build, lint/typecheck and Helm. The evidence chain is now
+  executable from both the release CLI and production doctor. Remaining work
+  is provider-backed execution evidence: KMS/WORM, PITR/restore and IdP/
+  identity exercises.
+
 - **Merged doctor restore-binding sub-task PR #157 into the macro branch.**
   Hosted CI run **35338960631** passed typecheck/lint, Helm, Bun, Node 22,
   PostgreSQL, S3, OCI, build, CLI E2E, Playwright admin E2E and live
