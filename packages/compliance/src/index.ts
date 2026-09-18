@@ -35,7 +35,12 @@ export {
   type SignedBackupInventory,
   type BackupInventory,
 } from './dr-manifest.js';
-export { assertRestoreDrillEvidence, type RestoreDrillEvidence } from './restore-drill.js';
+export {
+  assertRestoreDrillEvidence,
+  canonicalRestoreDrillEvidence,
+  restoreDrillEvidenceSha256,
+  type RestoreDrillEvidence,
+} from './restore-drill.js';
 export {
   canonicalProductionEvidence,
   parseProductionEvidence,

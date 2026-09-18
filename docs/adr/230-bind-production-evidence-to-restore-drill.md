@@ -19,6 +19,10 @@ the bounded human/operator reference. The parser validates the digest before
 signing or verification, so replacing the referenced drill requires a new
 signed production observation.
 
+`@aqa/compliance` exposes `canonicalRestoreDrillEvidence` and
+`restoreDrillEvidenceSha256` so operators and release automation use the same
+validated canonical representation when producing the digest.
+
 ## Consequences and boundary
 
 This closes substitution ambiguity in the evidence handoff. It does not

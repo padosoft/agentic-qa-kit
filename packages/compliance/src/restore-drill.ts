@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { type BackupInventory, parseBackupInventory } from './dr-manifest.js';
 
 export interface RestoreDrillEvidence {
@@ -92,6 +93,18 @@ export function assertRestoreDrillEvidence(
   if (!Object.values(evidence.checks).every(Boolean))
     throw new Error('restore drill security checks are incomplete');
   return evidence;
+}
+
+/** Stable representation used when a production envelope binds to this drill. */
+export function canonicalRestoreDrillEvidence(input: unknown, inventoryInput: unknown): string {
+  return `${JSON.stringify(assertRestoreDrillEvidence(input, inventoryInput))}\n`;
+}
+
+/** SHA-256 of the validated, canonical restore-drill record. */
+export function restoreDrillEvidenceSha256(input: unknown, inventoryInput: unknown): string {
+  return createHash('sha256')
+    .update(canonicalRestoreDrillEvidence(input, inventoryInput), 'utf8')
+    .digest('hex');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
