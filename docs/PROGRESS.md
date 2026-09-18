@@ -13,13 +13,25 @@
 
 ## 2026-09-18
 
-- **Started authenticated remote-runner identity evidence.** Added
+- **Started executable remote-worker token rotation.** `aqa worker` now selects
+  `HttpRunnerQueue` whenever `AQA_SERVER_URL` is set, requires a token or
+  token-file credential, and reads the token file for every queue request.
+  Helm now requires `runner.worker.tokenSecretRef`, mounts the projected key,
+  and fails closed during render when it is absent. Worker configuration tests:
+  **4 passed**; Helm CI validation is required before marking deployment wiring
+  complete. ADR-227 records the decision.
+
+- **Closed authenticated remote-runner identity evidence.** Added
   `HttpRunnerQueue`, which keeps enqueue/reaping/cancellation on the control
   plane and invokes a token source for every dequeue/get/renew/ACK/fail request.
   Added scope-checked HTTP get/renew routes and a real `runAdmin` HTTP journey
   proving RS256 issuer/audience validation, tenant isolation, lease renewal,
   ACK fencing and JWT rotation without restarting the runner. Local journey:
-  **1 passed**; hosted CI still must prove the package/runtime matrix.
+  **1 passed**; CI run **35325413778** passed Bun, Node 22, PostgreSQL, S3,
+  OCI, build, Helm, CLI E2E and Playwright gates. TLS/mTLS termination,
+  revocation distribution and load-balancer behavior remain deployment evidence.
+  Next: connect token-file rotation and server URL settings to the executable
+  `aqa worker` deployment path, then prove a full remote worker run lifecycle.
 
 - **Closed the real remote-artifact evidence slice.** Added an ephemeral
   MinIO CI service and an endpoint-gated integration journey that creates an

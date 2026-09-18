@@ -5,6 +5,9 @@
 {{- if eq (len .Values.runner.worker.scopes) 0 }}
 {{- fail "runner.worker.scopes must contain at least one org/project or org/* scope when runner.worker.enabled is true" }}
 {{- end }}
+{{- if not .Values.runner.worker.tokenSecretRef }}
+{{- fail "runner.worker.tokenSecretRef is required when runner.worker.enabled is true" }}
+{{- end }}
 {{- if and .Values.runner.worker.enabled .Values.runner.sandbox.requirePinnedImage (not .Values.runner.sandbox.image) }}
 {{- fail "runner.sandbox.image is required when runner.sandbox.requirePinnedImage is true" }}
 {{- end }}
@@ -75,6 +78,8 @@ spec:
               value: {{ join "," .Values.runner.worker.scopes | quote }}
             - name: AQA_SERVER_URL
               value: "http://{{ .Release.Name }}-server:8080"
+            - name: AQA_RUNNER_TOKEN_FILE
+              value: {{ .Values.runner.worker.tokenFile | quote }}
             - name: AQA_DETERMINISM_LEVEL
               value: {{ .Values.determinism.level | quote }}
             - name: AQA_RUNNER_INDEX
@@ -88,6 +93,17 @@ spec:
           volumeMounts:
             - name: fixtures
               mountPath: /var/lib/aqa/fixtures
+            - name: runner-token
+              mountPath: {{ .Values.runner.worker.tokenFile | quote }}
+              subPath: token
+              readOnly: true
+      volumes:
+        - name: runner-token
+          secret:
+            secretName: {{ .Values.runner.worker.tokenSecretRef }}
+            items:
+              - key: {{ .Values.runner.worker.tokenSecretKey | quote }}
+                path: token
   volumeClaimTemplates:
     - metadata:
         name: fixtures

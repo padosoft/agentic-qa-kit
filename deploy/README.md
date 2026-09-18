@@ -37,8 +37,13 @@ operators.
   `runner.worker.enabled=true`, set `runner.worker.scopes` to explicit
   `org/project` or `org/*` entries, and use `runner.worker.queueDsnSecretRef`
   (or the shared `postgres.urlSecretRef`). The worker fails closed when the
-  DSN or scopes are absent; it runs `aqa worker` and uses the configured root,
-  never a client-supplied filesystem path.
+  DSN/scopes/token are absent; it uses the authenticated HTTP queue when
+  `AQA_SERVER_URL` and a projected runner token are configured, otherwise it
+  uses the direct PostgreSQL queue for explicitly local deployments. The token
+  file is read for every queue request, so projected Secret rotation does not
+  require a worker restart. It runs `aqa worker` and uses the configured root,
+  never a client-supplied filesystem path. Create `runner.worker.tokenSecretRef`
+  with the short-lived JWT under `runner.worker.tokenSecretKey`.
 - Pin server and runner images by digest in production and set both
   `server.image.requireDigest=true` and `runner.image.requireDigest=true`.
   The chart fails during render when a required digest is missing; mutable tags

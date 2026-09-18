@@ -35,4 +35,25 @@ describe('runner worker deployment configuration', () => {
       /10 to 60000/,
     );
   });
+
+  it('requires a credential for a remote control-plane worker and resolves token files', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_SERVER_URL: 'http://aqa-server:8080',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+        }),
+      /AQA_RUNNER_TOKEN or AQA_RUNNER_TOKEN_FILE/,
+    );
+    const config = runnerConfigFromEnv({
+      AQA_SERVER_URL: 'http://aqa-server:8080',
+      AQA_RUNNER_ROOT: 'C:/aqa',
+      AQA_RUNNER_SCOPES: 'padosoft/shop',
+      AQA_RUNNER_TOKEN_FILE: 'secrets/runner-token',
+    });
+    assert.equal(config.server_url, 'http://aqa-server:8080');
+    assert.match(config.runner_token_file ?? '', /secrets[\\/]runner-token$/);
+    assert.deepEqual(config.scopes, [{ org: 'padosoft', project: 'shop' }]);
+  });
 });
