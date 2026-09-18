@@ -14,6 +14,13 @@ contexts, callbacks or credentials. Pass compiled journey bindings through the
 embedding host/worker configuration, and write only digest plus bounded
 transition metadata to the canonical audit chain.
 
+# 2026-09-19 — Correlate traces with digests, never payloads
+
+Journey traceability needs a stable plan digest and transition identifiers, not
+business payloads. Use a strict technical-attribute allowlist with safe slug
+validation; bounded length alone is not a secret/PII control. Keep the audit
+chain authoritative because exporters can sample, drop or reorder telemetry.
+
 # 2026-09-19 — Trace deduplication must ignore collector identity
 
 When federating telemetry, the same span observed by two collectors is not a

@@ -53,7 +53,7 @@ describe('@aqa/observability', () => {
     assert.equal(records[0]?.parent_span_id, records[1]?.context.span_id);
   });
 
-  it('maps audit events to payload-free spans with run correlation', () => {
+  it('maps audit events to payload-free spans with safe journey correlation', () => {
     const spans: Array<{
       name: string;
       context: { run_id?: string };
@@ -67,11 +67,40 @@ describe('@aqa/observability', () => {
       actor: { type: 'agent' },
       scenario_id: 'checkout',
       finding_id: 'finding-1',
+      payload: {
+        stateful_journey: 'transition',
+        journey_id: 'checkout-journey',
+        journey_digest: 'a'.repeat(64),
+        transition_id: 'pay',
+        actor_id: 'customer',
+        from: 'cart',
+        to: 'paid',
+        ok: true,
+        authorization: 'Bearer secret-must-not-escape',
+      },
     });
     assert.equal(spans[0]?.name, 'aqa.event.finding_emitted');
     assert.equal(spans[0]?.context.run_id, 'run-42');
     assert.equal(spans[0]?.attributes['aqa.scenario_id'], 'checkout');
+    assert.equal(spans[0]?.attributes['aqa.journey.id'], 'checkout-journey');
+    assert.equal(spans[0]?.attributes['aqa.journey.digest'], 'a'.repeat(64));
+    assert.equal(spans[0]?.attributes['aqa.journey.transition_id'], 'pay');
+    assert.equal(spans[0]?.attributes['aqa.journey.ok'], true);
     assert.equal('payload' in (spans[0]?.attributes ?? {}), false);
+    assert.equal(JSON.stringify(spans).includes('secret-must-not-escape'), false);
+    observer({
+      kind: 'info',
+      run_id: 'run-42',
+      seq: 4,
+      actor: { type: 'system' },
+      payload: {
+        stateful_journey: 'transition',
+        journey_id: 'customer@example.test',
+        transition_id: 'Bearer-secret',
+      },
+    });
+    assert.equal(spans[1]?.attributes['aqa.journey.id'], undefined);
+    assert.equal(spans[1]?.attributes['aqa.journey.transition_id'], undefined);
   });
 
   it('renders bounded counters, gauges and cumulative histogram buckets', () => {
