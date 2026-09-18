@@ -21,10 +21,13 @@ export {
 export {
   runMutationGate,
   runMutationCoverageGate,
+  runMutationRegressionGate,
   type MutationGateOptions,
   type MutationGateResult,
   type MutationCoverageGateOptions,
   type MutationCoverageGateResult,
+  type MutationRegressionGateOptions,
+  type MutationRegressionGateResult,
 } from './commands/mutation-gate.js';
 export {
   runRiskCoverage,

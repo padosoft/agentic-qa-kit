@@ -8,7 +8,11 @@ import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
-import { runMutationCoverageGate, runMutationGate } from '../commands/mutation-gate.js';
+import {
+  runMutationCoverageGate,
+  runMutationGate,
+  runMutationRegressionGate,
+} from '../commands/mutation-gate.js';
 import { runOracleCalibration } from '../commands/oracle-calibrate.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
@@ -143,6 +147,8 @@ ${bold('Commands')}
                                     Gate an externally-produced mutation report
   mutation coverage <report.json> <manifest.json> --min-mapped-rate X --min-killed-rate X
                                     Gate mutant mapping to risk-linked regression scenarios
+  mutation regression <report.json> <manifest.json> <evidence.json> --min-kill-rate X
+                                    Gate observed regression executions and mutation outcomes
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -723,14 +729,52 @@ async function main(): Promise<number> {
     }
     case 'mutation': {
       const subcommand = args.positionals[0];
-      if (subcommand !== 'gate' && subcommand !== 'coverage') {
-        console.error(red('aqa mutation: expected `gate` or `coverage`'));
+      if (subcommand !== 'gate' && subcommand !== 'coverage' && subcommand !== 'regression') {
+        console.error(red('aqa mutation: expected `gate`, `coverage` or `regression`'));
         return 1;
       }
       const inputFile = args.positionals[1];
       if (!inputFile) {
         console.error(red(`aqa mutation ${subcommand}: missing <report.json>`));
         return 1;
+      }
+      if (subcommand === 'regression') {
+        const manifestFile = args.positionals[2];
+        const evidenceFile = args.positionals[3];
+        const minValue = args.values.get('min-kill-rate');
+        const minKillRate = minValue === undefined ? undefined : Number(minValue);
+        if (
+          !manifestFile ||
+          !evidenceFile ||
+          minKillRate === undefined ||
+          !Number.isFinite(minKillRate) ||
+          minKillRate < 0 ||
+          minKillRate > 1
+        ) {
+          console.error(
+            red(
+              'aqa mutation regression: report, manifest, evidence and --min-kill-rate (0..1) are required',
+            ),
+          );
+          return 1;
+        }
+        const result = runMutationRegressionGate({
+          root: cwd,
+          inputFile,
+          manifestFile,
+          evidenceFile,
+          minKillRate,
+        });
+        if (!result.ok || !result.regression) {
+          console.error(
+            red(`aqa mutation regression: ${result.error ?? 'regression gate failed'}`),
+          );
+          return 1;
+        }
+        console.info(
+          `  ${result.gate_ok ? green('✓') : red('✗')} pairs=${result.regression.observed_pairs}/${result.regression.expected_pairs} killed=${result.regression.kill_rate.toFixed(6)} missing=${result.regression.missing_pairs.length}`,
+        );
+        return result.gate_ok ? 0 : 2;
       }
       if (subcommand === 'coverage') {
         const manifestFile = args.positionals[2];

@@ -22,6 +22,11 @@ copied into the normalized report.
 - `parseMutationCoverageManifest(json)` and `evaluateMutationCoverage(...)`
   bind each evaluated mutant to reviewed risk/scenario IDs and gate mapping
   completeness plus kill rate, including a per-risk breakdown.
+- `parseMutationRegressionEvidence(json)` and
+  `evaluateMutationRegressionEvidence(...)` require metadata-only observations
+  for every reviewed mutant/scenario pair. Missing pairs, contradictory
+  outcomes and unreviewed pairs fail closed; `source_revision` and `run_id`
+  make the producer binding explicit without copying secrets or test payloads.
 - `parseOtlpTrace(json)` accepts bounded OTLP/HTTP JSON traces and retains only
   trace/span identity, timing, service, status and primitive attributes. Known
   credential-bearing attributes and URLs are redacted before normalization.
@@ -31,8 +36,9 @@ copied into the normalized report.
 
 Mutation parsing does not execute Stryker, mutmut or another mutator and does
 not prove that the report was produced by a trusted job. The producer must be
-run by a separately protected CI job, and the resulting report should be
-bound to the source revision and artifact checkpoint before release use.
+run by a separately protected CI job, and the resulting report plus regression
+evidence should be bound to the source revision and artifact checkpoint before
+release use.
 
 This package parses evidence; it does not mark AQA findings verified or merge
 security findings automatically. That requires an explicit policy and audit

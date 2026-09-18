@@ -87,11 +87,16 @@ export interface MutationThresholdResult {
 
 export {
   evaluateMutationCoverage,
+  evaluateMutationRegressionEvidence,
   parseMutationCoverageManifest,
+  parseMutationRegressionEvidence,
   type MutationCoverageLink,
   type MutationCoverageManifest,
   type MutationCoveragePolicy,
   type MutationCoverageResult,
+  type MutationRegressionCoverageResult,
+  type MutationRegressionEvidence,
+  type MutationRegressionObservation,
 } from './mutation-coverage.js';
 export {
   federateTraceSources,

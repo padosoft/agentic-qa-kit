@@ -3,16 +3,63 @@ import { describe, it } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import {
   evaluateMutationCoverage,
+  evaluateMutationRegressionEvidence,
   evaluateMutationThreshold,
   evaluatePerformanceThresholds,
   parseJunit,
   parseK6Summary,
   parseLocustSummary,
   parseMutationCoverageManifest,
+  parseMutationRegressionEvidence,
   parseMutationSummary,
   parsePlaywrightTrace,
   parseSast,
 } from '../dist/index.js';
+
+describe('mutation regression evidence', () => {
+  const report = parseMutationSummary({
+    mutants: [
+      { id: 'm-1', file: 'cart.ts', operator: 'condition', status: 'Killed' },
+      { id: 'm-2', file: 'cart.ts', operator: 'condition', status: 'Survived' },
+    ],
+  });
+  const manifest = parseMutationCoverageManifest({
+    schema_version: '1',
+    links: [
+      { mutation_id: 'm-1', risk_ids: ['cart'], scenario_ids: ['checkout'] },
+      { mutation_id: 'm-2', risk_ids: ['cart'], scenario_ids: ['checkout'] },
+    ],
+  });
+
+  it('passes only when observed runs explain the mutation report', () => {
+    const evidence = parseMutationRegressionEvidence({
+      schema_version: '1',
+      source_revision: 'abc123',
+      observations: [
+        { mutation_id: 'm-1', scenario_id: 'checkout', run_id: 'run-1', outcome: 'killed' },
+        { mutation_id: 'm-2', scenario_id: 'checkout', run_id: 'run-2', outcome: 'survived' },
+      ],
+    });
+    const result = evaluateMutationRegressionEvidence(report, manifest, evidence, 0.5);
+    assert.equal(result.passed, true);
+    assert.equal(result.observed_pairs, 2);
+    assert.equal(result.kill_rate, 0.5);
+  });
+
+  it('fails closed for missing or contradictory execution evidence', () => {
+    const evidence = parseMutationRegressionEvidence({
+      schema_version: '1',
+      source_revision: 'abc123',
+      observations: [
+        { mutation_id: 'm-1', scenario_id: 'checkout', run_id: 'run-1', outcome: 'survived' },
+      ],
+    });
+    const result = evaluateMutationRegressionEvidence(report, manifest, evidence, 0);
+    assert.equal(result.passed, false);
+    assert.deepEqual(result.missing_pairs, ['m-2:checkout']);
+    assert.deepEqual(result.mismatched_mutant_ids, ['m-1']);
+  });
+});
 
 function traceZip(content: string, method: 0 | 8 = 8): Uint8Array {
   const name = Buffer.from('trace.trace');
