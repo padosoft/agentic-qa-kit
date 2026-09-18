@@ -67,6 +67,16 @@ describe('RunnerQueue', () => {
     assert.equal(q.size(), 0);
   });
 
+  it('fences lease mutation to the runner identity that acquired it', () => {
+    const q = new RunnerQueue();
+    q.enqueue(JOB);
+    const lease = q.dequeue(undefined, undefined, 'runner-a');
+    assert.equal(lease?.leased_by, 'runner-a');
+    assert.equal(q.renew(JOB.id, lease?.lease_token, undefined, 'runner-b'), false);
+    assert.equal(q.ack(JOB.id, lease?.lease_token, 'runner-b'), false);
+    assert.equal(q.ack(JOB.id, lease?.lease_token, 'runner-a'), true);
+  });
+
   it('renews only the current lease token', () => {
     const q = new RunnerQueue({ lease_ms: 100 });
     q.enqueue(JOB);

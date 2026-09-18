@@ -2381,6 +2381,14 @@ Keep the deterministic unit tests and add an endpoint-gated integration job
 against an ephemeral S3-compatible provider. Create a unique locked bucket per
 run, use CI-only environment credentials, and do not claim AWS/KMS/replication
 or restore behavior from a MinIO contract.
+
+# 2026-09-18 — Scope authorization is not lease ownership
+
+Runner org/project scopes constrain placement but do not identify the process
+that owns a lease. A same-scope runner with a valid credential could otherwise
+renew or ACK another runner's job. Carry the verified JWT subject into the
+lease record and require it on every mutation, while preserving token fencing
+and keeping legacy identity-less local mode explicitly non-enterprise.
 # 2026-09-18 — Recovery observation must preserve evidence boundaries
 
 A typed restore-drill JSON record is not provider evidence. A useful incremental

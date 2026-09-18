@@ -2405,3 +2405,13 @@
 - The artifact adapter now requests and reads back AES256, KMS or DSSE
   encryption metadata, failing closed on provider mismatch. Bucket-level KMS
   policy and WORM remain deployment evidence requirements.
+
+# 2026-09-18 — runner identity lease fencing in progress
+
+- Closed a concrete distributed-worker gap: runner JWT `runner_id` is now
+  propagated from API authorization into queue leases. Renew, ACK and fail are
+  fenced by both lease token and authenticated runner identity in memory and
+  PostgreSQL; the worker supports `AQA_RUNNER_ID` for direct queue operation.
+- Added API and queue regressions proving a different runner in the same
+  org/project cannot mutate the lease. Existing hosted PostgreSQL CI remains
+  required before declaring the durable migration path promoted.

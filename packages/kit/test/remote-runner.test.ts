@@ -152,8 +152,11 @@ describe('remote runner identity journey', () => {
       assert.equal(await remote.get('remote-forbidden'), null);
       assert.equal(await remote.renew(lease?.id ?? '', lease?.lease_token), true);
 
-      // A projected secret/JWT can change while the process remains alive.
+      // A projected secret/JWT can change while the process remains alive,
+      // but rotating credentials must preserve the authenticated runner id.
       token = jwt(privateKey, 'runner-b', ['shop/checkout']);
+      assert.equal(await remote.ack(lease?.id ?? '', lease?.lease_token), false);
+      token = jwt(privateKey, 'runner-a', ['shop/checkout']);
       assert.equal(await remote.ack(lease?.id ?? '', lease?.lease_token), true);
 
       const wrongScope = new HttpRunnerQueue(boot.url, () =>
@@ -209,7 +212,7 @@ describe('remote runner identity journey', () => {
     let tokenCalls = 0;
     const remoteQueue = new HttpRunnerQueue(boot.url, () => {
       tokenCalls += 1;
-      return jwt(privateKey, tokenCalls === 1 ? 'runner-a' : 'runner-b', ['shop/checkout']);
+      return jwt(privateKey, 'runner-a', ['shop/checkout']);
     });
     const worker = makeKitWorker({
       queue: remoteQueue,

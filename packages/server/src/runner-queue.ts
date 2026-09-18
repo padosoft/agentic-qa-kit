@@ -35,6 +35,7 @@ export interface EnqueuedJob extends RunnerJob {
   failure_reason?: string | undefined;
   leased_until?: string | undefined;
   lease_token?: string | undefined;
+  leased_by?: string | undefined;
 }
 
 export interface QueueReapResult {
@@ -47,12 +48,23 @@ export interface RunnerQueueLike {
   dequeue(
     now?: Date,
     scopes?: readonly RunnerScope[],
+    runnerId?: string,
   ): EnqueuedJob | null | Promise<EnqueuedJob | null>;
   get(id: string): EnqueuedJob | null | Promise<EnqueuedJob | null>;
-  renew(id: string, leaseToken: string | undefined, now?: Date): boolean | Promise<boolean>;
+  renew(
+    id: string,
+    leaseToken: string | undefined,
+    now?: Date,
+    runnerId?: string,
+  ): boolean | Promise<boolean>;
   snapshot(): EnqueuedJob[] | Promise<EnqueuedJob[]>;
-  ack(id: string, leaseToken?: string): boolean | Promise<boolean>;
-  fail(id: string, leaseToken: string | undefined, reason: string): boolean | Promise<boolean>;
+  ack(id: string, leaseToken?: string, runnerId?: string): boolean | Promise<boolean>;
+  fail(
+    id: string,
+    leaseToken: string | undefined,
+    reason: string,
+    runnerId?: string,
+  ): boolean | Promise<boolean>;
   /** Reclaim expired leases without requiring a worker dequeue. */
   reapExpired(now?: Date): QueueReapResult | Promise<QueueReapResult>;
   cancel(
@@ -188,7 +200,11 @@ export class RunnerQueue {
     return enq;
   }
 
-  dequeue(now: Date = new Date(), scopes?: readonly RunnerScope[]): EnqueuedJob | null {
+  dequeue(
+    now: Date = new Date(),
+    scopes?: readonly RunnerScope[],
+    runnerId?: string,
+  ): EnqueuedJob | null {
     // Promote stale leases back to queued before picking the next.
     for (const j of this.jobs) {
       if (j.status === 'in_flight' && j.leased_until && new Date(j.leased_until) < now) {
@@ -215,17 +231,25 @@ export class RunnerQueue {
     job.attempts += 1;
     job.leased_until = new Date(now.getTime() + this.leaseMs).toISOString();
     job.lease_token = randomUUID();
+    if (runnerId !== undefined) job.leased_by = runnerId;
     // Never leak the mutable queue record: a later lease/requeue must not
     // rewrite the token held by an earlier worker.
     return { ...job };
   }
 
-  ack(id: string, leaseToken?: string): boolean {
+  ack(id: string, leaseToken?: string, runnerId?: string): boolean {
     const job = this.jobs.find((j) => j.id === id);
-    if (!job || job.status !== 'in_flight' || !leaseToken || job.lease_token !== leaseToken)
+    if (
+      !job ||
+      job.status !== 'in_flight' ||
+      !leaseToken ||
+      job.lease_token !== leaseToken ||
+      (job.leased_by !== undefined && job.leased_by !== runnerId)
+    )
       return false;
     job.status = 'done';
     job.lease_token = undefined;
+    job.leased_by = undefined;
     return true;
   }
 
@@ -234,22 +258,35 @@ export class RunnerQueue {
     return job ? { ...job } : null;
   }
 
-  renew(id: string, leaseToken: string | undefined, now = new Date()): boolean {
+  renew(id: string, leaseToken: string | undefined, now = new Date(), runnerId?: string): boolean {
     if (!leaseToken) return false;
     const job = this.jobs.find((candidate) => candidate.id === id);
-    if (!job || job.status !== 'in_flight' || job.lease_token !== leaseToken) return false;
+    if (
+      !job ||
+      job.status !== 'in_flight' ||
+      job.lease_token !== leaseToken ||
+      (job.leased_by !== undefined && job.leased_by !== runnerId)
+    )
+      return false;
     job.leased_until = new Date(now.getTime() + this.leaseMs).toISOString();
     return true;
   }
 
-  fail(id: string, leaseToken: string | undefined, reason: string): boolean {
+  fail(id: string, leaseToken: string | undefined, reason: string, runnerId?: string): boolean {
     const job = this.jobs.find((j) => j.id === id);
-    if (!job || job.status !== 'in_flight' || !leaseToken || job.lease_token !== leaseToken)
+    if (
+      !job ||
+      job.status !== 'in_flight' ||
+      !leaseToken ||
+      job.lease_token !== leaseToken ||
+      (job.leased_by !== undefined && job.leased_by !== runnerId)
+    )
       return false;
     job.status = 'failed';
     job.failure_reason = reason.slice(0, 1000);
     job.leased_until = undefined;
     job.lease_token = undefined;
+    job.leased_by = undefined;
     return true;
   }
 
@@ -261,6 +298,7 @@ export class RunnerQueue {
         continue;
       job.leased_until = undefined;
       job.lease_token = undefined;
+      job.leased_by = undefined;
       if (job.attempts >= job.max_attempts) {
         job.status = 'failed';
         job.failure_reason = 'lease expired after maximum attempts';
@@ -281,6 +319,7 @@ export class RunnerQueue {
     job.failure_reason = reason.trim().slice(0, 1000) || 'cancelled by operator';
     job.leased_until = undefined;
     job.lease_token = undefined;
+    job.leased_by = undefined;
     return true;
   }
 
