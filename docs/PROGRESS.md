@@ -11,6 +11,14 @@
 
 ## 2026-09-18
 
+- **Added protected PostgreSQL recovery-target evidence.** The manual
+  `postgres-recovery-provider-evidence.yml` workflow connects through the
+  existing SELECT-only observer, requires recovery mode and transaction
+  read-only state, and can pin server major/replay LSN without logging the DSN.
+  It proves the recovered target posture only; cloud PITR/WAL/object restore,
+  KMS, replication and RTO/RPO remain separate controls. Next: merge this
+  slice, then complete the roadmap audit.
+
 - **Added protected mTLS and runner-token rotation evidence.** The manual
   `mtls-runner-rotation-evidence.yml` workflow writes CA/client certificate
   material only to a mode-700 temporary directory, verifies an HTTPS mTLS

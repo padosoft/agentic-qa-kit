@@ -1,0 +1,42 @@
+name: PostgreSQL recovery provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-observation:
+    name: Read-only PostgreSQL recovery target observation
+    runs-on: ubuntu-latest
+    environment: production-database-evidence
+    timeout-minutes: 10
+    env:
+      AQA_TEST_POSTGRES_RECOVERY_DSN: ${{ secrets.AQA_TEST_POSTGRES_RECOVERY_DSN }}
+      AQA_TEST_POSTGRES_RECOVERY_EXPECTED_MAJOR: ${{ vars.AQA_TEST_POSTGRES_RECOVERY_EXPECTED_MAJOR }}
+      AQA_TEST_POSTGRES_RECOVERY_EXPECTED_LSN: ${{ vars.AQA_TEST_POSTGRES_RECOVERY_EXPECTED_LSN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require isolated recovery target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${AQA_TEST_POSTGRES_RECOVERY_DSN:-}" ]; then
+            echo "::error title=Missing recovery target::AQA_TEST_POSTGRES_RECOVERY_DSN is required in the production-database-evidence environment"
+            exit 1
+          fi
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Observe recovery target
+        run: bun test packages/store/test/postgres-recovery-provider-live.test.ts
