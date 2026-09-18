@@ -43,6 +43,11 @@ operators.
   `server.image.requireDigest=true` and `runner.image.requireDigest=true`.
   The chart fails during render when a required digest is missing; mutable tags
   remain available only for development/PoC values.
+- Publish a signed `ProductionEvidence` envelope from the approved SRE/security
+  process and configure `AQA_PRODUCTION_EVIDENCE_PATH` plus its trusted public
+  key. `aqa doctor --production` verifies its integrity and completeness but
+  does not contact KMS, WORM, PostgreSQL or the IdP; see
+  `docs/operations/production-evidence.md`.
 - The chart uses TCP probes because the current server package exposes the
   framework-agnostic route table rather than a standalone health HTTP server;
   replace them with an authenticated-free application health endpoint when the

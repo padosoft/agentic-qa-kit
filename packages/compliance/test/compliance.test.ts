@@ -11,10 +11,13 @@ import {
   createAuditCheckpoint,
   parseBackupInventory,
   parseEventLines,
+  productionEvidenceCompleteness,
   signBackupInventory,
+  signProductionEvidence,
   verifyAuditCheckpoint,
   verifyBackupInventory,
   verifyEventChain,
+  verifyProductionEvidence,
 } from '../dist/index.js';
 
 const ZERO = '0'.repeat(64);
@@ -226,6 +229,86 @@ describe('restore drill evidence contract', () => {
           inventory,
         ),
       /security checks are incomplete/,
+    );
+  });
+});
+
+describe('production evidence contract', () => {
+  const evidence = {
+    schema_version: '1' as const,
+    evidence_id: 'prod-evidence-1',
+    captured_at: '2026-09-18T10:00:00Z',
+    environment: 'prod-eu-1',
+    application_image_digest: `sha256:${'a'.repeat(64)}`,
+    controls: {
+      key_custody: {
+        provider: 'vault',
+        key_ref: 'transit/aqa-audit',
+        rotation_verified: true,
+        observed_at: '2026-09-18T09:00:00Z',
+      },
+      artifact_immutability: {
+        provider: 's3-object-lock',
+        store_ref: 'aqa-prod-eu-artifacts',
+        versioning_enabled: true,
+        retention_verified: true,
+        observed_at: '2026-09-18T09:05:00Z',
+      },
+      database_recovery: {
+        provider: 'postgresql',
+        cluster_ref: 'aqa-prod-eu-db',
+        pitr_enabled: true,
+        wal_archiving_verified: true,
+        restore_drill_ref: 'drill-2026-q3',
+        observed_at: '2026-09-18T09:10:00Z',
+      },
+      identity: {
+        provider: 'corp-idp',
+        oidc_verified: true,
+        mtls_verified: true,
+        runner_rotation_verified: true,
+        observed_at: '2026-09-18T09:15:00Z',
+      },
+    },
+  };
+
+  it('signs, verifies and reports a complete provider observation set', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const signed = signProductionEvidence(evidence, {
+      key_id: 'prod-evidence-key-1',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const result = verifyProductionEvidence(signed, publicKeyPem);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.completeness, { complete: true, missing: [] });
+    assert.deepEqual(productionEvidenceCompleteness(evidence), { complete: true, missing: [] });
+  });
+
+  it('keeps incomplete controls explicit and rejects tampering', () => {
+    const incomplete = {
+      ...evidence,
+      controls: {
+        ...evidence.controls,
+        identity: { ...evidence.controls.identity, mtls_verified: false },
+      },
+    };
+    assert.deepEqual(productionEvidenceCompleteness(incomplete), {
+      complete: false,
+      missing: ['identity.mtls'],
+    });
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const signed = signProductionEvidence(evidence, {
+      key_id: 'prod-evidence-key-1',
+      private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const tampered = { ...signed, evidence: { ...signed.evidence, environment: 'prod-us-1' } };
+    assert.equal(
+      verifyProductionEvidence(
+        tampered,
+        publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      ).ok,
+      false,
     );
   });
 });
