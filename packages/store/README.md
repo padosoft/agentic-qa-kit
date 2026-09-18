@@ -25,3 +25,8 @@ isolated database → `pg_restore` → fresh-read digest journey using synthetic
 data. This proves restore integrity for that CI PostgreSQL boundary; it does
 not prove cloud PITR/WAL archiving, KMS, Object Lock, replication or production
 RTO/RPO.
+
+The protected manual `postgres-provider-evidence.yml` workflow repeats the
+same bounded journey against an operator-owned disposable PostgreSQL provider.
+Its DSN is an Environment secret and the job fails closed when it is absent;
+never point it at a customer or application production database.
