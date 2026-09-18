@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { verifyProductionEvidence } from '@aqa/compliance';
 import { type ProjectProfile, profileRepo } from '../profiler.js';
 import { runValidate } from './validate.js';
 
@@ -128,6 +129,8 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   const otlp = Boolean(process.env.AQA_OTLP_ENDPOINT?.trim());
   const sandboxImage = process.env.AQA_CONTAINER_IMAGE?.trim() ?? '';
   const sandboxImagePinned = /^.+@sha256:[0-9a-f]{64}$/u.test(sandboxImage);
+  const evidencePath = process.env.AQA_PRODUCTION_EVIDENCE_PATH?.trim();
+  const evidenceKey = process.env.AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM;
 
   checks.push({
     id: 'production-store',
@@ -204,6 +207,61 @@ function addProductionChecks(checks: DoctorCheck[]): void {
       ? undefined
       : 'Configure AQA_CONTAINER_IMAGE as registry/image@sha256:<64 lowercase hex> for security/release-gate runs.',
   });
+  if (!evidencePath) {
+    checks.push({
+      id: 'production-evidence',
+      title: 'Signed production evidence pack verified',
+      status: 'warn',
+      detail: 'AQA_PRODUCTION_EVIDENCE_PATH is not configured',
+      suggestion:
+        'Provide a signed provider observation pack and AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM; this check never contacts providers.',
+    });
+  } else if (!existsSync(evidencePath)) {
+    checks.push({
+      id: 'production-evidence',
+      title: 'Signed production evidence pack verified',
+      status: 'fail',
+      detail: 'configured evidence path does not exist',
+      suggestion: 'Publish the signed evidence pack at AQA_PRODUCTION_EVIDENCE_PATH.',
+    });
+  } else if (!evidenceKey?.trim()) {
+    checks.push({
+      id: 'production-evidence',
+      title: 'Signed production evidence pack verified',
+      status: 'fail',
+      detail: 'trusted public key is missing (value hidden)',
+      suggestion: 'Configure AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM from the approved trust root.',
+    });
+  } else {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(evidencePath, 'utf8'));
+      const verification = verifyProductionEvidence(parsed, evidenceKey);
+      const completeness = verification.completeness;
+      checks.push({
+        id: 'production-evidence',
+        title: 'Signed production evidence pack verified',
+        status:
+          verification.ok && completeness?.complete ? 'pass' : verification.ok ? 'warn' : 'fail',
+        detail: verification.ok
+          ? completeness?.complete
+            ? 'signed provider observations verified (values hidden)'
+            : `signed evidence is incomplete (${completeness?.missing.join(', ') ?? 'unknown controls'})`
+          : 'evidence signature or schema verification failed',
+        suggestion:
+          verification.ok && completeness?.complete
+            ? undefined
+            : 'Regenerate the signed pack from fresh provider observations; the document is not live provider proof by itself.',
+      });
+    } catch {
+      checks.push({
+        id: 'production-evidence',
+        title: 'Signed production evidence pack verified',
+        status: 'fail',
+        detail: 'evidence file is not valid JSON',
+        suggestion: 'Provide a JSON signed ProductionEvidence envelope without secrets.',
+      });
+    }
+  }
 }
 
 function agentFilesPresent(root: string): boolean {

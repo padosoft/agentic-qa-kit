@@ -2020,3 +2020,11 @@ Bun's `node:test` compatibility currently exposes `t.skip()` but throws a
 `NotImplementedError` when it is called. For optional platform journeys, use
 the repository's explicit skip message + return convention in the shared unit
 suite, and keep the actual required live assertion in the OCI-specific CI job.
+# 2026-09-18 — Signed evidence is a handoff, not live infrastructure proof
+
+Provider controls that the repository cannot contact should cross the release
+boundary as a signed, bounded evidence envelope rather than environment
+variables or prose. The verifier must distinguish missing, invalid and
+incomplete evidence, avoid secrets, and explicitly retain the limitation that
+signature validity proves provenance/integrity—not that KMS, WORM, PITR or IdP
+behavior is live at the time of use.

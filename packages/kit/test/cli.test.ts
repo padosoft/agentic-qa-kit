@@ -120,6 +120,7 @@ describe('aqa doctor', () => {
     assert.equal(d.checks.find((c) => c.id === 'production-store')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-artifacts')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-sandbox-image')?.status, 'fail');
+    assert.equal(d.checks.find((c) => c.id === 'production-evidence')?.status, 'warn');
     assert.ok(d.checks.every((c) => !c.detail.includes('postgres://')));
   });
 });

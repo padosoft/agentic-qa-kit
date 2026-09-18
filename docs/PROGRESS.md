@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Added the signed production evidence boundary.** `@aqa/compliance` now
+  validates and signs bounded observations for KMS/Vault rotation,
+  artifact-versioning/Object Lock, PostgreSQL PITR/WAL and IdP/OIDC/mTLS/
+  runner rotation. `aqa doctor --production` optionally verifies the envelope
+  through an explicit public-key trust root and distinguishes missing,
+  incomplete and invalid evidence. This makes the operational handoff
+  automatable without claiming that a signed document alone proves live
+  provider behavior. Added ADR-206 and 17 compliance tests.
+
 - **Added a live OCI complete journey for hardened kit runs.** The container
   integration job now resolves an immutable Alpine digest and executes the
   real `release-gate` path with automatic sandbox selection and a shell probe,
