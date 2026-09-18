@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-infra-iac
+risks:
+  - id: iac-unreviewed-destruction
+    category: availability
+    title: An infrastructure plan destroys or replaces a critical resource without an approved boundary.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-plan-reviewed
+        statement: Destructive and replacement operations are detected, bounded and explicitly approved before apply.
+  - id: iac-drift-undetected
+    category: integrity
+    title: Deployed infrastructure diverges from the declared source of truth without an actionable signal.
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-drift-visible
+        statement: Drift is detected with a stable resource identity, severity and remediation owner.
+  - id: iac-policy-bypass
+    category: compliance
+    title: Infrastructure violates security or data-residency policy while the pipeline reports success.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-policy-gated
+        statement: Policy violations fail the release gate and cannot be bypassed by an untrusted plan annotation.

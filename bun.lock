@@ -278,6 +278,10 @@
       "name": "@aqa/pack-database-migrations",
       "version": "0.1.0",
     },
+    "packs/infra-iac": {
+      "name": "@aqa/pack-infra-iac",
+      "version": "0.1.0",
+    },
     "packs/llm-agent": {
       "name": "@aqa/pack-llm-agent",
       "version": "0.1.0",
@@ -342,6 +346,8 @@
     "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
 
     "@aqa/pack-database-migrations": ["@aqa/pack-database-migrations@workspace:packs/database-migrations"],
+
+    "@aqa/pack-infra-iac": ["@aqa/pack-infra-iac@workspace:packs/infra-iac"],
 
     "@aqa/pack-llm-agent": ["@aqa/pack-llm-agent@workspace:packs/llm-agent"],
 

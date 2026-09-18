@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-iac-policy-enforcement
+title: IaC policy violations fail the release gate
+risk_refs: [iac-policy-bypass]
+invariant_refs: [inv-policy-gated]
+preconditions:
+  - "a disposable policy evaluation endpoint is available"
+steps:
+  - id: evaluate-policy
+    kind: http
+    with: { method: "GET", url: "/infra/policy?fixture=forbidden-public-storage" }
+oracles:
+  - id: o-violation-gated
+    kind: response_contains
+    probe_id: evaluate-policy
+    with: { jsonpath: "$.release_gate", equals: "blocked" }
+  - id: o-bypass-denied
+    kind: response_contains
+    probe_id: evaluate-policy
+    with: { jsonpath: "$.bypass_allowed", equals: false }
+tags: [infra, iac, policy]

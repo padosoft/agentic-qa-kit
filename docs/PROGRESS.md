@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-infra-iac`.** It adds opt-in, schema-valid contracts for
+  destructive plan visibility, drift ownership/correlation and policy-gated
+  release decisions. Provider-backed apply, IAM, state-lock and recovery
+  evidence remain separate; next: validate and publish the pack.
+
 - **Started `pack-accessibility-wcag`.** It adds opt-in, schema-valid contracts
   for keyboard operability, semantic names/roles/states and live-region
   announcements, with an explicit boundary against claiming WCAG certification.
