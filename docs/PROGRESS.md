@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-compliance-hipaa`.** It adds opt-in, schema-valid contracts
+  for minimum-necessary PHI, purpose-bound access and tamper-evident incident
+  evidence. Legal, administrative, physical and vendor controls remain
+  separate; next: validate and publish the pack.
+
 - **Started `pack-mobile-native`.** It adds opt-in, schema-valid contracts for
   offline mutation idempotency, minimal permissions and authenticated deep-link
   session binding. Device, OS, store and push-provider evidence remain

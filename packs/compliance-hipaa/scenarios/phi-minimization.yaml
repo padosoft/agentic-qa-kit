@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-hipaa-phi-minimization
+title: A healthcare journey collects and retains only minimum necessary PHI
+risk_refs: [hipaa-phi-overcollection]
+invariant_refs: [inv-phi-minimum-necessary]
+preconditions:
+  - "a seeded non-production healthcare fixture and declared purpose/retention policy are available"
+steps:
+  - id: inspect-minimization
+    kind: http
+    with: { method: "GET", url: "/hipaa/phi/minimization?journey=care-support&fixture=seeded" }
+oracles:
+  - id: o-fields
+    kind: response_contains
+    probe_id: inspect-minimization
+    with: { jsonpath: "$.minimum_fields_enforced", equals: true }
+  - id: o-retention
+    kind: response_contains
+    probe_id: inspect-minimization
+    with: { jsonpath: "$.retention_policy_bound", equals: true }
+  - id: o-redaction
+    kind: response_contains
+    probe_id: inspect-minimization
+    with: { jsonpath: "$.downstream_redaction_verified", equals: true }
+tags: [hipaa, phi, minimization, privacy]

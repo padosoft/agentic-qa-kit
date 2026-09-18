@@ -2126,3 +2126,10 @@ Offline retries, permission denial and deep links need explicit idempotency,
 revocation and session-binding assertions. A provider-neutral HTTP fixture does
 not prove OS background behavior, push delivery, device security or app-store
 controls; those journeys must remain separately evidenced.
+
+## 2026-09-18 — HIPAA engineering checks are not an attestation
+
+PHI minimization, purpose-bound access and tamper-evident incident evidence are
+useful technical contracts, but they cannot establish a BAA, administrative or
+physical safeguards, vendor compliance or a breach-notification conclusion.
+Keep seeded fixtures and independent compliance/legal evidence explicit.

@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-hipaa-incident-evidence
+title: Suspected PHI access produces bounded tamper-evident incident evidence
+risk_refs: [hipaa-incident-unproven]
+invariant_refs: [inv-phi-incident-evidence]
+preconditions:
+  - "a seeded non-production incident fixture and trusted evidence store are available"
+steps:
+  - id: inspect-incident
+    kind: http
+    with: { method: "GET", url: "/hipaa/incident/evidence?fixture=seeded-access" }
+oracles:
+  - id: o-chain
+    kind: response_contains
+    probe_id: inspect-incident
+    with: { jsonpath: "$.tamper_evident", equals: true }
+  - id: o-scope
+    kind: response_contains
+    probe_id: inspect-incident
+    with: { jsonpath: "$.affected_scope_bounded", equals: true }
+  - id: o-owner
+    kind: response_contains
+    probe_id: inspect-incident
+    with: { jsonpath: "$.response_owner_bound", equals: true }
+tags: [hipaa, phi, incident, evidence]
