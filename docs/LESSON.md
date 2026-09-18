@@ -2517,3 +2517,14 @@ manually copied local command. A protected manual workflow can read redacted
 JSON and trust roots from an Environment, run the canonical release gate and
 clean its temporary files. Keep this provenance gate separate from the provider
 execution drill it references.
+
+# 2026-09-18 — Compose real drivers only at the host boundary
+
+Having a runner implementation in `@aqa/runner` is not sufficient evidence
+that `aqa run` can execute that probe kind. The CLI must compose each driver,
+declare its capability set for preflight, and close its resources. Keep the
+configuration operator-owned: packs describe intent, while DSNs, browser
+enablement and shell allowlists stay outside pack files. On Windows, absolute
+executable paths may cross a YAML/environment separator boundary (`\\` vs `/`);
+normalize only exact absolute paths and never turn that fix into implicit
+basename authorization.

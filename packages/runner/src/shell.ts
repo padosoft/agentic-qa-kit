@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { basename } from 'node:path';
+import { basename, isAbsolute, normalize } from 'node:path';
 import { redactText } from '@aqa/observability';
 import type { ProbeRunner } from './run.js';
 
@@ -15,7 +15,18 @@ export interface ShellProbeRunnerOptions {
 }
 
 function commandAllowed(command: string, allowed: readonly string[]): boolean {
-  return allowed.some((candidate) => candidate === command || candidate === basename(command));
+  const normalizedCommand = isAbsolute(command) ? normalize(command) : undefined;
+  return allowed.some((candidate) => {
+    if (candidate === command || candidate === basename(command)) return true;
+    // YAML and environment variables commonly use `/` even on Windows;
+    // compare absolute paths using the host path normalizer, never by
+    // broadening a basename allowlist implicitly.
+    return (
+      normalizedCommand !== undefined &&
+      isAbsolute(candidate) &&
+      normalize(candidate) === normalizedCommand
+    );
+  });
 }
 
 /**

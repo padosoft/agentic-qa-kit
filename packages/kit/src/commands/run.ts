@@ -69,9 +69,17 @@ import { buildReplayArtifacts } from '@aqa/reporter';
 import {
   EventChainWriter,
   FindingsWriter,
+  type PlaywrightProbeRunnerOptions,
+  type PostgresSqlProbeRunnerOptions,
   type ProbeRunResult,
   type ProbeRunner,
+  type ShellProbeRunnerOptions,
+  type SqlProbeRunnerOptions,
   makeHttpProbeRunner,
+  makePlaywrightProbeRunner,
+  makePostgresSqlProbeRunner,
+  makeShellProbeRunner,
+  makeSqlProbeRunner,
   runScenario,
 } from '@aqa/runner';
 import { ContainerSandbox, type Sandbox } from '@aqa/sandbox';
@@ -80,6 +88,62 @@ import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
 
 type ClosableProbeRunner = ProbeRunner & { close?: () => Promise<void> };
+
+/**
+ * Host-owned probe integrations for the CLI orchestration boundary.
+ *
+ * These are deliberately not read from pack content. A production host can
+ * inject a preconfigured SQL adapter, or the convenience PostgreSQL driver;
+ * shell and browser execution remain explicit because they expand the trust
+ * boundary beyond ordinary HTTP probes.
+ */
+export interface RunProbeDrivers {
+  shell?: ShellProbeRunnerOptions;
+  sql?: SqlProbeRunnerOptions;
+  postgres?: PostgresSqlProbeRunnerOptions;
+  playwright?: Omit<PlaywrightProbeRunnerOptions, 'baseUrl'> & { baseUrl?: string };
+}
+
+function envEnabled(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true' || value?.toLowerCase() === 'yes';
+}
+
+/**
+ * Translate explicit operator environment into host-owned drivers. Secrets
+ * are returned only in memory and are never included in diagnostics.
+ * Disabled by default; malformed opt-in configuration throws a safe message.
+ */
+export function probeDriversFromEnvironment(root: string): RunProbeDrivers | undefined {
+  const drivers: RunProbeDrivers = {};
+  const postgresDsn = process.env.AQA_PROBE_POSTGRES_DSN?.trim();
+  if (postgresDsn) drivers.postgres = { connectionString: postgresDsn };
+
+  if (envEnabled(process.env.AQA_PROBE_SHELL_ENABLED)) {
+    const allowedCommands = (process.env.AQA_PROBE_SHELL_ALLOWED_COMMANDS ?? '')
+      .split(',')
+      .map((command) => command.trim())
+      .filter(Boolean);
+    if (allowedCommands.length === 0) {
+      throw new Error(
+        'AQA_PROBE_SHELL_ENABLED requires AQA_PROBE_SHELL_ALLOWED_COMMANDS (comma-separated)',
+      );
+    }
+    drivers.shell = {
+      allowShell: true,
+      cwd: process.env.AQA_PROBE_SHELL_CWD?.trim() || root,
+      allowedCommands,
+    };
+  }
+
+  if (envEnabled(process.env.AQA_PROBE_PLAYWRIGHT_ENABLED)) {
+    const allowedOrigins = (process.env.AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    drivers.playwright = allowedOrigins.length > 0 ? { allowedOrigins } : {};
+  }
+  return Object.keys(drivers).length > 0 ? drivers : undefined;
+}
 
 export interface RunOptions {
   root: string;
@@ -122,6 +186,8 @@ export interface RunOptions {
   httpSecrets?: Readonly<Record<string, string>>;
   /** Optional capability declaration forwarded to runner preflight. */
   supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
+  /** Explicit host-owned drivers for non-HTTP probe kinds. */
+  probeDrivers?: RunProbeDrivers;
   /** Require trusted Ed25519 signatures and a full pack content digest before execution. */
   requireSignedPacks?: boolean;
   /** Operator trust root keyed by the manifest signing key_id. */
@@ -228,6 +294,31 @@ function composeSandboxProbeRunner(sandbox: Sandbox, httpRunner?: ProbeRunner): 
       ? { probe_id: probe.id, status: 200, body: result.output }
       : { probe_id: probe.id, error: result.error ?? 'sandbox shell probe failed' };
   };
+}
+
+interface NamedProbeRunner {
+  kind: Scenario.ProbeKind;
+  runner: ClosableProbeRunner;
+}
+
+/** Compose independently owned drivers without allowing kind fall-through. */
+function composeProbeRunners(drivers: readonly NamedProbeRunner[]): ClosableProbeRunner {
+  const byKind = new Map(drivers.map(({ kind, runner }) => [kind, runner]));
+  const composed = (async (probe, signal) => {
+    const runner = byKind.get(probe.kind);
+    return runner
+      ? runner(probe, signal)
+      : { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
+  }) as ClosableProbeRunner;
+  composed.close = async () => {
+    const closed = new Set<ClosableProbeRunner>();
+    for (const runner of byKind.values()) {
+      if (closed.has(runner) || !runner.close) continue;
+      closed.add(runner);
+      await runner.close();
+    }
+  };
+  return composed;
 }
 
 /**
@@ -611,11 +702,70 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       }`,
     );
   }
-  const probeRunner: ClosableProbeRunner | undefined = explicitRunner
-    ? explicitRunner
-    : sandbox
-      ? composeSandboxProbeRunner(sandbox, httpRunner)
-      : httpRunner;
+  let probeRunner: ClosableProbeRunner | undefined;
+  let configuredProbeKinds: ReadonlySet<Scenario.ProbeKind> | undefined;
+  if (explicitRunner) {
+    probeRunner = explicitRunner;
+    configuredProbeKinds = opts.supportedProbeKinds;
+  } else {
+    const drivers: NamedProbeRunner[] = [];
+    const supportedKinds = new Set<Scenario.ProbeKind>();
+    if (httpRunner) {
+      drivers.push({ kind: 'http', runner: httpRunner });
+      supportedKinds.add('http');
+    }
+    if (sandbox) {
+      const sandboxRunner = composeSandboxProbeRunner(sandbox, undefined);
+      drivers.push({ kind: 'shell', runner: sandboxRunner });
+      supportedKinds.add('shell');
+    } else if (opts.probeDrivers?.shell) {
+      drivers.push({ kind: 'shell', runner: makeShellProbeRunner(opts.probeDrivers.shell) });
+      supportedKinds.add('shell');
+    }
+    try {
+      if (opts.probeDrivers?.sql && opts.probeDrivers.postgres) {
+        throw new Error('probeDrivers.sql and probeDrivers.postgres are mutually exclusive');
+      }
+      if (opts.probeDrivers?.sql) {
+        drivers.push({ kind: 'sql', runner: makeSqlProbeRunner(opts.probeDrivers.sql) });
+        supportedKinds.add('sql');
+      } else if (opts.probeDrivers?.postgres) {
+        drivers.push({
+          kind: 'sql',
+          runner: makePostgresSqlProbeRunner(opts.probeDrivers.postgres),
+        });
+        supportedKinds.add('sql');
+      }
+      if (opts.probeDrivers?.playwright) {
+        const playwrightBaseUrl = opts.probeDrivers.playwright.baseUrl ?? project.sut.base_url;
+        if (!playwrightBaseUrl) {
+          throw new Error(
+            'playwright probe driver requires project.sut.base_url or probeDrivers.playwright.baseUrl',
+          );
+        }
+        drivers.push({
+          kind: 'playwright',
+          runner: makePlaywrightProbeRunner({
+            ...opts.probeDrivers.playwright,
+            baseUrl: playwrightBaseUrl,
+          }),
+        });
+        supportedKinds.add('playwright');
+      }
+    } catch (error) {
+      const closed = new Set<ClosableProbeRunner>();
+      for (const { runner } of drivers) {
+        if (closed.has(runner) || !runner.close) continue;
+        closed.add(runner);
+        await runner.close();
+      }
+      return makeError(
+        `probe driver configuration is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (drivers.length > 0) probeRunner = composeProbeRunners(drivers);
+    configuredProbeKinds = opts.supportedProbeKinds ?? supportedKinds;
+  }
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a
@@ -859,7 +1009,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
             events,
             findings,
             ...(probeRunner ? { probeRunner } : {}),
-            ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
+            ...(configuredProbeKinds ? { supportedProbeKinds: configuredProbeKinds } : {}),
             findingIdSeed,
             ...(risk ? { risk } : {}),
             ...(opts.signal ? { signal: opts.signal } : {}),

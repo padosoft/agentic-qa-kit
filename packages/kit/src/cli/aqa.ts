@@ -12,7 +12,7 @@ import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
 import { runRiskCoverage } from '../commands/risk-coverage.js';
 import { runRiskDiscover } from '../commands/risk-discover.js';
-import { runRun } from '../commands/run.js';
+import { probeDriversFromEnvironment, runRun } from '../commands/run.js';
 import { runValidate } from '../commands/validate.js';
 import { runVerify } from '../commands/verify.js';
 import { runWorker, runnerConfigFromEnv } from '../commands/worker.js';
@@ -289,6 +289,19 @@ async function main(): Promise<number> {
       if (args.values.has('seed')) runOpts.seed = args.values.get('seed') ?? '';
       if (args.values.has('otlp-endpoint'))
         runOpts.otlpEndpoint = args.values.get('otlp-endpoint') ?? '';
+      try {
+        const probeDrivers = probeDriversFromEnvironment(cwd);
+        if (probeDrivers) runOpts.probeDrivers = probeDrivers;
+      } catch (error) {
+        console.error(
+          red(
+            `aqa run: invalid probe driver configuration: ${
+              error instanceof Error ? error.message : 'invalid configuration'
+            }`,
+          ),
+        );
+        return 1;
+      }
       if (args.flags.has('require-signed-packs')) {
         const rawTrustRoot = process.env.AQA_PACK_TRUSTED_KEYS_JSON;
         if (!rawTrustRoot) {
