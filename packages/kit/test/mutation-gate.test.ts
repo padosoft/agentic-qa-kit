@@ -105,3 +105,39 @@ test('mutation regression gate requires observed scenario outcomes', () => {
   assert.equal(result.gate_ok, true);
   assert.equal(result.regression?.observed_pairs, 2);
 });
+
+test('mutation regression gate rejects evidence from another source revision', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Survived']));
+  writeFileSync(
+    join(root, 'manifest.json'),
+    JSON.stringify({
+      schema_version: '1',
+      links: [
+        { mutation_id: 'm-0', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+        { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(root, 'evidence.json'),
+    JSON.stringify({
+      schema_version: '1',
+      source_revision: 'old-sha',
+      observations: [
+        { mutation_id: 'm-0', scenario_id: 'scenario-cart', run_id: 'run-0', outcome: 'killed' },
+        { mutation_id: 'm-1', scenario_id: 'scenario-cart', run_id: 'run-1', outcome: 'survived' },
+      ],
+    }),
+  );
+  const result = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    minKillRate: 0.5,
+    expectedSourceRevision: 'new-sha',
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /source revision/);
+});

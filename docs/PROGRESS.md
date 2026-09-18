@@ -11,6 +11,12 @@
 
 ## 2026-09-19
 
+- **Bound mutation regression evidence to the workflow revision.** The protected
+  gate now passes `${github.sha}` to `aqa mutation regression`, which rejects
+  evidence whose `source_revision` belongs to another commit. Added a
+  regression test for cross-revision evidence and completed the full suite:
+  **862 pass / 5 explicit skips / 0 fail**. ADR-277.
+
 - **Connected protected mutation CI to regression execution evidence.** The
   reusable `mutation-evidence-gate.yml` now accepts optional producer and file
   inputs for observed mutant/scenario executions, validates their paths and

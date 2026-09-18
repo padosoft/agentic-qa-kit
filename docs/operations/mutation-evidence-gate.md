@@ -26,7 +26,8 @@ aqa mutation regression <report.json> <manifest.json> <evidence.json> \
 
 This second gate requires one bounded observation for every reviewed
 mutant/scenario pair and checks that observed outcomes agree with the mutation
-report. Leaving the optional artifact unset preserves compatibility with
+report and that `source_revision` equals the protected workflow's commit SHA.
+Leaving the optional artifact unset preserves compatibility with
 existing producers, but does not claim execution evidence.
 
 The log contains only bounded IDs and rates and is retained as a short-lived
