@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { failureFingerprint } from '../dist/fingerprint.js';
 import { verifyScenario } from '../dist/replay.js';
 
 const SCENARIO = {
@@ -16,6 +17,37 @@ const SCENARIO = {
 };
 
 describe('verifyScenario', () => {
+  it('produces a stable fingerprint for the failed oracle set', async () => {
+    const first = await verifyScenario({
+      scenario: SCENARIO,
+      run_id: 'run-fingerprint-a',
+      attempts: 1,
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+    });
+    const second = await verifyScenario({
+      scenario: SCENARIO,
+      run_id: 'run-fingerprint-b',
+      attempts: 1,
+      probeRunner: async (p) => ({ probe_id: p.id, status: 200 }),
+    });
+    assert.equal(first.fingerprint, second.fingerprint);
+    assert.match(first.fingerprint ?? '', /^[0-9a-f]{64}$/u);
+    assert.equal(
+      first.fingerprint,
+      failureFingerprint({
+        scenario_id: SCENARIO.id,
+        outcome: 'fail',
+        execution_status: 'completed',
+        probes: [{ probe_id: 'p', status: 200 }],
+        cleanup: [],
+        oracles: [
+          { oracle_id: 'o', passed: false, reason: 'expected status 401, got 200', agreement: 0 },
+        ],
+        finding: null,
+      }),
+    );
+  });
+
   it('deterministic=true when every attempt reproduces the finding', async () => {
     const r = await verifyScenario({
       scenario: SCENARIO,

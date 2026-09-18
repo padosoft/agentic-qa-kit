@@ -70,6 +70,11 @@ export const Finding = z
     discovered_at: IsoDateTime,
     confidence: z.number().min(0).max(1),
     confidence_components: ConfidenceComponents.default({}),
+    /** Stable digest of the failed oracle set that produced this occurrence. */
+    failure_fingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
     reproducibility: Reproducibility.default({}),
     verification_floor: VerificationFloor,
     evidence: z.array(z.string()).default([]),

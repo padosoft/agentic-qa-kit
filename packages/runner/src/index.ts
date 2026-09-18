@@ -27,7 +27,12 @@ export {
   type PostgresSqlProbeRunner,
   type PostgresSqlProbeRunnerOptions,
 } from './postgres.js';
-export { verifyScenario, type VerifyOptions, type VerifyResult } from './replay.js';
+export {
+  verifyScenario,
+  type VerifyOptions,
+  type VerifyResult,
+} from './replay.js';
+export { failureFingerprint } from './fingerprint.js';
 export {
   AgentToolGuard,
   type AgentTool,

@@ -68,4 +68,53 @@ describe('aqa verify', () => {
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /finding not found/i);
   });
+
+  it('does not call a different replayed failure deterministic', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'aqa-verify-fingerprint-'));
+    roots.push(root);
+    const pack = join(root, 'packs', 'local');
+    const runDir = join(root, '.aqa', 'runs', 'run-verify-fingerprint');
+    mkdirSync(join(pack, 'scenarios'), { recursive: true });
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      join(pack, 'pack.yaml'),
+      `schema_version: "1"\nname: pack-local-fingerprint\nversion: 0.1.0\ndescription: verify fixture\nauthor: test\nlicense: MIT\napplies_when: {}\ntemplates: []\nscenarios:\n  - scenarios/verify.yaml\nrisks: []\noracles: []\nprobes: []\n`,
+    );
+    writeFileSync(
+      join(pack, 'scenarios', 'verify.yaml'),
+      `schema_version: "1"\nid: scn-fingerprint\ntitle: Verify fingerprint\nrisk_refs: [r-fingerprint]\ninvariant_refs: []\npreconditions: []\nsteps:\n  - id: probe\n    kind: http\n    with: { url: /healthz }\noracles:\n  - id: status\n    kind: http_status\n    with: { expected: 200 }\ncleanup: []\ntags: []\n`,
+    );
+    writeFileSync(
+      join(runDir, 'findings.jsonl'),
+      `${JSON.stringify({
+        schema_version: '1',
+        id: 'AQA-2026-12345678901234567891',
+        run_id: 'run-verify-fingerprint',
+        scenario_id: 'scn-fingerprint',
+        risk_id: 'r-fingerprint',
+        title: 'Verification finding',
+        summary: 'A persisted finding with an original failure fingerprint.',
+        severity: 'high',
+        status: 'draft',
+        execution_mode: 'orchestrator',
+        discovered_at: '2026-09-17T12:00:00.000Z',
+        confidence: 1,
+        confidence_components: {},
+        failure_fingerprint: '0'.repeat(64),
+        reproducibility: {},
+        verification_floor: 'scenario_level',
+        evidence: [],
+        tags: [],
+      })}\n`,
+    );
+    const result = await runVerify({
+      root,
+      findingId: 'AQA-2026-12345678901234567891',
+      attempts: 2,
+      probeRunner: async (probe) => ({ probe_id: probe.id, status: 500 }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.deterministic, false);
+    assert.equal(result.successes, 0);
+  });
 });

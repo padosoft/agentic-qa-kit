@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Anchored replay to the original defect identity.** Findings now persist a
+  SHA-256 `failure_fingerprint` of the failed-oracle set, and `aqa verify`
+  passes it into every retry. A different oracle failure can no longer be
+  reported as deterministic merely because it also produced a finding.
+  Schema, runner and complete CLI verification tests cover the contract.
+  Next: continue the remaining operational proof (real KMS/WORM/PITR/IdP and
+  external security validation).
+
 - **Closed the audit-serving false-green boundary.** `GET /api/runs/:id/events`
   now verifies the complete stored hash chain before returning evidence and
   returns bounded `AUDIT_CHAIN_INVALID` on tampering, matching the existing

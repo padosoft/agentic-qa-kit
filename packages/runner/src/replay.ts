@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import type { Scenario } from '@aqa/schemas';
+import { failureFingerprint } from './fingerprint.js';
 import { type ProbeRunner, type ScenarioRunResult, runScenario } from './run.js';
 
 export interface VerifyOptions {
@@ -22,17 +22,6 @@ export interface VerifyResult {
     failure_fingerprint?: string;
   }>;
   fingerprint?: string;
-}
-
-function failureFingerprint(result: ScenarioRunResult): string | undefined {
-  const failed = result.oracles
-    .filter((oracle) => !oracle.passed)
-    .map((oracle) => ({ oracle_id: oracle.oracle_id, reason: oracle.reason }))
-    .sort((a, b) => a.oracle_id.localeCompare(b.oracle_id));
-  if (failed.length === 0) return undefined;
-  return createHash('sha256')
-    .update(JSON.stringify({ scenario_id: result.scenario_id, failed }))
-    .digest('hex');
 }
 
 /**

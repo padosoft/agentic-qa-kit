@@ -3,6 +3,7 @@ import { type TraceContext, formatTraceParent } from '@aqa/observability';
 import { Finding, type RiskMap, type Scenario } from '@aqa/schemas';
 import type { EventChainWriter } from './events.js';
 import type { FindingsWriter } from './findings.js';
+import { failureFingerprint } from './fingerprint.js';
 import { RunLifecycle } from './lifecycle.js';
 import { type OracleResult, type ProbeRunResult, evaluateOracle } from './oracles.js';
 
@@ -434,6 +435,15 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       discovered_at: new Date().toISOString(),
       confidence: agreement,
       confidence_components: { oracle_agreement: agreement },
+      failure_fingerprint: failureFingerprint({
+        scenario_id: opts.scenario.id,
+        outcome: 'fail',
+        execution_status: 'completed',
+        probes: probeResults,
+        cleanup: cleanupResults,
+        oracles: oracleResults,
+        finding: null,
+      }),
       reproducibility: {},
       verification_floor: 'scenario_level',
       evidence: [],
