@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-accessibility-wcag
+version: 0.1.0
+description: "Opt-in WCAG accessibility baseline for keyboard, names/roles and live-region contracts."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [accessibility, accessibility-wcag, wcag]
+templates: []
+scenarios:
+  - scenarios/keyboard-navigation.yaml
+  - scenarios/semantic-controls.yaml
+  - scenarios/live-region.yaml
+risks:
+  - risks/wcag.yaml
+oracles: []
+probes: []

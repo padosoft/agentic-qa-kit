@@ -2064,6 +2064,13 @@ non-certification boundaries. Redaction, tokenization and segmentation checks
 are useful contracts, but they do not prove PCI scope, QSA assessment, key
 management or production network enforcement.
 
+## 2026-09-18 — Accessibility automation must not replace assistive-technology review
+
+Keyboard and accessibility-tree contracts are valuable regression gates, but
+they cannot prove complete WCAG conformance. Keep browser, zoom, screen-reader,
+voice-input and manual review evidence explicit and separate from automated
+placeholder observations.
+
 ## 2026-09-18 — Migration packs must separate contracts from migration engines
 
 Expand/contract and rollback scenarios can prove application compatibility only

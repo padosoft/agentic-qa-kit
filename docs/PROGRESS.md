@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-accessibility-wcag`.** It adds opt-in, schema-valid contracts
+  for keyboard operability, semantic names/roles/states and live-region
+  announcements, with an explicit boundary against claiming WCAG certification.
+  Next: validate and publish the pack.
+
 - **Started the next regulated e-commerce pack: `pack-compliance-pci`.** It
   defines opt-in, schema-valid contracts for payment-data redaction,
   tokenization boundaries and deny-by-default segmentation. It explicitly does

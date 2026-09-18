@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-wcag-live-region
+title: Async checkout status and validation errors are announced
+risk_refs: [wcag-missing-status]
+invariant_refs: [inv-live-status]
+preconditions:
+  - "a disposable checkout surface exposes its accessibility event observations"
+steps:
+  - id: inspect-status-announcements
+    kind: http
+    with: { method: "GET", url: "/accessibility/live-regions?journey=checkout" }
+oracles:
+  - id: o-status-announced
+    kind: response_contains
+    probe_id: inspect-status-announcements
+    with: { jsonpath: "$.status_announced", equals: true }
+  - id: o-errors-announced
+    kind: response_contains
+    probe_id: inspect-status-announcements
+    with: { jsonpath: "$.validation_errors_announced", equals: true }
+tags: [accessibility, wcag, live-region]
