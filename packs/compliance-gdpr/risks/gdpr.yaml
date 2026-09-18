@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-compliance-gdpr
+risks:
+  - id: gdpr-dsar-access
+    category: compliance
+    title: Data subject access request is not fulfilled or is cross-tenant
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-dsar-access
+        statement: An authenticated subject can request only its own export and receives a bounded completion acknowledgement.
+  - id: gdpr-consent-withdrawal
+    category: compliance
+    title: Consent withdrawal does not become effective
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-consent-withdrawal
+        statement: After withdrawal, the subject is no longer eligible for the withdrawn processing purpose.
+  - id: gdpr-erasure
+    category: compliance
+    title: Erasure request is ignored, partial or leaks deleted identity
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-erasure-request
+        statement: An erasure request is accepted exactly once and its completion removes subject access without exposing residual identity.

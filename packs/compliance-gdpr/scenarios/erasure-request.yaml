@@ -1,0 +1,29 @@
+schema_version: "1"
+id: scn-gdpr-erasure-request
+title: Erasure request is accepted and blocks subject access
+risk_refs: [gdpr-erasure]
+invariant_refs: [inv-erasure-request]
+preconditions:
+  - "subject fixture is present and deletion is permitted"
+steps:
+  - id: request-erasure
+    kind: http
+    with:
+      method: POST
+      url: "/privacy/requests"
+      body: { type: "erasure", subject_id: "subject-fixture" }
+  - id: read-after-erasure
+    kind: http
+    with:
+      method: GET
+      url: "/privacy/subjects/subject-fixture"
+oracles:
+  - id: erasure-accepted
+    kind: http_status
+    probe_id: request-erasure
+    with: { expected: 202 }
+  - id: subject-no-longer-readable
+    kind: http_status
+    probe_id: read-after-erasure
+    with: { expected: 404 }
+tags: [gdpr, erasure, privacy]

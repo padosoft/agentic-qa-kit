@@ -258,6 +258,10 @@
       "name": "@aqa/pack-commerce-core",
       "version": "0.1.0",
     },
+    "packs/compliance-gdpr": {
+      "name": "@aqa/pack-compliance-gdpr",
+      "version": "0.1.0",
+    },
     "packs/core": {
       "name": "@aqa/pack-core",
       "version": "0.1.0",
@@ -316,6 +320,8 @@
     "@aqa/pack-author": ["@aqa/pack-author@workspace:packages/pack-author"],
 
     "@aqa/pack-commerce-core": ["@aqa/pack-commerce-core@workspace:packs/commerce-core"],
+
+    "@aqa/pack-compliance-gdpr": ["@aqa/pack-compliance-gdpr@workspace:packs/compliance-gdpr"],
 
     "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
 
