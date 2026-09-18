@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Connected hardened shell probes to the sandbox boundary.** Orchestrator
+  `security` and `release-gate` runs now create a `ContainerSandbox` when the
+  host has not supplied a driver; shell probes execute through the bounded OCI
+  tool boundary, while HTTP remains origin-scoped and smoke profiles remain
+  explicit/no-sandbox. Evidence: real `aqa run` shell journey with an injected
+  sandbox executor passes, kit suite **38 passed / 0 failed**, plus existing
+  hosted OCI runtime coverage. This is not a claim of VM isolation or live
+  Docker proof for every deployment. Next: enforce pinned production image and
+  continue KMS/WORM, PITR/restore and IdP/mTLS evidence.
+
 - **Added an explicit scenario isolation policy.** Profiles now support
   `parallel`, `grouped` and `serial` scheduler modes; scenarios can declare an
   `isolation_group`, and grouped scenarios are serialized while independent

@@ -46,6 +46,7 @@
     "@aqa/runner": "workspace:*",
     "@aqa/methodology": "workspace:*",
     "@aqa/schemas": "workspace:*",
+    "@aqa/sandbox": "workspace:*",
     "@aqa/server": "workspace:*",
     "@aqa/store": "workspace:*",
     "kleur": "^4.1.5",

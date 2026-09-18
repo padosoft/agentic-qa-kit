@@ -10,4 +10,7 @@ Sandbox abstraction for the runner. Two implementations:
   the implementation is an OCI policy boundary, not a substitute for a VM
   isolation boundary against a hostile tenant.
 
-`selectSandbox({ profile, handlers })` picks the right one.
+`selectSandbox({ profile, handlers })` picks the right one. The CLI also routes
+shell probes in `security` and `release-gate` orchestrator runs through a
+container sandbox when no host driver is injected; HTTP/provider probes remain
+separate explicit boundaries.

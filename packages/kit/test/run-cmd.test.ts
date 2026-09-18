@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { FileArtifactStore } from '@aqa/artifacts';
+import { ContainerSandbox } from '@aqa/sandbox';
 import { RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
@@ -297,6 +298,45 @@ describe('aqa run', () => {
     const result = await runFixture({ root, profile: 'smoke', packsRoot: [packDir] });
     assert.equal(result.ok, true, `custom resource run must succeed: ${JSON.stringify(result)}`);
     assert.equal(result.scenariosRun, 1);
+  });
+
+  it('routes hardened shell probes through the host-owned container sandbox', async () => {
+    const { root, packDir } = fixtureProject();
+    writeFileSync(join(packDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      SMOKE_SCENARIO.replace(
+        'kind: http\n    with: { method: "GET", url: "/healthz" }',
+        'kind: shell\n    with: { command: "printf hello" }',
+      ).replace(
+        'kind: http_status\n    with: { expected: 200 }',
+        'kind: response_contains\n    with: { value: "hello" }',
+      ),
+      'utf8',
+    );
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, Record<string, unknown>>;
+    };
+    profiles.profiles['release-gate'] = {
+      ...profiles.profiles['release-gate'],
+      packs: ['pack-local-smoke'],
+      tags: [],
+      parallelism: 1,
+    };
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+    const calls: string[] = [];
+    const sandbox = new ContainerSandbox({
+      budget: { max_calls: 2, per_call_timeout_ms: 1_000 },
+      executor: async (_runtime, args) => {
+        calls.push(args.join(' '));
+        return { code: 0, stdout: 'hello', stderr: '' };
+      },
+    });
+    const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir], sandbox });
+    assert.equal(result.ok, true, `sandbox shell run must succeed: ${JSON.stringify(result)}`);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0] ?? '', /printf hello/);
   });
 
   it('honors profile parallelism with bounded concurrent scenario execution', async () => {

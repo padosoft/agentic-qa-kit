@@ -7,6 +7,7 @@ export {
   evaluateOracle,
   type OracleEvaluator,
   type OracleResult,
+  type ProbeRunResult,
 } from './oracles.js';
 export {
   makeHttpProbeRunner,

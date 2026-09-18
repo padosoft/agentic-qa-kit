@@ -132,6 +132,7 @@
         "@aqa/pack-scanner": "workspace:*",
         "@aqa/reporter": "workspace:*",
         "@aqa/runner": "workspace:*",
+        "@aqa/sandbox": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "@aqa/server": "workspace:*",
         "@aqa/store": "workspace:*",
