@@ -245,6 +245,37 @@ describe('Scenario oracle probe references', () => {
     assert.equal(Scenario.Scenario.safeParse(base).success, true);
   });
 
+  it('accepts executable preconditions and rejects an oracle bound to another probe', () => {
+    const executable = {
+      id: 'ready',
+      probe: { id: 'preflight-health', kind: 'http' as const, with: {}, timeout_ms: 1000 },
+      oracle: {
+        id: 'preflight-ok',
+        kind: 'http_status' as const,
+        probe_id: 'preflight-health',
+        with: { expected: 200 },
+        weight: 1,
+      },
+    };
+    assert.equal(
+      Scenario.Scenario.safeParse({ ...base, preconditions: [executable] }).success,
+      true,
+    );
+    const result = Scenario.Scenario.safeParse({
+      ...base,
+      preconditions: [
+        { ...executable, oracle: { ...executable.oracle, probe_id: 'probe-health' } },
+      ],
+    });
+    assert.equal(result.success, false);
+    if (result.success) return;
+    assert.ok(
+      result.error.issues.some(
+        (issue) => issue.path.join('.') === 'preconditions.0.oracle.probe_id',
+      ),
+    );
+  });
+
   it('rejects duplicate steps and references to missing steps', () => {
     const result = Scenario.Scenario.safeParse({
       ...base,

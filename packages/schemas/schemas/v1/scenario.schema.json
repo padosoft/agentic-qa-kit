@@ -42,7 +42,112 @@
         "preconditions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                  },
+                  "probe": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "http",
+                          "shell",
+                          "sql",
+                          "playwright",
+                          "llm_eval",
+                          "fs",
+                          "custom"
+                        ]
+                      },
+                      "with": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "default": {}
+                      },
+                      "timeout_ms": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 600000,
+                        "default": 30000
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "oracle": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "http_status",
+                          "response_contains",
+                          "response_not_contains",
+                          "json_schema",
+                          "db_query",
+                          "semantic_llm_judge",
+                          "custom"
+                        ]
+                      },
+                      "probe_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[a-z0-9](?:-?[a-z0-9])*$"
+                      },
+                      "with": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "default": {}
+                      },
+                      "weight": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "default": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "probe",
+                  "oracle"
+                ],
+                "additionalProperties": false
+              }
+            ]
           },
           "default": []
         },

@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Preconditions must be executable or explicitly descriptive
+
+A string such as `user logged in` is useful documentation but cannot protect
+an enterprise run from executing against the wrong state. Keep legacy strings
+for compatibility, but provide a typed probe+oracle contract, execute it
+before scenario steps, persist its evidence, and return `blocked` on failure;
+otherwise a setup failure can become a misleading product finding.
+
 # 2026-09-18 — Server projections must verify evidence before aggregation
 
 The CLI coverage gate already rejected tampered event chains, but the server

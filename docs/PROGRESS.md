@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Added executable scenario preconditions.** `Scenario.preconditions` now
+  accepts a backwards-compatible structured `{ id, probe, oracle }` contract.
+  `runScenario()` executes those checks before scenario steps, records their
+  probe/oracle evidence, runs cleanup after a failed setup check, and returns
+  `blocked` without emitting a security finding. Existing descriptive string
+  preconditions remain valid but are explicitly non-executable. Evidence:
+  runner and schema tests pass, schema JSON regenerated, Biome clean. Next:
+  close the remaining execution-policy gap around configured parallelism.
+
 - **Connected signed-pack policy to execution.** `aqa run --require-signed-packs`
   now refuses every discovered pack unless its canonical manifest digest,
   trusted Ed25519 signature and full file content digest all verify before any

@@ -80,7 +80,16 @@ title: Repeating a POST with the same Idempotency-Key must not create a duplicat
 risk_refs: [r-idempotency]                   # link back to risks/api.yaml
 invariant_refs: [inv-idempotent-post]
 preconditions:
-  - "user authenticated"
+  - id: user-ready
+    probe:
+      id: check-user
+      kind: http
+      with: { method: GET, url: /me }
+    oracle:
+      id: user-authenticated
+      kind: http_status
+      probe_id: check-user
+      with: { expected: 200 }
 steps:
   - id: probe-post-1
     kind: http

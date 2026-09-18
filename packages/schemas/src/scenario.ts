@@ -33,6 +33,18 @@ export const Oracle = z.object({
 });
 export type Oracle = z.infer<typeof Oracle>;
 
+/**
+ * An executable setup assertion. String preconditions remain supported as
+ * human-readable context, while this shape gives the runner a verifiable
+ * contract that must pass before scenario steps can have side effects.
+ */
+export const Precondition = z.object({
+  id: Slug,
+  probe: Probe,
+  oracle: Oracle,
+});
+export type Precondition = z.infer<typeof Precondition>;
+
 export const Scenario = z
   .object({
     schema_version: z.literal('1'),
@@ -40,7 +52,7 @@ export const Scenario = z
     title: z.string().min(4).max(200),
     risk_refs: z.array(Slug).min(1, 'a scenario must reference at least one risk id'),
     invariant_refs: z.array(Slug).default([]),
-    preconditions: z.array(z.string()).default([]),
+    preconditions: z.array(z.union([z.string(), Precondition])).default([]),
     steps: z.array(Probe).min(1, 'a scenario must have at least one probe step'),
     oracles: z.array(Oracle).min(1, 'a scenario must have at least one oracle'),
     cleanup: z.array(Probe).default([]),
@@ -101,6 +113,26 @@ export const Scenario = z
     }
     for (const [index, step] of scenario.cleanup.entries()) {
       validateHttpProbe(step, ['cleanup', index]);
+    }
+    const preconditionIds = new Set<string>();
+    for (const [index, precondition] of scenario.preconditions.entries()) {
+      if (typeof precondition === 'string') continue;
+      if (preconditionIds.has(precondition.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['preconditions', index, 'id'],
+          message: 'precondition ids must be unique',
+        });
+      }
+      preconditionIds.add(precondition.id);
+      validateHttpProbe(precondition.probe, ['preconditions', index, 'probe']);
+      if (precondition.oracle.probe_id && precondition.oracle.probe_id !== precondition.probe.id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['preconditions', index, 'oracle', 'probe_id'],
+          message: `precondition oracle must reference its probe "${precondition.probe.id}"`,
+        });
+      }
     }
     for (const [index, oracle] of scenario.oracles.entries()) {
       if (oracle.probe_id && !stepIds.has(oracle.probe_id))
