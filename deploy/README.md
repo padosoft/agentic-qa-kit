@@ -44,6 +44,14 @@ operators.
   require a worker restart. It runs `aqa worker` and uses the configured root,
   never a client-supplied filesystem path. Create `runner.worker.tokenSecretRef`
   with the short-lived JWT under `runner.worker.tokenSecretKey`.
+- Additional probe drivers are an explicit runner policy under
+  `runner.worker.probeDrivers` and are disabled by default. PostgreSQL SQL
+  probes require a Secret reference (`dsnSecretRef`/`dsnSecretKey`); Playwright
+  requires an explicit origin list; shell requires an executable allowlist and
+  always runs through direct argv. Queue payloads cannot change this policy.
+  For a managed SQL target, add its CIDR to
+  `networkPolicy.runnerExtraEgressCidrs`; the chart cannot infer network
+  identity from a Secret DSN.
 - Pin server and runner images by digest in production and set both
   `server.image.requireDigest=true` and `runner.image.requireDigest=true`.
   The chart fails during render when a required digest is missing; mutable tags

@@ -8,6 +8,15 @@
 {{- if not .Values.runner.worker.tokenSecretRef }}
 {{- fail "runner.worker.tokenSecretRef is required when runner.worker.enabled is true" }}
 {{- end }}
+{{- if and .Values.runner.worker.probeDrivers.postgres.enabled (not .Values.runner.worker.probeDrivers.postgres.dsnSecretRef) }}
+{{- fail "runner.worker.probeDrivers.postgres.dsnSecretRef is required when PostgreSQL SQL probes are enabled" }}
+{{- end }}
+{{- if and .Values.runner.worker.probeDrivers.playwright.enabled (eq (len .Values.runner.worker.probeDrivers.playwright.allowedOrigins) 0) }}
+{{- fail "runner.worker.probeDrivers.playwright.allowedOrigins must contain an origin when Playwright probes are enabled" }}
+{{- end }}
+{{- if and .Values.runner.worker.probeDrivers.shell.enabled (eq (len .Values.runner.worker.probeDrivers.shell.allowedCommands) 0) }}
+{{- fail "runner.worker.probeDrivers.shell.allowedCommands must contain an executable when shell probes are enabled" }}
+{{- end }}
 {{- if and .Values.runner.worker.enabled .Values.runner.sandbox.requirePinnedImage (not .Values.runner.sandbox.image) }}
 {{- fail "runner.sandbox.image is required when runner.sandbox.requirePinnedImage is true" }}
 {{- end }}
@@ -88,6 +97,29 @@ spec:
                   fieldPath: metadata.name
             - name: AQA_CONTAINER_IMAGE
               value: {{ .Values.runner.sandbox.image | quote }}
+            {{- if .Values.runner.worker.probeDrivers.postgres.enabled }}
+            - name: AQA_PROBE_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.worker.probeDrivers.postgres.dsnSecretRef }}
+                  key: {{ .Values.runner.worker.probeDrivers.postgres.dsnSecretKey }}
+            {{- end }}
+            {{- if .Values.runner.worker.probeDrivers.playwright.enabled }}
+            - name: AQA_PROBE_PLAYWRIGHT_ENABLED
+              value: "true"
+            - name: AQA_PROBE_PLAYWRIGHT_ALLOWED_ORIGINS
+              value: {{ join "," .Values.runner.worker.probeDrivers.playwright.allowedOrigins | quote }}
+            {{- end }}
+            {{- if .Values.runner.worker.probeDrivers.shell.enabled }}
+            - name: AQA_PROBE_SHELL_ENABLED
+              value: "true"
+            - name: AQA_PROBE_SHELL_ALLOWED_COMMANDS
+              value: {{ join "," .Values.runner.worker.probeDrivers.shell.allowedCommands | quote }}
+            {{- if .Values.runner.worker.probeDrivers.shell.cwd }}
+            - name: AQA_PROBE_SHELL_CWD
+              value: {{ .Values.runner.worker.probeDrivers.shell.cwd | quote }}
+            {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.runner.resources | nindent 12 }}
           volumeMounts:

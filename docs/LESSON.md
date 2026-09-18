@@ -2537,3 +2537,12 @@ translation and pass it through the worker composition boundary; never let a
 queue payload choose a DSN, origin allowlist or executable policy. Validate the
 operator configuration before the worker leases work so unsupported jobs do not
 become an asynchronous surprise.
+
+# 2026-09-18 — Helm must expose the same trust boundary as the worker
+
+Runtime support is not deployment support: a Helm worker that cannot receive
+the explicit driver policy will diverge from `aqa worker` behavior. Keep DSNs
+Secret-backed, keep shell/browser policy declarative and reviewable, validate
+enabled configurations at render time, and require network egress as a separate
+operator decision. When the local platform lacks Helm, do not claim rendering
+evidence; leave the authoritative CI gate visible.

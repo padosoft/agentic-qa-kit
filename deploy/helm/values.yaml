@@ -44,6 +44,20 @@ runner:
     tokenSecretKey: token
     tokenFile: /var/run/secrets/aqa/runner-token
     command: ["aqa", "worker"]
+    # Optional host-owned probe policy. All drivers are disabled by default;
+    # queue payloads cannot enable or override these values.
+    probeDrivers:
+      postgres:
+        enabled: false
+        dsnSecretRef: ""
+        dsnSecretKey: dsn
+      playwright:
+        enabled: false
+        allowedOrigins: []
+      shell:
+        enabled: false
+        allowedCommands: []
+        cwd: ""
   reaper:
     # Reclaims expired worker leases even while the worker fleet is stopped.
     enabled: false
