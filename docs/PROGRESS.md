@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Added runtime stateful journey execution.** `@aqa/methodology` now compiles
+  legal graph paths into stable actor-bound plans and executes them through
+  injected actor actions with authoritative state read-back, transition-bound
+  temporal observers, bounded cancellation/timeout and guaranteed cleanup.
+  Callback errors are reduced to safe codes and contexts are never returned.
+  Added 18/18 methodology tests and ADR-273. Next: integrate this runtime
+  contract into the real CLI/worker lifecycle and bind it to trace correlation.
+
 - **Added bounded OTLP trace federation.** `@aqa/ingest` now normalizes OTLP
   JSON span metadata with ID/time/size limits, redacts credential-like
   attributes and URLs, accepts optional OTLP status, and federates multiple

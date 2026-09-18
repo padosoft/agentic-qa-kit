@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-19 — A state graph is not runtime evidence
+
+Static path validation must remain separate from execution. A runtime journey
+needs actor-bound contexts, an authoritative observed-state read-back after
+each action, temporal observers and cleanup on failure. Keep callback errors
+as safe reason codes: provider exception text can contain credentials or PII.
+
 # 2026-09-19 — Trace deduplication must ignore collector identity
 
 When federating telemetry, the same span observed by two collectors is not a
