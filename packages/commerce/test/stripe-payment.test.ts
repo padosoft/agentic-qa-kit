@@ -356,6 +356,23 @@ describe('StripePaymentGateway', () => {
             net: -1000,
             currency: 'eur',
           });
+        if (url.includes('/balance_transactions?'))
+          return jsonResponse({
+            object: 'list',
+            has_more: false,
+            data: [
+              {
+                object: 'balance_transaction',
+                id: 'txn_charge_1',
+                type: 'charge',
+                source: 'ch_test_1',
+                amount: 1000,
+                fee: 0,
+                net: 1000,
+                currency: 'eur',
+              },
+            ],
+          });
         return jsonResponse({
           object: 'payout',
           id: 'po_test_1',
@@ -372,6 +389,7 @@ describe('StripePaymentGateway', () => {
       expected_amount: { currency: 'EUR', amount_minor: '1000' },
       expected_fee: { currency: 'EUR', amount_minor: '0' },
       expected_status: 'paid',
+      expected_balance_transaction_sources: ['ch_test_1'],
     });
 
     assert.equal(result.payout_id, 'po_test_1');
@@ -395,14 +413,16 @@ describe('StripePaymentGateway', () => {
                 net: -1000,
                 currency: 'eur',
               }
-            : {
-                object: 'payout',
-                id: 'po_test_1',
-                amount: 1000,
-                currency: 'eur',
-                status: 'paid',
-                balance_transaction: 'txn_wrong',
-              },
+            : String(input).includes('/balance_transactions?')
+              ? { object: 'list', has_more: false, data: [] }
+              : {
+                  object: 'payout',
+                  id: 'po_test_1',
+                  amount: 1000,
+                  currency: 'eur',
+                  status: 'paid',
+                  balance_transaction: 'txn_wrong',
+                },
         ),
     });
 
@@ -413,6 +433,100 @@ describe('StripePaymentGateway', () => {
         expected_fee: { currency: 'EUR', amount_minor: '0' },
       }),
       /not a payout balance transaction/,
+    );
+  });
+
+  it('fails closed when a merchant payment source is absent from the payout', async () => {
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes('/balance_transactions/'))
+          return jsonResponse({
+            object: 'balance_transaction',
+            id: 'txn_payout_1',
+            type: 'payout',
+            source: 'po_test_1',
+            amount: -1000,
+            fee: 0,
+            net: -1000,
+            currency: 'eur',
+          });
+        if (url.includes('/balance_transactions?'))
+          return jsonResponse({
+            object: 'list',
+            has_more: false,
+            data: [
+              {
+                object: 'balance_transaction',
+                id: 'txn_other',
+                type: 'charge',
+                source: 'ch_other',
+                amount: 1000,
+                fee: 0,
+                net: 1000,
+                currency: 'eur',
+              },
+            ],
+          });
+        return jsonResponse({
+          object: 'payout',
+          id: 'po_test_1',
+          amount: 1000,
+          currency: 'eur',
+          status: 'paid',
+          balance_transaction: 'txn_payout_1',
+        });
+      },
+    });
+
+    await assert.rejects(
+      reconcileStripePayout(gateway, {
+        payout_id: 'po_test_1',
+        expected_amount: { currency: 'EUR', amount_minor: '1000' },
+        expected_fee: { currency: 'EUR', amount_minor: '0' },
+        expected_balance_transaction_sources: ['ch_expected_for_order_1'],
+      }),
+      /expected balance transaction source is absent from payout/,
+    );
+  });
+
+  it('fails closed when Stripe truncates the payout constituent ledger', async () => {
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes('/balance_transactions/'))
+          return jsonResponse({
+            object: 'balance_transaction',
+            id: 'txn_payout_1',
+            type: 'payout',
+            source: 'po_test_1',
+            amount: -1000,
+            fee: 0,
+            net: -1000,
+            currency: 'eur',
+          });
+        if (url.includes('/balance_transactions?'))
+          return jsonResponse({ object: 'list', has_more: true, data: [] });
+        return jsonResponse({
+          object: 'payout',
+          id: 'po_test_1',
+          amount: 1000,
+          currency: 'eur',
+          status: 'paid',
+          balance_transaction: 'txn_payout_1',
+        });
+      },
+    });
+
+    await assert.rejects(
+      reconcileStripePayout(gateway, {
+        payout_id: 'po_test_1',
+        expected_amount: { currency: 'EUR', amount_minor: '1000' },
+        expected_fee: { currency: 'EUR', amount_minor: '0' },
+      }),
+      /payout balance transaction list is incomplete/,
     );
   });
 });

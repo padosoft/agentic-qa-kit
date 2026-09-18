@@ -85,6 +85,11 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   payout amount, fee, net equation, source linkage, type, currency or expected
   status drifts. It is payout evidence, not proof that a merchant order was
   included in that payout.
+- When `expected_balance_transaction_sources` is supplied,
+  `reconcileStripePayout()` also reads the bounded Stripe balance transactions
+  assigned to the payout and requires every merchant-persisted provider
+  source ID to be present. This is an explicit order/payment-to-payout join,
+  not an inferred success; incomplete pagination fails closed.
 - `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
   the business side effect idempotent across retries and replicas, rejecting
   reuse of one logical effect key by a different event.

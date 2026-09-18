@@ -2430,3 +2430,10 @@ does not prove which merchant orders funded it or when the bank settled it.
 Keep signed balance debits visible, verify the payout source/type and net
 equation, and require a separate durable merchant join before reporting order
 settlement as complete.
+
+# 2026-09-18 — Amount equality cannot prove payout inclusion
+
+An order amount matching a payout total is not evidence that the order funded
+that payout. Persist the provider source ID at payment/merchant commit time and
+verify its presence in the provider's payout constituent ledger; reject
+incomplete pagination and duplicate expectations before claiming the join.
