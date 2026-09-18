@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-performance-error-budget
+title: Performance failure consumes an explicit error budget and blocks release
+risk_refs: [performance-error-budget]
+invariant_refs: [inv-error-budget-gated]
+preconditions:
+  - "a disposable load-test result and release policy are available"
+steps:
+  - id: inspect-budget
+    kind: http
+    with: { method: "GET", url: "/performance/error-budget?window=release" }
+oracles:
+  - id: o-budget-attributed
+    kind: response_contains
+    probe_id: inspect-budget
+    with: { jsonpath: "$.attribution_present", equals: true }
+  - id: o-release-blocked
+    kind: response_contains
+    probe_id: inspect-budget
+    with: { jsonpath: "$.release_gate", equals: "blocked" }
+tags: [performance, slo, error-budget]

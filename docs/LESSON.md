@@ -2084,3 +2084,10 @@ Plan and drift evidence can validate release decisions, but cannot prove that
 an apply succeeded safely or that IAM, state locking, networking and recovery
 work in production. Keep provider-backed apply and restore drills as distinct
 evidence boundaries.
+
+## 2026-09-18 — Performance packs must bound traffic and attribution
+
+Latency assertions without a declared load profile, traffic budget and metric
+provenance are not production capacity evidence. Keep p95/p99, error-budget
+impact, saturation signals and release policy linked, while requiring a safe
+staging target and explicit cost controls.

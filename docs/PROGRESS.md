@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-performance`.** It adds opt-in, schema-valid contracts for
+  p95/p99 latency, error-budget release gating and saturation visibility on
+  critical journeys. Load-runner, cost and production-capacity evidence remain
+  operator supplied; next: validate and publish the pack.
+
 - **Started `pack-infra-iac`.** It adds opt-in, schema-valid contracts for
   destructive plan visibility, drift ownership/correlation and policy-gated
   release decisions. Provider-backed apply, IAM, state-lock and recovery
