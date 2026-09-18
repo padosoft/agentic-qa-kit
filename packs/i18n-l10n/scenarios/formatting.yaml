@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-i18n-formatting
+title: Locale formatting preserves commerce values across currencies and calendars
+risk_refs: [i18n-formatting-error]
+invariant_refs: [inv-locale-formatting-correct]
+preconditions:
+  - "a disposable checkout fixture with explicit minor-unit values is available"
+steps:
+  - id: inspect-formatting
+    kind: http
+    with: { method: "GET", url: "/i18n/formatting?fixture=commerce&locale=de-DE" }
+oracles:
+  - id: o-money
+    kind: response_contains
+    probe_id: inspect-formatting
+    with: { jsonpath: "$.money_semantics_preserved", equals: true }
+  - id: o-rounding
+    kind: response_contains
+    probe_id: inspect-formatting
+    with: { jsonpath: "$.rounding_policy_declared", equals: true }
+  - id: o-plural
+    kind: response_contains
+    probe_id: inspect-formatting
+    with: { jsonpath: "$.plural_rules_locale_aware", equals: true }
+tags: [i18n, formatting, currency, ecommerce]

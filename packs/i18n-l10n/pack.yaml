@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-i18n-l10n
+version: 0.1.0
+description: "Opt-in internationalization baseline for locale matrices, formatting and translation fallbacks."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [i18n, l10n, localization, internationalization, multilingual]
+templates: []
+scenarios:
+  - scenarios/locale-matrix.yaml
+  - scenarios/formatting.yaml
+  - scenarios/fallback-rtl.yaml
+risks:
+  - risks/i18n-l10n.yaml
+oracles: []
+probes: []
