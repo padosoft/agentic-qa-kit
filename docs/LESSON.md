@@ -1,5 +1,19 @@
 # Lessons
 
+# 2026-09-18 — numeric token counters are not credentials
+
+The common JSON redactor matched the word `token` at the key level and turned
+safe numeric usage counters into `[REDACTED]`, making audit cost evidence
+unusable. Keep the exception narrow to canonical non-negative input/output
+counter names; token strings and arbitrary `token` fields must remain redacted.
+
+# 2026-09-18 — provide one official adapter-to-audit bridge
+
+An event callback on a governed adapter is useful only if hosts can connect it
+to the authoritative run chain without copying prompts or provider payloads.
+Export a structural runner bridge with bounded fields and test both event order
+and hash-chain continuity; leave the LLM package independent of the runner.
+
 # 2026-09-18 — budget enforcement needs an observable boundary
 
 Admission and settlement can be correct while production operators still have

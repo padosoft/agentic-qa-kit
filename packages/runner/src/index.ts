@@ -1,6 +1,11 @@
 export { RunLifecycle, transitionAllowed } from './lifecycle.js';
 export type { RunStateName } from './lifecycle.js';
 export { EventChainWriter, type EventChainWriterOptions } from './events.js';
+export {
+  makeBudgetEventSink,
+  type BudgetAuditEvent,
+  type BudgetEventSinkOptions,
+} from './budget-events.js';
 export { FindingsWriter } from './findings.js';
 export {
   builtInOracles,

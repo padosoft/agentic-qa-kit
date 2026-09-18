@@ -48,6 +48,16 @@
   production evidence remains intentionally operator/deployment-specific and
   is not conflated with pack schema validation.
 
+- **Closed the LLM budget-to-audit integration gap.** `@aqa/runner` now exports
+  `makeBudgetEventSink`, a structural bridge from the prompt-free events emitted
+  by `BudgetedLlmAdapter` into the run's hash-chained `llm_call` and
+  `budget_exceeded` records. The bridge bounds provider/model/reason fields and
+  preserves numeric usage counters. A redaction regression was also fixed:
+  canonical numeric token counters are retained for cost evidence while token
+  strings remain redacted. Runner: 71 passed; observability: 17 passed. Host
+  wiring still must explicitly provide the sink, and provider billing
+  reconciliation remains deployment evidence.
+
 > The individual `Started pack-*` bullets below are historical work-start
 > notes retained for traceability. They are not current “next” items; the
 > consolidated completion status above is authoritative.
