@@ -25,6 +25,13 @@
   Added a complete run-boundary test; kit-focused suite passes 53/53. Next:
   bind journey correlation IDs to the federated OTLP trace report.
 
+- **Added safe journey-to-trace correlation.** The audit span observer now
+  exports only allowlisted technical journey identifiers, state transitions,
+  actor IDs, outcome and the SHA-256 plan digest; arbitrary payloads, secrets
+  and PII are rejected before OTLP export. Added regression coverage and
+  ADR-274. Collector sampling, exporter integrity and protected production
+  provenance remain open.
+
 - **Added bounded OTLP trace federation.** `@aqa/ingest` now normalizes OTLP
   JSON span metadata with ID/time/size limits, redacts credential-like
   attributes and URLs, accepts optional OTLP status, and federates multiple

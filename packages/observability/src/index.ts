@@ -265,8 +265,35 @@ export function makeEventSpanObserver(tracer: Tracer): (event: {
   scenario_id?: string | undefined;
   finding_id?: string | undefined;
   actor: { type: string };
+  payload?: Record<string, unknown> | undefined;
 }) => void {
   return (event) => {
+    const journeyPayload =
+      event.payload?.stateful_journey === 'transition' ? event.payload : undefined;
+    const journeyAttributes: Record<string, string | number | boolean> = {};
+    const boundedJourneyText = (key: string, max: number): string | undefined => {
+      const value = journeyPayload?.[key];
+      return typeof value === 'string' &&
+        /^[a-z0-9][a-z0-9_.-]*$/u.test(value) &&
+        value.length <= max
+        ? value
+        : undefined;
+    };
+    const journeyId = boundedJourneyText('journey_id', 128);
+    const journeyDigest = boundedJourneyText('journey_digest', 64);
+    const transitionId = boundedJourneyText('transition_id', 128);
+    const actorId = boundedJourneyText('actor_id', 128);
+    const from = boundedJourneyText('from', 64);
+    const to = boundedJourneyText('to', 64);
+    if (journeyId) journeyAttributes['aqa.journey.id'] = journeyId;
+    if (journeyDigest && /^[a-f0-9]{64}$/u.test(journeyDigest))
+      journeyAttributes['aqa.journey.digest'] = journeyDigest;
+    if (transitionId) journeyAttributes['aqa.journey.transition_id'] = transitionId;
+    if (actorId) journeyAttributes['aqa.journey.actor_id'] = actorId;
+    if (from) journeyAttributes['aqa.journey.from'] = from;
+    if (to) journeyAttributes['aqa.journey.to'] = to;
+    if (typeof journeyPayload?.ok === 'boolean')
+      journeyAttributes['aqa.journey.ok'] = journeyPayload.ok;
     const span = tracer.startSpan(
       `aqa.event.${event.kind}`,
       {
@@ -275,6 +302,7 @@ export function makeEventSpanObserver(tracer: Tracer): (event: {
         'aqa.event.actor_type': event.actor.type,
         ...(event.scenario_id ? { 'aqa.scenario_id': event.scenario_id } : {}),
         ...(event.finding_id ? { 'aqa.finding_id': event.finding_id } : {}),
+        ...journeyAttributes,
       },
       { trace_id: '1'.repeat(32), span_id: '1'.repeat(16), run_id: event.run_id },
     );
