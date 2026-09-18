@@ -30,3 +30,21 @@ export {
   type StatePathResult,
   type StateTransition,
 } from './state-graph.js';
+export {
+  compileStatefulJourney,
+  executeStatefulJourney,
+  type CompiledJourneyTransition,
+  type CompiledStatefulJourney,
+  type JourneyAction,
+  type JourneyActionInput,
+  type JourneyActor,
+  type JourneyCheckResult,
+  type JourneyCleanup,
+  type JourneyCleanupInput,
+  type JourneyObserver,
+  type JourneyObserverInput,
+  type JourneyObserverResult,
+  type JourneyStepResult,
+  type StatefulJourneyDefinition,
+  type StatefulJourneyExecution,
+} from './stateful-journey.js';
