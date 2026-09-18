@@ -27,6 +27,12 @@
   failed** locally; provider-specific tax-law and live merchant evidence remain
   separate.
 
+- **Bound fulfillment evidence to merchant identity.** Fulfillment snapshots
+  now require tenant and customer IDs, and post-purchase integrity rejects
+  cross-scope delivery records even when `order_id` matches. Added ADR-245 and
+  a regression test. Commerce suite: **55 passed, 0 failed** locally; carrier,
+  warehouse and physical-delivery evidence remain external boundaries.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes

@@ -1203,6 +1203,8 @@ describe('@aqa/commerce contracts', () => {
       schema_version: '1' as const,
       id: 'fulfillment-1',
       order_id: order.id,
+      tenant: order.tenant,
+      customer_id: order.customer_id,
       lines: [{ sku: 'rma-sku', quantity: 1 }],
       status: 'delivered' as const,
       carrier: 'carrier',
@@ -1211,6 +1213,10 @@ describe('@aqa/commerce contracts', () => {
       delivered_at: '2026-09-17T12:00:00Z',
     };
     assertFulfillmentIntegrity(order, delivered);
+    assert.throws(
+      () => assertFulfillmentIntegrity(order, { ...delivered, customer_id: 'other-customer' }),
+      /customer/,
+    );
     assert.throws(
       () =>
         assertFulfillmentIntegrity(order, {

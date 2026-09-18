@@ -345,6 +345,8 @@ export const FulfillmentSnapshot = z.object({
   schema_version: z.literal('1'),
   id: z.string().min(1),
   order_id: z.string().min(1),
+  tenant: z.string().min(1),
+  customer_id: z.string().min(1),
   lines: z.array(FulfillmentLine).min(1),
   status: z.enum(['processing', 'shipped', 'delivered', 'cancelled']),
   carrier: z.string().min(1).optional(),
@@ -592,6 +594,9 @@ export function assertFulfillmentIntegrity(
 ): void {
   const item = FulfillmentSnapshot.parse(fulfillment);
   if (item.order_id !== order.id) throw new Error('fulfillment does not belong to order');
+  if (item.tenant !== order.tenant) throw new Error('fulfillment tenant does not match order');
+  if (item.customer_id !== order.customer_id)
+    throw new Error('fulfillment customer does not match order');
   assertOrderLineQuantitiesWithinOrder(order, item.lines, 'fulfillment lines');
   if (item.status === 'shipped' || item.status === 'delivered') {
     if (!item.carrier || !item.tracking_number || !item.shipped_at)
@@ -1897,6 +1902,8 @@ export class InMemoryCommerceReference {
         schema_version: '1',
         id: this.nextId('fulfillment'),
         order_id: order.id,
+        tenant: order.tenant,
+        customer_id: order.customer_id,
         lines: order.lines.map(({ sku, quantity }) => ({ sku, quantity })),
         status: 'delivered',
         carrier: 'reference-carrier',
