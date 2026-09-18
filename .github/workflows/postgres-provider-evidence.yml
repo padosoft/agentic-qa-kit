@@ -1,0 +1,40 @@
+name: PostgreSQL provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-backup-restore:
+    name: Isolated PostgreSQL backup and restore journey
+    runs-on: ubuntu-latest
+    environment: production-database-evidence
+    timeout-minutes: 20
+    env:
+      AQA_TEST_POSTGRES_DSN: ${{ secrets.AQA_TEST_POSTGRES_DSN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require isolated provider DSN
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${AQA_TEST_POSTGRES_DSN:-}" ]; then
+            echo "::error title=Missing PostgreSQL provider configuration::AQA_TEST_POSTGRES_DSN is required in the production-database-evidence environment"
+            exit 1
+          fi
+
+      - name: Verify journey helper
+        run: node --test scripts/postgres-backup-restore-journey.test.mjs
+
+      - name: Run isolated provider backup and restore journey
+        run: node scripts/postgres-backup-restore-journey.mjs

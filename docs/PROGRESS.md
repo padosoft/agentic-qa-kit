@@ -11,6 +11,18 @@
 
 ## 2026-09-18
 
+- **Added protected live PostgreSQL provider evidence.** The manual
+  `postgres-provider-evidence.yml` workflow requires a disposable
+  `production-database-evidence` Environment secret, refuses missing DSNs,
+  and executes the synthetic `pg_dump`/isolated `pg_restore`/digest journey
+  without logging connection strings. It proves configured-provider restore
+  compatibility only; cloud PITR/WAL, KMS, replication and RTO/RPO remain
+  explicit DR evidence.
+- **Documented the operational safety boundary.** The runbook and ADR-260
+  require an isolated target with temporary-database privileges and explicitly
+  prohibit customer production DSNs. Next: validate and merge this slice,
+  then continue IdP/mTLS execution evidence and final roadmap audit.
+
 - **Added protected live artifact-provider evidence.** The manual
   `artifact-provider-evidence.yml` workflow requires a
   `production-artifact-evidence` Environment, validates endpoint/region/

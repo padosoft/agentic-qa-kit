@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — A backup script needs a disposable provider boundary
+
+`pg_dump` and `pg_restore` can provide useful provider evidence, but running a
+synthetic table journey against an application database would be an unsafe
+false proof. Put the DSN behind a protected environment, fail closed when it
+is absent, require a disposable target with cleanup privileges, and state
+explicitly that this is not PITR/WAL, KMS, replication or production RTO/RPO
+evidence.
+
 # 2026-09-18 — Compatibility-provider green is not production storage evidence
 
 An S3-compatible MinIO job proves request/response behavior, not the
