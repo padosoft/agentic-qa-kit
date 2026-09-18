@@ -2579,3 +2579,16 @@
   distributed boundary.
 - Next: close the remaining provider-backed production evidence and execute
   the protected GitHub Environment gate with real operator-owned evidence.
+
+# 2026-09-18 — Helm worker probe-driver policy
+
+- Added `runner.worker.probeDrivers` to the Helm chart. PostgreSQL DSNs are
+  Secret-backed, Playwright requires an explicit origin list and shell requires
+  an executable allowlist; all are disabled by default and queue payloads cannot
+  override them. Render-time validation fails incomplete enabled policies.
+- Documented that managed database/SUT egress must still be declared through
+  `networkPolicy.runnerExtraEgressCidrs`; a DSN cannot imply network identity.
+  ADR-253 records the deployment boundary.
+- Evidence: chart source review and `git diff --check` are clean. Helm is not
+  installed in the local Windows environment, so `helm lint`/render remain a
+  CI gate and must pass before merge.
