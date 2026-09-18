@@ -2641,6 +2641,14 @@ tenants cannot spend the same account. Keep the stored-value ledger separate
 from order arithmetic, lock the tenant/account boundary transactionally and
 make provider settlement and expiry explicit evidence requirements.
 
+# 2026-09-18 — Read-only payment evidence is the safe first provider boundary
+
+For a payment provider, a real retrieval of a pre-created test-mode object can
+prove credential, endpoint and typed-observation wiring without creating or
+refunding money in CI. Keep the expected amount, currency and status explicit,
+reject live-mode keys, and do not infer settlement, webhook, payout, dispute or
+refund accounting from retrieval evidence.
+
 # 2026-09-18 — Idempotency keys need an ownership scope
 
 Making an operation ID globally unique can prevent a cross-tenant mutation,

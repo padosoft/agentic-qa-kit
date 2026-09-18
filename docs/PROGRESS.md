@@ -11,6 +11,17 @@
 
 ## 2026-09-18
 
+- **Added protected read-only Stripe provider evidence.** The manual
+  `stripe-provider-evidence.yml` workflow requires an operator-owned
+  `sk_test_` secret and PaymentIntent expectations in the protected
+  `commerce-provider-evidence` Environment, then exercises the real Stripe
+  REST adapter and fails closed on currency, amount, received amount or status
+  drift without logging credentials or response bodies. This proves provider
+  authentication and typed retrieval only; checkout mutation, webhook,
+  settlement, payout, refund and dispute evidence remain separate. Next:
+  continue the final provider-evidence audit (KMS/WORM/PITR, mTLS/rotation and
+  the remaining ecommerce provider journeys).
+
 - **Added protected full OIDC provider evidence.** The manual
   `oidc-provider-evidence.yml` workflow requires an operator-issued,
   single-use authorization code, PKCE verifier/nonce and client secret in the
