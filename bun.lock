@@ -266,6 +266,10 @@
       "name": "@aqa/pack-core",
       "version": "0.1.0",
     },
+    "packs/database-migrations": {
+      "name": "@aqa/pack-database-migrations",
+      "version": "0.1.0",
+    },
     "packs/llm-agent": {
       "name": "@aqa/pack-llm-agent",
       "version": "0.1.0",
@@ -324,6 +328,8 @@
     "@aqa/pack-compliance-gdpr": ["@aqa/pack-compliance-gdpr@workspace:packs/compliance-gdpr"],
 
     "@aqa/pack-core": ["@aqa/pack-core@workspace:packs/core"],
+
+    "@aqa/pack-database-migrations": ["@aqa/pack-database-migrations@workspace:packs/database-migrations"],
 
     "@aqa/pack-llm-agent": ["@aqa/pack-llm-agent@workspace:packs/llm-agent"],
 

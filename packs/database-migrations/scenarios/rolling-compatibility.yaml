@@ -1,0 +1,24 @@
+schema_version: "1"
+id: scn-db-rolling-compatibility
+title: Rolling deployment preserves read/write compatibility across versions
+risk_refs: [db-migration-breaking-change]
+invariant_refs: [inv-expand-contract]
+preconditions:
+  - "at least one old and one new application instance are serving"
+steps:
+  - id: write-old-shape
+    kind: http
+    with: { method: "POST", url: "/migration/compatibility/fixture", body: { version: "legacy", value: "fixture" } }
+  - id: read-new-shape
+    kind: http
+    with: { method: "GET", url: "/migration/compatibility/fixture?version=current" }
+oracles:
+  - id: o-write-accepted
+    kind: http_status
+    probe_id: write-old-shape
+    with: { expected: 201 }
+  - id: o-new-read-accepted
+    kind: http_status
+    probe_id: read-new-shape
+    with: { expected: 200 }
+tags: [database, migration, rolling-deploy]

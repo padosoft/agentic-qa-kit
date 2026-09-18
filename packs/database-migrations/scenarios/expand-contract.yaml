@@ -1,0 +1,24 @@
+schema_version: "1"
+id: scn-db-expand-contract
+title: Expand/contract migration keeps both schema versions compatible
+risk_refs: [db-migration-breaking-change]
+invariant_refs: [inv-expand-contract]
+preconditions:
+  - "a disposable migration environment is available"
+steps:
+  - id: read-legacy-contract
+    kind: http
+    with: { method: "GET", url: "/migration/compatibility?version=legacy" }
+  - id: read-current-contract
+    kind: http
+    with: { method: "GET", url: "/migration/compatibility?version=current" }
+oracles:
+  - id: o-legacy-compatible
+    kind: response_contains
+    probe_id: read-legacy-contract
+    with: { jsonpath: "$.compatible", equals: true }
+  - id: o-current-compatible
+    kind: response_contains
+    probe_id: read-current-contract
+    with: { jsonpath: "$.compatible", equals: true }
+tags: [database, migration, expand-contract]

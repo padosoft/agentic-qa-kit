@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-database-migrations
+version: 0.1.0
+description: "Provider-neutral database migration safety baseline for expand/contract and rolling deploys."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [database-migrations, database, migration]
+templates: []
+scenarios:
+  - scenarios/expand-contract.yaml
+  - scenarios/rolling-compatibility.yaml
+  - scenarios/rollback-safety.yaml
+risks:
+  - risks/migrations.yaml
+oracles: []
+probes: []
