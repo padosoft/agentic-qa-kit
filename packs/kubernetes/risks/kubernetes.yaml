@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-kubernetes
+risks:
+  - id: k8s-insecure-manifest
+    category: confidentiality
+    title: A workload manifest grants excessive privilege or exposes a sensitive endpoint.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-k8s-manifest-hardened
+        statement: Workloads run with bounded identity, filesystem and network privileges before admission.
+  - id: k8s-admission-bypass
+    category: integrity
+    title: An untrusted or policy-violating workload bypasses admission controls.
+    severity: critical
+    likelihood: unlikely
+    invariants:
+      - id: inv-k8s-admission-gated
+        statement: Admission policy rejects forbidden workload attributes and records an auditable policy decision.
+  - id: k8s-rollout-outage
+    category: availability
+    title: A rollout or disruption removes too much capacity and causes customer downtime.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-k8s-rollout-safe
+        statement: Rollout and disruption policies preserve minimum service capacity and expose rollback readiness.

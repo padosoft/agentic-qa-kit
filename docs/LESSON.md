@@ -2091,3 +2091,10 @@ Latency assertions without a declared load profile, traffic budget and metric
 provenance are not production capacity evidence. Keep p95/p99, error-budget
 impact, saturation signals and release policy linked, while requiring a safe
 staging target and explicit cost controls.
+
+## 2026-09-18 — Kubernetes evidence must separate rendered policy from runtime
+
+Rendered manifests and admission decisions are valuable pre-deploy contracts,
+but they do not prove image provenance, control-plane behavior, network policy,
+runtime identity or rollback safety. Keep disposable-cluster and production
+rollout evidence explicit.

@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-kubernetes`.** It adds opt-in, schema-valid contracts for
+  workload hardening, admission policy decisions and rollout/disruption
+  resilience. Cluster, image, network and production runtime evidence remain
+  operator supplied; next: validate and publish the pack.
+
 - **Started `pack-performance`.** It adds opt-in, schema-valid contracts for
   p95/p99 latency, error-budget release gating and saturation visibility on
   critical journeys. Load-runner, cost and production-capacity evidence remain
