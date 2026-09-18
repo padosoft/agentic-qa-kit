@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  calibrateSimilarityHoldout,
   calibrateSimilarityThreshold,
   clusterFindings,
   clusterFindingsBySimilarity,
@@ -8,6 +9,7 @@ import {
   priorityOf,
   rootCauseId,
   signatureOf,
+  splitSimilarityCalibrationHoldout,
 } from '../dist/index.js';
 
 const base = {
@@ -249,5 +251,23 @@ describe('clusterFindings', () => {
       false,
     );
     assert.throws(() => calibrateSimilarityThreshold([], 0.8), /requires/);
+  });
+
+  it('uses a deterministic unseen holdout for semantic calibration', () => {
+    const samples = Array.from({ length: 10 }, (_, index) => ({
+      score: index % 2 === 0 ? 0.9 : 0.2,
+      same_root_cause: index % 2 === 0,
+    }));
+    const first = splitSimilarityCalibrationHoldout(samples, 0.3, 'review-corpus-v1');
+    const second = splitSimilarityCalibrationHoldout(samples, 0.3, 'review-corpus-v1');
+    assert.deepEqual(first, second);
+    assert.equal(first.train.length + first.holdout.length, samples.length);
+    const report = calibrateSimilarityHoldout(samples, 0.8, 0.3, 'review-corpus-v1', {
+      min_precision: 1,
+      min_recall: 1,
+    });
+    assert.equal(report.gate.passed, true);
+    assert.match(report.split_digest, /^[a-f0-9]{64}$/u);
+    assert.throws(() => splitSimilarityCalibrationHoldout(samples, 0.3, ''), /seed/);
   });
 });

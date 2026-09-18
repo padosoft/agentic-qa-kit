@@ -21,6 +21,13 @@ business payloads. Use a strict technical-attribute allowlist with safe slug
 validation; bounded length alone is not a secret/PII control. Keep the audit
 chain authoritative because exporters can sample, drop or reorder telemetry.
 
+# 2026-09-19 — Calibration needs an unseen split
+
+Precision/recall on the same reviewed pairs used to tune a similarity threshold
+is optimistic. Use a deterministic seed/index split with a recorded digest and
+gate on holdout metrics; still label the result as operator-corpus evidence,
+not independent validation.
+
 # 2026-09-19 — Trace deduplication must ignore collector identity
 
 When federating telemetry, the same span observed by two collectors is not a

@@ -32,6 +32,12 @@
   ADR-274. Collector sampling, exporter integrity and protected production
   provenance remain open.
 
+- **Added holdout semantic calibration.** Clustering now creates a deterministic
+  SHA-256-digest-bound train/holdout split and evaluates the release policy only
+  on unseen reviewed pairs. Added 10/10 clustering tests, package docs and
+  ADR-275. This reduces threshold overfit but does not replace independent
+  methodology validation or external governance.
+
 - **Added bounded OTLP trace federation.** `@aqa/ingest` now normalizes OTLP
   JSON span metadata with ID/time/size limits, redacts credential-like
   attributes and URLs, accepts optional OTLP status, and federates multiple
