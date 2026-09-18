@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  calibrateSimilarityThreshold,
   clusterFindings,
   clusterFindingsBySimilarity,
+  evaluateSimilarityCalibration,
   priorityOf,
   rootCauseId,
   signatureOf,
@@ -219,5 +221,33 @@ describe('clusterFindings', () => {
       () => clusterFindingsBySimilarity([first, second], { embed: () => [Number.NaN] }),
       /finite/,
     );
+  });
+
+  it('calibrates similarity thresholds against reviewed pairs and enforces policy', () => {
+    const report = calibrateSimilarityThreshold(
+      [
+        { score: 0.95, same_root_cause: true },
+        { score: 0.9, same_root_cause: false },
+        { score: 0.4, same_root_cause: true },
+        { score: 0.1, same_root_cause: false },
+      ],
+      0.8,
+    );
+    assert.deepEqual(
+      {
+        true_positive: report.true_positive,
+        false_positive: report.false_positive,
+        false_negative: report.false_negative,
+        true_negative: report.true_negative,
+      },
+      { true_positive: 1, false_positive: 1, false_negative: 1, true_negative: 1 },
+    );
+    assert.equal(evaluateSimilarityCalibration(report, { min_precision: 0.4 }).passed, true);
+    assert.equal(
+      evaluateSimilarityCalibration(report, { min_recall: 0.6, max_false_positive_rate: 0.4 })
+        .passed,
+      false,
+    );
+    assert.throws(() => calibrateSimilarityThreshold([], 0.8), /requires/);
   });
 });

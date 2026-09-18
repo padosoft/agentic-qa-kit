@@ -13,6 +13,10 @@ Cross-run findings dedup + clustering for the admin panel's Findings Kanban
   It uses bounded deterministic token similarity by default or an
   operator-owned embedding callback, and retains every edge (score, method,
   member IDs) that caused a connected component.
+- `calibrateSimilarityThreshold(samples, threshold)` and
+  `evaluateSimilarityCalibration(report, policy)` — measure precision, recall
+  and false-positive rate on human-reviewed pairs before enabling a semantic
+  grouping threshold in release policy.
 - `priorityOf(finding)` — computes bounded severity × confidence × blast radius
   / fix cost. Missing optional business estimates use neutral value `1`.
 

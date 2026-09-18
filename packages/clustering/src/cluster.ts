@@ -35,6 +35,35 @@ export interface SemanticClusteringOptions {
   embed?: (finding: Finding.Finding) => ReadonlyArray<number>;
 }
 
+export interface SimilarityCalibrationSample {
+  score: number;
+  same_root_cause: boolean;
+}
+
+export interface SimilarityCalibrationReport {
+  sample_count: number;
+  threshold: number;
+  true_positive: number;
+  false_positive: number;
+  true_negative: number;
+  false_negative: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  false_positive_rate: number;
+}
+
+export interface SimilarityCalibrationPolicy {
+  min_precision?: number;
+  min_recall?: number;
+  max_false_positive_rate?: number;
+}
+
+export interface SimilarityCalibrationGate {
+  passed: boolean;
+  violations: ReadonlyArray<string>;
+}
+
 const SEV_RANK: Record<Finding.Finding['severity'], number> = {
   critical: 0,
   high: 1,
@@ -251,4 +280,71 @@ export function clusterFindingsBySimilarity(
     .sort(
       (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.priority_score - a.priority_score,
     );
+}
+
+/** Measure a candidate threshold against human-reviewed same-root-cause pairs. */
+export function calibrateSimilarityThreshold(
+  samples: ReadonlyArray<SimilarityCalibrationSample>,
+  threshold: number,
+): SimilarityCalibrationReport {
+  if (samples.length === 0 || samples.length > 100_000)
+    throw new Error('similarity calibration requires 1..100000 samples');
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+    throw new Error('similarity calibration threshold must be between 0 and 1');
+  let truePositive = 0;
+  let falsePositive = 0;
+  let trueNegative = 0;
+  let falseNegative = 0;
+  for (const sample of samples) {
+    if (!Number.isFinite(sample.score) || sample.score < 0 || sample.score > 1)
+      throw new Error('similarity calibration scores must be between 0 and 1');
+    const predicted = sample.score >= threshold;
+    if (predicted && sample.same_root_cause) truePositive += 1;
+    else if (predicted) falsePositive += 1;
+    else if (sample.same_root_cause) falseNegative += 1;
+    else trueNegative += 1;
+  }
+  const precision =
+    truePositive + falsePositive === 0 ? 0 : truePositive / (truePositive + falsePositive);
+  const recall =
+    truePositive + falseNegative === 0 ? 0 : truePositive / (truePositive + falseNegative);
+  const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+  const falsePositiveRate =
+    falsePositive + trueNegative === 0 ? 0 : falsePositive / (falsePositive + trueNegative);
+  return {
+    sample_count: samples.length,
+    threshold,
+    true_positive: truePositive,
+    false_positive: falsePositive,
+    true_negative: trueNegative,
+    false_negative: falseNegative,
+    precision: Number(precision.toFixed(6)),
+    recall: Number(recall.toFixed(6)),
+    f1: Number(f1.toFixed(6)),
+    false_positive_rate: Number(falsePositiveRate.toFixed(6)),
+  };
+}
+
+/** Apply explicit release policy to a reviewed semantic calibration report. */
+export function evaluateSimilarityCalibration(
+  report: SimilarityCalibrationReport,
+  policy: SimilarityCalibrationPolicy,
+): SimilarityCalibrationGate {
+  const entries = Object.entries(policy);
+  if (entries.length === 0) throw new Error('similarity calibration policy is empty');
+  for (const [name, value] of entries) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)
+      throw new Error(`similarity calibration policy ${name} must be between 0 and 1`);
+  }
+  const violations: string[] = [];
+  if (policy.min_precision !== undefined && report.precision < policy.min_precision)
+    violations.push('precision is below the configured minimum');
+  if (policy.min_recall !== undefined && report.recall < policy.min_recall)
+    violations.push('recall is below the configured minimum');
+  if (
+    policy.max_false_positive_rate !== undefined &&
+    report.false_positive_rate > policy.max_false_positive_rate
+  )
+    violations.push('false-positive rate exceeds the configured maximum');
+  return { passed: violations.length === 0, violations };
 }
