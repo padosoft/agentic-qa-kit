@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-desktop
+risks:
+  - id: desktop-ipc-escape
+    category: confidentiality
+    title: Renderer or untrusted content reaches privileged IPC, filesystem or shell capabilities.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-desktop-ipc-minimal
+        statement: IPC capabilities are allowlisted, origin-bound, validated and unavailable to untrusted renderers.
+  - id: desktop-update-tampering
+    category: integrity
+    title: A desktop auto-update installs an unsigned, replayed or incompatible artifact.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-desktop-update-authentic
+        statement: Updates are signed, provenance-checked, rollback-safe and compatible before activation.
+  - id: desktop-protocol-confusion
+    category: integrity
+    title: A custom protocol or deep link performs an action under the wrong user or stale session.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-desktop-protocol-bound
+        statement: Protocol actions are authenticated, single-use and bound to the intended tenant and desktop session.

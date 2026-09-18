@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-desktop
+version: 0.1.0
+description: "Opt-in desktop baseline for Electron/Tauri IPC, sandboxing and signed auto-updates."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [desktop, electron, tauri, desktop-native]
+templates: []
+scenarios:
+  - scenarios/ipc-sandbox.yaml
+  - scenarios/auto-update.yaml
+  - scenarios/deep-link-protocol.yaml
+risks:
+  - risks/desktop.yaml
+oracles: []
+probes: []

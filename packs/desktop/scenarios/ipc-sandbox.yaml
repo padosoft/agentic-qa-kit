@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-desktop-ipc-sandbox
+title: Desktop IPC exposes only validated capabilities to the renderer
+risk_refs: [desktop-ipc-escape]
+invariant_refs: [inv-desktop-ipc-minimal]
+preconditions:
+  - "a disposable desktop build with a hostile-renderer fixture is available"
+steps:
+  - id: inspect-ipc
+    kind: http
+    with: { method: "GET", url: "/desktop/ipc?fixture=hostile-renderer" }
+oracles:
+  - id: o-allowlist
+    kind: response_contains
+    probe_id: inspect-ipc
+    with: { jsonpath: "$.capability_allowlist_enforced", equals: true }
+  - id: o-origin
+    kind: response_contains
+    probe_id: inspect-ipc
+    with: { jsonpath: "$.origin_and_schema_validated", equals: true }
+  - id: o-shell
+    kind: response_contains
+    probe_id: inspect-ipc
+    with: { jsonpath: "$.untrusted_shell_access_denied", equals: true }
+tags: [desktop, ipc, sandbox, electron, tauri]

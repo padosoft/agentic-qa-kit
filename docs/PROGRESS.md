@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-desktop`.** It closes the M6 pack gap for Electron/Tauri with
+  schema-valid IPC sandbox, signed auto-update and authenticated protocol
+  contracts. Platform signing and OS evidence remain separate; next: validate
+  and publish the pack.
+
 - **Started `pack-chaos`.** It adds opt-in, schema-valid contracts for bounded
   fault experiments, RTO/RPO recovery evidence and tenant blast-radius
   containment. Fault injection, provider recovery and production impact remain
