@@ -15,19 +15,19 @@
   exposes `verifyGiftCardProviderJourney()` and a schema-validated provider
   snapshot. It reconciles tenant/card identity, currency and exact balance
   against the merchant ledger and rejects impossible active/expired timestamp
-  combinations. Five deterministic tests pass; this is adapter contract
-  evidence, not a live issuer/provider execution claim. Next: run the full
-  repository gates, then promote the slice and continue the remaining external
-  KMS/WORM/PITR, IdP and real commerce-provider evidence.
+  combinations. PR #195 merged as `e852b27` after the full technical matrix;
+  local evidence was 827 passed, 1 skipped, 0 failed. This is adapter contract
+  evidence, not a live issuer/provider execution claim. The remaining external
+  KMS/WORM/PITR, IdP and real commerce-provider evidence stays explicit.
 
 - **Added the bounded HTTP gift-card provider adapter.**
   `HttpGiftCardProvider` now connects the typed provider snapshot to a real
   HTTPS boundary with origin allowlisting, manual redirect handling, response
   limits, URL-credential rejection and explicit loopback-only HTTP for local
-  tests. Four transport/schema regressions are covered without credentials or
-  network access. Next: run the full repository gates, promote this adapter,
-  and configure a protected live issuer journey when provider credentials are
-  available.
+  tests. PR #196 merged as `1f55196` after both CI workflow runs passed the
+  complete technical matrix; local evidence was 831 passed, 1 skipped, 0
+  failed. A transient hosted NuGet timeout was rerun successfully. Provider
+  IAM, token rotation and live issuer execution remain deployment evidence.
 
 - **Hardened stored-value idempotency scope.** Gift-card operation IDs are now
   unique within tenant + gift-card ownership rather than globally, in Memory
