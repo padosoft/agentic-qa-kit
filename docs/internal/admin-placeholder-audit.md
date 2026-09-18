@@ -4,6 +4,13 @@
 
 ## Scope
 
+> Status note (2026-09-18): the original inventory below is historical. The
+> finding transition follow-up is now closed: both store implementations route
+> the legacy `updateFindingStatus` API through the atomic audited transition,
+> which retains the reason in `finding_status_changed`; the API emits its
+> integration event after the store commit. Re-run the inventory before using
+> the historical counts as a current completeness claim.
+
 `packages/admin/src/app.tsx` contains the entire bundled admin (the v1.5 design-handoff port). Static analysis shows:
 
 - **126 `<button>` elements** in total, of which:
@@ -29,7 +36,7 @@ The line numbers below were captured against commit `~v1.6.0` (post-merge of PR 
 
 - `3521`, `3524` — verify / reject row actions
 - `3609` — open detail
-- ~~`3837`, `3840` — kanban card actions~~ **DONE (slice 4a, PR #27):** the kanban confirm-transition modal is now wired to `POST /api/findings/:id/status` with required reason input + error alert + disabled-until-reason submit. Drag-and-drop opens the modal (terminal columns) or POSTs directly with a default reason (non-terminal `draft` column); happy-path closes the modal and moves the card; 4xx/5xx keeps the modal open with the server's error message and leaves the card in its original column. 11 Playwright e2e tests cover the flow (4 terminal + 2 non-terminal + 2 schema-invariant warnings for Duplicate/Verified targets + 1 apiUrl helper composition + 1 per-finding pending lock + 1 synchronous re-entrancy guard). **Not yet wired (both v1.7.x follow-ups):** (a) `MemoryStore.updateFindingStatus` ignores the `reason` parameter — only `status` is mutated, the reason text is dropped after the API validates non-emptiness; (b) the server-side hook that would append a `finding.status_changed` event to the audit chain. The wizard makes both gaps explicit in its subtitle so users aren't misled about what gets persisted.
+- ~~`3837`, `3840` — kanban card actions~~ **DONE (slice 4a, PR #27):** the kanban confirm-transition modal is wired to `POST /api/findings/:id/status` with required reason input + error alert + disabled-until-reason submit. The store transition is atomic and audited; the reason is retained in the tamper-evident event chain, and the API emits the integration event after the store commit. 11 Playwright e2e tests cover the flow (4 terminal + 2 non-terminal + 2 schema-invariant warnings for Duplicate/Verified targets + 1 apiUrl helper composition + 1 per-finding pending lock + 1 synchronous re-entrancy guard).
 - `3967`, `3970` — cluster expand
 
 ### Risks (lines ~4660-4730)

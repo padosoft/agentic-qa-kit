@@ -13,6 +13,20 @@
 
 ## 2026-09-18
 
+- **Closed the finding-transition audit gap.** `MemoryStore` and
+  `PostgresStore` now route the legacy `updateFindingStatus` API through the
+  atomic transition path, preserving the operator reason in the hash-chained
+  `finding_status_changed` event. Added a regression test and corrected the
+  admin/audit documentation that still claimed this was missing. Store suite:
+  16 passed, 0 failed. Next: audit cost-admission wiring and prove the
+  remaining production journeys.
+
+- **Hardened the governed LLM boundary.** `BudgetedLlmAdapter` now exposes a
+  bounded, prompt-free event sink for completed calls and budget denials,
+  including authoritative usage and cost without leaking prompts or secrets.
+  The adapter and cost suite pass; host wiring to the durable run event chain
+  remains an explicit integration boundary rather than an implicit side effect.
+
 - **Started `pack-desktop`.** It closes the M6 pack gap for Electron/Tauri with
   schema-valid IPC sandbox, signed auto-update and authenticated protocol
   contracts. Platform signing and OS evidence remain separate; next: validate

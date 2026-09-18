@@ -245,12 +245,11 @@ export class PostgresStore implements StoreProvider {
   async updateFindingStatus(
     id: string,
     status: Finding.Finding['status'],
+    actor: string,
+    reason: string,
   ): Promise<Finding.Finding | null> {
-    const current = await this.loadFinding(id);
-    if (!current) return null;
-    const updated = { ...current, status } as Finding.Finding;
-    await this.put('finding', id, updated);
-    return updated;
+    const transitioned = await this.transitionFindingStatus(id, status, actor, reason);
+    return transitioned?.finding ?? null;
   }
   async transitionFindingStatus(
     id: string,

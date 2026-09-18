@@ -4272,10 +4272,9 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
   // happens AFTER the server confirms, so a 4xx/5xx response leaves
   // the card in its original column with a clear error to the user.
   //
-  // The server today only mutates `status` on the finding record —
-  // appending a `finding.status_changed` event to the audit chain is
-  // a v1.7.x follow-up (EventKind enum + store wiring). This function
-  // POSTs the change but does NOT claim audit-chain coverage yet.
+  // The server owns the atomic status mutation and appends the
+  // `finding.status_changed` event to the audit chain before this request
+  // returns successfully. The UI updates only from that committed response.
   //
   // `setOnModal` lets the caller route submit-state into either the
   // shared modal state (for terminal transitions, where the user is
@@ -4436,7 +4435,7 @@ function FindingsKanban({ findings: initialFindings, onConfirmTerminal }) {
           setConfirm(null);
         }}
         title={`Confirm transition to ${confirm?.toCol.label}`}
-        sub={`Moving "${confirm?.finding?.title}" to a terminal status. The server requires a non-empty reason to accept the request, but neither persisting that reason on the finding record nor emitting a matching audit-chain event is wired yet — both are v1.7.x follow-ups.`}
+        sub={`Moving "${confirm?.finding?.title}" to a terminal status. The server requires a non-empty reason and records it in the tamper-evident audit chain.`}
         footer={
           <>
             <button
@@ -4663,7 +4662,7 @@ function CreatePackWizard({ open, onClose }) {
       title={result ? 'Pack created' : 'Create pack'}
       sub={
         result
-          ? 'Your pack is on disk and ready to edit. The wizard wrote the manifest + a starter scenario + a placeholder risk.'
+          ? 'Your pack is on disk and ready to edit. The wizard wrote the manifest, a starter scenario, and a starter risk.'
           : 'Scaffolds a runnable pack under <project>/packs/<slug>/. Same code path as `aqa pack new` on the CLI.'
       }
       size="md"
@@ -4714,7 +4713,7 @@ function CreatePackWizard({ open, onClose }) {
           </Alert>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             Next: open <code>pack.yaml</code> and <code>scenarios/starter.yaml</code> in your editor,
-            replace the placeholder probe URL and oracle with real ones, then wire this pack into a
+            replace the starter probe URL and oracle with real ones, then wire this pack into a
             profile in <code>.aqa/profiles.yaml</code>.
           </div>
         </div>
