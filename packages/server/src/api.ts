@@ -630,7 +630,11 @@ export function makeApi(): ApiHandler[] {
             body.reason,
           );
         } catch (error) {
-          if (error instanceof Error && error.name === 'InvalidFindingTransitionError') {
+          if (
+            error instanceof Error &&
+            (error.name === 'InvalidFindingTransitionError' ||
+              error.name === 'InvalidFindingVerificationError')
+          ) {
             return { status: 409, body: { error: error.message, code: 'INVALID_TRANSITION' } };
           }
           throw error;
@@ -641,6 +645,47 @@ export function makeApi(): ApiHandler[] {
           status: transitioned.finding.status,
         });
         return asResponse({ finding: transitioned.finding });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/findings/:id/verification',
+      requires: 'findings:edit',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        if (!id) return notFound('finding');
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const existing = await ctx.store.loadFinding(id);
+        if (!existing) return notFound('finding');
+        const run = await ctx.store.loadRun(existing.run_id);
+        if (!run || run.org !== s.org || run.project !== s.project) return notFound('finding');
+        const body = req.body as Record<string, unknown> | undefined;
+        const verification = FindingSchema.FindingVerification.safeParse({
+          schema_version: '1',
+          ...body,
+          actor: user.id,
+        });
+        if (!verification.success) {
+          return { status: 400, body: { error: formatZodError(verification.error) } };
+        }
+        let recorded: Awaited<ReturnType<StoreProvider['recordFindingVerification']>>;
+        try {
+          recorded = await ctx.store.recordFindingVerification(id, verification.data, user.id);
+        } catch (error) {
+          if (error instanceof Error && error.name === 'InvalidFindingTransitionError') {
+            return { status: 409, body: { error: error.message, code: 'INVALID_TRANSITION' } };
+          }
+          throw error;
+        }
+        if (!recorded) return notFound('finding');
+        await publishApiEvent(ctx, req, 'finding.status_changed', {
+          finding_id: recorded.finding.id,
+          status: recorded.finding.status,
+        });
+        return asResponse({ finding: recorded.finding, event: recorded.event });
       },
     },
 

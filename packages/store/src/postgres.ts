@@ -16,7 +16,12 @@ import type {
 } from '@aqa/schemas';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import { InvalidFindingTransitionError, findingStatusAudit } from './audit.js';
+import {
+  InvalidFindingTransitionError,
+  InvalidFindingVerificationError,
+  findingStatusAudit,
+  findingVerificationAudit,
+} from './audit.js';
 import {
   type LegacyMigrationResult,
   type StoreProvider,
@@ -281,6 +286,63 @@ export class PostgresStore implements StoreProvider {
         previous,
       );
       const updated = Finding.Finding.parse({ ...current, status });
+      await query(
+        'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $1',
+        [id, 'finding', JSON.stringify(updated)],
+      );
+      await query(
+        'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
+        [event.hash, event.seq, event.run_id, null, null, event.ts, JSON.stringify(event)],
+      );
+      return { finding: updated, event };
+    });
+  }
+  async recordFindingVerification(
+    id: string,
+    verification: Finding.FindingVerification,
+    actor: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
+    await this.wait();
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      await query("SELECT pg_advisory_xact_lock(hashtext('aqa_store_audit'))");
+      const findingRows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['finding', id],
+      )) as Array<{ payload: unknown }>;
+      const current = this.decode<Finding.Finding>(findingRows[0]?.payload);
+      if (!current) return null;
+      if (
+        verification.outcome === 'reproduced' &&
+        current.failure_fingerprint !== verification.expected_fingerprint
+      )
+        throw new InvalidFindingVerificationError(
+          'verification fingerprint does not match finding',
+        );
+      const nextStatus =
+        Finding.statusAfterVerification(current.status, verification) ?? current.status;
+      if (nextStatus !== current.status) {
+        const transition = Finding.validateStatusTransition(current.status, nextStatus);
+        if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
+      }
+      const auditRows = (await query(
+        'SELECT payload FROM aqa_store_events ORDER BY seq DESC LIMIT 1 FOR UPDATE',
+      )) as Array<{ payload: unknown }>;
+      const previous = auditRows[0] ? this.decode<Event.Event>(auditRows[0].payload) : undefined;
+      const event = findingVerificationAudit(
+        current,
+        actor,
+        verification,
+        current.status,
+        nextStatus,
+        (previous?.seq ?? -1) + 1,
+        previous,
+      );
+      const updated = Finding.Finding.parse({
+        ...current,
+        status: nextStatus,
+        last_verification: verification,
+      });
       await query(
         'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $1',
         [id, 'finding', JSON.stringify(updated)],

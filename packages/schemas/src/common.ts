@@ -6,7 +6,7 @@ export type ExecutionMode = z.infer<typeof ExecutionMode>;
 export const Severity = z.enum(['critical', 'high', 'medium', 'low', 'info']);
 export type Severity = z.infer<typeof Severity>;
 
-export const Status = z.enum(['draft', 'verified', 'rejected', 'duplicate', 'fixed']);
+export const Status = z.enum(['draft', 'verified', 'rejected', 'duplicate', 'fixed', 'regressed']);
 export type Status = z.infer<typeof Status>;
 
 export const SemVer = z

@@ -14,7 +14,12 @@ import type {
   SsoConfig,
   Tenancy,
 } from '@aqa/schemas';
-import { InvalidFindingTransitionError, findingStatusAudit } from './audit.js';
+import {
+  InvalidFindingTransitionError,
+  InvalidFindingVerificationError,
+  findingStatusAudit,
+  findingVerificationAudit,
+} from './audit.js';
 import {
   type StoreProvider,
   type StoreScope,
@@ -177,6 +182,46 @@ export class MemoryStore implements StoreProvider {
       current.status,
       status,
       reason,
+      this.audit.length,
+      previous,
+    );
+    this.findings.set(id, updated);
+    this.audit.push(event);
+    const bucket = this.events.get(current.run_id) ?? [];
+    bucket.push(event);
+    this.events.set(current.run_id, bucket);
+    return { finding: updated, event };
+  }
+  async recordFindingVerification(
+    id: string,
+    verification: Finding.FindingVerification,
+    actor: string,
+  ): Promise<{ finding: Finding.Finding; event: Event.Event } | null> {
+    const current = this.findings.get(id);
+    if (!current) return null;
+    if (
+      verification.outcome === 'reproduced' &&
+      current.failure_fingerprint !== verification.expected_fingerprint
+    )
+      throw new InvalidFindingVerificationError('verification fingerprint does not match finding');
+    const nextStatus =
+      Finding.statusAfterVerification(current.status, verification) ?? current.status;
+    if (nextStatus !== current.status) {
+      const transition = Finding.validateStatusTransition(current.status, nextStatus);
+      if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
+    }
+    const updated = Finding.Finding.parse({
+      ...current,
+      status: nextStatus,
+      last_verification: verification,
+    });
+    const previous = this.audit[this.audit.length - 1];
+    const event = findingVerificationAudit(
+      current,
+      actor,
+      verification,
+      current.status,
+      nextStatus,
       this.audit.length,
       previous,
     );

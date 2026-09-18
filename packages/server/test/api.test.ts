@@ -775,6 +775,7 @@ describe('makeApi', () => {
       discovered_at: '2026-05-17T10:00:00Z',
       confidence: 0.5,
       confidence_components: {},
+      failure_fingerprint: 'b'.repeat(64),
       reproducibility: {},
       verification_floor: 'scenario_level',
       evidence: [],
@@ -838,6 +839,7 @@ describe('makeApi', () => {
       discovered_at: '2026-05-17T10:00:00Z',
       confidence: 0.5,
       confidence_components: {},
+      failure_fingerprint: 'b'.repeat(64),
       reproducibility: {},
       verification_floor: 'scenario_level',
       evidence: [],
@@ -860,6 +862,97 @@ describe('makeApi', () => {
     assert.equal(audit.length, 1);
     assert.equal(audit[0]?.payload.action, 'finding_status_changed');
     assert.equal(audit[0]?.prev_hash, null);
+  });
+
+  it('POST /api/findings/:id/verification closes and reopens the finding lifecycle', async () => {
+    const c = ctx();
+    await c.store.saveRun({
+      schema_version: '1',
+      id: 'run-verification-loop',
+      started_at: '2026-05-17T10:00:00Z',
+      finished_at: '2026-05-17T10:01:00Z',
+      state: 'succeeded',
+      org: 'padosoft',
+      project: 'demo',
+      profile: 'smoke',
+      execution_mode: 'orchestrator',
+      config_snapshot: {
+        profile: 'smoke',
+        execution_mode: 'orchestrator',
+        packs: [],
+        config_hash: 'c'.repeat(64),
+      },
+      totals: {
+        scenarios: 1,
+        findings: 1,
+        probes: 1,
+        llm_tokens_in: 0,
+        llm_tokens_out: 0,
+        llm_cost_usd: 0,
+      },
+      artifact_dir: '.aqa/runs/run-verification-loop',
+    });
+    await c.store.appendFinding({
+      schema_version: '1',
+      id: 'AQA-2026-9003',
+      run_id: 'run-verification-loop',
+      scenario_id: 'scenario-verification',
+      risk_id: 'risk-verification',
+      title: 'A finding under verification',
+      summary: 'A sufficiently long finding summary for lifecycle testing',
+      severity: 'high',
+      status: 'draft',
+      execution_mode: 'orchestrator',
+      discovered_at: '2026-05-17T10:00:00Z',
+      confidence: 0.5,
+      confidence_components: {},
+      failure_fingerprint: 'b'.repeat(64),
+      reproducibility: {},
+      verification_floor: 'scenario_level',
+      evidence: [],
+      tags: [],
+    });
+    const route = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/findings/:id/verification',
+    );
+    const fixed = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9003' },
+        body: {
+          verification_id: 'verification-2026-9003',
+          observed_at: '2026-05-17T10:10:00Z',
+          outcome: 'fixed',
+          attempts: 2,
+          successes: 2,
+          deterministic: true,
+          evidence_path: '.aqa/runs/run-verification-loop/verification.json',
+        },
+      },
+      c,
+    );
+    assert.equal(fixed?.status, 200);
+    assert.equal((await c.store.loadFinding('AQA-2026-9003'))?.status, 'fixed');
+    const regressed = await route?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: 'AQA-2026-9003' },
+        body: {
+          verification_id: 'verification-2026-9004',
+          observed_at: '2026-05-24T10:10:00Z',
+          outcome: 'reproduced',
+          attempts: 2,
+          successes: 2,
+          deterministic: true,
+          fingerprint: 'b'.repeat(64),
+          expected_fingerprint: 'b'.repeat(64),
+          evidence_path: '.aqa/runs/run-verification-loop/regression.json',
+        },
+      },
+      c,
+    );
+    assert.equal(regressed?.status, 200);
+    assert.equal((await c.store.loadFinding('AQA-2026-9003'))?.status, 'regressed');
   });
 
   it('GET /api/findings only returns findings whose run belongs to the requested project', async () => {

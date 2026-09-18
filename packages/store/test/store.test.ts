@@ -42,6 +42,7 @@ const FINDING = {
   discovered_at: '2026-05-17T10:00:00Z',
   confidence: 0.8,
   confidence_components: {},
+  failure_fingerprint: 'a'.repeat(64),
   reproducibility: {},
   verification_floor: 'scenario_level' as const,
   evidence: [],
@@ -105,6 +106,41 @@ describe('MemoryStore', () => {
     assert.equal(result?.event.payload.action, 'finding_status_changed');
     assert.equal((await s.listEvents(FINDING.run_id)).length, 1);
     assert.equal((await s.loadFinding(FINDING.id))?.status, 'rejected');
+  });
+
+  it('records deterministic fix evidence and reopens a fixed finding on regression', async () => {
+    const s = new MemoryStore();
+    await s.appendFinding(FINDING);
+    const verification = {
+      schema_version: '1' as const,
+      verification_id: 'verification-2026-0001',
+      observed_at: '2026-05-17T10:10:00Z',
+      outcome: 'fixed' as const,
+      attempts: 2,
+      successes: 2,
+      deterministic: true,
+      evidence_path: '.aqa/runs/run-a/verification-1.json',
+      actor: 'ci',
+    };
+    const fixed = await s.recordFindingVerification(FINDING.id, verification, 'ci');
+    assert.equal(fixed?.finding.status, 'fixed');
+    assert.equal(fixed?.event.kind, 'finding_verification_recorded');
+    assert.equal(fixed?.finding.last_verification?.outcome, 'fixed');
+
+    const regression = await s.recordFindingVerification(
+      FINDING.id,
+      {
+        ...verification,
+        verification_id: 'verification-2026-0002',
+        observed_at: '2026-05-24T10:10:00Z',
+        outcome: 'reproduced',
+        fingerprint: 'a'.repeat(64),
+        expected_fingerprint: 'a'.repeat(64),
+      },
+      'ci',
+    );
+    assert.equal(regression?.finding.status, 'regressed');
+    assert.equal((await s.listEvents(FINDING.run_id)).length, 2);
   });
 
   it('rejects a no-op status transition without mutating or auditing', async () => {

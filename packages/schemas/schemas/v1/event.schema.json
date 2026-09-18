@@ -54,7 +54,9 @@
             "replay_started",
             "replay_finished",
             "error",
-            "info"
+            "info",
+            "finding_status_changed",
+            "finding_verification_recorded"
           ]
         },
         "actor": {
