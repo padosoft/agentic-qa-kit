@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Made restore-drill digest production executable.** Exported
+  `canonicalRestoreDrillEvidence` and `restoreDrillEvidenceSha256` from
+  `@aqa/compliance`, both built on the same validated canonical record used by
+  the evidence contract. Compliance suite: **23 passed, 0 failed**; ADR-230,
+  lesson and operator contract updated. This removes producer-side
+  canonicalization drift; provider-side DR execution is still separate.
+
 - **Bound production recovery evidence to the exact restore drill.**
   `database_recovery` now requires a validated lowercase SHA-256 digest of the
   canonical restore-drill record in addition to the operator reference ID;

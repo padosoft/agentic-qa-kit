@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Canonicalization must be executable by the producer
+
+If a signed evidence contract requires a digest but does not expose the exact
+canonicalization routine, independent producers can calculate different
+values for the same record. The compliance package now exports the validated
+canonical restore-drill representation and its SHA-256 helper.
+
 # 2026-09-18 — References are not evidence bindings
 
 An operator reference such as `restore_drill_ref` is searchable metadata, not

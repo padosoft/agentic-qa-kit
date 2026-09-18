@@ -7,6 +7,7 @@ import {
   assertRestoreDrillEvidence,
   backupInventorySha256,
   canonicalBackupInventory,
+  canonicalRestoreDrillEvidence,
   controlsCoverage,
   createAuditCheckpoint,
   parseBackupInventory,
@@ -14,6 +15,7 @@ import {
   parseProductionEvidence,
   productionEvidenceCompleteness,
   productionEvidenceFreshness,
+  restoreDrillEvidenceSha256,
   signBackupInventory,
   signProductionEvidence,
   verifyAuditCheckpoint,
@@ -280,6 +282,33 @@ describe('restore drill evidence contract', () => {
         ),
       /unsupported field.*provider_payload/,
     );
+  });
+
+  it('produces a deterministic digest for the validated drill record', () => {
+    const drill = {
+      schema_version: '1' as const,
+      drill_id: 'drill-1',
+      source_backup_id: inventory.backup_id,
+      source_manifest_sha256: inventory.artifacts.manifest_sha256,
+      restored_manifest_sha256: inventory.artifacts.manifest_sha256,
+      target_environment: 'recovery-cluster',
+      started_at: '2026-09-17T10:00:00Z',
+      completed_at: '2026-09-17T10:20:00Z',
+      observed_rpo_minutes: 5,
+      observed_rto_minutes: 20,
+      checks: {
+        tenant_isolation: true,
+        audit_chain: true,
+        queue_fencing: true,
+        secret_redaction: true,
+      },
+    };
+    assert.equal(canonicalRestoreDrillEvidence(drill, inventory).endsWith('\n'), true);
+    assert.equal(
+      restoreDrillEvidenceSha256(drill, inventory),
+      restoreDrillEvidenceSha256({ ...drill, checks: { ...drill.checks } }, inventory),
+    );
+    assert.equal(restoreDrillEvidenceSha256(drill, inventory).length, 64);
   });
 });
 
