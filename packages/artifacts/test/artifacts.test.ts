@@ -90,6 +90,7 @@ describe('S3ArtifactStore', () => {
       prefix: 'tenant/acme',
       retainUntil: new Date('2027-01-01T00:00:00Z'),
       retentionMode: 'COMPLIANCE',
+      verifyRetention: true,
       client,
     });
     const ref = await store.putText('runs/r1/log.txt', 'Bearer secret');
@@ -98,6 +99,13 @@ describe('S3ArtifactStore', () => {
     const put = calls.find((call) => call.name === 'PutObjectCommand');
     assert.equal(put?.input.Key, 'tenant/acme/runs/r1/log.txt');
     assert.equal(put?.input.ObjectLockMode, 'COMPLIANCE');
+    const retentionHeads = calls
+      .filter((call) => call.name === 'HeadObjectCommand')
+      .map((call) => call.input.Key);
+    assert.deepEqual(retentionHeads.slice(0, 2), [
+      'tenant/acme/runs/r1/log.txt',
+      'tenant/acme/runs/r1/log.txt.meta.json',
+    ]);
     assert.deepEqual(await store.head(ref), ref);
     await store.delete(ref);
     await assert.rejects(() => store.get(ref), /empty|digest/i);

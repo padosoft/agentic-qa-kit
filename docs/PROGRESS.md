@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Fixed prefixed S3 Object Lock verification.** Retention verification now
+  checks the exact provider key for both the artifact and its metadata object;
+  a configured prefix is no longer applied twice to the metadata check. The
+  S3 retention journey asserts both `HeadObject` keys and passes 6/6 locally.
+  Next: continue the remaining deployment-grade evidence (real KMS/WORM,
+  PITR/restore, IdP/mTLS and provider-backed commerce journeys).
+
 - **Made profile parallelism operational.** `aqa run` now discovers scenarios
   before scheduling them through a bounded worker pool capped by the profile's
   `parallelism`, while preserving unique finding seeds, cooperative
