@@ -5,6 +5,9 @@
 {{- if eq (len .Values.runner.worker.scopes) 0 }}
 {{- fail "runner.worker.scopes must contain at least one org/project or org/* scope when runner.worker.enabled is true" }}
 {{- end }}
+{{- if and .Values.runner.worker.enabled .Values.runner.sandbox.requirePinnedImage (not .Values.runner.sandbox.image) }}
+{{- fail "runner.sandbox.image is required when runner.sandbox.requirePinnedImage is true" }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -78,6 +81,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: AQA_CONTAINER_IMAGE
+              value: {{ .Values.runner.sandbox.image | quote }}
           resources:
             {{- toYaml .Values.runner.resources | nindent 12 }}
           volumeMounts:

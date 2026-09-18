@@ -54,6 +54,11 @@ runner:
     digest: ""
     requireDigest: false
     pullPolicy: IfNotPresent
+  sandbox:
+    # Image executed by the host-owned OCI sandbox for hardened shell probes.
+    # Use an immutable registry/image@sha256:... reference in production.
+    image: ""
+    requirePinnedImage: true
   # StatefulSet — stable identity + per-runner PVC for deterministic fixtures.
   replicaCount: 2
   storage:
