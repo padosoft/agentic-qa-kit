@@ -15,8 +15,13 @@
   unique within tenant + gift-card ownership rather than globally, in Memory
   and PostgreSQL lookup/index paths. Added a regression proving equal keys can
   be used independently by two tenants/cards; the durable migration promotes
-  the entry identity to a scoped unique index. Targeted test and full gates are
-  next before promotion.
+  the entry identity to a scoped unique index. PR #193 merged as `eba363d`
+  after the full technical matrix: **822 passed, 1 skipped, 0 failed** locally,
+  plus both CI workflow runs green for typecheck/lint, build, Bun/Node,
+  PostgreSQL/S3/OCI, CLI smoke, Playwright admin UI, Helm, Cloudflare and live
+  Prometheus/OTLP telemetry. Copilot remained the intentionally excluded
+  failing check. The skip is the existing live S3 test without
+  `AQA_TEST_S3_ENDPOINT`; no production credentials were introduced.
 
 - **Merged the atomic gift-card ledger boundary.** PR #191 merged as
   `59d4e4a` after the full technical matrix, including both Playwright admin
