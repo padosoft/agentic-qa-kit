@@ -4,8 +4,12 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { signBackupInventory } from '@aqa/compliance';
-import { runDrInventory, runDrRestore } from '../dist/commands/dr.js';
+import {
+  restoreDrillEvidenceSha256,
+  signBackupInventory,
+  signProductionEvidence,
+} from '@aqa/compliance';
+import { runDrInventory, runDrReleaseGate, runDrRestore } from '../dist/commands/dr.js';
 
 const inventory = {
   schema_version: '1' as const,
@@ -126,5 +130,123 @@ describe('aqa dr command boundary', () => {
     });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /observed RTO/);
+  });
+
+  it('verifies the production evidence release gate against the exact drill digest', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+    const publicKeyFile = tempFile(
+      'public.pem',
+      publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    );
+    const productionEvidence = signProductionEvidence(
+      {
+        schema_version: '1',
+        evidence_id: 'prod-evidence-2026-q3-eu',
+        captured_at: '2026-09-18T10:00:00Z',
+        environment: 'prod-eu-1',
+        application_image_digest: `sha256:${'b'.repeat(64)}`,
+        controls: {
+          key_custody: {
+            provider: 'vault',
+            key_ref: 'transit/aqa-audit',
+            rotation_verified: true,
+            observed_at: '2026-09-18T09:00:00Z',
+          },
+          artifact_immutability: {
+            provider: 's3-object-lock',
+            store_ref: 'aqa-prod-eu-artifacts',
+            versioning_enabled: true,
+            retention_verified: true,
+            observed_at: '2026-09-18T09:05:00Z',
+          },
+          database_recovery: {
+            provider: 'postgresql',
+            cluster_ref: 'aqa-prod-eu-db',
+            pitr_enabled: true,
+            wal_archiving_verified: true,
+            restore_drill_ref: restoreEvidence.drill_id,
+            restore_drill_sha256: restoreDrillEvidenceSha256(restoreEvidence, inventory),
+            observed_at: '2026-09-18T09:10:00Z',
+          },
+          identity: {
+            provider: 'corp-idp',
+            oidc_verified: true,
+            mtls_verified: true,
+            runner_rotation_verified: true,
+            observed_at: '2026-09-18T09:15:00Z',
+          },
+        },
+      },
+      { key_id: 'production-evidence-key-2026', private_key_pem: privateKeyPem },
+    );
+    const result = runDrReleaseGate({
+      inventoryFile: tempFile('inventory.json', inventory),
+      evidenceFile: tempFile('restore.json', restoreEvidence),
+      productionEvidenceFile: tempFile('production-evidence.json', productionEvidence),
+      publicKeyFile,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.production_signature, 'verified');
+    assert.equal(result.restore_drill_sha256?.length, 64);
+  });
+
+  it('fails the release gate when production evidence points to another drill', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const productionEvidence = signProductionEvidence(
+      {
+        schema_version: '1',
+        evidence_id: 'prod-evidence-2026-q3-eu',
+        captured_at: '2026-09-18T10:00:00Z',
+        environment: 'prod-eu-1',
+        application_image_digest: `sha256:${'b'.repeat(64)}`,
+        controls: {
+          key_custody: {
+            provider: 'vault',
+            key_ref: 'transit/aqa-audit',
+            rotation_verified: true,
+            observed_at: '2026-09-18T09:00:00Z',
+          },
+          artifact_immutability: {
+            provider: 's3-object-lock',
+            store_ref: 'aqa-prod-eu-artifacts',
+            versioning_enabled: true,
+            retention_verified: true,
+            observed_at: '2026-09-18T09:05:00Z',
+          },
+          database_recovery: {
+            provider: 'postgresql',
+            cluster_ref: 'aqa-prod-eu-db',
+            pitr_enabled: true,
+            wal_archiving_verified: true,
+            restore_drill_ref: 'different-drill',
+            restore_drill_sha256: 'c'.repeat(64),
+            observed_at: '2026-09-18T09:10:00Z',
+          },
+          identity: {
+            provider: 'corp-idp',
+            oidc_verified: true,
+            mtls_verified: true,
+            runner_rotation_verified: true,
+            observed_at: '2026-09-18T09:15:00Z',
+          },
+        },
+      },
+      {
+        key_id: 'production-evidence-key-2026',
+        private_key_pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      },
+    );
+    const result = runDrReleaseGate({
+      inventoryFile: tempFile('inventory.json', inventory),
+      evidenceFile: tempFile('restore.json', restoreEvidence),
+      productionEvidenceFile: tempFile('production-evidence.json', productionEvidence),
+      publicKeyFile: tempFile(
+        'public.pem',
+        publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      ),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /restore drill reference/);
   });
 });

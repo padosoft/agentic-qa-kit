@@ -5,6 +5,7 @@ import {
   backupInventorySha256,
   parseBackupInventory,
   verifyBackupInventory,
+  verifyProductionEvidenceRestoreBinding,
 } from '@aqa/compliance';
 import { safeErrorMessage } from '@aqa/observability';
 
@@ -15,6 +16,11 @@ export interface DrInventoryOptions {
 
 export interface DrRestoreOptions extends DrInventoryOptions {
   evidenceFile: string;
+}
+
+export interface DrReleaseGateOptions extends DrInventoryOptions {
+  evidenceFile: string;
+  productionEvidenceFile: string;
 }
 
 export interface DrInventoryResult {
@@ -29,6 +35,11 @@ export interface DrRestoreResult extends DrInventoryResult {
   drill_id?: string;
   observed_rpo_minutes?: number;
   observed_rto_minutes?: number;
+}
+
+export interface DrReleaseGateResult extends DrRestoreResult {
+  production_signature?: 'verified';
+  restore_drill_sha256?: string;
 }
 
 export function runDrInventory(opts: DrInventoryOptions): DrInventoryResult {
@@ -57,6 +68,41 @@ export function runDrRestore(opts: DrRestoreOptions): DrRestoreResult {
       drill_id: evidence.drill_id,
       observed_rpo_minutes: evidence.observed_rpo_minutes,
       observed_rto_minutes: evidence.observed_rto_minutes,
+    };
+  } catch (error) {
+    return { ok: false, error: safeErrorMessage(error) };
+  }
+}
+
+/** Verify the signed production pack is bound to this exact restore drill. */
+export function runDrReleaseGate(opts: DrReleaseGateOptions): DrReleaseGateResult {
+  try {
+    if (!opts.publicKeyFile) throw new Error('signed production evidence requires --public-key');
+    const { inventory, signature } = readInventory(opts);
+    const evidenceInput = readJson(opts.evidenceFile);
+    const evidence = assertRestoreDrillEvidence(evidenceInput, inventory);
+    const productionEvidence = readJson(opts.productionEvidenceFile);
+    const publicKey = readFileSync(opts.publicKeyFile, 'utf8');
+    const binding = verifyProductionEvidenceRestoreBinding(
+      productionEvidence,
+      evidence,
+      inventory,
+      publicKey,
+    );
+    if (!binding.ok)
+      throw new Error(binding.reason ?? 'production evidence restore binding failed');
+    if (!binding.restore_drill_sha256)
+      throw new Error('production evidence restore binding did not return a drill digest');
+    return {
+      ok: true,
+      backup_id: inventory.backup_id,
+      inventory_sha256: backupInventorySha256(inventory),
+      signature,
+      drill_id: evidence.drill_id,
+      observed_rpo_minutes: evidence.observed_rpo_minutes,
+      observed_rto_minutes: evidence.observed_rto_minutes,
+      production_signature: 'verified',
+      restore_drill_sha256: binding.restore_drill_sha256,
     };
   } catch (error) {
     return { ok: false, error: safeErrorMessage(error) };

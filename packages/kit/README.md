@@ -52,6 +52,8 @@ Commands
                 Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>]
                 Validate a restore drill against RPO/RTO and security checks
+  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>
+                Verify signed production evidence is bound to this restore drill
 
 Common options
   --force       (init) overwrite existing files
@@ -159,6 +161,13 @@ against the selected inventory: backup identity, artifact manifest digest,
 RPO/RTO objectives and required security checks must all match. This is an
 operator evidence gate, not a substitute for actually running PostgreSQL PITR
 or object-store restore in an isolated environment.
+
+`aqa dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>`
+validates all three documents, verifies the signed production envelope, and
+requires both its restore-drill reference and canonical SHA-256 digest to match
+the exact drill record. It fails closed on missing signatures or substitutions.
+The command proves evidence provenance and document consistency; it does not
+contact PostgreSQL, the artifact provider, KMS or the identity provider.
 
 Host applications can inject a bounded `MetricsRegistry` into `runAdmin` to
 expose `GET /metrics` in Prometheus text format. Scraping is opt-in; a

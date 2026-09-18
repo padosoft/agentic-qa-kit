@@ -2337,6 +2337,16 @@ memory-queue scope test is not sufficient evidence for the durable adapter.
 When building dynamic PostgreSQL predicates, never append an unused NULL
 placeholder: PostgreSQL cannot infer its type even if the branch does not
 reference it. Derive placeholder indexes from the values actually appended.
+# 2026-09-18 — Release gates must reuse canonical evidence verifiers
+
+When a compliance library has a cross-document verifier, exposing only the
+individual document commands leaves release automation free to reimplement the
+join and drift from the signed canonical representation. The operator CLI now
+delegates `aqa dr release-gate` to the same verifier used by the library. Keep
+the CLI responsible for file/trust-root boundaries and presentation, while the
+compliance package remains the only cryptographic and canonicalization source
+of truth.
+
 # 2026-09-18 — Injected S3 clients are not provider evidence
 
 An injected S3 client can prove adapter logic but cannot prove bucket-level
