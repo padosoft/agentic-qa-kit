@@ -17,8 +17,9 @@
   queue now drives the real `makeKitWorker` and canonical `runRun` path against
   a local HTTP target, then proves `events.jsonl`/`findings.jsonl` publication,
   queue completion and a fresh JWT lookup after dequeue. Remote identity tests:
-  **2 passed** locally; hosted CI is required before marking the cross-process
-  journey complete.
+  **2 passed** locally under Bun and Node 22 after hardening the lease watcher
+  against in-flight remote queue probes during shutdown; hosted CI is required
+  before marking the cross-process journey complete.
 
 - **Closed executable remote-worker token rotation.** `aqa worker` now selects
   `HttpRunnerQueue` whenever `AQA_SERVER_URL` is set, requires a token or

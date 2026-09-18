@@ -49,8 +49,12 @@ export class RunnerWorker {
     const controller = new AbortController();
     let cancelled = false;
     let leaseLost = false;
-    const watcher = setInterval(() => {
-      void Promise.resolve(this.queue.get(job.id)).then(async (current) => {
+    let watcherActive = true;
+    const refreshLease = async (): Promise<void> => {
+      if (!watcherActive) return;
+      try {
+        const current = await this.queue.get(job.id);
+        if (!watcherActive) return;
         if (current?.status === 'cancelled') {
           cancelled = true;
           controller.abort();
@@ -66,7 +70,18 @@ export class RunnerWorker {
           leaseLost = true;
           controller.abort();
         }
-      });
+      } catch {
+        // A remote queue may be closed while a lease probe is in flight. The
+        // worker must turn that into a fenced lease outcome, never an
+        // unhandled rejection after runOnce() has already returned.
+        if (watcherActive) {
+          leaseLost = true;
+          controller.abort();
+        }
+      }
+    };
+    const watcher = setInterval(() => {
+      void refreshLease();
     }, this.pollMs);
     try {
       await this.handle(job, controller.signal);
@@ -85,6 +100,7 @@ export class RunnerWorker {
       await this.queue.fail(job.id, job.lease_token, boundedError(error));
       return { status: 'failed', job_id: job.id };
     } finally {
+      watcherActive = false;
       clearInterval(watcher);
     }
   }

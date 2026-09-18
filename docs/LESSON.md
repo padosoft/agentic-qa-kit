@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Clear does not cancel an asynchronous lease probe
+
+`clearInterval()` stops future callbacks but does not cancel a `queue.get()` or
+renew already awaiting a remote HTTP response. A worker can therefore close a
+server after `runOnce()` and receive an unhandled rejection later. Track an
+active watcher flag, check it after every await, and catch post-stop queue
+errors so shutdown produces a fenced lease result instead of background noise.
+
 # 2026-09-18 — Preserve generated profile invariants in integration fixtures
 
 When a fixture starts from real `aqa init`, replacing a generated profile with
