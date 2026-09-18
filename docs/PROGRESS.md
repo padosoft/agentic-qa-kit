@@ -2566,3 +2566,16 @@
 - This proves provider-source inclusion only. Amount equality cannot fabricate
   an order join; bank arrival, tax/fee allocation and merchant durable
   transaction persistence remain separate evidence requirements.
+
+# 2026-09-18 — distributed worker probe-driver parity
+
+- Propagated the explicit `AQA_PROBE_*` host policy through
+  `runnerConfigFromEnv` → `makeKitWorker` → `makeRunJobHandler` → `runRun`.
+  Queue payloads cannot select credentials, origins or shell allowlists, and
+  malformed opt-in policy prevents worker startup before leasing jobs.
+- Evidence: kit typecheck, Biome and **179 passed / 0 failed / 2 platform
+  skips** in the full kit suite; worker configuration regressions cover both
+  policy propagation and fail-closed shell enablement. ADR-252 records the
+  distributed boundary.
+- Next: close the remaining provider-backed production evidence and execute
+  the protected GitHub Environment gate with real operator-owned evidence.

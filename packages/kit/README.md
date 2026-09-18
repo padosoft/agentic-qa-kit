@@ -114,6 +114,8 @@ These values belong in the CI/runner secret and policy store, never in a pack.
 The PostgreSQL DSN is not written to evidence; browser requests are restricted
 to the configured origins; shell execution uses `shell: false`. Security and
 release-gate profiles keep container-sandbox precedence for shell probes.
+The same `AQA_PROBE_*` policy is applied by `aqa worker`; queued job payloads
+cannot override it.
 
 ## Durable artifact backend
 

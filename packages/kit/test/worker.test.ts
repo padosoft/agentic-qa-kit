@@ -56,4 +56,30 @@ describe('runner worker deployment configuration', () => {
     assert.match(config.runner_token_file ?? '', /secrets[\\/]runner-token$/);
     assert.deepEqual(config.scopes, [{ org: 'padosoft', project: 'shop' }]);
   });
+
+  it('carries explicit probe-driver policy into the worker configuration', () => {
+    const config = runnerConfigFromEnv({
+      AQA_QUEUE_DSN: 'postgres://redacted',
+      AQA_RUNNER_ROOT: 'C:/aqa',
+      AQA_RUNNER_SCOPES: 'padosoft/shop',
+      AQA_PROBE_SHELL_ENABLED: 'true',
+      AQA_PROBE_SHELL_ALLOWED_COMMANDS: 'node, npm',
+      AQA_PROBE_SHELL_CWD: 'C:/aqa/project',
+    });
+    assert.deepEqual(config.probe_drivers?.shell?.allowedCommands, ['node', 'npm']);
+    assert.equal(config.probe_drivers?.shell?.cwd, 'C:/aqa/project');
+  });
+
+  it('fails closed when a worker opts into shell probes without an allowlist', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_QUEUE_DSN: 'postgres://redacted',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+          AQA_PROBE_SHELL_ENABLED: '1',
+        }),
+      /AQA_PROBE_SHELL_ALLOWED_COMMANDS/,
+    );
+  });
 });

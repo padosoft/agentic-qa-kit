@@ -2528,3 +2528,12 @@ enablement and shell allowlists stay outside pack files. On Windows, absolute
 executable paths may cross a YAML/environment separator boundary (`\\` vs `/`);
 normalize only exact absolute paths and never turn that fix into implicit
 basename authorization.
+
+# 2026-09-18 — CLI and queue workers must share capability policy
+
+Adding a driver to the interactive CLI is incomplete if the durable worker
+constructs a separate `RunOptions` path. Centralize the environment-to-driver
+translation and pass it through the worker composition boundary; never let a
+queue payload choose a DSN, origin allowlist or executable policy. Validate the
+operator configuration before the worker leases work so unsupported jobs do not
+become an asynchronous surprise.

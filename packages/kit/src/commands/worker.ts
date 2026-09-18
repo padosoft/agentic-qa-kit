@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { HttpRunnerQueue, PostgresRunnerQueue } from '@aqa/server';
 import { makeKitWorker } from '../worker.js';
+import { type RunProbeDrivers, probeDriversFromEnvironment } from './run.js';
 
 export type RunnerWorkerConfig = {
   queue_dsn?: string;
@@ -12,6 +13,7 @@ export type RunnerWorkerConfig = {
   root: string;
   poll_ms: number;
   scopes: readonly { org: string; project?: string }[];
+  probe_drivers?: RunProbeDrivers;
 };
 
 /** Parse the deliberately boring `org/project,org/*` deployment format. */
@@ -56,6 +58,14 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
   const pollMs = rawPoll ? Number(rawPoll) : 250;
   if (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 60_000)
     throw new Error('[worker] AQA_RUNNER_POLL_MS must be an integer from 10 to 60000');
+  let probeDrivers: RunProbeDrivers | undefined;
+  try {
+    probeDrivers = probeDriversFromEnvironment(resolve(root), env);
+  } catch (error) {
+    throw new Error(
+      `[worker] invalid probe driver configuration: ${error instanceof Error ? error.message : 'invalid configuration'}`,
+    );
+  }
   return {
     ...(queueDsn ? { queue_dsn: queueDsn } : {}),
     ...(serverUrl ? { server_url: serverUrl } : {}),
@@ -65,6 +75,7 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
     root: resolve(root),
     poll_ms: pollMs,
     scopes: parseRunnerScopes(scopes),
+    ...(probeDrivers ? { probe_drivers: probeDrivers } : {}),
   };
 }
 
@@ -82,6 +93,7 @@ export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
     poll_ms: config.poll_ms,
     scopes: config.scopes,
     ...(config.runner_id ? { runner_id: config.runner_id } : {}),
+    ...(config.probe_drivers ? { probeDrivers: config.probe_drivers } : {}),
   });
   const stop = () => worker.stop();
   process.once('SIGTERM', stop);
