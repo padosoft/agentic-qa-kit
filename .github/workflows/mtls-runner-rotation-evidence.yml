@@ -1,0 +1,54 @@
+name: mTLS runner rotation evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  identity-journey:
+    name: mTLS and runner token rotation journey
+    runs-on: ubuntu-latest
+    environment: production-identity-evidence
+    timeout-minutes: 10
+    env:
+      AQA_TEST_MTLS_HEALTH_URL: ${{ vars.AQA_TEST_MTLS_HEALTH_URL }}
+      AQA_TEST_RUNNER_ROTATION_URL: ${{ vars.AQA_TEST_RUNNER_ROTATION_URL }}
+      AQA_TEST_MTLS_EXPECTED_HEALTH_STATUS: ${{ vars.AQA_TEST_MTLS_EXPECTED_HEALTH_STATUS }}
+      AQA_TEST_RUNNER_EXPECTED_OLD_STATUS: ${{ vars.AQA_TEST_RUNNER_EXPECTED_OLD_STATUS }}
+      AQA_TEST_MTLS_CA_PEM: ${{ secrets.AQA_TEST_MTLS_CA_PEM }}
+      AQA_TEST_MTLS_CERT_PEM: ${{ secrets.AQA_TEST_MTLS_CERT_PEM }}
+      AQA_TEST_MTLS_KEY_PEM: ${{ secrets.AQA_TEST_MTLS_KEY_PEM }}
+      AQA_TEST_RUNNER_OLD_TOKEN: ${{ secrets.AQA_TEST_RUNNER_OLD_TOKEN }}
+      AQA_TEST_RUNNER_NEW_TOKEN: ${{ secrets.AQA_TEST_RUNNER_NEW_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require protected identity configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            AQA_TEST_MTLS_HEALTH_URL \
+            AQA_TEST_RUNNER_ROTATION_URL \
+            AQA_TEST_MTLS_CA_PEM \
+            AQA_TEST_MTLS_CERT_PEM \
+            AQA_TEST_MTLS_KEY_PEM \
+            AQA_TEST_RUNNER_OLD_TOKEN \
+            AQA_TEST_RUNNER_NEW_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing identity evidence configuration::$name is required in the production-identity-evidence environment"
+              exit 1
+            fi
+          done
+
+      - name: Run mTLS and token rotation journey
+        run: node scripts/mtls-runner-rotation-journey.mjs

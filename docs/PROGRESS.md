@@ -11,6 +11,16 @@
 
 ## 2026-09-18
 
+- **Added protected mTLS and runner-token rotation evidence.** The manual
+  `mtls-runner-rotation-evidence.yml` workflow writes CA/client certificate
+  material only to a mode-700 temporary directory, verifies an HTTPS mTLS
+  health endpoint, proves the old runner token is rejected and the new token is
+  accepted, disables redirects and cleans up on every path. It never logs
+  credentials or response bodies. This is deployment-boundary evidence only;
+  IdP issuance, CA governance, revocation propagation and HA failover remain
+  separate. Next: merge this slice, then perform the final roadmap audit and
+  close any remaining implementable provider journey.
+
 - **Added protected read-only Stripe provider evidence.** The manual
   `stripe-provider-evidence.yml` workflow requires an operator-owned
   `sk_test_` secret and PaymentIntent expectations in the protected
