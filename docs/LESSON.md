@@ -16,6 +16,14 @@ journey therefore verifies both paths independently and uses disposable
 provider containers; configuration-only tests remain useful but cannot replace
 either runtime assertion.
 
+# 2026-09-18 — Collector debug output is not stdout
+
+The OpenTelemetry Collector `debug` exporter writes its diagnostic span output
+to stderr in the container. A live journey that only reads stdout can report a
+false negative after successful delivery. Capture both streams when asserting
+provider-side evidence, while keeping the actual scrape/query assertion
+independent.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or

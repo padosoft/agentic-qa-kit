@@ -115,7 +115,8 @@ try {
   assert.equal(prometheusResult.status, 'success');
   assert.equal(prometheusResult.data.result[0].value[1], '1');
 
-  const collectorLogs = docker(['logs', collector]).stdout;
+  const collectorResult = docker(['logs', collector]);
+  const collectorLogs = `${collectorResult.stdout}\n${collectorResult.stderr}`;
   assert.match(collectorLogs, /aqa\.live\.observability/);
   console.log('PASS: live Prometheus scrape/query and OTLP Collector export verified');
 } finally {
