@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Merged the DR release-gate sub-task PR #155 into the macro branch.** The
+  authoritative hosted CI run **35336917827** passed all technical gates:
+  typecheck/lint, Helm, Bun, Node 22, PostgreSQL, S3, OCI, build, CLI E2E,
+  Playwright admin E2E and live Prometheus/OTLP telemetry. A duplicate CI run
+  hung in Playwright and was cancelled after the complete duplicate run had
+  already passed; no code failure was observed. Next: promote the macro branch
+  to `main`, then continue provider-backed KMS/WORM/PITR and identity work.
+
 - **Added the executable DR release gate to the operator CLI.** `aqa dr
   release-gate <inventory> <restore-evidence> <production-evidence>
   --public-key <pem>` now reuses the canonical compliance verifier to validate
