@@ -9,6 +9,13 @@ export const LlmUsage = z.enum([
 ]);
 export type LlmUsage = z.infer<typeof LlmUsage>;
 
+/**
+ * Scheduler-level state sharing policy. This is deliberately separate from
+ * process/container sandboxing: it only controls which scenarios may overlap.
+ */
+export const IsolationStrategy = z.enum(['parallel', 'grouped', 'serial']);
+export type IsolationStrategy = z.infer<typeof IsolationStrategy>;
+
 export const Profile = z.object({
   schema_version: z.literal('1'),
   name: Slug,
@@ -17,6 +24,7 @@ export const Profile = z.object({
   llm_budget_usd: z.number().nonnegative().nullable().default(null),
   budget_minutes: z.number().int().positive().optional(),
   parallelism: z.number().int().positive().max(64).default(1),
+  isolation: IsolationStrategy.default('parallel'),
   require_deterministic_replay: z.boolean().default(false),
   packs: z.array(Slug).default([]),
   tags: z.array(z.string()).default([]),

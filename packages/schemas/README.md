@@ -99,6 +99,12 @@ Each namespaced export bundles the Zod validator(s) for that domain. To work wit
 
 A `status: 'verified'` finding **must** have a deterministic floor at the declared `verification_floor`. The validator enforces this.
 
+Profiles also declare a scheduler isolation policy. `parallel` preserves the
+configured worker pool, `grouped` serializes scenarios sharing an
+`isolation_group`, and `serial` runs the complete profile one scenario at a
+time. This controls overlap only; it is not a substitute for container/VM or
+tenant isolation.
+
 `Scenario` also validates executable cross-field contracts before a runner is
 called. HTTP probes reject ignored fields and malformed secret references;
 `http_status` requires a numeric expected status; and `response_contains`
