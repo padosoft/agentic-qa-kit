@@ -57,6 +57,13 @@
   regressions. Auth suite: **20 passed, 0 failed** locally; live IdP
   certificate, DNS, egress and lifecycle evidence remains deployment-scoped.
 
+- **Made restore-drill timing operation-derived.** `@aqa/compliance` now
+  exposes `measureRestoreDrill()`, which records timestamps around the actual
+  restore callback, computes bounded RTO and propagates provider failures.
+  Added ADR-249 and regression coverage. Compliance suite: **26 passed, 0
+  failed** locally. This improves evidence provenance but does not itself prove
+  cloud PITR, KMS/WORM or artifact-provider execution.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes

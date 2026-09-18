@@ -15,6 +15,8 @@ SOC2 / ISO 27001 readiness layer for `agentic-qa-kit` (Task 23).
 - `aqa-audit-verify <path>` — CLI wrapper around `verifyEventChain`.
   Exits non-zero on chain break — wire it into CI to fail builds on
   tampered audit logs.
+- `measureRestoreDrill()` — measures RTO timestamps around a real restore
+  callback and propagates provider failures.
 
 ## What's deferred to post-v1.0
 

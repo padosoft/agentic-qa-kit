@@ -2495,3 +2495,10 @@ still allows token, UserInfo or JWKS calls to be redirected to an unrelated
 origin. Pin all discovered endpoints to the issuer origin by default, require
 HTTPS and reject embedded credentials; make split-origin providers an explicit
 allowlist decision.
+
+# 2026-09-18 — Restore timing must be generated around the real operation
+
+Timestamp consistency alone cannot establish that a reported RTO came from the
+restore. Expose a small wrapper that starts before the provider callback,
+stops only after it resolves, computes the bounded RTO and propagates errors.
+Keep provider execution and timing provenance separate from the schema verifier.
