@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-chaos
+version: 0.1.0
+description: "Opt-in chaos baseline for controlled failure injection, recovery objectives and blast-radius containment."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [chaos, resilience, fault-injection, disaster-recovery]
+templates: []
+scenarios:
+  - scenarios/failure-injection.yaml
+  - scenarios/recovery-objectives.yaml
+  - scenarios/blast-radius.yaml
+risks:
+  - risks/chaos.yaml
+oracles: []
+probes: []

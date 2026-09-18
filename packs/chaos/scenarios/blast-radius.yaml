@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-chaos-blast-radius
+title: Partial failure produces observable safe degradation and tenant isolation
+risk_refs: [chaos-failure-silent]
+invariant_refs: [inv-chaos-failure-contained]
+preconditions:
+  - "a disposable multi-tenant target and bounded dependency fault fixture are available"
+steps:
+  - id: inspect-containment
+    kind: http
+    with: { method: "GET", url: "/chaos/containment?fixture=inventory-latency" }
+oracles:
+  - id: o-isolation
+    kind: response_contains
+    probe_id: inspect-containment
+    with: { jsonpath: "$.tenant_blast_radius_contained", equals: true }
+  - id: o-degradation
+    kind: response_contains
+    probe_id: inspect-containment
+    with: { jsonpath: "$.safe_degradation_declared", equals: true }
+  - id: o-observed
+    kind: response_contains
+    probe_id: inspect-containment
+    with: { jsonpath: "$.alerts_and_audit_observed", equals: true }
+tags: [chaos, resilience, containment, multi-tenant]
