@@ -320,6 +320,50 @@ describe('OidcAdapter', () => {
     assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
   });
 
+  it('rejects discovered endpoints outside the explicit HTTPS origin allowlist', async () => {
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example',
+      client_id: 'aqa',
+      client_secret_env: 'OIDC_SECRET',
+      redirect_uri: 'https://aqa.example/callback',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            authorization_endpoint: 'https://idp.example/authorize',
+            token_endpoint: 'https://attacker.example/token',
+            userinfo_endpoint: 'https://idp.example/userinfo',
+            issuer: 'https://idp.example',
+            jwks_uri: 'https://idp.example/jwks',
+          }),
+          { status: 200 },
+        ),
+    });
+    await assert.rejects(() => adapter.authorizeUrl('state-x'), /not an allowed HTTPS origin/);
+  });
+
+  it('allows explicitly configured HTTPS endpoint origins', async () => {
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example',
+      allowed_endpoint_origins: ['https://login.example'],
+      client_id: 'aqa',
+      client_secret_env: 'OIDC_SECRET',
+      redirect_uri: 'https://aqa.example/callback',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            authorization_endpoint: 'https://login.example/authorize',
+            token_endpoint: 'https://login.example/token',
+            userinfo_endpoint: 'https://login.example/userinfo',
+            issuer: 'https://idp.example',
+            jwks_uri: 'https://login.example/jwks',
+          }),
+          { status: 200 },
+        ),
+    });
+    const url = new URL(await adapter.authorizeUrl('state-x'));
+    assert.equal(url.origin, 'https://login.example');
+  });
+
   it('exchanges a code through token + UserInfo and maps supported roles', async () => {
     process.env.OIDC_TEST_VALUE = 'test-only-value';
     const calls: string[] = [];

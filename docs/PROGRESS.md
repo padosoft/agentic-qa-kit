@@ -50,6 +50,13 @@
   with the existing PostgreSQL-dependent skip. Merchant TLS, certificate
   rotation and network egress remain deployment evidence.
 
+- **Pinned OIDC discovery endpoints.** `OidcAdapter` now requires an HTTPS
+  issuer, rejects URL credentials and validates authorization, token, UserInfo
+  and JWKS origins against the issuer by default or an explicit HTTPS
+  `allowed_endpoint_origins` list. Added ADR-248 and SSRF/misrouting
+  regressions. Auth suite: **20 passed, 0 failed** locally; live IdP
+  certificate, DNS, egress and lifecycle evidence remains deployment-scoped.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
