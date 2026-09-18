@@ -14,6 +14,14 @@ to the authoritative run chain without copying prompts or provider payloads.
 Export a structural runner bridge with bounded fields and test both event order
 and hash-chain continuity; leave the LLM package independent of the runner.
 
+# 2026-09-18 — validate again at every audit boundary
+
+Producer-side validation is not enough for a public callback. A host can call
+the bridge directly with malformed numbers or provider error text, so the
+boundary must cap counters/costs, drop invalid values and apply the shared
+redactor before hashing. This keeps the persisted audit useful without trusting
+every integration caller.
+
 # 2026-09-18 — budget enforcement needs an observable boundary
 
 Admission and settlement can be correct while production operators still have
