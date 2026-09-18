@@ -395,6 +395,16 @@ describe('StripePaymentGateway', () => {
     assert.equal(result.payout_id, 'po_test_1');
     assert.equal(result.balance_transaction_amount.amount_minor, '-1000');
     assert.equal(result.net_amount.amount_minor, '-1000');
+
+    await assert.rejects(
+      reconcileStripePayout(gateway, {
+        payout_id: 'po_test_1',
+        expected_amount: { currency: 'EUR', amount_minor: '1000' },
+        expected_fee: { currency: 'EUR', amount_minor: '0' },
+        expected_balance_transaction_sources: ['ch_test_1', 'ch_test_1'],
+      }),
+      /expected payout sources contain duplicates/,
+    );
   });
 
   it('fails closed when the payout balance transaction is not its own payout entry', async () => {
