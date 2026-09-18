@@ -46,6 +46,14 @@ describe('Gift-card tender ledger', () => {
     );
   });
 
+  it('scopes idempotency keys to the tenant and gift card', async () => {
+    const ledger = new InMemoryGiftCardLedger();
+    await ledger.credit('shop-a', 'gift-a', 'same-operation', eur('100'));
+    await ledger.credit('shop-b', 'gift-b', 'same-operation', eur('200'));
+    assert.deepEqual((await ledger.balance('shop-a', 'gift-a'))?.balance, eur('100'));
+    assert.deepEqual((await ledger.balance('shop-b', 'gift-b'))?.balance, eur('200'));
+  });
+
   it('shares an atomic balance across PostgreSQL clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {

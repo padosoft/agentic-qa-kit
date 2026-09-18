@@ -11,6 +11,13 @@
 
 ## 2026-09-18
 
+- **Hardened stored-value idempotency scope.** Gift-card operation IDs are now
+  unique within tenant + gift-card ownership rather than globally, in Memory
+  and PostgreSQL lookup/index paths. Added a regression proving equal keys can
+  be used independently by two tenants/cards; the durable migration promotes
+  the entry identity to a scoped unique index. Targeted test and full gates are
+  next before promotion.
+
 - **Merged the atomic gift-card ledger boundary.** PR #191 merged as
   `59d4e4a` after the full technical matrix, including both Playwright admin
   journeys, CLI smoke, Postgres/S3/OCI integrations and live telemetry.

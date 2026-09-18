@@ -2589,3 +2589,11 @@ the balance was atomically reserved, that a retry is idempotent or that two
 tenants cannot spend the same account. Keep the stored-value ledger separate
 from order arithmetic, lock the tenant/account boundary transactionally and
 make provider settlement and expiry explicit evidence requirements.
+
+# 2026-09-18 — Idempotency keys need an ownership scope
+
+Making an operation ID globally unique can prevent a cross-tenant mutation,
+but it also lets an unrelated tenant create a denial/conflict by reusing the
+same harmless key. Idempotency must be unique within the business ownership
+boundary (tenant plus account/resource), and the durable unique index and
+lookup must use that same scope.

@@ -15,8 +15,10 @@ overspend and cross-tenant balance errors.
 ## Decision
 
 Add a provider-neutral `GiftCardLedger` boundary with credit, redeem and
-balance operations. Operation IDs are single-use: an identical retry is a
-`duplicate`, while a changed payload is a `conflict`. Redemptions acquire a
+balance operations. Operation IDs are single-use within the tenant/card
+scope: an identical retry is a `duplicate`, while a changed payload is a
+`conflict`; equal operation IDs belonging to different tenants/cards do not
+collide. Redemptions acquire a
 per-tenant/card transaction lock and return `insufficient_funds` without
 writing an entry when the balance is unavailable. Currency changes for an
 existing card fail closed. The in-memory implementation is deterministic for
@@ -34,7 +36,7 @@ uses transaction-scoped advisory locks for the durable concurrency boundary.
 ## Evidence
 
 `packages/commerce/test/tender-ledger.test.ts` covers idempotent credit/redeem,
-conflicting operation reuse, tenant/currency isolation and concurrent
-overspend prevention. The PostgreSQL concurrency test runs when
+conflicting operation reuse, scoped idempotency keys, tenant/currency
+isolation and concurrent overspend prevention. The PostgreSQL concurrency test runs when
 `AQA_TEST_POSTGRES_DSN` is configured; without it the test reports an explicit
 environment skip.
