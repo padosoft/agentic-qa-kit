@@ -1,0 +1,56 @@
+name: Stripe provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-journey:
+    name: Read-only Stripe test-mode PaymentIntent journey
+    runs-on: ubuntu-latest
+    environment: commerce-provider-evidence
+    timeout-minutes: 10
+    env:
+      AQA_TEST_STRIPE_PAYMENT_ID: ${{ vars.AQA_TEST_STRIPE_PAYMENT_ID }}
+      AQA_TEST_STRIPE_EXPECTED_CURRENCY: ${{ vars.AQA_TEST_STRIPE_EXPECTED_CURRENCY }}
+      AQA_TEST_STRIPE_EXPECTED_AMOUNT_MINOR: ${{ vars.AQA_TEST_STRIPE_EXPECTED_AMOUNT_MINOR }}
+      AQA_TEST_STRIPE_EXPECTED_STATUS: ${{ vars.AQA_TEST_STRIPE_EXPECTED_STATUS }}
+      AQA_TEST_STRIPE_EXPECTED_AMOUNT_RECEIVED_MINOR: ${{ vars.AQA_TEST_STRIPE_EXPECTED_AMOUNT_RECEIVED_MINOR }}
+      AQA_TEST_STRIPE_API_VERSION: ${{ vars.AQA_TEST_STRIPE_API_VERSION }}
+      AQA_TEST_STRIPE_SECRET_KEY: ${{ secrets.AQA_TEST_STRIPE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require operator-owned test-mode configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            AQA_TEST_STRIPE_PAYMENT_ID \
+            AQA_TEST_STRIPE_EXPECTED_CURRENCY \
+            AQA_TEST_STRIPE_EXPECTED_AMOUNT_MINOR \
+            AQA_TEST_STRIPE_EXPECTED_STATUS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing Stripe evidence configuration::$name is required in the commerce-provider-evidence environment"
+              exit 1
+            fi
+          done
+          case "${AQA_TEST_STRIPE_SECRET_KEY:-}" in
+            sk_test_*) ;;
+            *) echo "::error title=Unsafe Stripe evidence key::AQA_TEST_STRIPE_SECRET_KEY must be a Stripe test-mode key"; exit 1 ;;
+          esac
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Run live Stripe provider journey
+        run: bun test packages/commerce/test/stripe-provider-live.test.ts
