@@ -13,6 +13,24 @@
 
 ## 2026-09-18
 
+- **Merged the DR release-gate sub-task PR #155 into the macro branch.** The
+  authoritative hosted CI run **35336917827** passed all technical gates:
+  typecheck/lint, Helm, Bun, Node 22, PostgreSQL, S3, OCI, build, CLI E2E,
+  Playwright admin E2E and live Prometheus/OTLP telemetry. A duplicate CI run
+  hung in Playwright and was cancelled after the complete duplicate run had
+  already passed; no code failure was observed. Next: promote the macro branch
+  to `main`, then continue provider-backed KMS/WORM/PITR and identity work.
+
+- **Added the executable DR release gate to the operator CLI.** `aqa dr
+  release-gate <inventory> <restore-evidence> <production-evidence>
+  --public-key <pem>` now reuses the canonical compliance verifier to validate
+  the inventory, restore objectives, trusted production signature, drill
+  reference and SHA-256 binding in one fail-closed command. Kit suite: **169
+  passed, 0 failed, 2 platform skips**; kit typecheck, Biome and package build
+  passed. This proves the evidence chain at the CLI boundary, not provider
+  execution. Next: run full workspace gates, then continue provider-backed
+  KMS/WORM/PITR and identity evidence.
+
 - **Merged PR #154 (`762e8ee`) with the hosted production-evidence binding gate.**
   CI run **35335845194** completed successfully across typecheck/lint, build,
   Bun and Node 22 tests, PostgreSQL, OCI, S3-compatible storage, CLI E2E,
