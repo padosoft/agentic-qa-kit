@@ -11,6 +11,15 @@
 
 ## 2026-09-18
 
+- **Completed the formal roadmap audit.** Added
+  `docs/internal/roadmap-completion-audit-2026-09-18.md` and updated the README
+  to replace the stale pre-production v1.9 summary with evidence-based status.
+  The audit marks repository capabilities separately from protected provider
+  execution and independent security/compliance obligations; it intentionally
+  does not claim 100% production completion before those external controls run.
+  Next: validate and merge the audit, then execute protected workflows when the
+  operator environments are available.
+
 - **Added protected PostgreSQL recovery-target evidence.** The manual
   `postgres-recovery-provider-evidence.yml` workflow connects through the
   existing SELECT-only observer, requires recovery mode and transaction
