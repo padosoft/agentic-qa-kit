@@ -2230,3 +2230,11 @@ memory-queue scope test is not sufficient evidence for the durable adapter.
 When building dynamic PostgreSQL predicates, never append an unused NULL
 placeholder: PostgreSQL cannot infer its type even if the branch does not
 reference it. Derive placeholder indexes from the values actually appended.
+# 2026-09-18 — Injected S3 clients are not provider evidence
+
+An injected S3 client can prove adapter logic but cannot prove bucket-level
+Object Lock enablement, provider retention read-back, or metadata persistence.
+Keep the deterministic unit tests and add an endpoint-gated integration job
+against an ephemeral S3-compatible provider. Create a unique locked bucket per
+run, use CI-only environment credentials, and do not claim AWS/KMS/replication
+or restore behavior from a MinIO contract.

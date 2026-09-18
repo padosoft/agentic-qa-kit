@@ -224,6 +224,47 @@ jobs:
           bun test packages/runner/test/postgres-trajectory.test.ts
           AQA_TEST_POSTGRES_DSN="$AQA_TEST_POSTGRES_DSN" bun test packages/kit/test/run-cmd.test.ts
 
+  test-s3:
+    name: Integration (S3-compatible artifact store)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [typecheck-lint]
+    services:
+      minio:
+        image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+        env:
+          MINIO_ROOT_USER: aqa-ci-access
+          MINIO_ROOT_PASSWORD: aqa-ci-secret
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl --fail http://127.0.0.1:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        command: server /data
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Run real S3-compatible artifact journey
+        env:
+          AQA_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+          AWS_ACCESS_KEY_ID: aqa-ci-access
+          AWS_SECRET_ACCESS_KEY: aqa-ci-secret
+          AWS_REGION: us-east-1
+        run: bun test packages/artifacts/test/s3-live.test.ts
+
   test-container-sandbox:
     name: Integration (OCI container sandbox)
     runs-on: ubuntu-latest
