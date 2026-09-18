@@ -20,9 +20,12 @@
   emitted by the registry; 20 observability tests passed, including asset
   structure and secret-safety checks. This closes the repository asset gap,
   but not live-cluster evidence: scrape, OTLP export, alert firing and
-  dashboard population still require an operator environment. Next: add a
-  reproducible local live telemetry journey or document the required hosted
-  evidence boundary.
+  dashboard population still require an operator environment. Added a
+  reproducible Docker journey that will start disposable Prometheus and an
+  OpenTelemetry Collector, then scrape the real admin endpoint, query the
+  series and verify OTLP span delivery; local execution is explicitly skipped
+  when Docker is unavailable, so hosted CI remains the authoritative evidence.
+  Next: run and close this live journey in hosted CI.
 
 - **Closed the complete remote worker production journey.** PR #145 is merged
   on `main` as **95e5a18**. The real Kit lifecycle now runs through the

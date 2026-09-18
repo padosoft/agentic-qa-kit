@@ -29,5 +29,17 @@ scrape/export evidence through the approved operator process.
 6. Run a real AQA journey and retain evidence of a successful scrape, OTLP
    export, alert evaluation and dashboard data population.
 
+The repository's hosted Docker journey can be run with:
+
+```bash
+AQA_TEST_OBSERVABILITY_LIVE=1 bun run test:observability-live
+```
+
+It starts disposable Prometheus and OpenTelemetry Collector containers,
+scrapes the real admin `/metrics` endpoint, queries the scraped series, and
+exports a real span through OTLP/HTTP. It is intentionally skipped without the
+explicit environment variable because Docker/provider availability is not
+assumed on developer machines.
+
 The configuration intentionally uses environment substitution for endpoints and
 does not contain tokens, passwords or signing keys.

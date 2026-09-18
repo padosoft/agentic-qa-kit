@@ -492,3 +492,29 @@ jobs:
             playwright-report
             test-results
           if-no-files-found: ignore
+
+  observability-live:
+    name: Integration (live Prometheus + OTLP telemetry)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspaces and admin
+        run: |
+          npm --prefix docs-site ci
+          bun run build
+
+      - name: Run live Prometheus scrape and OTLP Collector journey
+        env:
+          AQA_TEST_OBSERVABILITY_LIVE: '1'
+        run: bun run test:observability-live
