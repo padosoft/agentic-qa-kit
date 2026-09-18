@@ -2486,3 +2486,8 @@ export {
   type GiftCardProviderReconciliationOptions,
   type GiftCardProviderReconciliationResult,
 } from './gift-card-provider.js';
+
+export {
+  HttpGiftCardProvider,
+  type HttpGiftCardProviderOptions,
+} from './gift-card-http-provider.js';

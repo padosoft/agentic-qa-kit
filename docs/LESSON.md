@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — A typed provider contract still needs a transport boundary
+
+Provider reconciliation code is not safe merely because its snapshot schema is
+typed. The HTTP adapter must reject external plaintext HTTP and URL
+credentials, avoid redirects, cap response bytes and keep authentication
+injected by deployment. Injected fetch tests prove adapter behavior only;
+issuer IAM, token rotation and live provider execution remain separate evidence.
+
 # 2026-09-18 — Stored-value provider evidence needs a temporal boundary
 
 A merchant ledger can prove local idempotency and overspend prevention, but it
