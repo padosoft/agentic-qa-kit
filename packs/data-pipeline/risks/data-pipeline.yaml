@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-data-pipeline
+risks:
+  - id: data-schema-breaking-change
+    category: integrity
+    title: A producer schema change silently breaks downstream consumers or historical replay.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-data-schema-compatible
+        statement: Published data contracts remain compatible with declared consumers and replay windows.
+  - id: data-quality-regression
+    category: integrity
+    title: Null, duplicate, stale or out-of-range records enter a customer-facing dataset.
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-data-quality-gated
+        statement: Data quality thresholds are evaluated before a dataset is promoted or consumed.
+  - id: data-replay-duplication
+    category: availability
+    title: A retry or backfill duplicates side effects or loses records at a pipeline boundary.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-data-replay-idempotent
+        statement: Retries, backfills and replays are bounded, observable and idempotent at the effect boundary.

@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-data-schema-compatibility
+title: Data contract remains compatible across producer and consumer versions
+risk_refs: [data-schema-breaking-change]
+invariant_refs: [inv-data-schema-compatible]
+preconditions:
+  - "a disposable pipeline environment and versioned contract registry are available"
+steps:
+  - id: check-contract
+    kind: http
+    with: { method: "GET", url: "/data-pipeline/schema-compatibility?dataset=orders" }
+oracles:
+  - id: o-compatible
+    kind: response_contains
+    probe_id: check-contract
+    with: { jsonpath: "$.compatible", equals: true }
+  - id: o-replay-window
+    kind: response_contains
+    probe_id: check-contract
+    with: { jsonpath: "$.replay_window_declared", equals: true }
+tags: [data-pipeline, schema, contract]

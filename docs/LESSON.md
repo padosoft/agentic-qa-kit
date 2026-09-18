@@ -2098,3 +2098,10 @@ Rendered manifests and admission decisions are valuable pre-deploy contracts,
 but they do not prove image provenance, control-plane behavior, network policy,
 runtime identity or rollback safety. Keep disposable-cluster and production
 rollout evidence explicit.
+
+## 2026-09-18 — Data pipeline contracts must separate quality from lineage
+
+Schema compatibility, freshness and replay checks are useful release contracts,
+but a passing fixture cannot prove warehouse lineage, access controls,
+retention, exactly-once delivery or provider recovery. Keep bounded fixtures and
+provider-backed evidence as separate boundaries.

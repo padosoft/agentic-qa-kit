@@ -274,6 +274,10 @@
       "name": "@aqa/pack-core",
       "version": "0.1.0",
     },
+    "packs/data-pipeline": {
+      "name": "@padosoft/aqa-pack-data-pipeline",
+      "version": "0.1.0",
+    },
     "packs/database-migrations": {
       "name": "@aqa/pack-database-migrations",
       "version": "0.1.0",
@@ -498,6 +502,8 @@
     "@npmcli/redact": ["@npmcli/redact@5.0.0", "", {}, "sha512-3zcN5Q3yEmeyxXBzqB6fXPQFzYa2ROsGFSr69W0ArXIAGJqxl/aFECOVPD2kbkYPm0U/EHxFKgclK3UA9WQg5A=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.150.0", "", {}, "sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw=="],
+
+    "@padosoft/aqa-pack-data-pipeline": ["@padosoft/aqa-pack-data-pipeline@workspace:packs/data-pipeline"],
 
     "@playwright/test": ["@playwright/test@1.60.0", "", { "dependencies": { "playwright": "1.60.0" }, "bin": { "playwright": "cli.js" } }, "sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag=="],
 

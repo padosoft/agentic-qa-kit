@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-data-pipeline`.** It adds opt-in, schema-valid contracts for
+  producer/consumer compatibility, data-quality promotion gates and bounded
+  idempotent replay. Orchestrator, warehouse, lineage and provider recovery
+  evidence remain operator supplied; next: validate and publish the pack.
+
 - **Started `pack-kubernetes`.** It adds opt-in, schema-valid contracts for
   workload hardening, admission policy decisions and rollout/disruption
   resilience. Cluster, image, network and production runtime evidence remain

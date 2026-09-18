@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-data-quality-gate
+title: Dataset quality gates block unsafe promotion
+risk_refs: [data-quality-regression]
+invariant_refs: [inv-data-quality-gated]
+preconditions:
+  - "a non-production dataset with deterministic quality metrics is available"
+steps:
+  - id: inspect-quality
+    kind: http
+    with: { method: "GET", url: "/data-pipeline/quality?dataset=orders_daily" }
+oracles:
+  - id: o-quality-pass
+    kind: response_contains
+    probe_id: inspect-quality
+    with: { jsonpath: "$.gate", equals: "pass" }
+  - id: o-freshness
+    kind: response_contains
+    probe_id: inspect-quality
+    with: { jsonpath: "$.freshness_within_sla", equals: true }
+  - id: o-duplicates
+    kind: response_contains
+    probe_id: inspect-quality
+    with: { jsonpath: "$.duplicate_rate_within_threshold", equals: true }
+tags: [data-pipeline, quality, freshness]
