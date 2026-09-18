@@ -23,6 +23,11 @@ contains both a one-time PKCE verifier and a one-time nonce; the PostgreSQL
 store rejects legacy pending rows without a nonce. The adapter never logs client
 secrets or bearer tokens and never grants an implicit admin role.
 
+The protected manual `oidc-provider-evidence.yml` workflow executes the full
+discovery/code/PKCE/JWKS/UserInfo path against an operator-owned IdP using a
+fresh single-use authorization code. It is external provider evidence, not a
+replacement for SCIM, mTLS, session-store or rotation exercises.
+
 `RunnerJwtAuthorizer` verifies dedicated runner credentials using an explicit
 RS256 trust root, issuer, audience, bounded clock skew, expiry/not-before and
 tenant/project scopes. It rejects unsigned or algorithm-switched tokens and
