@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import {
+  evaluateMutationThreshold,
   evaluatePerformanceThresholds,
   parseJunit,
   parseK6Summary,
   parseLocustSummary,
+  parseMutationSummary,
   parsePlaywrightTrace,
   parseSast,
 } from '../dist/index.js';
@@ -231,6 +233,61 @@ describe('performance threshold policy', () => {
     assert.deepEqual(
       result.violations.map((violation) => violation.metric),
       ['failure_rate', 'check_rate'],
+    );
+  });
+});
+
+describe('mutation evidence', () => {
+  it('normalizes flat and Stryker-style reports and excludes ignored mutants', () => {
+    const report = parseMutationSummary({
+      files: {
+        'src/cart.ts': {
+          mutants: [
+            { id: '1', mutatorName: 'Arithmetic', status: 'Killed' },
+            { id: '2', mutatorName: 'ConditionalExpression', status: 'Survived' },
+            { id: '3', mutatorName: 'StringLiteral', status: 'NoCoverage' },
+            { id: '4', mutatorName: 'Ignored', status: 'Ignored' },
+          ],
+        },
+      },
+    });
+    assert.equal(report.mutation_score, 0.333333);
+    assert.deepEqual(report.totals, {
+      killed: 1,
+      survived: 1,
+      no_coverage: 1,
+      timeout: 0,
+      runtime_error: 0,
+      compile_error: 0,
+      ignored: 1,
+    });
+    assert.equal(evaluateMutationThreshold(report, 0.3).passed, true);
+    assert.equal(evaluateMutationThreshold(report, 0.4).passed, false);
+  });
+
+  it('fails closed for malformed, duplicate and unsupported mutation evidence', () => {
+    assert.throws(() => parseMutationSummary({ mutants: [] }), /between 1 and 100000/);
+    assert.throws(
+      () =>
+        parseMutationSummary({
+          mutants: [
+            { id: 'same', file: 'a.ts', status: 'Killed' },
+            { id: 'same', file: 'a.ts', status: 'Killed' },
+          ],
+        }),
+      /duplicate/,
+    );
+    assert.throws(
+      () => parseMutationSummary({ mutants: [{ id: '1', file: 'a.ts', status: 'Unknown' }] }),
+      /unsupported/,
+    );
+    assert.throws(
+      () =>
+        evaluateMutationThreshold(
+          parseMutationSummary({ mutants: [{ id: '1', file: 'a.ts', status: 'Killed' }] }),
+          1.1,
+        ),
+      /between 0 and 1/,
     );
   });
 });

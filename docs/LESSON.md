@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Mutation score is evidence only at an explicit boundary
+
+Stryker/mutmut reports are external observations, not proof that the intended
+source revision was actually mutated. Normalize status variants, exclude only
+explicitly ignored mutants, keep no-coverage/timeouts/errors visible, and gate
+the score separately. Bind the report to commit, tool version, command and
+artifact checkpoint in a protected producer workflow before release use.
+
 # 2026-09-18 — OIDC live evidence needs a fresh code, not a fixture
 
 Discovery and JWT fixtures do not prove that the configured IdP, client,

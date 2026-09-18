@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { runMutationGate } from '../dist/commands/mutation-gate.js';
+
+function report(statuses: string[]): string {
+  return JSON.stringify({
+    mutants: statuses.map((status, index) => ({
+      id: `m-${index}`,
+      file: 'src/cart.ts',
+      operator: 'ConditionalExpression',
+      status,
+    })),
+  });
+}
+
+test('mutation gate accepts an external report above the minimum', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Survived']));
+  const result = runMutationGate({ root, inputFile: 'mutation.json', minScore: 0.5 });
+  assert.equal(result.ok, true);
+  assert.equal(result.gate_ok, true);
+  assert.equal(result.report?.totals.killed, 1);
+  assert.equal(result.threshold?.evaluated_mutants, 2);
+});
+
+test('mutation gate returns a non-passing result below the minimum', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Survived', 'NoCoverage']));
+  const result = runMutationGate({ root, inputFile: 'mutation.json', minScore: 0.5 });
+  assert.equal(result.ok, true);
+  assert.equal(result.gate_ok, false);
+});
+
+test('mutation gate fails closed for malformed evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), '{not-json');
+  const result = runMutationGate({ root, inputFile: 'mutation.json', minScore: 0.5 });
+  assert.equal(result.ok, false);
+  assert.equal(result.gate_ok, false);
+});

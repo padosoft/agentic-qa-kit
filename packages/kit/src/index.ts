@@ -19,6 +19,11 @@ export {
   type OracleCalibrationResult,
 } from './commands/oracle-calibrate.js';
 export {
+  runMutationGate,
+  type MutationGateOptions,
+  type MutationGateResult,
+} from './commands/mutation-gate.js';
+export {
   runRiskCoverage,
   type RiskCoverageOptions,
   type RiskCoverageResult,

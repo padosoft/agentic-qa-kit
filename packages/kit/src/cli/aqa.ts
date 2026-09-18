@@ -8,6 +8,7 @@ import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
+import { runMutationGate } from '../commands/mutation-gate.js';
 import { runOracleCalibration } from '../commands/oracle-calibrate.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
@@ -61,6 +62,7 @@ const VALUE_FLAGS = new Set([
   'public-key-id',
   'bin-count',
   'max-ece',
+  'min-score',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -135,6 +137,8 @@ ${bold('Commands')}
   risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
   oracle calibrate <corpus.json> [--bin-count N] [--max-ece X]
                                     Calibrate opaque judge scores against a reviewed gold corpus
+  mutation gate <report.json> --min-score X
+                                    Gate an externally-produced mutation report
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -711,6 +715,38 @@ async function main(): Promise<number> {
         console.error(red('  ✗ calibration gate not satisfied: ECE exceeds --max-ece'));
         return 2;
       }
+      return 0;
+    }
+    case 'mutation': {
+      const subcommand = args.positionals[0];
+      if (subcommand !== 'gate') {
+        console.error(red('aqa mutation: expected `gate`'));
+        return 1;
+      }
+      const inputFile = args.positionals[1];
+      const minScoreValue = args.values.get('min-score');
+      if (!inputFile) {
+        console.error(red('aqa mutation gate: missing <report.json>'));
+        return 1;
+      }
+      if (minScoreValue === undefined || !Number.isFinite(Number(minScoreValue))) {
+        console.error(red('aqa mutation gate: --min-score must be a number between 0 and 1'));
+        return 1;
+      }
+      const minScore = Number(minScoreValue);
+      if (minScore < 0 || minScore > 1) {
+        console.error(red('aqa mutation gate: --min-score must be a number between 0 and 1'));
+        return 1;
+      }
+      const result = runMutationGate({ root: cwd, inputFile, minScore });
+      if (!result.ok || !result.report || !result.threshold) {
+        console.error(red(`aqa mutation gate: ${result.error ?? 'mutation gate failed'}`));
+        return 1;
+      }
+      console.info(
+        `  ${result.gate_ok ? green('✓') : red('✗')} score=${result.report.mutation_score.toFixed(6)} evaluated=${result.threshold.evaluated_mutants} killed=${result.report.totals.killed}`,
+      );
+      if (!result.gate_ok) return 2;
       return 0;
     }
     case 'admin': {
