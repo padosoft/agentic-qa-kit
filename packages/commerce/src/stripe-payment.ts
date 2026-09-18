@@ -53,8 +53,38 @@ export type StripeRefundReconciliation = {
   observed_at: string;
 };
 
+export type StripeDisputeObservation = {
+  provider: 'stripe';
+  dispute_id: string;
+  payment_id: string;
+  amount: Money;
+  status: StripeDisputeStatus;
+  evidence_due_at?: string;
+  observed_at: string;
+};
+
+export type StripeDisputeStatus =
+  | 'warning_needs_response'
+  | 'needs_response'
+  | 'under_review'
+  | 'won'
+  | 'lost';
+
+export type StripeDisputeReconciliationInput = {
+  payment_id: string;
+  expected_disputed: Money;
+};
+
+export type StripeDisputeReconciliation = {
+  provider: 'stripe';
+  payment: StripePaymentIntentObservation;
+  disputes: readonly StripeDisputeObservation[];
+  disputed_amount: Money;
+  observed_at: string;
+};
+
 /**
- * Minimal REST boundary for Stripe PaymentIntents and refunds.
+ * Minimal REST boundary for Stripe PaymentIntents, refunds and disputes.
  *
  * The gateway deliberately returns provider observations instead of pretending
  * to be a complete CommerceAdapter: carts, inventory, fulfilment and order
@@ -130,6 +160,19 @@ export class StripePaymentGateway {
     return response.data.map((item) => parseRefund(item, id));
   }
 
+  /** Read the complete bounded dispute ledger for one PaymentIntent. */
+  async listDisputes(paymentId: string): Promise<StripeDisputeObservation[]> {
+    const id = providerId(paymentId, 'payment_id');
+    const response = record(
+      await this.request(`disputes?payment_intent=${encodeURIComponent(id)}&limit=100`),
+    );
+    if (response.object !== 'list' || !Array.isArray(response.data))
+      throw new Error('[commerce/stripe] dispute list response is invalid');
+    if (response.has_more === true)
+      throw new Error('[commerce/stripe] dispute list exceeds the bounded dispute page');
+    return response.data.map((item) => parseDispute(item, id));
+  }
+
   private async request(
     path: string,
     body?: URLSearchParams,
@@ -199,6 +242,40 @@ export async function reconcileStripeRefunds(
   };
 }
 
+/**
+ * Reconcile provider-reported dispute exposure with the merchant ledger.
+ * This is intentionally separate from settlement: a won dispute is still a
+ * provider observation, while only a lost dispute is a settled chargeback.
+ */
+export async function reconcileStripeDisputes(
+  gateway: StripePaymentGateway,
+  input: StripeDisputeReconciliationInput,
+): Promise<StripeDisputeReconciliation> {
+  const paymentId = providerId(input.payment_id, 'payment_id');
+  const expectedDisputed = validateMoney(input.expected_disputed, 'expected_disputed');
+  const payment = await gateway.retrievePaymentIntent(paymentId);
+  if (payment.status !== 'succeeded')
+    throw new Error('[commerce/stripe] payment is not provider-captured');
+  if (payment.amount.currency !== expectedDisputed.currency)
+    throw new Error('[commerce/stripe] provider payment currency mismatch');
+  const disputes = await gateway.listDisputes(paymentId);
+  let disputedMinor = 0n;
+  for (const dispute of disputes) {
+    if (dispute.amount.currency !== expectedDisputed.currency)
+      throw new Error('[commerce/stripe] provider dispute currency mismatch');
+    disputedMinor += BigInt(dispute.amount.amount_minor);
+  }
+  if (disputedMinor !== BigInt(expectedDisputed.amount_minor))
+    throw new Error('[commerce/stripe] provider dispute total does not reconcile');
+  return {
+    provider: 'stripe',
+    payment,
+    disputes,
+    disputed_amount: expectedDisputed,
+    observed_at: new Date().toISOString(),
+  };
+}
+
 function parsePaymentIntent(value: unknown): StripePaymentIntentObservation {
   const object = record(value);
   if (object.object !== 'payment_intent')
@@ -227,6 +304,45 @@ function parseRefund(value: unknown, paymentId: string): StripeRefundObservation
     status: requiredText(object.status, 'refund.status'),
     observed_at: new Date().toISOString(),
   };
+}
+
+function parseDispute(value: unknown, paymentId: string): StripeDisputeObservation {
+  const object = record(value);
+  if (object.object !== 'dispute') throw new Error('[commerce/stripe] expected Dispute');
+  if (object.payment_intent !== paymentId)
+    throw new Error('[commerce/stripe] dispute belongs to a different PaymentIntent');
+  const status = disputeStatus(object.status);
+  const evidenceDetails = object.evidence_details;
+  let evidenceDueAt: string | undefined;
+  if (evidenceDetails !== undefined) {
+    const details = record(evidenceDetails);
+    if (details.due_by !== undefined) {
+      if (!Number.isSafeInteger(details.due_by) || (details.due_by as number) < 0)
+        throw new Error('[commerce/stripe] dispute evidence due_by is invalid');
+      evidenceDueAt = new Date((details.due_by as number) * 1000).toISOString();
+    }
+  }
+  return {
+    provider: 'stripe',
+    dispute_id: providerId(object.id, 'dispute.id'),
+    payment_id: paymentId,
+    amount: money(object.amount, currencyCode(object.currency), 'dispute.amount'),
+    status,
+    ...(evidenceDueAt ? { evidence_due_at: evidenceDueAt } : {}),
+    observed_at: new Date().toISOString(),
+  };
+}
+
+function disputeStatus(value: unknown): StripeDisputeStatus {
+  if (
+    value !== 'warning_needs_response' &&
+    value !== 'needs_response' &&
+    value !== 'under_review' &&
+    value !== 'won' &&
+    value !== 'lost'
+  )
+    throw new Error('[commerce/stripe] unsupported dispute status');
+  return value;
 }
 
 function record(value: unknown): Record<string, unknown> {

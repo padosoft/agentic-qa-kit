@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { StripePaymentGateway, reconcileStripeRefunds } from '../dist/index.js';
+import {
+  StripePaymentGateway,
+  reconcileStripeDisputes,
+  reconcileStripeRefunds,
+} from '../dist/index.js';
 
 const paymentIntent = {
   object: 'payment_intent',
@@ -208,6 +212,130 @@ describe('StripePaymentGateway', () => {
         expected_refunded: { currency: 'EUR', amount_minor: '500' },
       }),
       /refund total does not reconcile/,
+    );
+  });
+
+  it('reconciles the bounded Stripe dispute ledger and preserves evidence deadlines', async () => {
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) =>
+        jsonResponse(
+          String(input).includes('/disputes?')
+            ? {
+                object: 'list',
+                has_more: false,
+                data: [
+                  {
+                    object: 'dispute',
+                    id: 'dp_test_1',
+                    payment_intent: 'pi_test_123',
+                    amount: 300,
+                    currency: 'eur',
+                    status: 'needs_response',
+                    evidence_details: { due_by: 1_736_726_400 },
+                  },
+                ],
+              }
+            : paymentIntent,
+        ),
+    });
+
+    const result = await reconcileStripeDisputes(gateway, {
+      payment_id: 'pi_test_123',
+      expected_disputed: { currency: 'EUR', amount_minor: '300' },
+    });
+
+    assert.equal(result.disputes[0]?.dispute_id, 'dp_test_1');
+    assert.equal(result.disputed_amount.amount_minor, '300');
+    assert.equal(result.disputes[0]?.evidence_due_at, '2025-01-13T00:00:00.000Z');
+  });
+
+  it('fails closed on incomplete, mislinked or unknown Stripe disputes', async () => {
+    const responseFor = (disputes: unknown) =>
+      new StripePaymentGateway({
+        secretKey: 'sk_test_abc123',
+        fetch: async (input) =>
+          jsonResponse(String(input).includes('/disputes?') ? disputes : paymentIntent),
+      });
+
+    await assert.rejects(
+      reconcileStripeDisputes(responseFor({ object: 'list', has_more: true, data: [] }), {
+        payment_id: 'pi_test_123',
+        expected_disputed: { currency: 'EUR', amount_minor: '0' },
+      }),
+      /bounded dispute page/,
+    );
+
+    await assert.rejects(
+      reconcileStripeDisputes(
+        responseFor({
+          object: 'list',
+          has_more: false,
+          data: [
+            {
+              object: 'dispute',
+              id: 'dp_test_2',
+              payment_intent: 'pi_other',
+              amount: 300,
+              currency: 'eur',
+              status: 'lost',
+            },
+          ],
+        }),
+        {
+          payment_id: 'pi_test_123',
+          expected_disputed: { currency: 'EUR', amount_minor: '300' },
+        },
+      ),
+      /different PaymentIntent/,
+    );
+
+    await assert.rejects(
+      reconcileStripeDisputes(
+        responseFor({
+          object: 'list',
+          has_more: false,
+          data: [
+            {
+              object: 'dispute',
+              id: 'dp_test_3',
+              payment_intent: 'pi_test_123',
+              amount: 300,
+              currency: 'eur',
+              status: 'future_provider_state',
+            },
+          ],
+        }),
+        {
+          payment_id: 'pi_test_123',
+          expected_disputed: { currency: 'EUR', amount_minor: '300' },
+        },
+      ),
+      /unsupported dispute status/,
+    );
+
+    await assert.rejects(
+      reconcileStripeDisputes(
+        responseFor({
+          object: 'list',
+          has_more: false,
+          data: [
+            {
+              object: 'dispute',
+              id: 'dp_test_4',
+              payment_intent: 'pi_test_123',
+              amount: 301,
+              currency: 'eur',
+              status: 'lost',
+            },
+          ],
+        }),
+        {
+          payment_id: 'pi_test_123',
+          expected_disputed: { currency: 'EUR', amount_minor: '300' },
+        },
+      ),
+      /dispute total does not reconcile/,
     );
   });
 });
