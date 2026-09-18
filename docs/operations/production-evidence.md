@@ -61,6 +61,8 @@ Set these values in the protected release environment:
 AQA_PRODUCTION_EVIDENCE_PATH=/run/secrets/aqa/production-evidence.signed.json
 AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM=<public key from the approved trust root>
 AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS=168
+AQA_PRODUCTION_DR_INVENTORY_PATH=/run/secrets/aqa/backup-inventory.json
+AQA_PRODUCTION_DR_EVIDENCE_PATH=/run/secrets/aqa/restore-drill.json
 ```
 
 Run `aqa doctor --production`. The result is:
@@ -80,3 +82,10 @@ This check proves provenance and completeness of the submitted observation. It
 does not contact providers and must be paired with the provider's audit trail,
 fresh restore drill and identity/security test evidence before a production
 release is approved.
+
+When the two `AQA_PRODUCTION_DR_*_PATH` values are configured, `aqa doctor
+--production` adds a fail-closed binding check that revalidates the inventory
+and restore drill and compares their canonical digest with the signed
+production envelope. If the paths are absent, the check is explicitly reported
+as a warning rather than being silently treated as complete. This is a
+provenance gate, not provider execution evidence.

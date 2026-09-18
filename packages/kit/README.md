@@ -169,6 +169,12 @@ the exact drill record. It fails closed on missing signatures or substitutions.
 The command proves evidence provenance and document consistency; it does not
 contact PostgreSQL, the artifact provider, KMS or the identity provider.
 
+For automated production readiness checks, set
+`AQA_PRODUCTION_DR_INVENTORY_PATH` and `AQA_PRODUCTION_DR_EVIDENCE_PATH`.
+`aqa doctor --production` then runs the same cross-document binding check; if
+either path is missing, it reports a visible warning instead of claiming a
+complete release evidence chain.
+
 Host applications can inject a bounded `MetricsRegistry` into `runAdmin` to
 expose `GET /metrics` in Prometheus text format. Scraping is opt-in; a
 non-loopback bind fails closed unless `metricsAuthorize` is supplied. Metric
