@@ -2462,3 +2462,11 @@ the merchant exposes both capabilities, run a separate namespaced checkout and
 compare the final order's currency and integer minor-unit tax amount with the
 quote. Keep quote-only providers explicitly limited rather than silently
 claiming final-tax assurance.
+
+# 2026-09-18 — Order IDs are not sufficient fulfillment identity
+
+Post-purchase evidence must bind fulfillment to the merchant tenant and
+customer as well as the order ID. A provider or migration can reuse an ID
+outside its scope; quantity and tracking checks alone would then produce a
+false pass. Physical carrier delivery and warehouse state remain separate
+claims.
