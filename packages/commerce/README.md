@@ -128,6 +128,11 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   followed, origins are allowlisted and response size is capped. Credentials
   remain injected by deployment configuration and are never written to tests
   or artifacts.
+- `gift-card-provider-live.test.ts` plus the protected
+  `gift-card-provider-evidence.yml` workflow provide a read-only issuer
+  journey. It fails closed when the operator environment is incomplete and
+  proves only the configured endpoint/card observation, not issuer settlement
+  or disaster recovery.
 
 ## Setup
 

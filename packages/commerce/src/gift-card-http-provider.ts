@@ -88,9 +88,12 @@ export class HttpGiftCardProvider implements GiftCardProviderAdapter {
     } catch {
       // Preserve a bounded response for the diagnostic below without logging it.
     }
+    // Never include a provider response body in an exception. Issuers often
+    // echo authorization diagnostics, card metadata or other tenant data in
+    // error payloads; the caller may persist or display this message.
     if (!response.ok)
       throw new Error(
-        `gift-card provider HTTP ${response.status}: ${typeof parsed === 'string' ? parsed : response.statusText}`,
+        `gift-card provider HTTP ${response.status}: ${response.statusText || 'request failed'}`,
       );
     return GiftCardProviderSnapshot.parse(parsed);
   }

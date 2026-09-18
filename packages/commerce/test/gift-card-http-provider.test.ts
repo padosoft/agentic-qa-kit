@@ -74,5 +74,18 @@ describe('HttpGiftCardProvider', () => {
       fetch: async () => new Response('{"status":"active"}', { status: 200 }),
     });
     await assert.rejects(() => malformed.observeGiftCard('shop-a', 'gift-1'));
+
+    const secretError = new HttpGiftCardProvider({
+      baseUrl: 'https://issuer.example.test',
+      fetch: async () => new Response('Authorization: Bearer provider-secret', { status: 401 }),
+    });
+    await assert.rejects(
+      () => secretError.observeGiftCard('shop-a', 'gift-1'),
+      (error: unknown) => {
+        assert(error instanceof Error);
+        assert.doesNotMatch(error.message, /provider-secret/);
+        return true;
+      },
+    );
   });
 });

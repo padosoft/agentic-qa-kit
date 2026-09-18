@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — Provider error bodies are untrusted evidence
+
+An HTTP adapter can be transport-safe and still leak secrets through its
+errors: issuers may echo authorization diagnostics or tenant data in a 4xx/5xx
+body, and callers often persist exception messages. Bound and parse successful
+responses, but report only status and status text for failures. A live provider
+journey must also fail closed when its protected environment is incomplete;
+local skip behavior is not production evidence.
+
 # 2026-09-18 — A typed provider contract still needs a transport boundary
 
 Provider reconciliation code is not safe merely because its snapshot schema is

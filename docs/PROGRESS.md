@@ -11,6 +11,19 @@
 
 ## 2026-09-18
 
+- **Added protected live gift-card provider evidence.** The manual
+  `gift-card-provider-evidence.yml` workflow requires an operator-owned
+  `commerce-provider-evidence` Environment, fails closed on missing required
+  settings, injects authorization only from an Environment secret, and runs a
+  read-only typed endpoint/tenant/card/balance/status/expiry reconciliation.
+  A successful run will be external provider evidence; it is not claimed until
+  that Environment is configured and the job passes.
+- **Closed a provider error-leak path.** `HttpGiftCardProvider` no longer
+  includes non-2xx response bodies in thrown errors, preventing provider
+  diagnostics or tenant data from becoming logs or persisted artifacts.
+  Next: run local gates, merge this sub-task, then continue provider-backed
+  KMS/WORM/PITR and IdP execution evidence.
+
 - **Added the provider gift-card lifecycle boundary.** `@aqa/commerce` now
   exposes `verifyGiftCardProviderJourney()` and a schema-validated provider
   snapshot. It reconciles tenant/card identity, currency and exact balance
