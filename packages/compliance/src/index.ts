@@ -38,8 +38,10 @@ export {
 export {
   assertRestoreDrillEvidence,
   canonicalRestoreDrillEvidence,
+  measureRestoreDrill,
   restoreDrillEvidenceSha256,
   type RestoreDrillEvidence,
+  type RestoreDrillTiming,
 } from './restore-drill.js';
 export {
   canonicalProductionEvidence,

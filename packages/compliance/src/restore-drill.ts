@@ -20,6 +20,34 @@ export interface RestoreDrillEvidence {
   };
 }
 
+export interface RestoreDrillTiming {
+  started_at: string;
+  completed_at: string;
+  observed_rto_minutes: number;
+}
+
+/** Measure a real restore operation without manufacturing success or timing. */
+export async function measureRestoreDrill<T>(
+  operation: () => Promise<T>,
+  now: () => number = Date.now,
+): Promise<{ result: T; timing: RestoreDrillTiming }> {
+  const startedMs = now();
+  if (!Number.isSafeInteger(startedMs) || startedMs < 0)
+    throw new Error('restore drill clock returned an invalid start time');
+  const result = await operation();
+  const completedMs = now();
+  if (!Number.isSafeInteger(completedMs) || completedMs <= startedMs)
+    throw new Error('restore drill clock did not advance after completion');
+  return {
+    result,
+    timing: {
+      started_at: new Date(startedMs).toISOString(),
+      completed_at: new Date(completedMs).toISOString(),
+      observed_rto_minutes: Math.ceil((completedMs - startedMs) / 60_000),
+    },
+  };
+}
+
 /**
  * Validate a restore drill against the backup inventory's identity and
  * approved recovery objectives. A valid result is necessary evidence, but it

@@ -10,6 +10,7 @@ import {
   canonicalRestoreDrillEvidence,
   controlsCoverage,
   createAuditCheckpoint,
+  measureRestoreDrill,
   parseBackupInventory,
   parseEventLines,
   parseProductionEvidence,
@@ -172,6 +173,41 @@ describe('backup inventory contract', () => {
 });
 
 describe('restore drill evidence contract', () => {
+  it('measures RTO from a completed operation instead of accepting caller timing', async () => {
+    let clock = Date.parse('2026-09-18T10:00:00.000Z');
+    const measured = await measureRestoreDrill(
+      async () => {
+        clock += 61_000;
+        return 'restored';
+      },
+      () => clock,
+    );
+    assert.equal(measured.result, 'restored');
+    assert.deepEqual(measured.timing, {
+      started_at: '2026-09-18T10:00:00.000Z',
+      completed_at: '2026-09-18T10:01:01.000Z',
+      observed_rto_minutes: 2,
+    });
+  });
+
+  it('fails closed when the restore operation fails or the clock is invalid', async () => {
+    await assert.rejects(
+      () =>
+        measureRestoreDrill(
+          async () => Promise.reject(new Error('provider failed')),
+          () => 1,
+        ),
+      /provider failed/,
+    );
+    await assert.rejects(
+      () =>
+        measureRestoreDrill(
+          async () => 'ok',
+          () => Number.NaN,
+        ),
+      /invalid start time/,
+    );
+  });
   it('proves identity, objectives and security checks against the inventory', () => {
     const evidence = assertRestoreDrillEvidence(
       {
