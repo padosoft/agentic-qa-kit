@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-desktop-auto-update
+title: Desktop auto-update verifies provenance and preserves rollback safety
+risk_refs: [desktop-update-tampering]
+invariant_refs: [inv-desktop-update-authentic]
+preconditions:
+  - "a disposable desktop update channel with signed non-production artifacts is available"
+steps:
+  - id: inspect-update
+    kind: http
+    with: { method: "GET", url: "/desktop/update?channel=staging&fixture=signed" }
+oracles:
+  - id: o-signature
+    kind: response_contains
+    probe_id: inspect-update
+    with: { jsonpath: "$.signature_and_provenance_verified", equals: true }
+  - id: o-compatibility
+    kind: response_contains
+    probe_id: inspect-update
+    with: { jsonpath: "$.compatibility_checked", equals: true }
+  - id: o-rollback
+    kind: response_contains
+    probe_id: inspect-update
+    with: { jsonpath: "$.rollback_available", equals: true }
+tags: [desktop, update, supply-chain]

@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-desktop-deep-link-protocol
+title: Desktop protocol actions remain authenticated and single-use
+risk_refs: [desktop-protocol-confusion]
+invariant_refs: [inv-desktop-protocol-bound]
+preconditions:
+  - "a disposable desktop app and single-use protocol fixture are available"
+steps:
+  - id: inspect-protocol
+    kind: http
+    with: { method: "GET", url: "/desktop/protocol?fixture=order-action&session=bound" }
+oracles:
+  - id: o-auth
+    kind: response_contains
+    probe_id: inspect-protocol
+    with: { jsonpath: "$.authenticated_before_action", equals: true }
+  - id: o-binding
+    kind: response_contains
+    probe_id: inspect-protocol
+    with: { jsonpath: "$.tenant_session_binding_verified", equals: true }
+  - id: o-replay
+    kind: response_contains
+    probe_id: inspect-protocol
+    with: { jsonpath: "$.replay_rejected", equals: true }
+tags: [desktop, protocol, deep-link, security]

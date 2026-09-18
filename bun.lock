@@ -290,6 +290,10 @@
       "name": "@aqa/pack-database-migrations",
       "version": "0.1.0",
     },
+    "packs/desktop": {
+      "name": "@padosoft/aqa-pack-desktop",
+      "version": "0.1.0",
+    },
     "packs/i18n-l10n": {
       "name": "@padosoft/aqa-pack-i18n-l10n",
       "version": "0.1.0",
@@ -528,6 +532,8 @@
     "@padosoft/aqa-pack-compliance-hipaa": ["@padosoft/aqa-pack-compliance-hipaa@workspace:packs/compliance-hipaa"],
 
     "@padosoft/aqa-pack-data-pipeline": ["@padosoft/aqa-pack-data-pipeline@workspace:packs/data-pipeline"],
+
+    "@padosoft/aqa-pack-desktop": ["@padosoft/aqa-pack-desktop@workspace:packs/desktop"],
 
     "@padosoft/aqa-pack-i18n-l10n": ["@padosoft/aqa-pack-i18n-l10n@workspace:packs/i18n-l10n"],
 

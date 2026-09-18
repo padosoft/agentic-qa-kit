@@ -2140,3 +2140,9 @@ Fault-injection scenarios are unsafe without an approved target, owner, traffic
 budget, stop condition and rollback plan. RTO/RPO and recovery assertions need
 disposable data and provider evidence; a passing HTTP fixture is not a disaster
 recovery drill.
+
+## 2026-09-18 — Desktop security must include update and protocol boundaries
+
+IPC allowlists alone do not cover signed update provenance, rollback or custom
+protocol replay. Keep renderer capability checks, artifact signing and session
+binding as separate explicit contracts with platform evidence.
