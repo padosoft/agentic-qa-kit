@@ -2414,3 +2414,11 @@ unbounded/incomplete refund pagination, and compare currency plus integer minor
 unit totals with the merchant ledger. Keep disputes and payouts as explicit
 additional joins rather than silently reporting a partial reconciliation as
 complete.
+
+# 2026-09-18 — Dispute exposure is not settlement
+
+Stripe dispute states include open, under-review and won outcomes that must not
+be counted as lost chargebacks. A provider dispute adapter must bind each
+record to the exact PaymentIntent, reject unknown states and incomplete
+pagination, and keep exposure reconciliation separate from payout/fee
+settlement accounting.

@@ -74,6 +74,12 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   refund list, then fails closed when captured or successful-refund totals do
   not match merchant-authoritative values. Disputes and payout settlement
   remain separate provider observations.
+- `reconcileStripeDisputes()` reads back the bounded Stripe dispute list,
+  requires every dispute to link to the exact PaymentIntent, validates known
+  provider lifecycle states and evidence deadlines, and fails closed on
+  pagination, currency, status or total drift. It reports provider dispute
+  exposure; it does not turn a won/open dispute into settled chargeback
+  accounting.
 - `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
   the business side effect idempotent across retries and replicas, rejecting
   reuse of one logical effect key by a different event.
