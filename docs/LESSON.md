@@ -2573,3 +2573,11 @@ issuer-only, but expose a reviewed HTTPS origin allowlist through both runtime
 environment and Helm. Validate dynamic Secret environment names at chart
 render time so an operator typo cannot silently produce an unusable or
 ambiguous deployment.
+
+# 2026-09-18 — A green skipped gate is not enterprise evidence
+
+CI conditions that skip tests, builds or browser journeys when expected
+repository paths are absent can turn repository drift into a successful
+release check. Enterprise gates should fail closed on missing required
+surfaces; optional provider exercises belong in explicitly named, separately
+reported jobs rather than generic placeholder passes.
