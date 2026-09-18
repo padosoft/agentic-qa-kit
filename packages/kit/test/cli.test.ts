@@ -137,8 +137,47 @@ describe('aqa doctor', () => {
     assert.equal(d.checks.find((c) => c.id === 'production-store')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-artifacts')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-sandbox-image')?.status, 'fail');
+    assert.equal(d.checks.find((c) => c.id === 'production-admin-auth')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-evidence')?.status, 'warn');
     assert.ok(d.checks.every((c) => !c.detail.includes('postgres://')));
+  });
+
+  it('fails closed for partial OIDC and passes the admin identity check only when complete', () => {
+    const root = makeTempProject({ 'package.json': '{}' });
+    withEnvironment(
+      {
+        AQA_OIDC_ENABLED: 'true',
+        AQA_OIDC_ISSUER: 'https://idp.example.test',
+        AQA_OIDC_CLIENT_ID: 'aqa-admin',
+        AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
+        AQA_OIDC_CLIENT_SECRET: 'test-only-secret',
+        AQA_OIDC_SESSION_DSN: 'postgres://user:password@db.example.test/aqa',
+      },
+      () => {
+        const d = runDoctor({ root, production: true });
+        const check = d.checks.find((c) => c.id === 'production-admin-auth');
+        assert.equal(check?.status, 'pass');
+        assert.match(check?.detail ?? '', /shared PostgreSQL/);
+        assert.doesNotMatch(check?.detail ?? '', /test-only-secret|postgres:\/\//);
+      },
+    );
+    withEnvironment(
+      {
+        AQA_OIDC_ENABLED: 'true',
+        AQA_OIDC_ISSUER: 'https://idp.example.test',
+        AQA_OIDC_CLIENT_ID: undefined,
+        AQA_OIDC_REDIRECT_URI: 'https://aqa.example.test/auth/callback',
+        AQA_OIDC_CLIENT_SECRET: 'test-only-secret',
+        AQA_OIDC_SESSION_DSN: undefined,
+      },
+      () => {
+        const d = runDoctor({ root, production: true });
+        const check = d.checks.find((c) => c.id === 'production-admin-auth');
+        assert.equal(check?.status, 'fail');
+        assert.match(check?.detail ?? '', /OIDC configuration missing/);
+        assert.doesNotMatch(check?.detail ?? '', /test-only-secret/);
+      },
+    );
   });
 
   it('warns when the production evidence pack has no restore binding inputs', () => {

@@ -128,6 +128,10 @@ PostgreSQL PKCE/session store for HA replicas. Partial configuration fails
 closed and never falls back to the local admin identity; the secret and DSN
 are never included in evidence or error messages.
 
+`aqa doctor --production` reuses this exact parser and fails when the admin
+would otherwise use the local development identity; it reports process-local
+sessions separately so an operator can close the HA continuity gap.
+
 ## Durable artifact backend
 
 Runs use the local filesystem by default. For AWS S3, MinIO or another

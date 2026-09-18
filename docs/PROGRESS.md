@@ -11,6 +11,13 @@
 
 ## 2026-09-18
 
+- **Production doctor now enforces the admin identity boundary.** It reuses
+  the same fail-closed OIDC environment parser as `aqa admin`, reports whether
+  sessions are shared, and fails when the CLI deployment would fall back to the
+  local identity or has partial OIDC settings. Added complete/partial secret
+  redaction regressions; the check still does not claim live IdP issuance or
+  rotation. Next: run full gates and promote after CI.
+
 - **Closed the OIDC deployment composition gap.** `aqa admin` now resolves
   explicit `AQA_OIDC_*` settings, constructs the provider-neutral adapter and
   uses `AQA_OIDC_SESSION_DSN` for the shared PostgreSQL PKCE/session store;

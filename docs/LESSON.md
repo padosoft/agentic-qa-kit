@@ -2555,3 +2555,12 @@ configuration and host composition connected: validate complete public
 settings, require the secret without printing it, and use a shared session
 store for replicas. An injected manager remains the explicit programmatic
 override; provider login and rotation still require live IdP evidence.
+
+# 2026-09-18 — Production doctor must inspect the effective identity path
+
+Checking durable storage and runner credentials does not prove that the admin
+will authenticate users through an enterprise IdP. Reuse the exact runtime
+configuration parser in the doctor, fail on partial OIDC or local fallback, and
+keep shared-session state visible as a separate HA warning/requirement. This
+remains configuration evidence, not proof of live issuer or certificate
+rotation.

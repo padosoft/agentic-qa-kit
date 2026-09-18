@@ -74,6 +74,13 @@ Run `aqa doctor --production`. The result is:
   pack is structurally valid but incomplete/stale;
 - `fail`: the path, JSON, signature, pinned key identity or trust root is invalid.
 
+The same command also checks the effective admin identity boundary. A complete
+`AQA_OIDC_*` configuration passes; partial settings and the implicit local
+development identity fail closed. If `AQA_OIDC_SESSION_DSN` is absent, the
+doctor makes the process-local session state explicit and recommends a shared
+PostgreSQL session backend for multi-replica deployments. This is a runtime
+configuration check, not live IdP issuance or certificate-rotation evidence.
+
 `AQA_PRODUCTION_EVIDENCE_KEY_ID` is mandatory when a signed production pack is
 configured. It must exactly match the signed envelope's `signature.key_id`; the
 public key alone is not sufficient to identify the approved signing identity.
