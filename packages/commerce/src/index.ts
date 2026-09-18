@@ -292,6 +292,7 @@ export type ShippingAddress = z.infer<typeof ShippingAddress>;
 
 export const TaxQuote = z.object({
   schema_version: z.literal('1'),
+  cart_id: z.string().min(1),
   provider: z.string().min(1),
   jurisdiction: z.string().min(1),
   amount: Money,
@@ -310,6 +311,7 @@ export type ShippingRate = z.infer<typeof ShippingRate>;
 
 export const ShippingQuote = z.object({
   schema_version: z.literal('1'),
+  cart_id: z.string().min(1),
   destination: ShippingAddress,
   rates: z.array(ShippingRate).min(1),
   observed_at: z.string().datetime({ offset: true }),
@@ -867,6 +869,7 @@ export async function verifyTaxJourney(
       await adapter.addLine(opts.identity, cart.id, opts.sku, opts.quantity),
     );
     const quote = TaxQuote.parse(await adapter.quoteTax(opts.identity, updated.id));
+    if (quote.cart_id !== updated.id) throw new Error('tax quote does not belong to cart');
     assertMoneyNonNegative(quote.amount, 'tax quote');
     const currency = updated.lines[0]?.unit_price.currency;
     if (currency && quote.amount.currency !== currency)
@@ -913,6 +916,9 @@ export async function verifyShippingJourney(
     const quote = ShippingQuote.parse(
       await adapter.quoteShipping(opts.identity, updated.id, opts.destination),
     );
+    if (quote.cart_id !== updated.id) throw new Error('shipping quote does not belong to cart');
+    if (!sameShippingAddress(quote.destination, opts.destination))
+      throw new Error('shipping quote destination mismatch');
     const ids = new Set<string>();
     for (const rate of quote.rates) {
       if (ids.has(rate.id)) throw new Error(`duplicate shipping rate: ${rate.id}`);
@@ -2221,6 +2227,7 @@ export class InMemoryCommerceReference {
     const currency = assertSameCurrency(...cart.lines.map((line) => line.unit_price));
     return {
       schema_version: '1',
+      cart_id: cart.id,
       provider: 'reference-sandbox',
       jurisdiction: 'reference-zero-tax',
       amount: { currency, amount_minor: '0' },
@@ -2249,6 +2256,7 @@ export class InMemoryCommerceReference {
     ShippingAddress.parse(destination);
     return {
       schema_version: '1',
+      cart_id: cart.id,
       destination,
       rates: [
         {
@@ -2290,6 +2298,15 @@ export function assertSameCurrency(...money: Money[]): string {
 export function assertMoneyNonNegative(money: Money, label = 'money'): void {
   Money.parse(money);
   if (BigInt(money.amount_minor) < 0n) throw new Error(`${label} cannot be negative`);
+}
+
+function sameShippingAddress(left: ShippingAddress, right: ShippingAddress): boolean {
+  return (
+    left.country_code === right.country_code &&
+    left.postal_code === right.postal_code &&
+    left.city === right.city &&
+    (left.region ?? '') === (right.region ?? '')
+  );
 }
 
 export function assertCartIntegrity(cart: CartSnapshot): void {

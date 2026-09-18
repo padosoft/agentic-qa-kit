@@ -2446,3 +2446,11 @@ PKCE state, validate issuer/audience/time/signature, refresh JWKS once on an
 unknown `kid`, and require UserInfo `sub` to match the ID-token subject. During a
 rolling PostgreSQL migration, pending rows without a nonce must be rejected,
 not upgraded implicitly.
+
+# 2026-09-18 — Quote amounts do not identify the cart
+
+Tax and shipping money can be numerically valid while belonging to a stale or
+different cart. Provider-neutral ecommerce journeys must require an explicit
+cart join and, for shipping, an exact normalized destination join before
+reporting a pass. Tax-law correctness and final checkout price remain separate
+provider-specific claims.
