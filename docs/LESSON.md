@@ -2422,3 +2422,11 @@ be counted as lost chargebacks. A provider dispute adapter must bind each
 record to the exact PaymentIntent, reject unknown states and incomplete
 pagination, and keep exposure reconciliation separate from payout/fee
 settlement accounting.
+
+# 2026-09-18 — Payout consistency is not order settlement
+
+A Stripe payout links to a balance transaction, but that provider relationship
+does not prove which merchant orders funded it or when the bank settled it.
+Keep signed balance debits visible, verify the payout source/type and net
+equation, and require a separate durable merchant join before reporting order
+settlement as complete.

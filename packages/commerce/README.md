@@ -80,6 +80,11 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   pagination, currency, status or total drift. It reports provider dispute
   exposure; it does not turn a won/open dispute into settled chargeback
   accounting.
+- `reconcileStripePayout()` reads back a payout and its linked balance
+  transaction, preserving signed provider amounts and failing closed when the
+  payout amount, fee, net equation, source linkage, type, currency or expected
+  status drifts. It is payout evidence, not proof that a merchant order was
+  included in that payout.
 - `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
   the business side effect idempotent across retries and replicas, rejecting
   reuse of one logical effect key by a different event.
