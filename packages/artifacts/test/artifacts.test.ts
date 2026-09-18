@@ -133,6 +133,48 @@ describe('S3ArtifactStore', () => {
     );
   });
 
+  it('requests and verifies customer-managed KMS encryption on both objects', async () => {
+    const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+    const client = {
+      async send(command: { constructor: { name: string }; input: Record<string, unknown> }) {
+        calls.push({ name: command.constructor.name, input: command.input });
+        if (command.constructor.name === 'HeadObjectCommand') {
+          return { ServerSideEncryption: 'aws:kms', SSEKMSKeyId: 'arn:aws:kms:eu:key/aqa' };
+        }
+        return {};
+      },
+    };
+    const store = new S3ArtifactStore({
+      bucket: 'aqa-test',
+      serverSideEncryption: 'aws:kms',
+      sseKmsKeyId: 'arn:aws:kms:eu:key/aqa',
+      verifyEncryption: true,
+      client,
+    });
+    await store.putText('runs/r1/evidence.json', 'safe evidence');
+    const puts = calls.filter((call) => call.name === 'PutObjectCommand');
+    assert.equal(puts.length, 2);
+    assert.ok(puts.every((put) => put.input.ServerSideEncryption === 'aws:kms'));
+    assert.ok(puts.every((put) => put.input.SSEKMSKeyId === 'arn:aws:kms:eu:key/aqa'));
+  });
+
+  it('fails closed when the provider returns a different encryption state', async () => {
+    const client = {
+      send: async (command: { constructor: { name: string } }) =>
+        command.constructor.name === 'HeadObjectCommand' ? { ServerSideEncryption: 'AES256' } : {},
+    };
+    const store = new S3ArtifactStore({
+      bucket: 'aqa-test',
+      serverSideEncryption: 'aws:kms',
+      verifyEncryption: true,
+      client,
+    });
+    await assert.rejects(
+      () => store.putText('runs/r1/evidence.json', 'safe evidence'),
+      /server-side encryption mismatch/,
+    );
+  });
+
   it('rejects invalid retention configuration and traversal', () => {
     const client = { send: async () => ({}) };
     assert.throws(
@@ -152,6 +194,24 @@ describe('S3ArtifactStore', () => {
           client,
         }),
       /traversal/i,
+    );
+    assert.throws(
+      () =>
+        new S3ArtifactStore({
+          bucket: 'aqa-test',
+          sseKmsKeyId: 'key/without-kms',
+          client,
+        }),
+      /requires aws:kms/,
+    );
+    assert.throws(
+      () =>
+        new S3ArtifactStore({
+          bucket: 'aqa-test',
+          verifyEncryption: true,
+          client,
+        }),
+      /serverSideEncryption is required/,
     );
   });
 });

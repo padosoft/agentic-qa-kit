@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Added fail-closed S3 server-side encryption verification.** `S3ArtifactStore`
+  can now request AES256, KMS or KMS DSSE encryption, pin an exact KMS key
+  identity and verify the provider's `HeadObject` response for both the
+  artifact and metadata sidecar. Added mismatch/validation tests, package docs
+  and ADR-234. Artifact suite: **8 passed, 0 failed**; package build and
+  typecheck passed. This is an enforceable provider boundary, not proof of AWS
+  IAM, key rotation or cross-region replication. Next: wire the production
+  profile/deployment contract and continue PITR/identity evidence.
+
 - **Implemented signing-identity pinning for production evidence.** Compliance
   verifiers now optionally require an exact `signature.key_id`; the release gate
   requires `--public-key-id`, and `aqa doctor --production` requires
