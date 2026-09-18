@@ -2164,3 +2164,19 @@
 - Next: push the typed predicate fix, rerun the full technical CI, then merge
   only after PostgreSQL proves enqueue → scoped dequeue → runRun → artifacts
   → ACK.
+
+# 2026-09-18 — PostgreSQL worker journey merged
+
+- PR #141 merged to main as **718993c** after CI run **35322790731** passed
+  typecheck/lint, Helm, Bun, Node 22, build, PostgreSQL persistence, OCI
+  sandbox, CLI E2E and Playwright admin E2E.
+- The durable journey is now proven through scoped PostgreSQL dequeue,
+  makeKitWorker, the real runRun boundary, persisted events.jsonl and
+  findings.jsonl, and fenced ACK. The PostgreSQL adapter now stores typed
+  scope_org/scope_project columns, backfills legacy rows and indexes the
+  ready scope path.
+- Next macro task: prove deployment-grade external boundaries still open in
+  the roadmap — separate runner processes with authenticated identity,
+  remote artifact storage/retention, OIDC provider lifecycle, KMS/WORM/PITR
+  restore, OTel/Prometheus deployment evidence, and real commerce provider
+  reconciliation journeys.
