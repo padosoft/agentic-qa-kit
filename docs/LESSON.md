@@ -2077,3 +2077,10 @@ Expand/contract and rollback scenarios can prove application compatibility only
 when bound to a disposable migration environment. They must not imply that an
 HTTP fixture proves backup, PITR, replication, locking, or production schema
 safety; those require provider-specific evidence and restore drills.
+
+## 2026-09-18 — IaC contracts must not imply provider health
+
+Plan and drift evidence can validate release decisions, but cannot prove that
+an apply succeeded safely or that IAM, state locking, networking and recovery
+work in production. Keep provider-backed apply and restore drills as distinct
+evidence boundaries.

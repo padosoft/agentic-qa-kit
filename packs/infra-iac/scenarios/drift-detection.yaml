@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-iac-drift-detection
+title: Infrastructure drift is visible with ownership and severity
+risk_refs: [iac-drift-undetected]
+invariant_refs: [inv-drift-visible]
+preconditions:
+  - "a disposable environment can compare declared and observed infrastructure"
+steps:
+  - id: inspect-drift
+    kind: http
+    with: { method: "GET", url: "/infra/drift?environment=staging" }
+oracles:
+  - id: o-drift-correlated
+    kind: response_contains
+    probe_id: inspect-drift
+    with: { jsonpath: "$.all_findings_correlated", equals: true }
+  - id: o-owner-present
+    kind: response_contains
+    probe_id: inspect-drift
+    with: { jsonpath: "$.unowned_findings", equals: 0 }
+tags: [infra, iac, drift]

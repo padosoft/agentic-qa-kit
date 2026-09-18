@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-iac-plan-safety
+title: Infrastructure plan exposes bounded destructive changes before apply
+risk_refs: [iac-unreviewed-destruction]
+invariant_refs: [inv-plan-reviewed]
+preconditions:
+  - "a disposable IaC plan artifact is available"
+steps:
+  - id: inspect-plan
+    kind: http
+    with: { method: "GET", url: "/infra/plan?fixture=release" }
+oracles:
+  - id: o-plan-hashed
+    kind: response_contains
+    probe_id: inspect-plan
+    with: { jsonpath: "$.plan_digest_present", equals: true }
+  - id: o-destroy-count-bounded
+    kind: response_contains
+    probe_id: inspect-plan
+    with: { jsonpath: "$.unapproved_destroy_count", equals: 0 }
+tags: [infra, iac, plan]

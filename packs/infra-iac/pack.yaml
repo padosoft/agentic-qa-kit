@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-infra-iac
+version: 0.1.0
+description: "Opt-in infrastructure-as-code baseline for plan safety, drift and policy enforcement."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [infra-iac, terraform, pulumi, infrastructure]
+templates: []
+scenarios:
+  - scenarios/plan-safety.yaml
+  - scenarios/drift-detection.yaml
+  - scenarios/policy-enforcement.yaml
+risks:
+  - risks/iac.yaml
+oracles: []
+probes: []
