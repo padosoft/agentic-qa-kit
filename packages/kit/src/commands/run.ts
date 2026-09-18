@@ -575,8 +575,9 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   const unsafeScenarioPaths: string[] = [];
   const runtimeErrors: string[] = [];
   const executionErrors: string[] = [];
-  const scenarioOutcomes: Array<{ scenario_id: string; outcome: string }> = [];
+  const scenarioOutcomesByOrder = new Map<number, { scenario_id: string; outcome: string }>();
   const executedScenarios: Scenario.Scenario[] = [];
+  const pendingScenarios: Array<{ scenario: Scenario.Scenario; risk?: RiskMap.Risk }> = [];
   const riskCatalog = new Map(projectRiskMap.risks.map((risk) => [risk.id, risk]));
   const now = opts.now ?? Date.now;
   const budgetDeadline =
@@ -694,9 +695,26 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       const resolvedRisk = riskCatalog.get(scenario.risk_refs[0] ?? '');
+      pendingScenarios.push({ scenario, ...(resolvedRisk ? { risk: resolvedRisk } : {}) });
+    }
+  }
+
+  // Profiles expose bounded parallelism, so honor it with a small worker pool
+  // after discovery. The cursor is advanced synchronously before awaiting any
+  // runner, making finding seeds and scenario accounting unique and stable.
+  // Completion events may interleave by design; the summary is sorted back to
+  // discovery order so deterministic consumers do not depend on timing.
+  let nextScenario = 0;
+  let scenarioSequence = 0;
+  const executeNextScenario = async () => {
+    while (true) {
+      const order = nextScenario++;
+      const pending = pendingScenarios[order];
+      if (!pending) return;
+      const { scenario, risk } = pending;
       if (opts.signal?.aborted) {
         cancelled = true;
-        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+        scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'not_run' });
         events.append({
           ts: new Date().toISOString(),
           run_id: runId,
@@ -708,12 +726,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
         continue;
       }
       scenariosRun += 1;
+      const findingIdSeed = ++scenarioSequence;
       executedScenarios.push(scenario);
-      // runScenario itself appends `finding_emitted` to events and pushes the
-      // finding through findings.append when both writers are provided — do
-      // NOT re-emit here. Wrap in try/catch so a future probe-runner
-      // exception (or write failure) is collected instead of bubbling out
-      // and skipping the `run_finished` audit event.
       try {
         events.append({
           ts: new Date().toISOString(),
@@ -721,11 +735,11 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           kind: 'scenario_started',
           actor: { type: 'orchestrator', id: 'kit' },
           scenario_id: scenario.id,
-          payload: {},
+          payload: { dispatch_order: order, parallelism: profile.parallelism },
         });
         if (budgetDeadline !== undefined && now() >= budgetDeadline) {
           budgetExceeded = true;
-          scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'not_run' });
+          scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'not_run' });
           events.append({
             ts: new Date().toISOString(),
             run_id: runId,
@@ -748,11 +762,14 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           findings,
           ...(probeRunner ? { probeRunner } : {}),
           ...(opts.supportedProbeKinds ? { supportedProbeKinds: opts.supportedProbeKinds } : {}),
-          findingIdSeed: scenariosRun,
-          ...(resolvedRisk ? { risk: resolvedRisk } : {}),
+          findingIdSeed,
+          ...(risk ? { risk } : {}),
           ...(opts.signal ? { signal: opts.signal } : {}),
         });
-        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: scenarioResult.outcome });
+        scenarioOutcomesByOrder.set(order, {
+          scenario_id: scenario.id,
+          outcome: scenarioResult.outcome,
+        });
         events.append({
           ts: new Date().toISOString(),
           run_id: runId,
@@ -771,7 +788,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           );
         }
       } catch (e) {
-        scenarioOutcomes.push({ scenario_id: scenario.id, outcome: 'error' });
+        scenarioOutcomesByOrder.set(order, { scenario_id: scenario.id, outcome: 'error' });
         events.append({
           ts: new Date().toISOString(),
           run_id: runId,
@@ -784,7 +801,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       }
       if (opts.signal?.aborted) cancelled = true;
     }
-  }
+  };
+  const workerCount = Math.min(profile.parallelism, pendingScenarios.length);
+  await Promise.all(Array.from({ length: workerCount }, () => executeNextScenario()));
+  const scenarioOutcomes = [...scenarioOutcomesByOrder.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, outcome]) => outcome);
 
   if (probeRunner?.close) {
     try {
