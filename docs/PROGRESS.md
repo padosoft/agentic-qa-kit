@@ -2415,3 +2415,11 @@
 - Added API and queue regressions proving a different runner in the same
   org/project cannot mutate the lease. Existing hosted PostgreSQL CI remains
   required before declaring the durable migration path promoted.
+
+# 2026-09-18 — independent checkpoint integrity binding in progress
+
+- Independent WORM/checkpoint publication now fails closed if the external
+  artifact reference's SHA-256 or byte count differs from the canonical
+  checkpoint. Added regression coverage for a transforming/drifting store and
+  ADR-237. This proves cross-store content identity, not provider Object Lock
+  or IAM configuration.
