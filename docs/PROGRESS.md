@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Closed the complete remote worker production journey.** PR #145 is merged
+  on `main` as **95e5a18**. The real Kit lifecycle now runs through the
+  authenticated HTTP queue, lease renewal, token rotation, completion ACK and
+  artifact publication; the lease watcher shutdown race found during hosted
+  Node 22 execution is fixed. Hosted CI run **35327643173** passed typecheck,
+  lint, Bun, Node 22, PostgreSQL, S3/MinIO, OCI, build/SBOM, CLI and Playwright
+  gates. Remaining remote deployment evidence is AWS-specific KMS/replication,
+  mTLS/revocation and operator/load-balancer behavior. **Next: close the live
+  observability deployment evidence slice.**
+
 - **Added the complete remote worker run journey.** The authenticated HTTP
   queue now drives the real `makeKitWorker` and canonical `runRun` path against
   a local HTTP target, then proves `events.jsonl`/`findings.jsonl` publication,
