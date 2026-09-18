@@ -339,6 +339,43 @@ describe('aqa run', () => {
     assert.match(calls[0] ?? '', /printf hello/);
   });
 
+  it('executes the complete hardened release-gate journey through the auto-selected OCI sandbox', async () => {
+    if (!process.env.AQA_TEST_CONTAINER_RUNTIME || !process.env.AQA_CONTAINER_IMAGE) {
+      console.info(
+        '[run-cmd.test] live OCI journey skipped: AQA_TEST_CONTAINER_RUNTIME and AQA_CONTAINER_IMAGE are required',
+      );
+      return;
+    }
+    const { root, packDir } = fixtureProject();
+    writeFileSync(join(packDir, 'pack.yaml'), SMOKE_PACK_MANIFEST, 'utf8');
+    writeFileSync(
+      join(packDir, 'scenarios', 'smoke-noop.yaml'),
+      SMOKE_SCENARIO.replace(
+        'kind: http\n    with: { method: "GET", url: "/healthz" }',
+        'kind: shell\n    with: { command: "printf hello" }',
+      ).replace(
+        'kind: http_status\n    with: { expected: 200 }',
+        'kind: response_contains\n    with: { value: "hello" }',
+      ),
+      'utf8',
+    );
+    const profilesPath = join(root, '.aqa', 'profiles.yaml');
+    const profiles = yamlParse(readFileSync(profilesPath, 'utf8')) as {
+      profiles: Record<string, Record<string, unknown>>;
+    };
+    profiles.profiles['release-gate'] = {
+      ...profiles.profiles['release-gate'],
+      packs: ['pack-local-smoke'],
+      tags: [],
+      parallelism: 1,
+    };
+    writeFileSync(profilesPath, yamlStringify(profiles), 'utf8');
+    const result = await runRun({ root, profile: 'release-gate', packsRoot: [packDir] });
+    assert.equal(result.ok, true, `live OCI release-gate must succeed: ${JSON.stringify(result)}`);
+    assert.equal(result.scenariosRun, 1);
+    assert.equal(result.findingsCount, 0);
+  });
+
   it('honors profile parallelism with bounded concurrent scenario execution', async () => {
     const { root, packDir } = fixtureProject();
     writeFileSync(

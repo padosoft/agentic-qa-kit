@@ -243,6 +243,17 @@ jobs:
         env:
           AQA_TEST_CONTAINER_RUNTIME: docker
         run: bun test test/sandbox.test.ts
+      - name: Resolve pinned test image
+        run: |
+          docker pull alpine:3.20
+          echo "AQA_CONTAINER_IMAGE=$(docker image inspect --format '{{index .RepoDigests 0}}' alpine:3.20)" >> "$GITHUB_ENV"
+      - name: Run complete hardened kit journey
+        env:
+          AQA_TEST_CONTAINER_RUNTIME: docker
+          AQA_CONTAINER_RUNTIME: docker
+        run: |
+          bun run build:workspace
+          bun test packages/kit/test/run-cmd.test.ts
 
   validate-helm:
     name: Validate Helm deployment chart
