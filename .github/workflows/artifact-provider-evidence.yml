@@ -1,0 +1,63 @@
+name: Artifact provider evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-artifact-provider:
+    name: Read-back WORM and encryption evidence
+    runs-on: ubuntu-latest
+    environment: production-artifact-evidence
+    timeout-minutes: 15
+    env:
+      AQA_TEST_S3_ENDPOINT: ${{ vars.AQA_TEST_S3_ENDPOINT }}
+      AQA_TEST_S3_SERVER_SIDE_ENCRYPTION: ${{ vars.AQA_TEST_S3_SERVER_SIDE_ENCRYPTION }}
+      AQA_TEST_S3_SSE_KMS_KEY_ID: ${{ vars.AQA_TEST_S3_SSE_KMS_KEY_ID }}
+      AQA_TEST_S3_RETENTION_MODE: ${{ vars.AQA_TEST_S3_RETENTION_MODE }}
+      AQA_TEST_S3_RETENTION_HOURS: ${{ vars.AQA_TEST_S3_RETENTION_HOURS }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AQA_TEST_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AQA_TEST_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require operator-owned artifact provider configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AQA_TEST_S3_ENDPOINT AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing artifact provider configuration::$name is required in the production-artifact-evidence environment"
+              exit 1
+            fi
+          done
+          mode="${AQA_TEST_S3_SERVER_SIDE_ENCRYPTION:-}"
+          case "$mode" in
+            ''|AES256) ;;
+            aws:kms|aws:kms:dsse)
+              if [ -z "${AQA_TEST_S3_SSE_KMS_KEY_ID:-}" ]; then
+                echo "::error title=Missing KMS identity::AQA_TEST_S3_SSE_KMS_KEY_ID is required for KMS evidence"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error title=Invalid encryption mode::unsupported AQA_TEST_S3_SERVER_SIDE_ENCRYPTION"
+              exit 1
+              ;;
+          esac
+
+      - name: Build workspace
+        run: bun run build:workspace
+
+      - name: Run live artifact provider journey
+        run: bun test packages/artifacts/test/s3-live.test.ts

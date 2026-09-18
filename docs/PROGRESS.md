@@ -11,6 +11,18 @@
 
 ## 2026-09-18
 
+- **Added protected live artifact-provider evidence.** The manual
+  `artifact-provider-evidence.yml` workflow requires a
+  `production-artifact-evidence` Environment, validates endpoint/region/
+  credentials and KMS-mode completeness before running, and exercises
+  Object Lock plus optional exact KMS read-back for both artifact objects.
+  Local MinIO remains explicitly separate from cloud/provider evidence.
+- **Made the S3 live journey configurable for real providers.** Retention
+  duration/mode and `AES256`/KMS/DSSE encryption can now be supplied by the
+  operator without committing credentials or weakening the default CI fixture.
+  Next: run local artifact gates and merge this slice, then continue PITR,
+  KMS rotation/IAM and IdP execution evidence.
+
 - **Added protected live gift-card provider evidence.** The manual
   `gift-card-provider-evidence.yml` workflow requires an operator-owned
   `commerce-provider-evidence` Environment, fails closed on missing required

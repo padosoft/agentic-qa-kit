@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Compatibility-provider green is not production storage evidence
+
+An S3-compatible MinIO job proves request/response behavior, not the
+customer's KMS IAM, key identity, Object Lock bucket posture or replication.
+Keep synthetic CI and protected provider evidence as separate gates. Make the
+live journey operator-configurable, require exact KMS identity when enabled,
+and verify both the artifact and its metadata sidecar after the provider write.
+
 # 2026-09-18 — Provider error bodies are untrusted evidence
 
 An HTTP adapter can be transport-safe and still leak secrets through its

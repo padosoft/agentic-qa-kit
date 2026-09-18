@@ -5,6 +5,16 @@ import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { S3ArtifactStore } from '../dist/index.js';
 
 const endpoint = process.env.AQA_TEST_S3_ENDPOINT?.trim();
+const encryption = process.env.AQA_TEST_S3_SERVER_SIDE_ENCRYPTION?.trim() as
+  | 'AES256'
+  | 'aws:kms'
+  | 'aws:kms:dsse'
+  | undefined;
+const kmsKeyId = process.env.AQA_TEST_S3_SSE_KMS_KEY_ID?.trim() || undefined;
+const retentionMode = (process.env.AQA_TEST_S3_RETENTION_MODE?.trim() || 'COMPLIANCE') as
+  | 'GOVERNANCE'
+  | 'COMPLIANCE';
+const retentionHours = Number(process.env.AQA_TEST_S3_RETENTION_HOURS ?? '24');
 
 test(
   'real S3-compatible artifact journey proves retention and read-back',
@@ -13,6 +23,14 @@ test(
     if (!endpoint) return;
 
     const bucket = `aqa-ci-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    if (encryption && !['AES256', 'aws:kms', 'aws:kms:dsse'].includes(encryption))
+      throw new Error('AQA_TEST_S3_SERVER_SIDE_ENCRYPTION is invalid');
+    if (!['GOVERNANCE', 'COMPLIANCE'].includes(retentionMode))
+      throw new Error('AQA_TEST_S3_RETENTION_MODE is invalid');
+    if (!Number.isFinite(retentionHours) || retentionHours <= 0)
+      throw new Error('AQA_TEST_S3_RETENTION_HOURS must be positive');
+    if (kmsKeyId && encryption !== 'aws:kms' && encryption !== 'aws:kms:dsse')
+      throw new Error('AQA_TEST_S3_SSE_KMS_KEY_ID requires KMS encryption');
     const clientConfig = {
       endpoint,
       region: process.env.AWS_REGION ?? 'us-east-1',
@@ -33,13 +51,15 @@ test(
       }),
     );
 
-    const retainUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const retainUntil = new Date(Date.now() + retentionHours * 60 * 60 * 1000);
     const store = new S3ArtifactStore({
       bucket,
       prefix: 'tenant/acme/runs/live-s3',
       retainUntil,
-      retentionMode: 'COMPLIANCE',
+      retentionMode,
       verifyRetention: true,
+      ...(encryption ? { serverSideEncryption: encryption, verifyEncryption: true } : {}),
+      ...(kmsKeyId ? { sseKmsKeyId: kmsKeyId } : {}),
       client,
     });
 
