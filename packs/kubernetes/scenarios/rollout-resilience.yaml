@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-k8s-rollout-resilience
+title: Rollout and disruption policy preserve minimum service capacity
+risk_refs: [k8s-rollout-outage]
+invariant_refs: [inv-k8s-rollout-safe]
+preconditions:
+  - "a disposable cluster exposes rollout and disruption observations"
+steps:
+  - id: inspect-rollout
+    kind: http
+    with: { method: "GET", url: "/kubernetes/rollout?service=checkout" }
+oracles:
+  - id: o-capacity-preserved
+    kind: response_contains
+    probe_id: inspect-rollout
+    with: { jsonpath: "$.minimum_available_preserved", equals: true }
+  - id: o-rollback-ready
+    kind: response_contains
+    probe_id: inspect-rollout
+    with: { jsonpath: "$.rollback_ready", equals: true }
+tags: [kubernetes, k8s, rollout, resilience]

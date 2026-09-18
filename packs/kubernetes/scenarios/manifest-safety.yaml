@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-k8s-manifest-safety
+title: Kubernetes manifests meet workload hardening requirements
+risk_refs: [k8s-insecure-manifest]
+invariant_refs: [inv-k8s-manifest-hardened]
+preconditions:
+  - "a rendered Helm or Kubernetes manifest is available in a disposable environment"
+steps:
+  - id: inspect-manifest
+    kind: http
+    with: { method: "GET", url: "/kubernetes/manifest?fixture=checkout" }
+oracles:
+  - id: o-no-privileged
+    kind: response_contains
+    probe_id: inspect-manifest
+    with: { jsonpath: "$.privileged_containers", equals: 0 }
+  - id: o-nonroot
+    kind: response_contains
+    probe_id: inspect-manifest
+    with: { jsonpath: "$.non_root_workloads", equals: true }
+tags: [kubernetes, k8s, helm, security]

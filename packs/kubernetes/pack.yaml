@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-kubernetes
+version: 0.1.0
+description: "Opt-in Kubernetes baseline for manifest safety, admission policy and rollout resilience."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [kubernetes, k8s, helm]
+templates: []
+scenarios:
+  - scenarios/manifest-safety.yaml
+  - scenarios/admission-policy.yaml
+  - scenarios/rollout-resilience.yaml
+risks:
+  - risks/kubernetes.yaml
+oracles: []
+probes: []

@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-k8s-admission-policy
+title: Admission policy rejects forbidden workload attributes
+risk_refs: [k8s-admission-bypass]
+invariant_refs: [inv-k8s-admission-gated]
+preconditions:
+  - "a disposable cluster or policy evaluator is available"
+steps:
+  - id: evaluate-forbidden-workload
+    kind: http
+    with: { method: "GET", url: "/kubernetes/admission?fixture=forbidden" }
+oracles:
+  - id: o-admission-denied
+    kind: response_contains
+    probe_id: evaluate-forbidden-workload
+    with: { jsonpath: "$.decision", equals: "deny" }
+  - id: o-policy-identified
+    kind: response_contains
+    probe_id: evaluate-forbidden-workload
+    with: { jsonpath: "$.policy_id", equals: "fixture-policy-v1" }
+tags: [kubernetes, k8s, admission, policy]
