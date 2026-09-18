@@ -33,7 +33,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   currency-safe tax quotes and unique bounded shipping rates. Quotes must carry
   the exact cart ID under test; shipping quotes must also echo the requested
   destination. Stale, cross-cart or cross-destination provider responses fail
-  closed, while missing provider capability returns `unsupported`.
+  closed, while missing provider capability returns `unsupported`. When the
+  merchant also exposes checkout, the tax journey performs a separate,
+  namespaced idempotent checkout and requires the final order tax to equal the
+  provider quote; a quote that is never applied cannot pass as complete.
 - `verifyWebhookJourney()` checks order linkage, delivered state, valid
   signatures and bounded delivery attempts; it never treats an absent webhook
   observer as a pass.

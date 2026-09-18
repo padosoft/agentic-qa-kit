@@ -566,6 +566,42 @@ describe('@aqa/commerce contracts', () => {
     assert.equal(wrongShipping.outcome.status, 'error');
   });
 
+  it('rejects a tax quote that is not applied to the final checkout order', async () => {
+    const merchant = new InMemoryCommerceReference();
+    merchant.seedProduct({
+      sku: 'sku-tax-application',
+      price: { currency: 'EUR', amount_minor: '1000' },
+      on_hand: 1,
+    });
+    const service = merchant.asAdapter();
+    const context = {
+      schema_version: '1' as const,
+      merchant: 'provider',
+      environment: 'sandbox' as const,
+      tenant: 'shop-tax',
+      run_id: 'run-tax-application',
+      policy_revision: 'policy-1',
+      capabilities: {},
+    };
+    const adapter = {
+      ...service,
+      capabilities: async () => ({ ...(await service.capabilities(context)), tax_quote: true }),
+      quoteTax: async (identity: { tenant: string; customer_id: string }, cartId: string) => ({
+        ...(await service.quoteTax?.(identity, cartId)),
+        amount: { currency: 'EUR', amount_minor: '100' },
+      }),
+    } as never;
+    const result = await verifyTaxJourney(adapter, {
+      context,
+      identity: { tenant: 'shop-tax', customer_id: 'customer-tax' },
+      sku: 'sku-tax-application',
+      quantity: 1,
+      idempotencyKey: 'tax-application-key',
+    });
+    assert.equal(result.outcome.status, 'error');
+    assert.match(result.outcome.reason, /tax.*applied|tax.*reconcile/i);
+  });
+
   it('verifies checkout-linked loyalty earning and ledger reconciliation', async () => {
     const merchant = new InMemoryCommerceReference();
     merchant.seedProduct({

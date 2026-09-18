@@ -19,6 +19,14 @@
   false-green gap in provider-backed commerce evidence; tax-law correctness,
   final checkout price and real provider execution remain separate evidence.
 
+- **Added quote-to-checkout tax application evidence.** When checkout is
+  observable, `verifyTaxJourney()` now performs a namespaced idempotent checkout
+  and requires the final order tax to equal the provider quote; quote-only
+  merchants remain explicitly bounded. Added ADR-244 and a regression for a
+  tax quote silently dropped by checkout. Commerce suite: **55 passed, 0
+  failed** locally; provider-specific tax-law and live merchant evidence remain
+  separate.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
