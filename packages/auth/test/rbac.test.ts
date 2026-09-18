@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   OidcAdapter,
@@ -17,6 +18,7 @@ import {
 const viewer = { id: '1', email: 'v@x.test', display_name: 'V', roles: ['viewer' as const] };
 const dev = { id: '2', email: 'd@x.test', display_name: 'D', roles: ['developer' as const] };
 const admin = { id: '3', email: 'a@x.test', display_name: 'A', roles: ['admin' as const] };
+const oidcTestKeyPair = generateKeyPairSync('rsa', { modulusLength: 2048 });
 
 describe('allows', () => {
   it('viewer can read runs but cannot create them', () => {
@@ -306,6 +308,8 @@ describe('OidcAdapter', () => {
             authorization_endpoint: 'https://idp.example/authorize',
             token_endpoint: 'https://idp.example/token',
             userinfo_endpoint: 'https://idp.example/userinfo',
+            issuer: 'https://idp.example',
+            jwks_uri: 'https://idp.example/jwks',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
@@ -333,13 +337,24 @@ describe('OidcAdapter', () => {
               authorization_endpoint: 'https://idp.example/authorize',
               token_endpoint: 'https://idp.example/token',
               userinfo_endpoint: 'https://idp.example/userinfo',
+              issuer: 'https://idp.example',
+              jwks_uri: 'https://idp.example/jwks',
             }),
             { status: 200 },
           );
         if (url.endsWith('/token'))
-          return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 60 }), {
-            status: 200,
-          });
+          return new Response(
+            JSON.stringify({
+              access_token: 'access-token',
+              id_token: makeIdToken('key-1', 'https://idp.example', 'aqa', 'nonce-x'),
+              expires_in: 60,
+            }),
+            {
+              status: 200,
+            },
+          );
+        if (url.endsWith('/jwks'))
+          return new Response(JSON.stringify({ keys: [jwk(oidcTestKeyPair.publicKey, 'key-1')] }));
         return new Response(
           JSON.stringify({
             sub: 'user-1',
@@ -351,10 +366,10 @@ describe('OidcAdapter', () => {
         );
       },
     });
-    const session = await a.exchangeCode('code-x', 'verifier-x');
+    const session = await a.exchangeCode('code-x', 'verifier-x', 'nonce-x');
     assert.equal(session.user.id, 'user-1');
     assert.deepEqual(session.user.roles, ['developer']);
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     process.env.OIDC_TEST_VALUE = undefined;
   });
 
@@ -372,17 +387,115 @@ describe('OidcAdapter', () => {
                 authorization_endpoint: 'https://idp.example/a',
                 token_endpoint: 'https://idp.example/t',
                 userinfo_endpoint: 'https://idp.example/u',
+                issuer: 'https://idp.example',
+                jwks_uri: 'https://idp.example/jwks',
               }),
               { status: 200 },
             )
           : String(input).endsWith('/t')
-            ? new Response(JSON.stringify({ access_token: 'x' }), { status: 200 })
-            : new Response(
-                JSON.stringify({ sub: 'user-1', email: 'user@example.test', roles: ['owner'] }),
+            ? new Response(
+                JSON.stringify({
+                  access_token: 'x',
+                  id_token: makeIdToken('key-1', 'https://idp.example', 'aqa', 'nonce-x'),
+                }),
                 { status: 200 },
-              ),
+              )
+            : String(input).endsWith('/jwks')
+              ? new Response(JSON.stringify({ keys: [jwk(oidcTestKeyPair.publicKey, 'key-1')] }))
+              : new Response(
+                  JSON.stringify({ sub: 'user-1', email: 'user@example.test', roles: ['owner'] }),
+                  { status: 200 },
+                ),
     });
-    await assert.rejects(() => a.exchangeCode('code-x'), /no supported AQA role/);
+    await assert.rejects(
+      () => a.exchangeCode('code-x', undefined, 'nonce-x'),
+      /no supported AQA role/,
+    );
+    process.env.OIDC_TEST_VALUE = undefined;
+  });
+
+  it('validates the signed ID token and refreshes JWKS after key rotation', async () => {
+    const first = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const second = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    let jwksCalls = 0;
+    let active = first;
+    process.env.OIDC_TEST_VALUE = 'test-only-value';
+    const a = new OidcAdapter({
+      issuer: 'https://idp.example',
+      client_id: 'aqa',
+      client_secret_env: 'OIDC_TEST_VALUE',
+      redirect_uri: 'https://aqa.example/callback',
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.endsWith('openid-configuration'))
+          return new Response(
+            JSON.stringify({
+              issuer: 'https://idp.example',
+              authorization_endpoint: 'https://idp.example/authorize',
+              token_endpoint: 'https://idp.example/token',
+              userinfo_endpoint: 'https://idp.example/userinfo',
+              jwks_uri: 'https://idp.example/jwks',
+            }),
+          );
+        if (url.endsWith('/jwks')) {
+          jwksCalls += 1;
+          return new Response(
+            JSON.stringify({ keys: [jwk(active.publicKey, active === first ? 'key-1' : 'key-2')] }),
+          );
+        }
+        if (url.endsWith('/token'))
+          return new Response(
+            JSON.stringify({
+              access_token: 'access-token',
+              id_token: makeIdToken(
+                active === first ? 'key-1' : 'key-2',
+                'https://idp.example',
+                'aqa',
+                'nonce-x',
+                active.privateKey,
+              ),
+            }),
+          );
+        return new Response(
+          JSON.stringify({ sub: 'user-1', email: 'user@example.test', roles: ['viewer'] }),
+        );
+      },
+    });
+    await a.exchangeCode('code-x', undefined, 'nonce-x');
+    active = second;
+    await a.exchangeCode('code-x', undefined, 'nonce-x');
+    assert.equal(jwksCalls, 2, 'unknown kid must force one JWKS refresh for rotation');
+    await assert.rejects(() => a.exchangeCode('code-x', undefined, 'wrong-nonce'), /nonce/);
     process.env.OIDC_TEST_VALUE = undefined;
   });
 });
+
+function makeIdToken(
+  kid: string,
+  issuer: string,
+  audience: string,
+  nonce: string,
+  privateKey?: ReturnType<typeof generateKeyPairSync>['privateKey'],
+): string {
+  const key = privateKey ?? oidcTestKeyPair.privateKey;
+  const header = base64url(JSON.stringify({ alg: 'RS256', kid, typ: 'JWT' }));
+  const payload = base64url(
+    JSON.stringify({
+      iss: issuer,
+      sub: 'user-1',
+      aud: audience,
+      nonce,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 300,
+    }),
+  );
+  return `${header}.${payload}.${sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), key).toString('base64url')}`;
+}
+
+function jwk(key: ReturnType<typeof generateKeyPairSync>['publicKey'], kid: string) {
+  return { ...(key.export({ format: 'jwk' }) as JsonWebKey), kid, alg: 'RS256', use: 'sig' };
+}
+
+function base64url(value: string): string {
+  return Buffer.from(value).toString('base64url');
+}

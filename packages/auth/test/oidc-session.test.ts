@@ -17,15 +17,17 @@ const user = {
 describe('OidcSessionManager', () => {
   it('binds callback code to one-time PKCE state and authenticates cookie sessions', async () => {
     let verifier = '';
+    let nonce = '';
     const adapter = {
       authorizeUrl: async (state: string, challenge?: string) => {
         assert.ok(state);
         assert.ok(challenge);
         return `https://idp.test/auth?state=${state}`;
       },
-      exchangeCode: async (code: string, actualVerifier?: string) => {
+      exchangeCode: async (code: string, actualVerifier?: string, actualNonce?: string) => {
         assert.equal(code, 'code');
         verifier = actualVerifier ?? '';
+        nonce = actualNonce ?? '';
         return {
           user,
           issued_at: new Date().toISOString(),
@@ -37,6 +39,7 @@ describe('OidcSessionManager', () => {
     const login = await manager.begin();
     const completed = await manager.complete(login.state, 'code');
     assert.equal(verifier, login.pkce_verifier);
+    assert.ok(nonce);
     assert.deepEqual(
       manager.authenticate({ cookie: OidcSessionManager.sessionCookie(completed.token) }),
       user,
@@ -50,7 +53,7 @@ describe('OidcSessionManager', () => {
   });
 
   it('supports shared async state across manager instances and consumes PKCE state once', async () => {
-    const pending = new Map<string, { verifier: string; expires_at: number }>();
+    const pending = new Map<string, { verifier: string; nonce: string; expires_at: number }>();
     const sessions = new Map<string, { user: typeof user; expires_at: number }>();
     const store: OidcSessionStore = {
       async putPending(state, value) {

@@ -9,6 +9,18 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-18
+
+- **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
+  adapter now requires and validates RS256 ID tokens against discovered JWKS,
+  checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
+  keys once on provider rotation. `OidcSessionManager` generates a nonce with
+  each one-time PKCE state; PostgreSQL migration rejects legacy pending rows
+  that lack it. Local auth suite: **35 passed, 0 failed**; hosted live IdP and
+  PostgreSQL evidence remain open until CI/provider credentials are available.
+  Next: run the full workspace gates, open the technical PR, then continue with
+  provider-backed tax/shipping/fulfillment and recovery evidence.
+
 ## 2026-09-17
 
 ## 2026-09-18

@@ -5,6 +5,7 @@ import type { AuthSession, User } from './types.js';
 
 interface PendingLogin {
   verifier: string;
+  nonce: string;
   expires_at: number;
 }
 interface StoredSession {
@@ -14,6 +15,7 @@ interface StoredSession {
 
 export interface OidcPendingLogin {
   verifier: string;
+  nonce: string;
   expires_at: number;
 }
 
@@ -60,12 +62,13 @@ export class OidcSessionManager {
     const ttl = this.opts.loginTtlMs ?? 5 * 60_000;
     const state = randomToken(32);
     const verifier = randomToken(48);
+    const nonce = randomToken(32);
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    const pending = { verifier, expires_at: now + ttl };
+    const pending = { verifier, nonce, expires_at: now + ttl };
     if (this.opts.store) await this.opts.store.putPending(state, pending);
     else this.pending.set(state, pending);
     return {
-      authorization_url: await this.adapter.authorizeUrl(state, challenge),
+      authorization_url: await this.adapter.authorizeUrl(state, challenge, nonce),
       state,
       pkce_verifier: verifier,
       expires_at: new Date(now + ttl).toISOString(),
@@ -79,7 +82,7 @@ export class OidcSessionManager {
     if (!pending || pending.expires_at <= Date.now() || !state || !code) {
       throw new Error('[auth/oidc] invalid or expired login state');
     }
-    const session = await this.adapter.exchangeCode(code, pending.verifier);
+    const session = await this.adapter.exchangeCode(code, pending.verifier, pending.nonce);
     enforceMfa(session.user, this.opts.mfaPolicy);
     const token = randomToken(32);
     const configuredTtl = this.opts.sessionTtlMs;
