@@ -3,7 +3,7 @@ import { bold, cyan, dim, green, red, yellow } from 'kleur/colors';
 import { createAuditCheckpointStore } from '../artifacts.js';
 import { runAdmin } from '../commands/admin.js';
 import { type CheckStatus, runDoctor } from '../commands/doctor.js';
-import { runDrInventory, runDrRestore } from '../commands/dr.js';
+import { runDrInventory, runDrReleaseGate, runDrRestore } from '../commands/dr.js';
 import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js';
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
@@ -125,6 +125,8 @@ ${bold('Commands')}
   fixtures restore <fixture> <dir>  Verify and restore a fixture (use --force to overwrite)
   dr inventory <file> [--public-key <pem>] Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>] Validate a restore drill against RPO/RTO
+  dr release-gate <inventory> <evidence> <production-evidence> --public-key <pem>
+                                    Verify signed production evidence is bound to this restore drill
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
   risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
@@ -563,6 +565,32 @@ async function main(): Promise<number> {
         console.info(
           `  ${dim('observed:')} rpo=${result.observed_rpo_minutes}m rto=${result.observed_rto_minutes}m`,
         );
+        return 0;
+      }
+      if (subcommand === 'release-gate') {
+        const inventoryFile = args.positionals[1];
+        const evidenceFile = args.positionals[2];
+        const productionEvidenceFile = args.positionals[3];
+        if (!inventoryFile || !evidenceFile || !productionEvidenceFile) {
+          console.error(
+            red('aqa dr release-gate: missing <inventory> <evidence> <production-evidence>'),
+          );
+          return 1;
+        }
+        const result = runDrReleaseGate({
+          inventoryFile,
+          evidenceFile,
+          productionEvidenceFile,
+          ...(publicKeyFile !== undefined ? { publicKeyFile } : {}),
+        });
+        if (!result.ok) {
+          console.error(red(`aqa dr release-gate: ${result.error ?? 'verification failed'}`));
+          return 1;
+        }
+        console.info(`  ${green('✓')} restore drill ${result.drill_id}`);
+        console.info(`  ${dim('backup:')} ${result.backup_id}`);
+        console.info(`  ${dim('production evidence:')} ${result.production_signature}`);
+        console.info(`  ${dim('restore drill sha256:')} ${result.restore_drill_sha256}`);
         return 0;
       }
       console.error(red(`aqa dr: unknown subcommand "${subcommand ?? ''}"`));

@@ -48,6 +48,20 @@ record is internally consistent with the inventory and approved objectives; it
 does not prove that the cloud provider, WAL archiver, KMS, bucket retention or
 cluster restore actually ran unless those systems produced the evidence fields.
 
+Before approving a release, bind the signed provider observation to that exact
+drill with:
+
+```text
+aqa dr release-gate <inventory.json> <restore-evidence.json> \
+  <production-evidence.signed.json> --public-key <approved-trust-root.pem>
+```
+
+The command verifies the trusted Ed25519 signature, validates all three
+documents, and compares both `restore_drill_ref` and the digest of the
+canonical restore-drill record. A successful command proves the evidence chain
+is internally joined; it still does not replace provider audit trails or a
+fresh execution of the restore.
+
 ## Current repository boundary
 
 The repository provides scoped Postgres storage, content-addressed artifact references, redaction and queue fencing. It does not provision a cloud backup service, KMS, WAL archiver or immutable object-lock policy. Those are deployment obligations; this document is not evidence that a live backup or restore has run. A release claiming DR readiness must attach a fresh drill record with infrastructure-specific evidence.
