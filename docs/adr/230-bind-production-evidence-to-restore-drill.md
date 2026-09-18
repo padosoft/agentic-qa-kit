@@ -23,6 +23,10 @@ signed production observation.
 `restoreDrillEvidenceSha256` so operators and release automation use the same
 validated canonical representation when producing the digest.
 
+`verifyProductionEvidenceRestoreBinding` performs the complete join: trusted
+signature verification, inventory validation, drill validation, reference
+matching and digest matching.
+
 ## Consequences and boundary
 
 This closes substitution ambiguity in the evidence handoff. It does not

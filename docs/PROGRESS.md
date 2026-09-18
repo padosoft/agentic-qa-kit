@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Added the complete production-evidence/restore-drill join verifier.**
+  `verifyProductionEvidenceRestoreBinding` now verifies the trusted signature,
+  backup inventory, restore-drill contract, drill reference and recomputed
+  SHA-256 digest as one fail-closed operation. Compliance suite: **24 passed,
+  0 failed**; ADR-230 and lessons document the cross-document invariant. This
+  proves evidence linkage, not the underlying provider execution.
+
 - **Made restore-drill digest production executable.** Exported
   `canonicalRestoreDrillEvidence` and `restoreDrillEvidenceSha256` from
   `@aqa/compliance`, both built on the same validated canonical record used by

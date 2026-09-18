@@ -1,4 +1,6 @@
 import { createHash, sign, verify } from 'node:crypto';
+import { parseBackupInventory } from './dr-manifest.js';
+import { restoreDrillEvidenceSha256 } from './restore-drill.js';
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
 
@@ -65,6 +67,12 @@ export interface ProductionEvidenceFreshness {
   age_hours: number;
   max_age_hours: number;
   reason?: 'expired' | 'future-dated';
+}
+
+export interface ProductionEvidenceRestoreBindingResult {
+  ok: boolean;
+  reason?: string;
+  restore_drill_sha256?: string;
 }
 
 /** Parse provider observations without accepting credentials or arbitrary payloads. */
@@ -300,6 +308,31 @@ export function verifyProductionEvidence(
   }
 }
 
+/** Verify the signed envelope and its cryptographic binding to one drill. */
+export function verifyProductionEvidenceRestoreBinding(
+  input: unknown,
+  restoreDrillInput: unknown,
+  inventoryInput: unknown,
+  trustedPublicKeyPem: string,
+): ProductionEvidenceRestoreBindingResult {
+  try {
+    const verified = verifyProductionEvidence(input, trustedPublicKeyPem);
+    if (!verified.ok) throw new Error(verified.reason ?? 'production evidence signature failed');
+    if (!isRecord(input) || !isRecord(input.evidence))
+      throw new Error('production evidence payload is missing');
+    const evidence = parseProductionEvidence(input.evidence);
+    const inventory = parseBackupInventory(inventoryInput);
+    const drillDigest = restoreDrillEvidenceSha256(restoreDrillInput, inventory);
+    if (evidence.controls.database_recovery.restore_drill_ref !== getDrillId(restoreDrillInput))
+      throw new Error('production evidence restore drill reference does not match drill');
+    if (evidence.controls.database_recovery.restore_drill_sha256 !== drillDigest)
+      throw new Error('production evidence restore drill digest does not match drill');
+    return { ok: true, restore_drill_sha256: drillDigest };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -342,6 +375,12 @@ function digest(value: unknown, label: string): string {
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value))
     throw new Error(`production evidence ${label} must be a lowercase SHA-256 digest`);
   return value;
+}
+
+function getDrillId(input: unknown): string {
+  if (!isRecord(input) || typeof input.drill_id !== 'string')
+    throw new Error('restore drill id is missing');
+  return input.drill_id;
 }
 
 function boolean(value: unknown, label: string): boolean {

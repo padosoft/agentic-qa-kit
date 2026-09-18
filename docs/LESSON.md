@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-18 — Evidence chains need a cross-document verifier
+
+Having a signed parent document and a digest field is not enough unless the
+release gate recomputes and compares the child record. The compliance package
+now verifies signature, inventory, restore-drill reference and digest in one
+fail-closed operation.
+
 # 2026-09-18 — Canonicalization must be executable by the producer
 
 If a signed evidence contract requires a digest but does not expose the exact
