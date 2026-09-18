@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Added a live OCI complete journey for hardened kit runs.** The container
+  integration job now resolves an immutable Alpine digest and executes the
+  real `release-gate` path with automatic sandbox selection and a shell probe,
+  in addition to the lower-level sandbox contract. The local suite skips this
+  journey when Docker/runtime credentials are unavailable; no local skip is
+  counted as production evidence.
+
 - **Added bounded Playwright trace ingestion.** `aqa ingest playwright
   <trace.zip>` now reads only the `trace.trace` JSONL member, rejects encrypted
   or traversal ZIP entries, bounds decompression, and persists action-level

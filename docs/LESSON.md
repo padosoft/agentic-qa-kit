@@ -2007,3 +2007,11 @@ headers, request bodies, browser storage and screenshots. A safe ingestion
 path must parse only the action metadata needed for QA evidence, enforce input
 and decompression bounds, reject encrypted/traversal entries, and preserve the
 distinction between “trace ingested” and “browser journey replayed”.
+# 2026-09-18 — Test the auto-selected security boundary end to end
+
+A unit test with an injected sandbox executor proves routing, but not that the
+CLI/profile path selects the hardened boundary or that the OCI runtime can
+execute it. Keep the injected contract for deterministic tests and add a
+separate live journey in the OCI-enabled CI job with a resolved immutable test
+image. A local skip must remain visible and cannot be reported as deployment
+evidence.
