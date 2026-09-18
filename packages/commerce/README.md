@@ -58,6 +58,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.
+- `StripeWebhookProcessor` combines raw-body signature verification, bounded
+  event parsing, supported-event allowlisting and the durable effect ledger.
+  Failed effects release their in-progress claim so provider retries can
+  safely recover; conflicting logical effects fail closed.
 - `StripePaymentGateway` is a bounded REST boundary for PaymentIntent create/
   retrieve and refund operations. It requires Stripe secret-key format,
   HTTPS (except localhost test servers), write idempotency keys, bounded
