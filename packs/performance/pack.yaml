@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-performance
+version: 0.1.0
+description: "Opt-in performance baseline for latency SLOs, error budgets and saturation signals."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [performance, load-testing, slo]
+templates: []
+scenarios:
+  - scenarios/latency-slo.yaml
+  - scenarios/error-budget.yaml
+  - scenarios/saturation.yaml
+risks:
+  - risks/performance.yaml
+oracles: []
+probes: []

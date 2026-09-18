@@ -286,6 +286,10 @@
       "name": "@aqa/pack-llm-agent",
       "version": "0.1.0",
     },
+    "packs/performance": {
+      "name": "@aqa/pack-performance",
+      "version": "0.1.0",
+    },
     "packs/security": {
       "name": "@aqa/pack-security",
       "version": "0.1.0",
@@ -352,6 +356,8 @@
     "@aqa/pack-llm-agent": ["@aqa/pack-llm-agent@workspace:packs/llm-agent"],
 
     "@aqa/pack-loader": ["@aqa/pack-loader@workspace:packages/pack-loader"],
+
+    "@aqa/pack-performance": ["@aqa/pack-performance@workspace:packs/performance"],
 
     "@aqa/pack-scanner": ["@aqa/pack-scanner@workspace:packages/pack-scanner"],
 

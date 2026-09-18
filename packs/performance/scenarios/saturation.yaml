@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-performance-saturation
+title: Saturation signals remain visible before queue or connection collapse
+risk_refs: [performance-saturation]
+invariant_refs: [inv-saturation-visible]
+preconditions:
+  - "a disposable target exposes bounded saturation metrics"
+steps:
+  - id: inspect-saturation
+    kind: http
+    with: { method: "GET", url: "/performance/saturation?service=checkout" }
+oracles:
+  - id: o-queue-visible
+    kind: response_contains
+    probe_id: inspect-saturation
+    with: { jsonpath: "$.queue_depth_observed", equals: true }
+  - id: o-rejections-bounded
+    kind: response_contains
+    probe_id: inspect-saturation
+    with: { jsonpath: "$.unbounded_rejections", equals: 0 }
+tags: [performance, saturation, checkout]

@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-performance
+risks:
+  - id: performance-tail-latency
+    category: availability
+    title: Tail latency violates the customer journey SLO while average latency remains healthy.
+    severity: high
+    likelihood: likely
+    invariants:
+      - id: inv-tail-latency
+        statement: Critical journeys meet explicit p95 and p99 latency thresholds under the declared load profile.
+  - id: performance-error-budget
+    category: availability
+    title: Elevated errors consume an error budget without blocking an unsafe release.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-error-budget-gated
+        statement: A failed performance gate records the budget impact and blocks release when policy requires it.
+  - id: performance-saturation
+    category: availability
+    title: CPU, memory, connection or queue saturation causes cascading customer failures.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-saturation-visible
+        statement: Saturation thresholds and rejected/queued work are observable before the system becomes unavailable.

@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-performance-latency-slo
+title: Critical commerce journey meets p95 and p99 latency SLOs
+risk_refs: [performance-tail-latency]
+invariant_refs: [inv-tail-latency]
+preconditions:
+  - "a disposable staging target and bounded load profile are available"
+steps:
+  - id: inspect-latency
+    kind: http
+    with: { method: "GET", url: "/performance/summary?journey=checkout" }
+oracles:
+  - id: o-p95
+    kind: response_contains
+    probe_id: inspect-latency
+    with: { jsonpath: "$.p95_ms", equals: 500 }
+  - id: o-p99
+    kind: response_contains
+    probe_id: inspect-latency
+    with: { jsonpath: "$.p99_ms", equals: 1000 }
+tags: [performance, slo, latency, checkout]
