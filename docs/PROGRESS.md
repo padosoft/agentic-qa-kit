@@ -19,7 +19,8 @@
   business effect. Hardened both webhook ledgers with processing/completed
   state and release-on-failure semantics, fixing the lost-retry case where an
   effect could fail after its claim was stored. Commerce suite: **44 passed,
-  0 failed**; hosted CI is required before this migration is marked complete.
+  0 failed**; PR #149 merged after hosted CI run **35331906279** passed the
+  PostgreSQL migration, full test matrix and E2E gates.
 
 - **Added a real Stripe payment boundary.** `StripePaymentGateway` now creates
   and retrieves PaymentIntents and creates refunds through Stripe's REST API,
