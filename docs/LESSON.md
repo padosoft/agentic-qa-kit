@@ -2397,3 +2397,11 @@ target, including `pg_is_in_recovery`, replay position and transaction
 read-only state. Keep this record free of DSNs and payloads, fail closed on a
 writable target, and continue to distinguish database observation from provider
 PITR, object-store restore and KMS/WORM evidence.
+
+# 2026-09-18 — Protected evidence needs a repeatable handoff
+
+Production evidence must not be committed to Git or validated only by a
+manually copied local command. A protected manual workflow can read redacted
+JSON and trust roots from an Environment, run the canonical release gate and
+clean its temporary files. Keep this provenance gate separate from the provider
+execution drill it references.

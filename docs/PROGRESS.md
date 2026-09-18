@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Added a protected production-evidence CI handoff.** Manual workflow
+  `production-evidence-gate.yml` reads the signed envelope, inventory,
+  restore-drill, trust root and key ID only from the protected GitHub
+  Environment, runs `aqa dr release-gate`, and cleans a mode-700 temporary
+  directory on every exit path. Added ADR-250 and operator documentation. It
+  makes provenance/binding repeatable; provider execution evidence remains an
+  explicit deployment obligation.
+
 - **Added fail-closed S3 server-side encryption verification.** `S3ArtifactStore`
   can now request AES256, KMS or KMS DSSE encryption, pin an exact KMS key
   identity and verify the provider's `HeadObject` response for both the
