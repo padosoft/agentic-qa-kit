@@ -30,6 +30,7 @@ export {
   InMemoryWebhookEffectLedger,
   PostgresWebhookEffectLedger,
   type WebhookClaim,
+  type WebhookLedgerOptions,
   type WebhookEffectLedger,
 } from './webhook-ledger.js';
 export { HttpCommerceAdapter, type HttpCommerceAdapterOptions } from './http-adapter.js';

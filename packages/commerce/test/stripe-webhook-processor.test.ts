@@ -55,6 +55,18 @@ describe('StripeWebhookProcessor', () => {
     assert.equal(applied, 1);
   });
 
+  it('reclaims an abandoned processing lease but keeps completed effects duplicate-safe', async () => {
+    let now = 1_000;
+    const ledger = new InMemoryWebhookEffectLedger({ lease_ms: 100, now_ms: () => now });
+    assert.equal(await ledger.claim('order-lease:payment_captured', 'evt-1'), 'claimed');
+    assert.equal(await ledger.claim('order-lease:payment_captured', 'evt-1'), 'duplicate');
+    now += 101;
+    assert.equal(await ledger.claim('order-lease:payment_captured', 'evt-1'), 'claimed');
+    await ledger.complete('order-lease:payment_captured', 'evt-1');
+    now += 101;
+    assert.equal(await ledger.claim('order-lease:payment_captured', 'evt-1'), 'duplicate');
+  });
+
   it('rejects stale or malformed events and reports unsupported provider types explicitly', async () => {
     const processor = new StripeWebhookProcessor({
       endpointSecret: 'whsec_test',
