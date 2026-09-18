@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/observability.test.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/observability.test.ts test/deployment-assets.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
   "publishConfig": { "access": "public" }

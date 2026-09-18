@@ -1,0 +1,53 @@
+groups:
+  - name: aqa.recording
+    interval: 30s
+    rules:
+      - record: aqa:run_failure_ratio
+        expr: |
+          sum(rate(aqa_runs_finished_total{outcome=~"fail|error"}[5m]))
+          /
+          clamp_min(sum(rate(aqa_runs_finished_total[5m])), 1)
+      - record: aqa:llm_budget_denial_ratio
+        expr: |
+          sum(rate(aqa_llm_budget_exceeded_total[15m]))
+          /
+          clamp_min(sum(rate(aqa_llm_calls_total[15m])), 1)
+
+  - name: aqa.alerts
+    rules:
+      - alert: AqaRunFailureRatioHigh
+        expr: aqa:run_failure_ratio > 0.10
+        for: 10m
+        labels:
+          severity: warning
+          service: agentic-qa-kit
+        annotations:
+          summary: AQA run failure ratio is above 10%
+          description: More than one in ten completed runs failed or errored during the last five minutes.
+      - alert: AqaRunnerQueueBacklog
+        expr: sum(aqa_runner_queue_depth) > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: agentic-qa-kit
+        annotations:
+          summary: AQA runner queue is backlogged
+          description: The queue depth is above the default operational threshold; inspect runner capacity and leases.
+      - alert: AqaLlmBudgetDenials
+        expr: aqa:llm_budget_denial_ratio > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          service: agentic-qa-kit
+        annotations:
+          summary: AQA LLM budget denials are increasing
+          description: Budget denials exceed 5% of observed LLM calls; inspect policy, usage and provider health.
+      - alert: AqaTelemetryMissing
+        expr: absent(aqa_runs_started_total)
+        for: 15m
+        labels:
+          severity: critical
+          service: agentic-qa-kit
+        annotations:
+          summary: AQA telemetry is missing
+          description: Prometheus cannot see the run metric; verify the protected scrape route and Collector pipeline.

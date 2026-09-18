@@ -13,6 +13,17 @@
 
 ## 2026-09-18
 
+- **Added the provider-neutral observability deployment bundle.** Versioned an
+  OpenTelemetry Collector pipeline, Prometheus recording/alert rules and a
+  Grafana operations dashboard under `integrations/observability/`. The bundle
+  is credential-free, uses bounded processors and the metric names actually
+  emitted by the registry; 20 observability tests passed, including asset
+  structure and secret-safety checks. This closes the repository asset gap,
+  but not live-cluster evidence: scrape, OTLP export, alert firing and
+  dashboard population still require an operator environment. Next: add a
+  reproducible local live telemetry journey or document the required hosted
+  evidence boundary.
+
 - **Closed the complete remote worker production journey.** PR #145 is merged
   on `main` as **95e5a18**. The real Kit lifecycle now runs through the
   authenticated HTTP queue, lease renewal, token rotation, completion ACK and
