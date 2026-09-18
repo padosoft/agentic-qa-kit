@@ -2445,3 +2445,14 @@
 - This proves provider-observed dispute exposure only. Won/open disputes are
   not treated as settled chargebacks; payout timing, fees, representment and
   durable merchant joins remain separate production evidence requirements.
+
+# 2026-09-18 — Stripe payout reconciliation in progress
+
+- Added `retrievePayout()` and `reconcileStripePayout()` to read back the
+  payout plus its linked balance transaction. The boundary preserves signed
+  provider amounts and verifies payout amount, fee, net equation, source/type,
+  currency and optional status. Commerce suite now passes **51/51** locally;
+  ADR-240 and the package README document the production boundary.
+- This proves provider payout consistency only. It does not prove bank
+  arrival, order inclusion, fee allocation or a durable merchant
+  payment/order-to-payout join.

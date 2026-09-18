@@ -36,6 +36,7 @@ export {
 export { HttpCommerceAdapter, type HttpCommerceAdapterOptions } from './http-adapter.js';
 export {
   reconcileStripeDisputes,
+  reconcileStripePayout,
   reconcileStripeRefunds,
   StripePaymentGateway,
   type StripeCreatePaymentIntent,
@@ -44,6 +45,10 @@ export {
   type StripeDisputeReconciliation,
   type StripeDisputeReconciliationInput,
   type StripeDisputeStatus,
+  type StripePayoutObservation,
+  type StripePayoutReconciliationInput,
+  type StripePayoutStatus,
+  type StripeSignedMoney,
   type StripePaymentGatewayOptions,
   type StripePaymentIntentObservation,
   type StripeRefundReconciliation,
