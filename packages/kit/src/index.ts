@@ -14,6 +14,11 @@ export {
 } from './commands/fixtures.js';
 export { runRiskDiscover } from './commands/risk-discover.js';
 export {
+  runOracleCalibration,
+  type OracleCalibrationOptions,
+  type OracleCalibrationResult,
+} from './commands/oracle-calibrate.js';
+export {
   runRiskCoverage,
   type RiskCoverageOptions,
   type RiskCoverageResult,

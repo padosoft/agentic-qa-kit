@@ -2666,6 +2666,14 @@ backup provider performed PITR or that WAL/object/KMS/RTO/RPO controls worked.
 Keep the target observation and provider execution drill as independently
 auditable controls.
 
+# 2026-09-18 — Calibration must be an explicit release input
+
+Having a calibration function in a library is not enough for an enterprise
+gate: operators need a versioned gold corpus, bounded parsing, no rationale
+leakage, visible reliability metrics and an explicit threshold. Keep the
+corpus labels human-reviewed and make threshold failure non-zero without
+pretending that calibration proves the corpus is unbiased.
+
 # 2026-09-18 — Idempotency keys need an ownership scope
 
 Making an operation ID globally unique can prevent a cross-tenant mutation,

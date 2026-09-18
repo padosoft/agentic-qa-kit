@@ -8,6 +8,7 @@ import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
+import { runOracleCalibration } from '../commands/oracle-calibrate.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
 import { runRiskCoverage } from '../commands/risk-coverage.js';
@@ -58,6 +59,8 @@ const VALUE_FLAGS = new Set([
   'target',
   'public-key',
   'public-key-id',
+  'bin-count',
+  'max-ece',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -130,6 +133,8 @@ ${bold('Commands')}
                                     Verify signed production evidence is bound to this restore drill
   risk discover --method stride|owasp|fmea|source Generate a deterministic or source-aware risk baseline
   risk coverage [--profile <name>] Analyze risk coverage from scenarios and persisted run evidence
+  oracle calibrate <corpus.json> [--bin-count N] [--max-ece X]
+                                    Calibrate opaque judge scores against a reviewed gold corpus
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -664,6 +669,48 @@ async function main(): Promise<number> {
       console.info(`  ${green('✓')} generated ${result.risk_count} ${method.toUpperCase()} risks`);
       console.info(`    ${dim('risk map: ')}${result.path}`);
       console.info(`    ${dim('write:    ')}${result.write_result}`);
+      return 0;
+    }
+    case 'oracle': {
+      const subcommand = args.positionals[0];
+      if (subcommand !== 'calibrate') {
+        console.error(red('aqa oracle: expected `calibrate`'));
+        return 1;
+      }
+      const inputFile = args.positionals[1];
+      if (!inputFile) {
+        console.error(red('aqa oracle calibrate: missing <corpus.json>'));
+        return 1;
+      }
+      const binCountValue = args.values.get('bin-count');
+      const maxEceValue = args.values.get('max-ece');
+      const binCount = binCountValue === undefined ? undefined : Number(binCountValue);
+      const maxEce = maxEceValue === undefined ? undefined : Number(maxEceValue);
+      if (binCountValue !== undefined && !Number.isInteger(binCount)) {
+        console.error(red('aqa oracle calibrate: --bin-count must be an integer'));
+        return 1;
+      }
+      if (maxEceValue !== undefined && (!Number.isFinite(maxEce) || (maxEce ?? -1) < 0)) {
+        console.error(red('aqa oracle calibrate: --max-ece must be a non-negative number'));
+        return 1;
+      }
+      const result = runOracleCalibration({
+        root: cwd,
+        inputFile,
+        ...(binCount !== undefined ? { binCount } : {}),
+        ...(maxEce !== undefined ? { maxEce } : {}),
+      });
+      if (!result.ok || !result.report) {
+        console.error(red(`aqa oracle calibrate: ${result.error ?? 'calibration failed'}`));
+        return 1;
+      }
+      console.info(`  ${green('✓')} samples=${result.report.samples}`);
+      console.info(`    ${dim('brier:')} ${result.report.brier_score.toFixed(6)}`);
+      console.info(`    ${dim('ece:')} ${result.report.expected_calibration_error.toFixed(6)}`);
+      if (!result.gate_ok) {
+        console.error(red('  ✗ calibration gate not satisfied: ECE exceeds --max-ece'));
+        return 2;
+      }
       return 0;
     }
     case 'admin': {
