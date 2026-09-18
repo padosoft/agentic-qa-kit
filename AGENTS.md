@@ -183,8 +183,24 @@ When the user enables parallel sub-agents:
 
 See `docs/PROGRESS.md` for live state. As of bootstrap:
 
-- **Active macro task:** Task 0 — Bootstrap governance & process docs (branch `task/bootstrap-governance`)
-- **Next macro task:** Task 1 — Schemas package & core types
+- **Active macro task:** production-evidence hardening — close provider-backed
+  identity, commerce and disaster-recovery boundaries without overstating what
+  local fixtures prove.
+- **Next macro task:** execute the cloud/provider evidence runbooks when the
+  protected deployment environment supplies approved credentials; until then,
+  keep building fail-closed adapters, measurement helpers and explicit manual
+  gates.
+
+## Complete-journey evidence boundary
+
+An E2E-labelled fixture, build, unit test or schema validator is not by itself
+proof that a product journey works end to end. A complete journey must identify
+the real boundary under test, execute the user/system action, observe the
+provider-backed result through a fresh read where applicable, validate the
+security and tenant invariants, and preserve redacted evidence of the result.
+If the external provider, production identity, KMS, WAL/PITR or carrier is not
+actually exercised, label the result as provider-neutral or unsupported and keep
+the deployment evidence gap open.
 
 ## Files referenced by this guide
 

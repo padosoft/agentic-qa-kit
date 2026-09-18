@@ -64,6 +64,13 @@
   failed** locally. This improves evidence provenance but does not itself prove
   cloud PITR, KMS/WORM or artifact-provider execution.
 
+- **Reconciled governance with the live roadmap.** Updated `AGENTS.md` and
+  `docs/RULES.md` so the current priority is production-evidence hardening,
+  and codified the complete-journey rule: fixtures and validators cannot be
+  reported as provider execution evidence. This closes the stale bootstrap
+  priority/documentation drift; cloud/provider exercises remain the next
+  external-evidence action.
+
 - **OIDC signed-token boundary implemented on `task/oidc-jwks-rotation`.** The
   adapter now requires and validates RS256 ID tokens against discovered JWKS,
   checks issuer/audience/azp/iat/exp/nonce, binds UserInfo `sub`, and refreshes
