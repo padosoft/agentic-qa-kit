@@ -1,0 +1,44 @@
+# Production-shaped baseline. Supply TLS/auth at the platform boundary; this
+# example contains no credentials and must not be treated as a live deployment.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch:
+    send_batch_size: 256
+    timeout: 5s
+  resource/aqa:
+    attributes:
+      - key: service.namespace
+        value: agentic-qa
+        action: upsert
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:9464
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlp/tempo:
+    endpoint: ${env:AQA_TEMPO_ENDPOINT}
+    tls:
+      insecure: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/aqa, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/aqa, batch]
+      exporters: [prometheus]

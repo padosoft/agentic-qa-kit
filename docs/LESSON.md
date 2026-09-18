@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — Deployment assets are not runtime evidence
+
+Prometheus, Grafana and Collector files can be structurally validated and
+secret-scanned in CI, but that does not prove a scrape, OTLP export, alert
+evaluation or dashboard query works. Keep those claims explicitly separate
+and require a live operator journey before marking production observability
+complete.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or
