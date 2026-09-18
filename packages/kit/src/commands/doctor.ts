@@ -126,6 +126,8 @@ function addProductionChecks(checks: DoctorCheck[]): void {
       process.env.AQA_AUDIT_CHECKPOINT_PRIVATE_KEY_PEM?.trim(),
   );
   const otlp = Boolean(process.env.AQA_OTLP_ENDPOINT?.trim());
+  const sandboxImage = process.env.AQA_CONTAINER_IMAGE?.trim() ?? '';
+  const sandboxImagePinned = /^.+@sha256:[0-9a-f]{64}$/u.test(sandboxImage);
 
   checks.push({
     id: 'production-store',
@@ -190,6 +192,17 @@ function addProductionChecks(checks: DoctorCheck[]): void {
     status: otlp ? 'pass' : 'warn',
     detail: otlp ? 'OTLP endpoint present (value hidden)' : 'AQA_OTLP_ENDPOINT is not configured',
     suggestion: otlp ? undefined : 'Configure OTLP export before claiming production SLO evidence.',
+  });
+  checks.push({
+    id: 'production-sandbox-image',
+    title: 'Hardened sandbox image is immutable',
+    status: sandboxImagePinned ? 'pass' : 'fail',
+    detail: sandboxImagePinned
+      ? 'AQA_CONTAINER_IMAGE digest configured (value hidden)'
+      : 'AQA_CONTAINER_IMAGE is missing or is not a full sha256 digest',
+    suggestion: sandboxImagePinned
+      ? undefined
+      : 'Configure AQA_CONTAINER_IMAGE as registry/image@sha256:<64 lowercase hex> for security/release-gate runs.',
   });
 }
 

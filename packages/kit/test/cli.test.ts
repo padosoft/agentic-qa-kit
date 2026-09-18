@@ -119,6 +119,7 @@ describe('aqa doctor', () => {
     const d = runDoctor({ root, production: true });
     assert.equal(d.checks.find((c) => c.id === 'production-store')?.status, 'fail');
     assert.equal(d.checks.find((c) => c.id === 'production-artifacts')?.status, 'fail');
+    assert.equal(d.checks.find((c) => c.id === 'production-sandbox-image')?.status, 'fail');
     assert.ok(d.checks.every((c) => !c.detail.includes('postgres://')));
   });
 });

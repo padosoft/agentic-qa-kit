@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Propagated sandbox image readiness into operations.** `aqa doctor
+  --production` now checks for a full immutable `AQA_CONTAINER_IMAGE` digest
+  without exposing its value. The Helm runner values/template expose the
+  operator-owned sandbox image and fail rendering when an enabled worker has
+  pinning required but no image configured. This validates configuration only;
+  OCI runtime/socket, registry admission and live image provenance remain
+  deployment evidence. Next: continue KMS/WORM, PITR/restore and IdP/mTLS.
+
 - **Required immutable images for auto-hardened sandbox profiles.** The
   automatically selected OCI sandbox for `security`/`release-gate` now rejects
   mutable tags and requires `AQA_CONTAINER_IMAGE` (or an injected equivalent)

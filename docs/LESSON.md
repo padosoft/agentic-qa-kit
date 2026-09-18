@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — runtime security prerequisites belong in deployment gates
+
+Pinning an image in application code is insufficient if Helm can deploy a
+worker without the corresponding sandbox image configuration. Mirror the
+precondition in the production doctor and chart rendering, but keep live
+runtime/socket/registry evidence separate; configuration presence is not proof
+that the pod can execute a safe OCI sandbox.
+
 # 2026-09-18 — hardened flags do not pin the image supply chain
 
 `--read-only`, dropped capabilities and `no-new-privileges` protect the
