@@ -13,6 +13,7 @@ export {
   runScenario,
   type ProbeRunner,
   type HttpProbeRunnerOptions,
+  type PreconditionRunResult,
   type ScenarioRunResult,
 } from './run.js';
 export { makeShellProbeRunner, type ShellProbeRunnerOptions } from './shell.js';

@@ -14,8 +14,16 @@ export interface ScenarioRunResult {
   execution_error?: string;
   probes: readonly ProbeRunResult[];
   cleanup: readonly ProbeRunResult[];
+  /** Results for executable preconditions; descriptive string preconditions are not run. */
+  preconditions: readonly PreconditionRunResult[];
   oracles: readonly OracleResult[];
   finding: Finding.Finding | null;
+}
+
+export interface PreconditionRunResult {
+  id: string;
+  probe: ProbeRunResult;
+  oracle: OracleResult;
 }
 
 export type ProbeRunner = (probe: Scenario.Probe, signal?: AbortSignal) => Promise<ProbeRunResult>;
@@ -263,6 +271,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       : { type: 'orchestrator' as const, id: 'runner' };
   const runner = opts.probeRunner ?? MISSING_PROBE_RUNNER;
   const probeResults: ProbeRunResult[] = [];
+  const preconditionResults: PreconditionRunResult[] = [];
   const execute = async (probe: Scenario.Probe): Promise<ProbeRunResult> => {
     const controller = new AbortController();
     let timedOut = false;
@@ -317,27 +326,58 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       },
     });
   };
+  const cleanupResults: ProbeRunResult[] = [];
+  const executeCleanup = async () => {
+    for (const probe of opts.scenario.cleanup) {
+      const result = await execute(probe);
+      cleanupResults.push(result);
+      recordProbe(probe, result, true);
+    }
+  };
   const unsupportedSteps = opts.supportedProbeKinds
     ? opts.scenario.steps.filter((probe) => !opts.supportedProbeKinds?.has(probe.kind))
+    : [];
+  const executablePreconditions = opts.scenario.preconditions.filter(
+    (precondition): precondition is Scenario.Precondition => typeof precondition !== 'string',
+  );
+  const unsupportedPreconditions = opts.supportedProbeKinds
+    ? executablePreconditions.filter(
+        (precondition) => !opts.supportedProbeKinds?.has(precondition.probe.kind),
+      )
     : [];
   const unsupportedCleanup = opts.supportedProbeKinds
     ? opts.scenario.cleanup.filter((probe) => !opts.supportedProbeKinds?.has(probe.kind))
     : [];
-  if (unsupportedSteps.length > 0 || unsupportedCleanup.length > 0) {
+  if (
+    unsupportedSteps.length > 0 ||
+    unsupportedCleanup.length > 0 ||
+    unsupportedPreconditions.length > 0
+  ) {
     const preflight = (probe: Scenario.Probe) => ({
       probe_id: probe.id,
       execution_status: 'failed' as const,
       error: `probe kind "${probe.kind}" is not supported by the configured driver`,
     });
     const preflightResults = unsupportedSteps.map(preflight);
-    const cleanupResults = unsupportedCleanup.map(preflight);
+    const preflightCleanupResults = unsupportedCleanup.map(preflight);
+    const preconditionProbeResults = unsupportedPreconditions.map((precondition) =>
+      preflight(precondition.probe),
+    );
     for (const [index, probe] of unsupportedSteps.entries()) {
       const result = preflightResults[index];
       if (result) recordProbe(probe, result, false);
     }
     for (const [index, probe] of unsupportedCleanup.entries()) {
-      const result = cleanupResults[index];
+      const result = preflightCleanupResults[index];
       if (result) recordProbe(probe, result, true);
+    }
+    for (const [index, precondition] of unsupportedPreconditions.entries()) {
+      const result = preconditionProbeResults[index];
+      if (result) {
+        recordProbe(precondition.probe, result, false);
+        const oracle = evaluateOracle(precondition.oracle, { probes: [result] });
+        preconditionResults.push({ id: precondition.id, probe: result, oracle });
+      }
     }
     const oracleResults = opts.scenario.oracles.map((oracle) => {
       const result = evaluateOracle(oracle, { probes: preflightResults });
@@ -351,18 +391,75 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       });
       return result;
     });
-    const preflightError = preflightResults[0]?.error ?? cleanupResults[0]?.error;
+    const preflightError =
+      preflightResults[0]?.error ??
+      preconditionProbeResults[0]?.error ??
+      preflightCleanupResults[0]?.error;
     const preflightResult: ScenarioRunResult = {
       scenario_id: opts.scenario.id,
       outcome: 'blocked',
       execution_status: 'failed',
       probes: preflightResults,
-      cleanup: cleanupResults,
+      cleanup: preflightCleanupResults,
+      preconditions: preconditionResults,
       oracles: oracleResults,
       finding: null,
     };
     if (preflightError) preflightResult.execution_error = preflightError;
     return preflightResult;
+  }
+
+  // Descriptive string preconditions are deliberately retained for humans,
+  // but cannot influence execution. Only the structured form is executable.
+  // Run every check before scenario steps so a failed setup assertion cannot
+  // be mistaken for a product finding or allow side effects to proceed.
+  for (const precondition of executablePreconditions) {
+    if (opts.signal?.aborted) {
+      return {
+        scenario_id: opts.scenario.id,
+        outcome: 'blocked',
+        execution_status: 'failed',
+        execution_error: 'preconditions cancelled before completion',
+        probes: probeResults,
+        cleanup: cleanupResults,
+        preconditions: preconditionResults,
+        oracles: [],
+        finding: null,
+      };
+    }
+    const probe = await execute(precondition.probe);
+    recordProbe(precondition.probe, probe, false);
+    const oracle = evaluateOracle(precondition.oracle, { probes: [probe] });
+    preconditionResults.push({ id: precondition.id, probe, oracle });
+    opts.events?.append({
+      ts: new Date().toISOString(),
+      run_id: opts.run_id,
+      kind: 'oracle_evaluated',
+      actor,
+      scenario_id: opts.scenario.id,
+      payload: {
+        oracle_id: precondition.oracle.id,
+        passed: oracle.passed,
+        reason: oracle.reason,
+        precondition_id: precondition.id,
+        precondition: true,
+      },
+    });
+    if (probe.execution_status === 'failed' || !oracle.passed) {
+      await executeCleanup();
+      return {
+        scenario_id: opts.scenario.id,
+        outcome: 'blocked',
+        execution_status: 'failed',
+        execution_error:
+          probe.error ?? `precondition "${precondition.id}" failed: ${oracle.reason}`,
+        probes: probeResults,
+        cleanup: cleanupResults,
+        preconditions: preconditionResults,
+        oracles: [],
+        finding: null,
+      };
+    }
   }
   let cancelled = false;
   for (const probe of opts.scenario.steps) {
@@ -378,12 +475,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
       break;
     }
   }
-  const cleanupResults: ProbeRunResult[] = [];
-  for (const probe of opts.scenario.cleanup) {
-    const r = await execute(probe);
-    cleanupResults.push(r);
-    recordProbe(probe, r, true);
-  }
+  await executeCleanup();
   const oracleResults: OracleResult[] = [];
   for (const oracle of opts.scenario.oracles) {
     const r = evaluateOracle(oracle, { probes: probeResults });
@@ -441,6 +533,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
         execution_status: 'completed',
         probes: probeResults,
         cleanup: cleanupResults,
+        preconditions: preconditionResults,
         oracles: oracleResults,
         finding: null,
       }),
@@ -472,6 +565,7 @@ export async function runScenario(opts: RunScenarioOptions): Promise<ScenarioRun
     ...(executionError ? { execution_error: executionError } : {}),
     probes: probeResults,
     cleanup: cleanupResults,
+    preconditions: preconditionResults,
     oracles: oracleResults,
     finding,
   };

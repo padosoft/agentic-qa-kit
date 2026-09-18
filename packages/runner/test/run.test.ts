@@ -81,6 +81,80 @@ describe('runScenario', () => {
     assert.equal(result.finding, null);
   });
 
+  it('executes structured preconditions before scenario steps', async () => {
+    const calls: string[] = [];
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        preconditions: [
+          {
+            id: 'health-ready',
+            probe: {
+              id: 'check-health',
+              kind: 'http',
+              with: { url: '/healthz' },
+              timeout_ms: 1000,
+            },
+            oracle: {
+              id: 'health-200',
+              kind: 'http_status',
+              probe_id: 'check-health',
+              with: { expected: 200 },
+              weight: 1,
+            },
+          },
+        ],
+      },
+      run_id: 'run-precondition-order',
+      probeRunner: async (probe) => {
+        calls.push(probe.id);
+        return { probe_id: probe.id, status: probe.id === 'check-health' ? 200 : 401 };
+      },
+    });
+    assert.deepEqual(calls, ['check-health', 'probe-rotate', 'probe-use-old']);
+    assert.equal(result.preconditions[0]?.oracle.passed, true);
+    assert.equal(result.outcome, 'pass');
+  });
+
+  it('blocks before scenario steps when a structured precondition fails', async () => {
+    const calls: string[] = [];
+    const result = await runScenario({
+      scenario: {
+        ...SCENARIO,
+        preconditions: [
+          {
+            id: 'health-ready',
+            probe: {
+              id: 'check-health',
+              kind: 'http',
+              with: { url: '/healthz' },
+              timeout_ms: 1000,
+            },
+            oracle: {
+              id: 'health-200',
+              kind: 'http_status',
+              probe_id: 'check-health',
+              with: { expected: 200 },
+              weight: 1,
+            },
+          },
+        ],
+        cleanup: [{ ...SCENARIO.steps[0], id: 'cleanup-reset' }],
+      },
+      run_id: 'run-precondition-blocked',
+      probeRunner: async (probe) => {
+        calls.push(probe.id);
+        return { probe_id: probe.id, status: 503 };
+      },
+    });
+    assert.deepEqual(calls, ['check-health', 'cleanup-reset']);
+    assert.equal(result.preconditions[0]?.oracle.passed, false);
+    assert.equal(result.outcome, 'blocked');
+    assert.equal(result.execution_status, 'failed');
+    assert.equal(result.cleanup.length, 1);
+    assert.equal(result.finding, null);
+  });
+
   it('derives finding severity from the resolved risk declaration', async () => {
     const result = await runScenario({
       scenario: SCENARIO,
