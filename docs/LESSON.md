@@ -2043,3 +2043,10 @@ Require the original fingerprint when recording a reproduced regression, and
 persist inconclusive evidence without changing status. Keep execution of the
 replay, durable state transition, and PR/scheduled-retest integrations as
 separate evidence boundaries.
+## 2026-09-18 — Fixture restore must be integrity- and path-bounded
+
+Fixture tooling should not recursively copy arbitrary source trees. Keep the
+first safe contract narrow (JSON only), record per-file hashes and byte limits,
+anonymize sensitive keys deterministically, reject traversal/absolute restore
+targets, and refuse overwrite by default. Staging extraction and scratch-tenant
+provisioning require provider-specific evidence and should remain explicit.

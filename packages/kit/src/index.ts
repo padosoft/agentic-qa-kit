@@ -5,6 +5,13 @@ export { runDoctor } from './commands/doctor.js';
 export { runValidate } from './commands/validate.js';
 export { runVerify } from './commands/verify.js';
 export { runIngest } from './commands/ingest.js';
+export {
+  runFixturesRestore,
+  runFixturesSnapshot,
+  type FixtureRestoreOptions,
+  type FixtureResult,
+  type FixtureSnapshotOptions,
+} from './commands/fixtures.js';
 export { runRiskDiscover } from './commands/risk-discover.js';
 export {
   runRiskCoverage,

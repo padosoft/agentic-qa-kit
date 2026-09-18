@@ -13,6 +13,16 @@
 
 ## 2026-09-18
 
+- **Added the M7 fixture management core.** `aqa fixtures snapshot <dir>` now
+  creates bounded, versioned JSON fixtures under `.aqa/fixtures/`, with
+  deterministic anonymization for common PII/credential fields. `aqa fixtures
+  restore <fixture> <dir>` validates manifest paths, size limits and SHA-256
+  integrity before a no-overwrite restore. Absolute/traversal targets are
+  rejected and only JSON is accepted by this safe baseline. Added CLI tests for
+  anonymization, tampering and overwrite protection. Provider-specific staging
+  extraction, distribution-preserving anonymization and ephemeral tenant
+  provisioning remain deployment integrations.
+
 - **Closed the durable finding fix-verification loop (M5 core).** Findings now
   retain a bounded `last_verification` record and support `fixed` →
   `regressed` transitions only when deterministic replay evidence matches the
