@@ -42,7 +42,7 @@ Environment configuration is absent:
 - `gift-card-provider-evidence.yml` — read-only issuer reconciliation;
 - `stripe-provider-evidence.yml` — read-only Stripe test-mode PaymentIntent;
 - `mutation-evidence-gate.yml` — protected reusable gate for producer-uploaded
-  mutation and reviewed coverage artifacts.
+  mutation, reviewed coverage and optional observed regression artifacts.
 
 The workflows are not evidence merely because they are present in Git. The
 operator must run them in their protected environments and retain the redacted

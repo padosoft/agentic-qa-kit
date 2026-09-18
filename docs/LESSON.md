@@ -2771,3 +2771,10 @@ execution evidence. Keep one bounded observation per pair, require its run ID
 and source revision, and compare the observed outcome with the report. Missing
 or contradictory pairs must fail closed; the protected producer remains a
 separate deployment concern.
+
+# 2026-09-19 — Optional protected inputs must not imply proof
+
+Adding regression artifacts to a reusable workflow must preserve old callers,
+but an omitted artifact cannot silently pass as execution evidence. Keep the
+second gate conditional, validate its artifact-relative path and threshold only
+when supplied, and document the resulting evidence boundary explicitly.

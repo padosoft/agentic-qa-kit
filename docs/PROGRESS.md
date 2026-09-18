@@ -11,6 +11,15 @@
 
 ## 2026-09-19
 
+- **Connected protected mutation CI to regression execution evidence.** The
+  reusable `mutation-evidence-gate.yml` now accepts optional producer and file
+  inputs for observed mutant/scenario executions, validates their paths and
+  invokes `aqa mutation regression` in the protected Environment. Existing
+  callers remain compatible when the optional artifact is absent; the absence
+  is explicitly not treated as execution proof. Operations documentation was
+  updated. Next: execute it with an operator-owned mutation producer and
+  protected environment.
+
 - **Added mutation-to-regression execution evidence.** `@aqa/ingest` now
   validates bounded evidence containing source revision, run ID and observed
   killed/survived outcome for every reviewed mutant/scenario pair. The new

@@ -27,6 +27,21 @@ on:
         description: Minimum kill rate among mapped mutants
         required: true
         type: string
+      regression_artifact:
+        description: Optional artifact containing observed mutant/scenario executions
+        required: false
+        default: ''
+        type: string
+      regression_file:
+        description: Relative JSON path inside the regression evidence artifact
+        required: false
+        default: ''
+        type: string
+      min_regression_kill_rate:
+        description: Minimum kill rate from observed regression executions
+        required: false
+        default: ''
+        type: string
     secrets: inherit
 
 permissions:
@@ -64,17 +79,32 @@ jobs:
           name: ${{ inputs.manifest_artifact }}
           path: .aqa/mutation/manifest
 
+      - name: Download observed regression evidence
+        if: ${{ inputs.regression_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.regression_artifact }}
+          path: .aqa/mutation/regression
+
       - name: Validate bounded paths and required files
         shell: bash
         env:
           REPORT_FILE: ${{ inputs.report_file }}
           MANIFEST_FILE: ${{ inputs.manifest_file }}
+          REGRESSION_ARTIFACT: ${{ inputs.regression_artifact }}
+          REGRESSION_FILE: ${{ inputs.regression_file }}
+          MIN_REGRESSION_KILL_RATE: ${{ inputs.min_regression_kill_rate }}
         run: |
           set -euo pipefail
           case "$REPORT_FILE" in /*|*..*|*\\*) echo '::error::unsafe report_file'; exit 1;; esac
           case "$MANIFEST_FILE" in /*|*..*|*\\*) echo '::error::unsafe manifest_file'; exit 1;; esac
           test -f ".aqa/mutation/report/$REPORT_FILE"
           test -f ".aqa/mutation/manifest/$MANIFEST_FILE"
+          if [ -n "$REGRESSION_ARTIFACT" ]; then
+            case "$REGRESSION_FILE" in ''|/*|*..*|*\\*) echo '::error::unsafe or missing regression_file'; exit 1;; esac
+            case "$MIN_REGRESSION_KILL_RATE" in ''|*[!0-9.]* ) echo '::error::invalid min_regression_kill_rate'; exit 1;; esac
+            test -f ".aqa/mutation/regression/$REGRESSION_FILE"
+          fi
 
       - name: Run AQA mutation coverage gate
         shell: bash
@@ -91,6 +121,22 @@ jobs:
             ".aqa/mutation/manifest/$MANIFEST_FILE" \
             --min-mapped-rate "$MIN_MAPPED_RATE" \
             --min-killed-rate "$MIN_KILLED_RATE" 2>&1 | tee .aqa/mutation/evidence/gate.log
+
+      - name: Run AQA mutation regression execution gate
+        if: ${{ inputs.regression_artifact != '' }}
+        shell: bash
+        env:
+          REPORT_FILE: ${{ inputs.report_file }}
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+          REGRESSION_FILE: ${{ inputs.regression_file }}
+          MIN_REGRESSION_KILL_RATE: ${{ inputs.min_regression_kill_rate }}
+        run: |
+          set -euo pipefail
+          bun packages/kit/dist/cli.cjs mutation regression \
+            ".aqa/mutation/report/$REPORT_FILE" \
+            ".aqa/mutation/manifest/$MANIFEST_FILE" \
+            ".aqa/mutation/regression/$REGRESSION_FILE" \
+            --min-kill-rate "$MIN_REGRESSION_KILL_RATE" 2>&1 | tee -a .aqa/mutation/evidence/gate.log
 
       - name: Upload redacted gate evidence
         if: always()

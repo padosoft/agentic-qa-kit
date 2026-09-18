@@ -14,6 +14,21 @@ aqa mutation coverage <report.json> <manifest.json> \
   --min-mapped-rate X --min-killed-rate Y
 ```
 
+For a producer that also publishes observed regression executions, provide the
+optional `regression_artifact`, `regression_file` and
+`min_regression_kill_rate` inputs. The protected workflow then additionally
+runs:
+
+```text
+aqa mutation regression <report.json> <manifest.json> <evidence.json> \
+  --min-kill-rate X
+```
+
+This second gate requires one bounded observation for every reviewed
+mutant/scenario pair and checks that observed outcomes agree with the mutation
+report. Leaving the optional artifact unset preserves compatibility with
+existing producers, but does not claim execution evidence.
+
 The log contains only bounded IDs and rates and is retained as a short-lived
 workflow artifact. The workflow being present is not evidence of a mutation
 run. An operator must configure the producer, environment protection and
