@@ -2658,6 +2658,14 @@ certificate material and tokens in protected Environment secrets, use a
 mode-700 temporary directory, disable redirects, and never persist response
 bodies.
 
+# 2026-09-18 — Recovery target posture is separate from PITR execution
+
+A SELECT-only observation of `pg_is_in_recovery()` and transaction read-only
+state is valuable evidence after a restore, but it cannot prove which cloud
+backup provider performed PITR or that WAL/object/KMS/RTO/RPO controls worked.
+Keep the target observation and provider execution drill as independently
+auditable controls.
+
 # 2026-09-18 — Idempotency keys need an ownership scope
 
 Making an operation ID globally unique can prevent a cross-tenant mutation,
