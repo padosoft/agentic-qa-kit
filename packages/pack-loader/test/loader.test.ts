@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -70,7 +70,10 @@ describe('loadPacks', () => {
 
 describe('pack resources', () => {
   it('ships the GDPR enterprise pack with schema-valid scenarios', () => {
-    const root = join(process.cwd(), 'packs', 'compliance-gdpr');
+    const workspaceRoot = existsSync(join(process.cwd(), 'packs', 'compliance-gdpr', 'pack.yaml'))
+      ? process.cwd()
+      : join(process.cwd(), '..', '..');
+    const root = join(workspaceRoot, 'packs', 'compliance-gdpr');
     const pack = loadPack(root);
     const resources = loadPackResources(pack);
     for (const scenarioPath of pack.manifest.scenarios ?? []) {
