@@ -13,6 +13,14 @@
 
 ## 2026-09-18
 
+- **Promoted the production-evidence release gate to `main`.** Macro PR #156
+  merged as **`141de9a`** after rerun **35337503239** passed every technical
+  gate, including 144 Playwright tests, CLI E2E, live Prometheus/OTLP,
+  PostgreSQL, S3, OCI, Bun/Node, build, lint/typecheck and Helm. Copilot was
+  intentionally not used. The next increment is to enforce this binding from
+  production doctor/release policy and then close provider-backed KMS/WORM,
+  PITR and identity evidence gaps.
+
 - **Merged the DR release-gate sub-task PR #155 into the macro branch.** The
   authoritative hosted CI run **35336917827** passed all technical gates:
   typecheck/lint, Helm, Bun, Node 22, PostgreSQL, S3, OCI, build, CLI E2E,
