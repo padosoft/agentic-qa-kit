@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-mobile-deep-link-session
+title: Deep links and app resume remain bound to the intended authenticated session
+risk_refs: [mobile-deeplink-session-confusion]
+invariant_refs: [inv-mobile-link-session-bound]
+preconditions:
+  - "a disposable mobile app and single-use deep-link fixture are available"
+steps:
+  - id: inspect-link
+    kind: http
+    with: { method: "GET", url: "/mobile/deep-link?fixture=order-status&session=bound" }
+oracles:
+  - id: o-auth
+    kind: response_contains
+    probe_id: inspect-link
+    with: { jsonpath: "$.authenticated_before_action", equals: true }
+  - id: o-binding
+    kind: response_contains
+    probe_id: inspect-link
+    with: { jsonpath: "$.user_tenant_binding_verified", equals: true }
+  - id: o-reuse
+    kind: response_contains
+    probe_id: inspect-link
+    with: { jsonpath: "$.single_use_enforced", equals: true }
+tags: [mobile, deep-link, session, security]

@@ -2119,3 +2119,10 @@ Locale matrix and formatting checks can catch regressions in checkout values,
 but they cannot certify translation quality, tax law, regional compliance or
 device typography. Keep semantic format assertions, visual/device checks and
 human/legal review explicit.
+
+## 2026-09-18 — Mobile happy paths are not lifecycle evidence
+
+Offline retries, permission denial and deep links need explicit idempotency,
+revocation and session-binding assertions. A provider-neutral HTTP fixture does
+not prove OS background behavior, push delivery, device security or app-store
+controls; those journeys must remain separately evidenced.

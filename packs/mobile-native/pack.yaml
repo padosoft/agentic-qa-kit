@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-mobile-native
+version: 0.1.0
+description: "Opt-in mobile baseline for offline journeys, permissions, deep links and secure session recovery."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [mobile, mobile-native, ios, android, react-native, expo]
+templates: []
+scenarios:
+  - scenarios/offline-retry.yaml
+  - scenarios/permissions.yaml
+  - scenarios/deep-link-session.yaml
+risks:
+  - risks/mobile-native.yaml
+oracles: []
+probes: []

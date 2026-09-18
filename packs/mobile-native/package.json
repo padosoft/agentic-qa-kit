@@ -1,0 +1,6 @@
+{
+  "name": "@padosoft/aqa-pack-mobile-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module"
+}
