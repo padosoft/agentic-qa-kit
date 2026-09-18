@@ -11,6 +11,12 @@
 
 ## 2026-09-18
 
+- **Removed silent CI placeholder passes.** Unit, Node, build and Playwright
+  jobs now execute their real commands unconditionally; a missing workspace or
+  admin Playwright setup fails the job instead of printing a green skip notice.
+  This closes a false-green governance gap in the enterprise release gate.
+  Next: run the full local matrix, then promote the CI hardening increment.
+
 - **Merged OIDC origin-policy hardening.** PR #188 merged as `a466cfa` after
   the full technical matrix: Bun/Node tests, typecheck/lint, build, Helm,
   CLI smoke, Playwright admin UI, Postgres/S3/OCI integrations and live
