@@ -20,6 +20,13 @@
   threshold calibration/governance, persistent root-cause lifecycle and bulk
   fix/verify orchestration.
 
+- **Added the bounded stateful journey graph contract.** `@aqa/methodology`
+  now validates versioned states/transitions, reachability, terminal states,
+  non-terminal dead ends and legal transition paths without executing side
+  effects. Added ADR-268, package docs and 14/14 methodology tests. This
+  closes the static graph gap; real actor sessions, temporal observers,
+  runtime cleanup and trace federation remain execution-level work.
+
 - **Added the first mutation-evidence release gate.** `@aqa/ingest` now
   normalizes bounded flat/Stryker-style reports, preserves non-killed outcomes
   and computes a deterministic score; `aqa mutation gate <report.json>
