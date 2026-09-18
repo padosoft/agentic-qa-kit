@@ -75,6 +75,18 @@ bunx playwright test      # only if UI/UX touched
 - UI/UX work: Playwright scenarios for every user-visible interaction.
 - LLM-dependent code: deterministic fixtures (record/replay) for CI; live calls only behind explicit env flag.
 
+### Complete-journey evidence
+
+- A passing fixture, build, unit test or test named E2E is not proof of a
+  complete product journey.
+- For UI/API integrations, name the real boundary, execute the action, observe
+  the resulting state through the supported read path, assert tenant/security
+  invariants, and retain redacted evidence.
+- Provider-neutral adapters and local emulators are valuable contract tests but
+  must not be reported as cloud/IdP/PSP/WMS/KMS/WAL evidence.
+- A missing provider credential is an evidence gap, not a reason to fabricate a
+  pass; use an explicit `unsupported`/manual gate and preserve the next action.
+
 ## Documentation rules
 
 - Update `docs/PROGRESS.md` after every meaningful work increment.

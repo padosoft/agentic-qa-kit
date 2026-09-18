@@ -2502,3 +2502,11 @@ Timestamp consistency alone cannot establish that a reported RTO came from the
 restore. Expose a small wrapper that starts before the provider callback,
 stops only after it resolves, computes the bounded RTO and propagates errors.
 Keep provider execution and timing provenance separate from the schema verifier.
+
+# 2026-09-18 — Process documents can become a production risk when stale
+
+The repository guide still advertised bootstrap work after the implementation
+had moved into production-evidence hardening. Agents could therefore select
+the wrong next task. Keep the live priority and complete-journey evidence
+boundary in the canonical guide and rules, with `PROGRESS.md` remaining the
+authoritative task ledger.
