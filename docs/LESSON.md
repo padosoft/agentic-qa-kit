@@ -8,6 +8,14 @@ evaluation or dashboard query works. Keep those claims explicitly separate
 and require a live operator journey before marking production observability
 complete.
 
+# 2026-09-18 — Live telemetry needs two independent proofs
+
+An exporter accepting a span does not prove Prometheus can scrape the
+application, and a successful scrape does not prove OTLP delivery. The live
+journey therefore verifies both paths independently and uses disposable
+provider containers; configuration-only tests remain useful but cannot replace
+either runtime assertion.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or
