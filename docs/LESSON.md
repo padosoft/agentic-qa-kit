@@ -2487,3 +2487,11 @@ mutations over external plaintext HTTP. Enforce HTTPS at construction time,
 allow only explicitly opted-in loopback HTTP for local journeys, reject URL
 credentials, and keep redirects manual so the origin allowlist remains
 effective.
+
+# 2026-09-18 — OIDC issuer validation is not endpoint validation
+
+OIDC discovery is untrusted provider input. Matching only the metadata issuer
+still allows token, UserInfo or JWKS calls to be redirected to an unrelated
+origin. Pin all discovered endpoints to the issuer origin by default, require
+HTTPS and reject embedded credentials; make split-origin providers an explicit
+allowlist decision.

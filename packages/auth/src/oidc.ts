@@ -4,6 +4,8 @@ import { AuthSession as AuthSessionSchema, User } from './types.js';
 
 export interface OidcConfig {
   issuer: string;
+  /** Additional HTTPS origins explicitly trusted for discovered OIDC endpoints. */
+  allowed_endpoint_origins?: readonly string[];
   client_id: string;
   client_secret_env: string;
   redirect_uri: string;
@@ -62,6 +64,25 @@ export class OidcAdapter {
       throw new Error('[auth/oidc] redirect_uri and client_secret_env are required');
     }
     this.request = config.fetch ?? fetch;
+    const issuer = new URL(config.issuer);
+    if (issuer.protocol !== 'https:' || issuer.username || issuer.password) {
+      throw new Error('[auth/oidc] issuer must be an HTTPS URL without credentials');
+    }
+    for (const origin of config.allowed_endpoint_origins ?? []) {
+      const url = new URL(origin);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.pathname !== '/' ||
+        url.search ||
+        url.hash
+      ) {
+        throw new Error(
+          '[auth/oidc] allowed endpoint origins must be HTTPS origins without credentials',
+        );
+      }
+    }
   }
 
   async authorizeUrl(state: string, codeChallenge?: string, nonce?: string): Promise<string> {
@@ -161,6 +182,26 @@ export class OidcAdapter {
     };
     if (this.discovery.issuer.replace(/\/$/, '') !== issuer) {
       throw new Error('[auth/oidc] discovery issuer does not match configured issuer');
+    }
+    const allowedOrigins = new Set([
+      new URL(issuer).origin,
+      ...(this.config.allowed_endpoint_origins ?? []).map((origin) => new URL(origin).origin),
+    ]);
+    for (const endpoint of [
+      this.discovery.authorization_endpoint,
+      this.discovery.token_endpoint,
+      this.discovery.userinfo_endpoint,
+      this.discovery.jwks_uri,
+    ]) {
+      const url = new URL(endpoint);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        !allowedOrigins.has(url.origin)
+      ) {
+        throw new Error('[auth/oidc] discovery endpoint is not an allowed HTTPS origin');
+      }
     }
     return this.discovery;
   }

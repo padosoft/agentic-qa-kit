@@ -7,6 +7,8 @@ User/Role/Permission shapes and a provider-neutral OIDC Authorization Code + PKC
 - `allows(user, permission)` answers per-permission authorization.
 - `OidcAdapter` performs discovery, Authorization Code + PKCE exchange, signed
   RS256 ID-token validation, UserInfo retrieval and strict AQA role mapping.
+  Discovery endpoints are pinned to the issuer HTTPS origin by default, with
+  explicit HTTPS allowlisting for providers that split endpoint origins.
   Issuer, audience, authorized party, `iat`, `exp`, `nonce`, subject binding and
   `kid`/JWKS rotation are checked; missing claims, endpoint metadata or secrets
   fail closed. JWKS is cached briefly and refreshed once when a new signing key
