@@ -6,6 +6,9 @@ Storage abstraction. Single `StoreProvider` interface; two adapters:
 - `PostgresStore` — durable PostgreSQL adapter using idempotent schema creation,
   JSONB envelopes, tenant indexes, atomic create operations and a separate
   hash-addressed audit-event table. Refuses construction on empty DSN.
+- `observePostgresRecoveryAtDsn()` — SELECT-only, redacted observation of a
+  PostgreSQL PITR target, with an injected-client variant for deterministic
+  tests and a fail-closed recovery/read-only assertion.
 
 Swap adapter via configuration; the runner only depends on `StoreProvider`.
 

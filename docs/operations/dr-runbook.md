@@ -65,3 +65,15 @@ fresh execution of the restore.
 ## Current repository boundary
 
 The repository provides scoped Postgres storage, content-addressed artifact references, redaction and queue fencing. It does not provision a cloud backup service, KMS, WAL archiver or immutable object-lock policy. Those are deployment obligations; this document is not evidence that a live backup or restore has run. A release claiming DR readiness must attach a fresh drill record with infrastructure-specific evidence.
+
+## PostgreSQL recovery observation
+
+The `@aqa/store` package exposes a SELECT-only recovery observer for the
+isolated PostgreSQL target. Configure the DSN through the deployment secret
+boundary and call `observePostgresRecoveryAtDsn()`; never pass the DSN as a CLI
+argument or write it to evidence. The emitted record contains only the observed
+timestamp, recovery/read-only state, replay LSN/timestamp and server version.
+Use `assertPostgresRecoveryTarget()` before reopening writes. This is a real
+database observation and should be attached to the drill's operator evidence,
+but it does not replace provider proof that the requested PITR and artifact
+restore actually ran.

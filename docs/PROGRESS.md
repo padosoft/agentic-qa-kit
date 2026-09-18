@@ -2384,3 +2384,24 @@
   remote artifact storage/retention, OIDC provider lifecycle, KMS/WORM/PITR
   restore, OTel/Prometheus deployment evidence, and real commerce provider
   reconciliation journeys.
+# 2026-09-18 — PostgreSQL recovery observation boundary in progress
+
+- Added a provider-backed, SELECT-only PostgreSQL recovery observer with DSN
+  connection lifecycle, replay LSN/timestamp validation, read-only target
+  assertion and bounded redacted output. Unit coverage includes valid state,
+  writable/non-recovery rejection and malformed provider output.
+- This proves the recovered PostgreSQL target's observed state, not the cloud
+  backup provider's PITR execution, object restore or KMS/WORM controls. Those
+  remain separate evidence requirements.
+- Next: run store gates, document the operator wiring, then add an end-to-end
+  hosted PostgreSQL recovery observation job if the CI environment can expose a
+  disposable recovery target.
+
+# 2026-09-18 — KMS/S3 promotion completed
+
+- PR #162 merged as `22f26f6` after the full technical matrix passed,
+  including Playwright admin E2E, CLI E2E, PostgreSQL/S3/OCI integrations,
+  telemetry, build, Bun and Node unit suites.
+- The artifact adapter now requests and reads back AES256, KMS or DSSE
+  encryption metadata, failing closed on provider mismatch. Bucket-level KMS
+  policy and WORM remain deployment evidence requirements.
