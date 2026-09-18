@@ -17,12 +17,15 @@
  * is the honest signal for now. Both smoke and release-gate currently
  * report `ok: true` when scenarios completed without infrastructure
  * errors. Agent profiles require an explicit host-owned `agentRunner`; this
- * command never selects a model or provider implicitly.
+ * command never selects a model or provider implicitly. Hardened orchestrator
+ * profiles provide a container boundary for shell probes when no host driver
+ * is given; browser, SQL and provider-specific drivers remain explicit.
  *
  * When `.aqa/project.yaml` declares `sut.base_url`, the default probe runner
- * is the origin-scoped HTTP driver from `@aqa/runner`. Browser, shell, SQL and
- * provider-specific drivers remain explicit host integrations; this command
- * owns orchestration and the audit trail.
+ * is the origin-scoped HTTP driver from `@aqa/runner`. Smoke profiles keep
+ * shell, browser, SQL and provider-specific drivers explicit; hardened
+ * profiles additionally route shell probes through `@aqa/sandbox`. This
+ * command owns orchestration and the audit trail.
  */
 
 import { createHash } from 'node:crypto';
@@ -60,10 +63,12 @@ import { buildReplayArtifacts } from '@aqa/reporter';
 import {
   EventChainWriter,
   FindingsWriter,
+  type ProbeRunResult,
   type ProbeRunner,
   makeHttpProbeRunner,
   runScenario,
 } from '@aqa/runner';
+import { ContainerSandbox, type Sandbox } from '@aqa/sandbox';
 import { type Event, Profile, Project, RiskMap, Run, Scenario } from '@aqa/schemas';
 import { parse as yamlParse } from 'yaml';
 import { createRunArtifactStore } from '../artifacts.js';
@@ -101,6 +106,8 @@ export interface RunOptions {
   otlpEndpoint?: string;
   /** Explicit driver boundary for integrations/tests; production must provide a real driver. */
   probeRunner?: ClosableProbeRunner;
+  /** Optional host-owned sandbox; hardened profiles create a container sandbox when omitted. */
+  sandbox?: Sandbox;
   /** Explicit host-owned agent driver. Required for `execution_mode: agent`. */
   agentRunner?: ClosableProbeRunner;
   /** Host-injected HTTP probe secrets; values never come from pack files. */
@@ -189,6 +196,30 @@ function freshRunId(): string {
     .digest('hex')
     .slice(0, 6);
   return `run-${stamp}-${rnd}`.toLowerCase();
+}
+
+/**
+ * Route shell probes through the host-owned sandbox. HTTP remains handled by
+ * the origin-scoped driver; every other probe kind stays explicitly
+ * unsupported until its own driver is injected.
+ */
+function composeSandboxProbeRunner(sandbox: Sandbox, httpRunner?: ProbeRunner): ProbeRunner {
+  return async (probe, signal): Promise<ProbeRunResult> => {
+    if (probe.kind === 'http' && httpRunner) return httpRunner(probe, signal);
+    if (probe.kind !== 'shell') {
+      return { probe_id: probe.id, error: `unsupported probe kind "${probe.kind}"` };
+    }
+    const command = probe.with.command;
+    if (typeof command !== 'string' || command.trim() === '') {
+      return { probe_id: probe.id, error: 'shell probe requires with.command' };
+    }
+    if (signal?.aborted)
+      return { probe_id: probe.id, error: 'shell probe cancelled before dispatch' };
+    const result = await sandbox.invoke({ tool: 'shell', args: { command } });
+    return result.ok
+      ? { probe_id: probe.id, status: 200, body: result.output }
+      : { probe_id: probe.id, error: result.error ?? 'sandbox shell probe failed' };
+  };
 }
 
 /**
@@ -538,16 +569,27 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     ...httpSecretsFromEnvironment(),
     ...(opts.httpSecrets ?? {}),
   };
-  const probeRunner: ClosableProbeRunner | undefined =
-    (profile.execution_mode === 'agent'
-      ? (opts.agentRunner ?? opts.probeRunner)
-      : opts.probeRunner) ??
-    (project.sut.base_url
-      ? makeHttpProbeRunner({
-          baseUrl: project.sut.base_url,
-          ...(Object.keys(httpSecrets).length > 0 ? { secrets: httpSecrets } : {}),
-        })
-      : undefined);
+  const explicitRunner =
+    profile.execution_mode === 'agent' ? (opts.agentRunner ?? opts.probeRunner) : opts.probeRunner;
+  const httpRunner = project.sut.base_url
+    ? makeHttpProbeRunner({
+        baseUrl: project.sut.base_url,
+        ...(Object.keys(httpSecrets).length > 0 ? { secrets: httpSecrets } : {}),
+      })
+    : undefined;
+  const hardenedProfile = profileKey === 'security' || profileKey === 'release-gate';
+  const sandbox =
+    explicitRunner || profile.execution_mode === 'agent'
+      ? opts.sandbox
+      : (opts.sandbox ??
+        (hardenedProfile
+          ? new ContainerSandbox({ budget: { max_calls: 200, per_call_timeout_ms: 60_000 } })
+          : undefined));
+  const probeRunner: ClosableProbeRunner | undefined = explicitRunner
+    ? explicitRunner
+    : sandbox
+      ? composeSandboxProbeRunner(sandbox, httpRunner)
+      : httpRunner;
   // applies_when context built from the parsed project — lets the pack-loader
   // skip packs that explicitly don't match the SUT. We forward every field
   // `appliesWhen()` knows about (sut_type, runtime, framework, db, tags) so a

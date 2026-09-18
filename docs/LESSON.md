@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-18 — a sandbox package is not a sandboxed execution path
+
+Having a tested container adapter in a package does not protect scenarios until
+the final CLI/runner boundary selects it. Wire the hardened profile to the
+host-owned sandbox, keep HTTP/provider drivers explicit, and distinguish an
+injected executor test from live OCI runtime evidence. Development profiles
+must not silently gain or lose security semantics through defaults.
+
 # 2026-09-18 — bounded parallelism is not state isolation
 
 Limiting worker count does not stop two scenarios from mutating the same cart,
