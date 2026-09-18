@@ -875,6 +875,22 @@ export async function verifyTaxJourney(
     if (currency && quote.amount.currency !== currency)
       throw new Error('tax quote currency mismatch');
     evidence.push({ step: 'tax.quote', ok: true, detail: `amount=${quote.amount.amount_minor}` });
+    if (capabilities.checkout && adapter.checkout) {
+      const checkout = validateCheckoutResult(
+        await adapter.checkout(opts.identity, updated.id, `${opts.idempotencyKey}:tax-application`),
+      );
+      if (
+        checkout.order.tax.currency !== quote.amount.currency ||
+        BigInt(checkout.order.tax.amount_minor) !== BigInt(quote.amount.amount_minor)
+      ) {
+        throw new Error('tax quote was not applied to checkout order');
+      }
+      evidence.push({
+        step: 'tax.applied',
+        ok: true,
+        detail: `order=${checkout.order.id}; amount=${checkout.order.tax.amount_minor}`,
+      });
+    }
     return {
       outcome: { status: 'pass', evidence_complete: true, reason: 'tax quote passed' },
       evidence,

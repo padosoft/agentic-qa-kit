@@ -2454,3 +2454,11 @@ different cart. Provider-neutral ecommerce journeys must require an explicit
 cart join and, for shipping, an exact normalized destination join before
 reporting a pass. Tax-law correctness and final checkout price remain separate
 provider-specific claims.
+
+# 2026-09-18 — A tax quote is not final order tax
+
+Binding a quote to the cart still does not prove the checkout applied it. When
+the merchant exposes both capabilities, run a separate namespaced checkout and
+compare the final order's currency and integer minor-unit tax amount with the
+quote. Keep quote-only providers explicitly limited rather than silently
+claiming final-tax assurance.
