@@ -2133,3 +2133,10 @@ PHI minimization, purpose-bound access and tamper-evident incident evidence are
 useful technical contracts, but they cannot establish a BAA, administrative or
 physical safeguards, vendor compliance or a breach-notification conclusion.
 Keep seeded fixtures and independent compliance/legal evidence explicit.
+
+## 2026-09-18 — Chaos contracts must carry a stop boundary
+
+Fault-injection scenarios are unsafe without an approved target, owner, traffic
+budget, stop condition and rollback plan. RTO/RPO and recovery assertions need
+disposable data and provider evidence; a passing HTTP fixture is not a disaster
+recovery drill.

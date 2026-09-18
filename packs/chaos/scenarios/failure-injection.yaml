@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-chaos-failure-injection
+title: A controlled dependency failure stops at the approved experiment boundary
+risk_refs: [chaos-unbounded-experiment]
+invariant_refs: [inv-chaos-experiment-bounded]
+preconditions:
+  - "a disposable or explicitly approved staging target and signed experiment plan are available"
+steps:
+  - id: inspect-experiment
+    kind: http
+    with: { method: "GET", url: "/chaos/experiment?fixture=payment-timeout" }
+oracles:
+  - id: o-approved
+    kind: response_contains
+    probe_id: inspect-experiment
+    with: { jsonpath: "$.target_and_owner_approved", equals: true }
+  - id: o-stop
+    kind: response_contains
+    probe_id: inspect-experiment
+    with: { jsonpath: "$.stop_condition_enforced", equals: true }
+  - id: o-budget
+    kind: response_contains
+    probe_id: inspect-experiment
+    with: { jsonpath: "$.blast_radius_within_budget", equals: true }
+tags: [chaos, fault-injection, safety]

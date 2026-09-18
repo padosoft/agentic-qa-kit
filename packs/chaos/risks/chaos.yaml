@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-chaos
+risks:
+  - id: chaos-unbounded-experiment
+    category: availability
+    title: A fault experiment escapes its safety budget and impacts customers or unrelated tenants.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-chaos-experiment-bounded
+        statement: Every experiment has an approved target, blast-radius budget, stop condition and owner.
+  - id: chaos-recovery-unproven
+    category: availability
+    title: The system cannot recover within declared RTO/RPO after a realistic dependency failure.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-chaos-recovery-objectives
+        statement: Recovery objectives, data integrity and customer-visible degradation are measured against explicit thresholds.
+  - id: chaos-failure-silent
+    category: integrity
+    title: A partial failure is not detected, isolated or observable before it corrupts a customer journey.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-chaos-failure-contained
+        statement: Faults trigger observable containment, safe degradation and an auditable experiment result.

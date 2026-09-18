@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-chaos-recovery-objectives
+title: A dependency failure meets recovery and data-integrity objectives
+risk_refs: [chaos-recovery-unproven]
+invariant_refs: [inv-chaos-recovery-objectives]
+preconditions:
+  - "a disposable recovery target, seeded non-production data and declared RTO/RPO are available"
+steps:
+  - id: inspect-recovery
+    kind: http
+    with: { method: "GET", url: "/chaos/recovery?fixture=database-failure" }
+oracles:
+  - id: o-rto
+    kind: response_contains
+    probe_id: inspect-recovery
+    with: { jsonpath: "$.rto_within_objective", equals: true }
+  - id: o-rpo
+    kind: response_contains
+    probe_id: inspect-recovery
+    with: { jsonpath: "$.rpo_within_objective", equals: true }
+  - id: o-integrity
+    kind: response_contains
+    probe_id: inspect-recovery
+    with: { jsonpath: "$.data_integrity_verified", equals: true }
+tags: [chaos, recovery, rto, rpo]

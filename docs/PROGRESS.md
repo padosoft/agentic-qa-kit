@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-chaos`.** It adds opt-in, schema-valid contracts for bounded
+  fault experiments, RTO/RPO recovery evidence and tenant blast-radius
+  containment. Fault injection, provider recovery and production impact remain
+  separate; next: validate and publish the pack.
+
 - **Started `pack-compliance-hipaa`.** It adds opt-in, schema-valid contracts
   for minimum-necessary PHI, purpose-bound access and tamper-evident incident
   evidence. Legal, administrative, physical and vendor controls remain
