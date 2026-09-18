@@ -95,3 +95,21 @@ production envelope. The same pinned key identity is applied to signed backup
 inventories. If the paths are absent, the check is explicitly reported as a
 warning rather than being silently treated as complete. This is a
 provenance gate, not provider execution evidence.
+
+## Protected CI handoff
+
+The repository also ships a manual **Production evidence gate** workflow. Set
+these GitHub Environment secrets on the protected `production-evidence`
+environment before dispatching it:
+
+| Secret | Contents |
+| --- | --- |
+| `AQA_PRODUCTION_EVIDENCE_JSON` | Signed redacted production envelope |
+| `AQA_PRODUCTION_DR_INVENTORY_JSON` | Validated backup inventory |
+| `AQA_PRODUCTION_DR_EVIDENCE_JSON` | Measured restore-drill evidence |
+| `AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM` | Approved Ed25519 trust-root key |
+| `AQA_PRODUCTION_EVIDENCE_KEY_ID` | Exact approved signing key ID |
+
+The workflow runs `aqa dr release-gate` and removes its temporary files even on
+failure. It validates provenance and cross-document binding; it intentionally
+does not claim to execute cloud PITR, KMS, WORM, IdP or runner-provider drills.

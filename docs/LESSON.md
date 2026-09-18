@@ -2510,3 +2510,10 @@ had moved into production-evidence hardening. Agents could therefore select
 the wrong next task. Keep the live priority and complete-journey evidence
 boundary in the canonical guide and rules, with `PROGRESS.md` remaining the
 authoritative task ledger.
+# 2026-09-18 — Protected evidence needs a repeatable handoff
+
+Production evidence must not be committed to Git or validated only by a
+manually copied local command. A protected manual workflow can read redacted
+JSON and trust roots from an Environment, run the canonical release gate and
+clean its temporary files. Keep this provenance gate separate from the provider
+execution drill it references.

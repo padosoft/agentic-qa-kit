@@ -1,0 +1,61 @@
+name: Production evidence gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-signed-pack:
+    name: Validate signed production evidence binding
+    runs-on: ubuntu-latest
+    environment: production-evidence
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build kit
+        run: bun run build:workspace
+
+      - name: Write protected evidence files
+        env:
+          EVIDENCE_JSON: ${{ secrets.AQA_PRODUCTION_EVIDENCE_JSON }}
+          INVENTORY_JSON: ${{ secrets.AQA_PRODUCTION_DR_INVENTORY_JSON }}
+          DRILL_JSON: ${{ secrets.AQA_PRODUCTION_DR_EVIDENCE_JSON }}
+          PUBLIC_KEY_PEM: ${{ secrets.AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$(mktemp -d)"
+          chmod 700 "$evidence_dir"
+          printf '%s' "$EVIDENCE_JSON" > "$evidence_dir/production-evidence.signed.json"
+          printf '%s' "$INVENTORY_JSON" > "$evidence_dir/backup-inventory.json"
+          printf '%s' "$DRILL_JSON" > "$evidence_dir/restore-drill.json"
+          printf '%s' "$PUBLIC_KEY_PEM" > "$evidence_dir/trust-root.pem"
+          echo "AQA_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+
+      - name: Verify cryptographic and cross-document binding
+        env:
+          PUBLIC_KEY_ID: ${{ secrets.AQA_PRODUCTION_EVIDENCE_KEY_ID }}
+        run: |
+          set -euo pipefail
+          node packages/kit/dist/cli.cjs dr release-gate \
+            "$AQA_EVIDENCE_DIR/backup-inventory.json" \
+            "$AQA_EVIDENCE_DIR/restore-drill.json" \
+            "$AQA_EVIDENCE_DIR/production-evidence.signed.json" \
+            --public-key "$AQA_EVIDENCE_DIR/trust-root.pem" \
+            --public-key-id "$PUBLIC_KEY_ID"
+
+      - name: Remove protected evidence files
+        if: always()
+        run: |
+          if [ -n "${AQA_EVIDENCE_DIR:-}" ] && [ -d "$AQA_EVIDENCE_DIR" ]; then
+            rm -rf -- "$AQA_EVIDENCE_DIR"
+          fi
