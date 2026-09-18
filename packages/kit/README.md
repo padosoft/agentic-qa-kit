@@ -48,6 +48,7 @@ Commands
   doctor        Report kit health (runtime, .aqa, agent docs, validation)
   validate      Validate .aqa/* against @aqa/schemas
   risk coverage  Show fail-closed risk coverage from persisted run evidence
+  oracle calibrate <corpus.json>  Calculate Brier/ECE metrics from a reviewed gold corpus
   dr inventory <file> [--public-key <pem>]
                 Validate/hash a backup inventory; verify signed inventories
   dr restore <inventory> <evidence> [--public-key <pem>]
@@ -63,6 +64,24 @@ Common options
 ```
 
 Exit codes: `0` success, `1` validation failure or unknown command, `2` unhandled error.
+
+### Oracle calibration
+
+Create a reviewed, redacted corpus with this shape:
+
+```json
+{
+  "schema_version": "1",
+  "corpus_id": "gold-2026-q3",
+  "samples": [
+    { "sample_id": "case-1", "predicted": 0.9, "expected": true }
+  ]
+}
+```
+
+Run `bunx aqa oracle calibrate gold.json --max-ece 0.1`. The command prints
+Brier score, ECE and reliability-bin metrics; it exits `2` when the threshold
+is exceeded. Rationales and unknown fields are rejected and are never persisted.
 
 ## Junior-friendly quick start
 

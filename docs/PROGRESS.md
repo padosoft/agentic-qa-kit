@@ -11,6 +11,15 @@
 
 ## 2026-09-18
 
+- **Closed the operational oracle-calibration gap.** Added
+  `aqa oracle calibrate <corpus.json>` with a versioned, bounded and
+  fail-closed gold-corpus parser, Brier/ECE/reliability-bin output and an
+  explicit `--max-ece` release gate. Unknown fields and private rationale
+  leakage are rejected; the command never invokes an LLM. Kit tests, build,
+  typecheck and lint pass. Remaining methodology work is mutation-scale
+  execution, semantic root-cause clustering and independent calibration
+  governance.
+
 - **Completed the formal roadmap audit.** Added
   `docs/internal/roadmap-completion-audit-2026-09-18.md` and updated the README
   to replace the stale pre-production v1.9 summary with evidence-based status.
