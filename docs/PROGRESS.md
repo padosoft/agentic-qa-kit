@@ -11,6 +11,15 @@
 
 ## 2026-09-18
 
+- **Closed the semantic clustering implementation gap.** Added
+  `clusterFindingsBySimilarity()` with bounded deterministic token similarity
+  or an operator-owned embedding callback, same-risk eligibility, explicit
+  thresholds and auditable member/score/method edges. A regression found during
+  implementation (semantic members being discarded by exact-cluster reduction)
+  was fixed and covered. ADR-267 and package docs updated. Remaining gaps are
+  threshold calibration/governance, persistent root-cause lifecycle and bulk
+  fix/verify orchestration.
+
 - **Added the first mutation-evidence release gate.** `@aqa/ingest` now
   normalizes bounded flat/Stryker-style reports, preserves non-killed outcomes
   and computes a deterministic score; `aqa mutation gate <report.json>

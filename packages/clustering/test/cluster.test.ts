@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { clusterFindings, priorityOf, rootCauseId, signatureOf } from '../dist/index.js';
+import {
+  clusterFindings,
+  clusterFindingsBySimilarity,
+  priorityOf,
+  rootCauseId,
+  signatureOf,
+} from '../dist/index.js';
 
 const base = {
   schema_version: '1' as const,
@@ -149,5 +155,69 @@ describe('clusterFindings', () => {
     const cluster = clusterFindings([finding])[0];
     assert.equal(cluster?.root_cause_id, rootCauseId(signature));
     assert.equal(cluster?.priority_score, 6.4);
+  });
+
+  it('links semantically similar findings only within the same risk and explains the edge', () => {
+    const first = {
+      ...base,
+      id: 'AQA-2026-0001',
+      scenario_id: 'login-a',
+      title: 'Expired session remains accepted',
+      summary: 'Expired session token remains accepted after logout',
+      severity: 'high' as const,
+      discovered_at: '2026-05-17T10:00:00Z',
+    };
+    const second = {
+      ...first,
+      id: 'AQA-2026-0002',
+      scenario_id: 'logout-b',
+      title: 'Logout does not invalidate session',
+      summary: 'Session token remains accepted after logout and expiry',
+      discovered_at: '2026-05-17T11:00:00Z',
+    };
+    const differentRisk = { ...second, id: 'AQA-2026-0003', risk_id: 'r-other' };
+    const clusters = clusterFindingsBySimilarity([first, second, differentRisk], {
+      threshold: 0,
+    });
+    const linked = clusters.find((cluster) =>
+      cluster.members.some((member) => member.id === first.id),
+    );
+    assert.equal(linked?.members.length, 2);
+    assert.equal(linked?.similarity_edges[0]?.method, 'token');
+    assert.equal(linked?.similarity_edges[0]?.left_id, first.id);
+    assert.equal(
+      clusters.some((cluster) =>
+        cluster.members.some(
+          (member) => member.id === differentRisk.id && cluster.members.length > 1,
+        ),
+      ),
+      false,
+    );
+  });
+
+  it('supports operator-owned embeddings with bounded dimensions and fail-closed thresholds', () => {
+    const first = {
+      ...base,
+      id: 'AQA-2026-0001',
+      title: 'A meaningful failure summary',
+      summary: 'A meaningful failure summary for the payment flow',
+      severity: 'medium' as const,
+      discovered_at: '2026-05-17T10:00:00Z',
+    };
+    const second = { ...first, id: 'AQA-2026-0002', discovered_at: '2026-05-17T11:00:00Z' };
+    const clusters = clusterFindingsBySimilarity([first, second], {
+      threshold: 0.9,
+      embed: () => [1, 0, 0],
+    });
+    assert.equal(clusters[0]?.members.length, 2);
+    assert.equal(clusters[0]?.similarity_edges[0]?.method, 'embedding');
+    assert.throws(
+      () => clusterFindingsBySimilarity([first, second], { threshold: 1.1 }),
+      /between 0 and 1/,
+    );
+    assert.throws(
+      () => clusterFindingsBySimilarity([first, second], { embed: () => [Number.NaN] }),
+      /finite/,
+    );
   });
 });

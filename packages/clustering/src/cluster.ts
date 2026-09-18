@@ -16,6 +16,25 @@ export interface Cluster {
   priority_score: number;
 }
 
+export interface SemanticSimilarityEdge {
+  left_id: string;
+  right_id: string;
+  score: number;
+  method: 'token' | 'embedding';
+}
+
+export interface SemanticCluster extends Cluster {
+  /** Explicit candidate links that caused members to be grouped. */
+  similarity_edges: ReadonlyArray<SemanticSimilarityEdge>;
+}
+
+export interface SemanticClusteringOptions {
+  /** Similarity must be at least this value; default is intentionally conservative. */
+  threshold?: number;
+  /** Optional operator-owned embedding function. Raw vectors are never persisted. */
+  embed?: (finding: Finding.Finding) => ReadonlyArray<number>;
+}
+
 const SEV_RANK: Record<Finding.Finding['severity'], number> = {
   critical: 0,
   high: 1,
@@ -99,4 +118,137 @@ export function clusterFindings(findings: ReadonlyArray<Finding.Finding>): Reado
     (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.priority_score - a.priority_score,
   );
   return out;
+}
+
+function tokens(finding: Finding.Finding): Set<string> {
+  const text = [finding.title, finding.summary, ...finding.tags]
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/gu, ' ');
+  return new Set(text.split(/\s+/u).filter((token) => token.length >= 3));
+}
+
+function tokenSimilarity(left: Set<string>, right: Set<string>): number {
+  const union = new Set([...left, ...right]);
+  if (union.size === 0) return 0;
+  let intersection = 0;
+  for (const token of left) if (right.has(token)) intersection += 1;
+  return intersection / union.size;
+}
+
+function cosineSimilarity(left: ReadonlyArray<number>, right: ReadonlyArray<number>): number {
+  if (left.length === 0 || left.length !== right.length || left.length > 4_096)
+    throw new Error('semantic embedding vectors must have the same bounded non-zero dimension');
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (a === undefined || b === undefined || !Number.isFinite(a) || !Number.isFinite(b))
+      throw new Error('semantic embedding vectors must contain finite numbers');
+    dot += a * b;
+    leftNorm += a * a;
+    rightNorm += b * b;
+  }
+  if (leftNorm === 0 || rightNorm === 0) return 0;
+  return Math.max(-1, Math.min(1, dot / Math.sqrt(leftNorm * rightNorm)));
+}
+
+/**
+ * Group findings with an explicit, bounded similarity edge in addition to
+ * exact fingerprints. Only findings for the same risk are eligible, and
+ * connected components are returned with the links that explain each merge.
+ * The default token score is deterministic; an embedding provider is opt-in.
+ */
+export function clusterFindingsBySimilarity(
+  findings: ReadonlyArray<Finding.Finding>,
+  options: SemanticClusteringOptions = {},
+): ReadonlyArray<SemanticCluster> {
+  const threshold = options.threshold ?? 0.82;
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+    throw new Error('semantic clustering threshold must be between 0 and 1');
+  if (findings.length > 10_000) throw new Error('semantic clustering is limited to 10000 findings');
+
+  const parent = findings.map((_, index) => index);
+  const find = (start: number): number => {
+    let root = start;
+    while (parent[root] !== root) root = parent[root] as number;
+    let index = start;
+    while (parent[index] !== index) {
+      const next = parent[index] as number;
+      parent[index] = root;
+      index = next;
+    }
+    return root;
+  };
+  const union = (left: number, right: number): void => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+  };
+  const edges: SemanticSimilarityEdge[] = [];
+  const tokenSets = options.embed ? undefined : findings.map(tokens);
+  const allVectors = options.embed
+    ? findings.map((finding) => options.embed?.(finding) ?? [])
+    : undefined;
+  if (allVectors) {
+    for (const vector of allVectors) {
+      if (vector.length === 0 || vector.length > 4_096)
+        throw new Error('semantic embedding vectors must have the same bounded non-zero dimension');
+      for (const value of vector) {
+        if (!Number.isFinite(value))
+          throw new Error('semantic embedding vectors must contain finite numbers');
+      }
+    }
+  }
+  for (let left = 0; left < findings.length; left += 1) {
+    const leftFinding = findings[left];
+    if (!leftFinding) continue;
+    for (let right = left + 1; right < findings.length; right += 1) {
+      const rightFinding = findings[right];
+      if (!rightFinding || leftFinding.risk_id !== rightFinding.risk_id) continue;
+      const score = options.embed
+        ? cosineSimilarity(allVectors?.[left] ?? [], allVectors?.[right] ?? [])
+        : tokenSimilarity(tokenSets?.[left] ?? new Set(), tokenSets?.[right] ?? new Set());
+      if (score < threshold) continue;
+      edges.push({
+        left_id: leftFinding.id,
+        right_id: rightFinding.id,
+        score: Number(score.toFixed(6)),
+        method: options.embed ? 'embedding' : 'token',
+      });
+      union(left, right);
+    }
+  }
+  const groups = new Map<number, Finding.Finding[]>();
+  findings.forEach((finding, index) => {
+    const bucket = groups.get(find(index)) ?? [];
+    bucket.push(finding);
+    groups.set(find(index), bucket);
+  });
+  return [...groups.values()]
+    .map((members) => {
+      const exact = clusterFindings([members[0] as Finding.Finding])[0];
+      if (!exact) throw new Error('semantic clustering produced an empty group');
+      const ids = new Set(members.map((member) => member.id));
+      const ordered = [...members].sort((a, b) =>
+        a.discovered_at < b.discovered_at ? -1 : a.discovered_at > b.discovered_at ? 1 : 0,
+      );
+      const worst = ordered.reduce(
+        (severity, member) => worseSeverity(severity, member.severity),
+        ordered[0]?.severity ?? exact.severity,
+      );
+      return {
+        ...exact,
+        members: ordered,
+        representative: ordered[0] ?? exact.representative,
+        severity: worst,
+        priority_score: Math.max(...ordered.map(priorityOf)),
+        similarity_edges: edges.filter((edge) => ids.has(edge.left_id) && ids.has(edge.right_id)),
+      };
+    })
+    .sort(
+      (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.priority_score - a.priority_score,
+    );
 }
