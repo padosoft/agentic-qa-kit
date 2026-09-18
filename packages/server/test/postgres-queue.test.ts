@@ -136,6 +136,41 @@ describe('PostgresRunnerQueue', () => {
     }
   });
 
+  it('dequeues only jobs inside the requested tenant project scope', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) {
+      console.warn('SKIP: AQA_TEST_POSTGRES_DSN is required for the live PostgreSQL contract');
+      return;
+    }
+    const queue = new PostgresRunnerQueue(dsn);
+    const prefix = `queue-scope-${randomUUID()}`;
+    const wanted = `${prefix}-wanted`;
+    const excluded = `${prefix}-excluded`;
+    try {
+      await queue.enqueue({
+        id: wanted,
+        payload: { org: `${prefix}-org`, project: `${prefix}-shop`, profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      await queue.enqueue({
+        id: excluded,
+        payload: { org: `${prefix}-org`, project: `${prefix}-other`, profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      const stored = await queue.get(wanted);
+      assert.equal(stored?.status, 'queued');
+      assert.equal((stored?.payload as Record<string, unknown>)?.org, `${prefix}-org`);
+      const leased = await queue.dequeue(undefined, [{ org: `${prefix}-org` }]);
+      assert.equal(leased?.id, wanted);
+      assert.equal(await queue.ack(wanted, leased?.lease_token), true);
+      assert.equal((await queue.get(excluded))?.status, 'queued');
+    } finally {
+      await queue.cancel(wanted, 'test cleanup');
+      await queue.cancel(excluded, 'test cleanup');
+      await queue.close();
+    }
+  });
+
   it('serializes scoped quota admission across concurrent PostgreSQL clients', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) {

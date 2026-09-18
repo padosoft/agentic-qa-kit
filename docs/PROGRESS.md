@@ -65,6 +65,15 @@
   leakage. Runner suite: 72 passed. This protects the audit artifact; provider
   billing reconciliation and distributed usage truth remain separate evidence.
 
+- **Added the durable queue-to-kit complete journey.** The PostgreSQL CI job now
+  runs `packages/kit/test/run-cmd.test.ts` with its real PostgreSQL service. The
+  journey enqueues a unique job in `PostgresRunnerQueue`, executes it through
+  `makeKitWorker` and the real HTTP `runRun` path, verifies the durable job is
+  `done`, and checks both run artifacts exist. ADR-224 records the exact
+  evidence boundary: this closes the durable queue/orchestrator gap, while
+  deployed multi-process identity, remote artifact publication and provider
+  effects remain separate production evidence.
+
 > The individual `Started pack-*` bullets below are historical work-start
 > notes retained for traceability. They are not current “next” items; the
 > consolidated completion status above is authoritative.
@@ -2139,3 +2148,19 @@
   locks in the durable adapters. Local typecheck, Biome and package tests are
   still required; hosted PostgreSQL CI remains the authoritative concurrency
   proof.
+
+# 2026-09-18 — scoped PostgreSQL worker journey hardening
+
+- PR #141 exposed a real gap in the first durable worker journey: the live
+  PostgreSQL dequeue predicate did not reliably match scoped JSONB payloads,
+  and the CI database also proved that an
+  unscoped worker could consume unrelated residual jobs. The journey now uses
+  unique tenant/project values, passes the same RunnerScope to the worker,
+  uses typed denormalized scope columns with migration backfill and an index,
+  and the queue contract has an exact scoped-dequeue regression.
+- Evidence: server typecheck, Biome and **144 local server tests** pass. The
+  hosted PostgreSQL rerun is still required to prove the live queue-to-kit
+  journey; PR #141 is intentionally not mergeable while that gate is red.
+- Next: push the typed predicate fix, rerun the full technical CI, then merge
+  only after PostgreSQL proves enqueue → scoped dequeue → runRun → artifacts
+  → ACK.

@@ -14,7 +14,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -32,7 +32,7 @@ import { describe, it } from 'node:test';
 import { FileArtifactStore } from '@aqa/artifacts';
 import { MetricsRegistry } from '@aqa/observability';
 import { ContainerSandbox } from '@aqa/sandbox';
-import { RunnerQueue } from '@aqa/server';
+import { PostgresRunnerQueue, RunnerQueue } from '@aqa/server';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { runInit } from '../dist/commands/init.js';
 import { runRun } from '../dist/commands/run.js';
@@ -225,6 +225,78 @@ describe('aqa run', () => {
       assert.equal(queue.get(job.id)?.status, 'done');
       assert.ok(readdirSync(join(root, '.aqa', 'runs')).length > 0);
     } finally {
+      await new Promise<void>((resolve, reject) =>
+        target.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it('executes the complete persisted PostgreSQL worker journey when a DSN is configured', async () => {
+    const dsn = process.env.AQA_TEST_POSTGRES_DSN;
+    if (!dsn) return;
+    const { root, packDir } = fixtureProject();
+    const target = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const address = target.address();
+    assert.ok(address && typeof address === 'object');
+    const projectPath = join(root, '.aqa', 'project.yaml');
+    const project = yamlParse(readFileSync(projectPath, 'utf8')) as Record<string, unknown>;
+    project.sut = {
+      ...(project.sut as Record<string, unknown>),
+      base_url: `http://127.0.0.1:${address.port}`,
+    };
+    writeFileSync(projectPath, yamlStringify(project));
+    const queue = new PostgresRunnerQueue(dsn, { lease_ms: 5_000 });
+    const jobId = `kit-pg-worker-${randomUUID()}`;
+    const scopedProbeId = `kit-pg-scope-probe-${randomUUID()}`;
+    const tenantProject = `kit-worker-${randomUUID()}`;
+    try {
+      const job = await queue.enqueue({
+        id: jobId,
+        payload: { org: 'kit-ci', project: tenantProject, profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      const probe = await queue.enqueue({
+        id: scopedProbeId,
+        payload: { org: 'kit-ci', project: tenantProject, profile: 'smoke' },
+        enqueued_at: new Date().toISOString(),
+      });
+      assert.deepEqual((await queue.get(job.id))?.payload, {
+        org: 'kit-ci',
+        project: tenantProject,
+        profile: 'smoke',
+      });
+      assert.equal((await queue.get(job.id))?.status, 'queued');
+      assert.deepEqual((await queue.get(probe.id))?.payload, {
+        org: 'kit-ci',
+        project: tenantProject,
+        profile: 'smoke',
+      });
+      const scopedLease = await queue.dequeue(undefined, [{ org: 'kit-ci' }]);
+      assert.equal(scopedLease?.id, job.id);
+      assert.equal(await queue.ack(job.id, scopedLease?.lease_token), true);
+      const worker = makeKitWorker({
+        queue,
+        root,
+        packsRoot: [packDir],
+        poll_ms: 10,
+        scopes: [{ org: 'kit-ci', project: tenantProject }],
+      });
+      assert.deepEqual(await worker.runOnce(), { status: 'completed', job_id: probe.id });
+      assert.equal((await queue.get(probe.id))?.status, 'done');
+      const runDirs = readdirSync(join(root, '.aqa', 'runs'));
+      assert.ok(runDirs.length > 0);
+      const runDir = join(root, '.aqa', 'runs', runDirs[0] as string);
+      assert.ok(existsSync(join(runDir, 'events.jsonl')));
+      assert.ok(existsSync(join(runDir, 'findings.jsonl')));
+      assert.ok(readFileSync(join(runDir, 'events.jsonl'), 'utf8').trim().length > 0);
+    } finally {
+      await queue.cancel(jobId, 'test cleanup');
+      await queue.cancel(scopedProbeId, 'test cleanup');
+      await queue.close();
       await new Promise<void>((resolve, reject) =>
         target.close((error) => (error ? reject(error) : resolve())),
       );
