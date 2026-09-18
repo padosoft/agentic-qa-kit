@@ -612,7 +612,16 @@ export function redactText(value: string, policy: RedactionPolicy = {}): string 
 }
 
 export function redactJson(value: unknown, key = ''): unknown {
-  if (SENSITIVE.test(key)) return '[REDACTED]';
+  // Usage counters are safe accounting metadata, not credentials. Keep this
+  // exception deliberately narrow: arbitrary numeric values under `token`
+  // still redact, while canonical input/output counters remain usable in
+  // audit and cost events.
+  const safeTokenCounter =
+    /^(?:tokens?_(?:in|out)|(?:input|output)_tokens|llm_tokens_(?:in|out))$/iu.test(key) &&
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0;
+  if (SENSITIVE.test(key) && !safeTokenCounter) return '[REDACTED]';
   if (typeof value === 'string') return redactText(value);
   if (Array.isArray(value)) return value.map((item) => redactJson(item));
   if (value && typeof value === 'object')

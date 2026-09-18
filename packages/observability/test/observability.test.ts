@@ -10,11 +10,20 @@ import {
   makeEventMetricsObserver,
   makeEventSpanObserver,
   parseTraceParent,
+  redactJson,
   redactText,
   safeErrorMessage,
 } from '../dist/index.js';
 
 describe('@aqa/observability', () => {
+  it('preserves bounded numeric token counters while redacting token strings', () => {
+    assert.deepEqual(redactJson({ tokens_in: 12, tokens_out: 8, token: 'secret-token' }), {
+      tokens_in: 12,
+      tokens_out: 8,
+      token: '[REDACTED]',
+    });
+  });
+
   it('validates and round-trips W3C traceparent without accepting malformed context', () => {
     const input = `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`;
     const context = parseTraceParent(input);

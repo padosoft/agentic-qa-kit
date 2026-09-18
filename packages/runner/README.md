@@ -28,6 +28,9 @@ Orchestrator runner for `agentic-qa-kit`. Ships:
   An optional `onEvent` observer exposes a non-blocking integration point for
   traces, metrics and event buses; observer failures never invalidate the
   persisted audit chain.
+- **`makeBudgetEventSink`** — connects prompt-free accounting events from
+  `@aqa/llm-adapters` to the same hash chain, preserving bounded usage/cost
+  evidence without persisting prompts or completions.
 - **`FindingsWriter`** — append-only `findings.jsonl` with in-run dedup on `(run_id, scenario_id, risk_id, severity)`.
 - **`evaluateOracle`** + built-in `http_status` / `response_contains` / `response_not_contains` oracles.
 - `response_contains` supports bounded JSONPath equality against a previous

@@ -1,11 +1,50 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
+import { makeBudgetEventSink } from '../dist/budget-events.js';
 import { EventChainWriter } from '../dist/events.js';
 
 const ZERO_HASH = '0'.repeat(64);
 
 describe('EventChainWriter', () => {
+  it('bridges bounded LLM budget events into the hash chain without prompt data', () => {
+    const writer = new EventChainWriter('/tmp/_ignore', { persist: false });
+    const sink = makeBudgetEventSink({
+      events: writer,
+      run_id: 'run-budget-bridge',
+      scenario_id: 'scenario-1',
+    });
+    sink({
+      kind: 'llm_call',
+      ts: '2026-09-18T10:00:00.000Z',
+      provider: 'fixture',
+      model: 'model-1',
+      status: 'completed',
+      tokens_in: 12,
+      tokens_out: 7,
+      cost_usd: 0.001,
+      reason: 'provider usage recorded',
+    });
+    sink({
+      kind: 'budget_exceeded',
+      ts: '2026-09-18T10:00:01.000Z',
+      provider: 'fixture',
+      model: 'model-1',
+      status: 'exhausted',
+      reason: 'budget exhausted after call',
+    });
+    const events = writer.snapshot();
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['llm_call', 'budget_exceeded'],
+    );
+    assert.equal(events[0]?.run_id, 'run-budget-bridge');
+    assert.equal(events[0]?.scenario_id, 'scenario-1');
+    assert.equal(events[0]?.payload.tokens_in, 12);
+    assert.equal(events[1]?.prev_hash, events[0]?.hash);
+    assert.doesNotMatch(JSON.stringify(events), /prompt|completion|secret/i);
+  });
+
   it('invokes a non-blocking observer without allowing telemetry failure to break the chain', () => {
     const observed: string[] = [];
     const writer = new EventChainWriter('/tmp/_ignore', {
