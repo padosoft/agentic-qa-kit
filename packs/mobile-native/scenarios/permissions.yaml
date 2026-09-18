@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-mobile-permissions
+title: Mobile runtime permissions are minimal and denial is safe
+risk_refs: [mobile-permission-overreach]
+invariant_refs: [inv-mobile-permissions-minimal]
+preconditions:
+  - "a disposable device/emulator with permission reset support is available"
+steps:
+  - id: inspect-permissions
+    kind: http
+    with: { method: "GET", url: "/mobile/permissions?journey=scan-to-cart" }
+oracles:
+  - id: o-minimal
+    kind: response_contains
+    probe_id: inspect-permissions
+    with: { jsonpath: "$.requested_permissions_minimal", equals: true }
+  - id: o-denial
+    kind: response_contains
+    probe_id: inspect-permissions
+    with: { jsonpath: "$.denial_fails_closed", equals: true }
+  - id: o-retention
+    kind: response_contains
+    probe_id: inspect-permissions
+    with: { jsonpath: "$.permissions_revocable", equals: true }
+tags: [mobile, permissions, privacy]

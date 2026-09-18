@@ -1,0 +1,25 @@
+schema_version: "1"
+id: scn-mobile-offline-retry
+title: Offline checkout retry is idempotent and exposes an explicit pending state
+risk_refs: [mobile-offline-duplication]
+invariant_refs: [inv-mobile-offline-idempotent]
+preconditions:
+  - "a disposable mobile fixture can toggle connectivity around a bounded cart mutation"
+steps:
+  - id: inspect-offline
+    kind: http
+    with: { method: "GET", url: "/mobile/offline?journey=cart&fixture=reconnect" }
+oracles:
+  - id: o-idempotency
+    kind: response_contains
+    probe_id: inspect-offline
+    with: { jsonpath: "$.mutation_idempotent", equals: true }
+  - id: o-pending
+    kind: response_contains
+    probe_id: inspect-offline
+    with: { jsonpath: "$.pending_state_explicit", equals: true }
+  - id: o-duplicate
+    kind: response_contains
+    probe_id: inspect-offline
+    with: { jsonpath: "$.duplicate_effects", equals: 0 }
+tags: [mobile, offline, retry, ecommerce]

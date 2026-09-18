@@ -298,6 +298,10 @@
       "name": "@aqa/pack-llm-agent",
       "version": "0.1.0",
     },
+    "packs/mobile-native": {
+      "name": "@padosoft/aqa-pack-mobile-native",
+      "version": "0.1.0",
+    },
     "packs/performance": {
       "name": "@aqa/pack-performance",
       "version": "0.1.0",
@@ -514,6 +518,8 @@
     "@padosoft/aqa-pack-data-pipeline": ["@padosoft/aqa-pack-data-pipeline@workspace:packs/data-pipeline"],
 
     "@padosoft/aqa-pack-i18n-l10n": ["@padosoft/aqa-pack-i18n-l10n@workspace:packs/i18n-l10n"],
+
+    "@padosoft/aqa-pack-mobile-native": ["@padosoft/aqa-pack-mobile-native@workspace:packs/mobile-native"],
 
     "@padosoft/aqa-pack-realtime": ["@padosoft/aqa-pack-realtime@workspace:packs/realtime"],
 

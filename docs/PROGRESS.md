@@ -13,6 +13,11 @@
 
 ## 2026-09-18
 
+- **Started `pack-mobile-native`.** It adds opt-in, schema-valid contracts for
+  offline mutation idempotency, minimal permissions and authenticated deep-link
+  session binding. Device, OS, store and push-provider evidence remain
+  separate; next: validate and publish the pack.
+
 - **Started `pack-i18n-l10n`.** It adds opt-in, schema-valid contracts for
   locale coverage, commerce formatting and safe translation fallback/RTL
   behavior. Human linguistic, visual, tax and legal evidence remain separate;

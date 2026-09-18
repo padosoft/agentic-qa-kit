@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-mobile-native
+risks:
+  - id: mobile-offline-duplication
+    category: integrity
+    title: Offline retry duplicates a commerce mutation or loses a queued customer action.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-mobile-offline-idempotent
+        statement: Offline queues, retries and reconnects preserve idempotent customer mutations and explicit failure states.
+  - id: mobile-permission-overreach
+    category: confidentiality
+    title: The app requests or retains device permissions beyond the declared journey need.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-mobile-permissions-minimal
+        statement: Runtime permissions are minimal, explainable, revocable and fail closed when denied.
+  - id: mobile-deeplink-session-confusion
+    category: integrity
+    title: A deep link or app resume binds a sensitive action to the wrong account or stale session.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-mobile-link-session-bound
+        statement: Deep links, push actions and resumed sessions are authenticated, single-use and bound to the intended tenant/user.
