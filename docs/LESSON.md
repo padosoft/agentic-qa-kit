@@ -22,6 +22,21 @@ boundary must cap counters/costs, drop invalid values and apply the shared
 redactor before hashing. This keeps the persisted audit useful without trusting
 every integration caller.
 
+# 2026-09-18 — durable queue evidence must execute the real host boundary
+
+An in-memory queue test can prove worker control flow while missing PostgreSQL
+migration locks, lease fencing or serialization failures. Put the complete
+queue-to-orchestrator journey in the PostgreSQL CI job, with a unique job ID and
+explicitly scoped evidence; do not promote the local-memory result to durable
+fleet proof.
+
+# 2026-09-18 — durable worker journeys must be tenant-scoped
+
+When a PostgreSQL integration database is shared by multiple contracts, an
+unscoped worker can claim an older queued job and make a test fail with a
+misleading job-id mismatch. Use a unique tenant/project and the same explicit
+`RunnerScope` in the worker; this also verifies the production isolation rule.
+
 # 2026-09-18 — budget enforcement needs an observable boundary
 
 Admission and settlement can be correct while production operators still have
@@ -2202,3 +2217,16 @@ recovery drill.
 IPC allowlists alone do not cover signed update provenance, rollback or custom
 protocol replay. Keep renderer capability checks, artifact signing and session
 binding as separate explicit contracts with platform evidence.
+
+## 2026-09-18 — PostgreSQL scope predicates need explicit boundary typing
+
+The durable worker journey caught a subtle production boundary: a queue query
+can be logically correct yet remain unproven for PostgreSQL JSONB extraction
+when scope parameters rely on implicit typing. Keep typed denormalized scope
+columns alongside the JSONB payload for the durable dequeue hot path, backfill
+them during migration, and index them. Test exact tenant/project dequeue
+against an excluded sibling project in the live PostgreSQL contract. A
+memory-queue scope test is not sufficient evidence for the durable adapter.
+When building dynamic PostgreSQL predicates, never append an unused NULL
+placeholder: PostgreSQL cannot infer its type even if the branch does not
+reference it. Derive placeholder indexes from the values actually appended.

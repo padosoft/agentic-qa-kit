@@ -30,6 +30,16 @@ type StoredJob = {
   priority: number;
 };
 
+function runnerScopeColumns(payload: Record<string, unknown>): {
+  org: string | null;
+  project: string | null;
+} {
+  return {
+    org: typeof payload.org === 'string' ? payload.org : null,
+    project: typeof payload.project === 'string' ? payload.project : null,
+  };
+}
+
 /** PostgreSQL-backed queue with row locking, visibility leases, and fencing tokens. */
 export class PostgresRunnerQueue implements RunnerQueueLike {
   private readonly sql: Sql;
@@ -66,7 +76,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
       await this.qWith(tx, "SELECT pg_advisory_xact_lock(hashtext('aqa_runner_jobs_migration'))");
       await this.qWith(
         tx,
-        "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, enqueued_at timestamptz NOT NULL, status text NOT NULL CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 5, failure_reason text, updated_at timestamptz NOT NULL DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS aqa_runner_jobs (id text PRIMARY KEY, payload jsonb NOT NULL, scope_org text, scope_project text, enqueued_at timestamptz NOT NULL, status text NOT NULL CONSTRAINT aqa_runner_jobs_status_check CHECK (status IN ('queued', 'in_flight', 'done', 'failed', 'cancelled')), leased_until timestamptz, lease_token text, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 5, failure_reason text, updated_at timestamptz NOT NULL DEFAULT now())",
       );
       await this.qWith(
         tx,
@@ -96,6 +106,15 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
         tx,
         'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 0',
       );
+      await this.qWith(tx, 'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS scope_org text');
+      await this.qWith(
+        tx,
+        'ALTER TABLE aqa_runner_jobs ADD COLUMN IF NOT EXISTS scope_project text',
+      );
+      await this.qWith(
+        tx,
+        "UPDATE aqa_runner_jobs SET scope_org = payload->>'org', scope_project = payload->>'project' WHERE scope_org IS NULL AND payload ? 'org'",
+      );
       await this.qWith(
         tx,
         'CREATE UNIQUE INDEX IF NOT EXISTS aqa_runner_jobs_idempotency_idx ON aqa_runner_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL',
@@ -103,6 +122,10 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
       await this.qWith(
         tx,
         'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_ready_idx ON aqa_runner_jobs (status, enqueued_at, leased_until)',
+      );
+      await this.qWith(
+        tx,
+        'CREATE INDEX IF NOT EXISTS aqa_runner_jobs_scope_ready_idx ON aqa_runner_jobs (scope_org, scope_project, status, enqueued_at)',
       );
     });
   }
@@ -136,6 +159,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
 
   async enqueue(job: RunnerJob): Promise<EnqueuedJob> {
     await this.wait();
+    const scopeColumns = runnerScopeColumns(job.payload);
     if (
       this.quota.concurrent_runs_max !== undefined ||
       this.quota.concurrent_scenarios_max !== undefined
@@ -159,10 +183,12 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     )
       assertQueueQuota(await this.snapshot(), job, this.quota);
     const rows = await this.q<StoredJob>(
-      "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint, priority) VALUES ($1, $2::jsonb, $3, 'queued', $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint, priority",
+      "INSERT INTO aqa_runner_jobs (id, payload, scope_org, scope_project, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint, priority) VALUES ($1, $2::jsonb, $3, $4, $5, 'queued', $6, $7, $8, $9) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint, priority",
       [
         job.id,
         JSON.stringify(job.payload),
+        scopeColumns.org,
+        scopeColumns.project,
         job.enqueued_at,
         this.maxAttempts,
         job.idempotency_key ?? null,
@@ -185,6 +211,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
   }
 
   private async enqueueWithQuota(job: RunnerJob): Promise<EnqueuedJob> {
+    const scopeColumns = runnerScopeColumns(job.payload);
     return this.sql.begin(async (tx) => {
       const scope = queueScope(job.payload);
       if (scope)
@@ -221,10 +248,12 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
 
       const rows = await this.qWith<StoredJob>(
         tx,
-        "INSERT INTO aqa_runner_jobs (id, payload, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint, priority) VALUES ($1, $2::jsonb, $3, 'queued', $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint, priority",
+        "INSERT INTO aqa_runner_jobs (id, payload, scope_org, scope_project, enqueued_at, status, max_attempts, idempotency_key, idempotency_fingerprint, priority) VALUES ($1, $2::jsonb, $3, $4, $5, 'queued', $6, $7, $8, $9) ON CONFLICT DO NOTHING RETURNING id, payload, enqueued_at, status, leased_until, lease_token, attempts, max_attempts, failure_reason, idempotency_key, idempotency_fingerprint, priority",
         [
           job.id,
           JSON.stringify(job.payload),
+          scopeColumns.org,
+          scopeColumns.project,
           job.enqueued_at,
           this.maxAttempts,
           job.idempotency_key ?? null,
@@ -259,11 +288,13 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
         : scopes.length === 0
           ? ' AND false'
           : ` AND (${scopes
-              .map((scope, index) => {
-                const orgIndex = 4 + index * 2;
-                const projectIndex = orgIndex + 1;
-                scopeValues.push(scope.org, scope.project ?? null);
-                return `(payload->>'org' = $${orgIndex} AND ($${projectIndex}::text IS NULL OR payload->>'project' = $${projectIndex}))`;
+              .map((scope) => {
+                const orgIndex = 4 + scopeValues.length;
+                scopeValues.push(scope.org);
+                if (scope.project === undefined) return `(scope_org = $${orgIndex}::text)`;
+                const projectIndex = 4 + scopeValues.length;
+                scopeValues.push(scope.project);
+                return `(scope_org = $${orgIndex}::text AND scope_project = $${projectIndex}::text)`;
               })
               .join(' OR ')})`;
     const rows = await this.q<StoredJob>(
@@ -352,7 +383,7 @@ export class PostgresRunnerQueue implements RunnerQueueLike {
     let scopeSql = '';
     if (scope) {
       values.push(scope.org, scope.project);
-      scopeSql = ` AND payload->>'org' = $${values.length - 1} AND payload->>'project' = $${values.length}`;
+      scopeSql = ` AND scope_org = $${values.length - 1} AND scope_project = $${values.length}`;
     }
     const rows = await this.q(
       `UPDATE aqa_runner_jobs

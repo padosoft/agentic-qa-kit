@@ -222,6 +222,7 @@ jobs:
           bun test packages/server/test/event-bus.test.ts
           bun test packages/runner/test/postgres-driver.test.ts
           bun test packages/runner/test/postgres-trajectory.test.ts
+          AQA_TEST_POSTGRES_DSN="$AQA_TEST_POSTGRES_DSN" bun test packages/kit/test/run-cmd.test.ts
 
   test-container-sandbox:
     name: Integration (OCI container sandbox)
