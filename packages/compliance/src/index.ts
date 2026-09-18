@@ -40,11 +40,13 @@ export {
   canonicalProductionEvidence,
   parseProductionEvidence,
   productionEvidenceCompleteness,
+  productionEvidenceFreshness,
   productionEvidenceSha256,
   signProductionEvidence,
   verifyProductionEvidence,
   type ProductionEvidence,
   type ProductionEvidenceCompleteness,
+  type ProductionEvidenceFreshness,
   type ProductionEvidenceSigner,
   type SignedProductionEvidence,
 } from './production-evidence.js';

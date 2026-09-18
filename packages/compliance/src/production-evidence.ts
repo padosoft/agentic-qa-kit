@@ -59,6 +59,13 @@ export interface ProductionEvidenceCompleteness {
   missing: string[];
 }
 
+export interface ProductionEvidenceFreshness {
+  fresh: boolean;
+  age_hours: number;
+  max_age_hours: number;
+  reason?: 'expired' | 'future-dated';
+}
+
 /** Parse provider observations without accepting credentials or arbitrary payloads. */
 export function parseProductionEvidence(input: unknown): ProductionEvidence {
   if (isRecord(input) && ('evidence' in input || 'signature' in input))
@@ -147,6 +154,40 @@ export function productionEvidenceCompleteness(input: unknown): ProductionEviden
   if (!evidence.controls.identity.runner_rotation_verified)
     missing.push('identity.runner_rotation');
   return { complete: missing.length === 0, missing };
+}
+
+/**
+ * Check the signed observation's declared capture time against an operator
+ * supplied freshness budget. This is a temporal policy check only: it does
+ * not contact providers or validate their underlying audit trail.
+ */
+export function productionEvidenceFreshness(
+  input: unknown,
+  options: { now?: Date; max_age_hours: number },
+): ProductionEvidenceFreshness {
+  const evidence = parseProductionEvidence(input);
+  if (
+    !Number.isFinite(options.max_age_hours) ||
+    options.max_age_hours <= 0 ||
+    options.max_age_hours > 8760
+  )
+    throw new Error('production evidence max_age_hours must be greater than 0 and at most 8760');
+  const now = options.now ?? new Date();
+  if (Number.isNaN(now.getTime())) throw new Error('production evidence freshness now is invalid');
+  const ageHours = (now.getTime() - Date.parse(evidence.captured_at)) / 3_600_000;
+  if (ageHours < 0)
+    return {
+      fresh: false,
+      age_hours: ageHours,
+      max_age_hours: options.max_age_hours,
+      reason: 'future-dated',
+    };
+  return {
+    fresh: ageHours <= options.max_age_hours,
+    age_hours: ageHours,
+    max_age_hours: options.max_age_hours,
+    ...(ageHours > options.max_age_hours ? { reason: 'expired' as const } : {}),
+  };
 }
 
 export function canonicalProductionEvidence(input: unknown): string {

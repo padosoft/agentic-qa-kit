@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { verifyProductionEvidence } from '@aqa/compliance';
+import { productionEvidenceFreshness, verifyProductionEvidence } from '@aqa/compliance';
 import { type ProjectProfile, profileRepo } from '../profiler.js';
 import { runValidate } from './validate.js';
 
@@ -131,6 +131,8 @@ function addProductionChecks(checks: DoctorCheck[]): void {
   const sandboxImagePinned = /^.+@sha256:[0-9a-f]{64}$/u.test(sandboxImage);
   const evidencePath = process.env.AQA_PRODUCTION_EVIDENCE_PATH?.trim();
   const evidenceKey = process.env.AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM;
+  const evidenceMaxAgeRaw = process.env.AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS?.trim();
+  const evidenceMaxAge = evidenceMaxAgeRaw ? Number(evidenceMaxAgeRaw) : undefined;
 
   checks.push({
     id: 'production-store',
@@ -237,20 +239,40 @@ function addProductionChecks(checks: DoctorCheck[]): void {
       const parsed: unknown = JSON.parse(readFileSync(evidencePath, 'utf8'));
       const verification = verifyProductionEvidence(parsed, evidenceKey);
       const completeness = verification.completeness;
+      const freshness =
+        verification.ok && evidenceMaxAge !== undefined
+          ? productionEvidenceFreshness((parsed as { evidence: unknown }).evidence, {
+              max_age_hours: evidenceMaxAge,
+            })
+          : undefined;
+      const freshnessFailure = freshness && !freshness.fresh;
+      const missingFreshnessPolicy = evidenceMaxAge === undefined;
       checks.push({
         id: 'production-evidence',
         title: 'Signed production evidence pack verified',
         status:
-          verification.ok && completeness?.complete ? 'pass' : verification.ok ? 'warn' : 'fail',
+          verification.ok && completeness?.complete && freshness?.fresh && !missingFreshnessPolicy
+            ? 'pass'
+            : verification.ok
+              ? 'warn'
+              : 'fail',
         detail: verification.ok
           ? completeness?.complete
-            ? 'signed provider observations verified (values hidden)'
+            ? freshnessFailure
+              ? `signed evidence is stale (${freshness.age_hours.toFixed(1)}h old; max ${freshness.max_age_hours}h)`
+              : missingFreshnessPolicy
+                ? 'signed provider observations verified; freshness policy is not configured (values hidden)'
+                : 'signed provider observations verified and within freshness policy (values hidden)'
             : `signed evidence is incomplete (${completeness?.missing.join(', ') ?? 'unknown controls'})`
           : 'evidence signature or schema verification failed',
         suggestion:
-          verification.ok && completeness?.complete
+          verification.ok && completeness?.complete && freshness?.fresh && !missingFreshnessPolicy
             ? undefined
-            : 'Regenerate the signed pack from fresh provider observations; the document is not live provider proof by itself.',
+            : freshnessFailure
+              ? 'Regenerate and re-sign the pack from fresh provider observations.'
+              : missingFreshnessPolicy
+                ? 'Configure AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS (1-8760) for release freshness enforcement.'
+                : 'Regenerate the signed pack from fresh provider observations; the document is not live provider proof by itself.',
       });
     } catch {
       checks.push({

@@ -2028,3 +2028,10 @@ variables or prose. The verifier must distinguish missing, invalid and
 incomplete evidence, avoid secrets, and explicitly retain the limitation that
 signature validity proves provenance/integrity—not that KMS, WORM, PITR or IdP
 behavior is live at the time of use.
+## 2026-09-18 — Signed evidence needs an explicit freshness budget
+
+A valid signature proves provenance and integrity, but without a freshness
+policy an old production observation can remain green forever. Keep freshness
+as a separate bounded policy (`1`–`8760` hours) and report stale/future-dated
+documents distinctly; do not imply that timestamp validation contacts or
+re-validates the provider.

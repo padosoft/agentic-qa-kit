@@ -24,8 +24,10 @@ root. `aqa doctor --production` optionally verifies the path named by
 
 The doctor reports a missing pack as a warning, an invalid signature/schema as a
 failure, and a valid but incomplete pack as a warning. A complete signed pack
-is a configuration/evidence assertion, not a substitute for an independent
-provider audit or a live restore/identity exercise.
+also needs an operator-supplied `AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS`
+freshness budget (1–8760 hours) to pass. A stale or future-dated pack is a
+warning. The freshness check is a temporal policy, not a substitute for an
+independent provider audit or a live restore/identity exercise.
 
 ## Consequences
 

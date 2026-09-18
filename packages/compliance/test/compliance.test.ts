@@ -12,6 +12,7 @@ import {
   parseBackupInventory,
   parseEventLines,
   productionEvidenceCompleteness,
+  productionEvidenceFreshness,
   signBackupInventory,
   signProductionEvidence,
   verifyAuditCheckpoint,
@@ -309,6 +310,24 @@ describe('production evidence contract', () => {
         publicKey.export({ type: 'spki', format: 'pem' }).toString(),
       ).ok,
       false,
+    );
+  });
+
+  it('enforces a bounded freshness budget without contacting providers', () => {
+    const now = new Date('2026-09-18T12:00:00Z');
+    assert.equal(productionEvidenceFreshness(evidence, { now, max_age_hours: 4 }).fresh, true);
+    const stale = { ...evidence, captured_at: '2026-09-17T12:00:00Z' };
+    const staleResult = productionEvidenceFreshness(stale, { now, max_age_hours: 4 });
+    assert.equal(staleResult.fresh, false);
+    assert.equal(staleResult.reason, 'expired');
+    const future = { ...evidence, captured_at: '2026-09-18T13:00:00Z' };
+    assert.equal(
+      productionEvidenceFreshness(future, { now, max_age_hours: 4 }).reason,
+      'future-dated',
+    );
+    assert.throws(
+      () => productionEvidenceFreshness(evidence, { now, max_age_hours: 8761 }),
+      /at most 8760/,
     );
   });
 });
