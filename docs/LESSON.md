@@ -2581,3 +2581,11 @@ repository paths are absent can turn repository drift into a successful
 release check. Enterprise gates should fail closed on missing required
 surfaces; optional provider exercises belong in explicitly named, separately
 reported jobs rather than generic placeholder passes.
+
+# 2026-09-18 — Tender reconciliation is not stored-value authorization
+
+Checking that gift-card allocation sums to an order total does not prove that
+the balance was atomically reserved, that a retry is idempotent or that two
+tenants cannot spend the same account. Keep the stored-value ledger separate
+from order arithmetic, lock the tenant/account boundary transactionally and
+make provider settlement and expiry explicit evidence requirements.

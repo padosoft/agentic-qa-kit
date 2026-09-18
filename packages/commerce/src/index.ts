@@ -2467,3 +2467,12 @@ export {
   type PromotionRedemptionClaim,
   type PromotionRedemptionLedger,
 } from './promotion-ledger.js';
+
+export {
+  InMemoryGiftCardLedger,
+  PostgresGiftCardLedger,
+  type GiftCardBalance,
+  type GiftCardCreditResult,
+  type GiftCardLedger,
+  type GiftCardRedeemResult,
+} from './tender-ledger.js';
