@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   StripePaymentGateway,
   reconcileStripeDisputes,
+  reconcileStripePayout,
   reconcileStripeRefunds,
 } from '../dist/index.js';
 
@@ -336,6 +337,82 @@ describe('StripePaymentGateway', () => {
         },
       ),
       /dispute total does not reconcile/,
+    );
+  });
+
+  it('reconciles a Stripe payout with its authoritative balance transaction', async () => {
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.includes('/balance_transactions/'))
+          return jsonResponse({
+            object: 'balance_transaction',
+            id: 'txn_payout_1',
+            type: 'payout',
+            source: 'po_test_1',
+            amount: -1000,
+            fee: 0,
+            net: -1000,
+            currency: 'eur',
+          });
+        return jsonResponse({
+          object: 'payout',
+          id: 'po_test_1',
+          amount: 1000,
+          currency: 'eur',
+          status: 'paid',
+          balance_transaction: 'txn_payout_1',
+        });
+      },
+    });
+
+    const result = await reconcileStripePayout(gateway, {
+      payout_id: 'po_test_1',
+      expected_amount: { currency: 'EUR', amount_minor: '1000' },
+      expected_fee: { currency: 'EUR', amount_minor: '0' },
+      expected_status: 'paid',
+    });
+
+    assert.equal(result.payout_id, 'po_test_1');
+    assert.equal(result.balance_transaction_amount.amount_minor, '-1000');
+    assert.equal(result.net_amount.amount_minor, '-1000');
+  });
+
+  it('fails closed when the payout balance transaction is not its own payout entry', async () => {
+    const gateway = new StripePaymentGateway({
+      secretKey: 'sk_test_abc123',
+      fetch: async (input) =>
+        jsonResponse(
+          String(input).includes('/balance_transactions/')
+            ? {
+                object: 'balance_transaction',
+                id: 'txn_wrong',
+                type: 'charge',
+                source: 'ch_wrong',
+                amount: -1000,
+                fee: 0,
+                net: -1000,
+                currency: 'eur',
+              }
+            : {
+                object: 'payout',
+                id: 'po_test_1',
+                amount: 1000,
+                currency: 'eur',
+                status: 'paid',
+                balance_transaction: 'txn_wrong',
+              },
+        ),
+    });
+
+    await assert.rejects(
+      reconcileStripePayout(gateway, {
+        payout_id: 'po_test_1',
+        expected_amount: { currency: 'EUR', amount_minor: '1000' },
+        expected_fee: { currency: 'EUR', amount_minor: '0' },
+      }),
+      /not a payout balance transaction/,
     );
   });
 });

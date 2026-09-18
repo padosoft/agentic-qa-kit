@@ -83,6 +83,35 @@ export type StripeDisputeReconciliation = {
   observed_at: string;
 };
 
+export type StripePayoutStatus = 'pending' | 'in_transit' | 'paid' | 'failed' | 'canceled';
+
+export type StripeSignedMoney = {
+  currency: string;
+  amount_minor: string;
+};
+
+export type StripePayoutObservation = {
+  provider: 'stripe';
+  payout_id: string;
+  amount: Money;
+  currency: string;
+  status: StripePayoutStatus;
+  balance_transaction_id: string;
+  balance_transaction_type: string;
+  balance_transaction_source: string;
+  balance_transaction_amount: StripeSignedMoney;
+  fee_amount: Money;
+  net_amount: StripeSignedMoney;
+  observed_at: string;
+};
+
+export type StripePayoutReconciliationInput = {
+  payout_id: string;
+  expected_amount: Money;
+  expected_fee: Money;
+  expected_status?: StripePayoutStatus;
+};
+
 /**
  * Minimal REST boundary for Stripe PaymentIntents, refunds and disputes.
  *
@@ -171,6 +200,31 @@ export class StripePaymentGateway {
     if (response.has_more === true)
       throw new Error('[commerce/stripe] dispute list exceeds the bounded dispute page');
     return response.data.map((item) => parseDispute(item, id));
+  }
+
+  /** Read a payout and its linked balance transaction as one observation. */
+  async retrievePayout(payoutId: string): Promise<StripePayoutObservation> {
+    const id = providerId(payoutId, 'payout_id');
+    const payout = parsePayout(await this.request(`payouts/${encodeURIComponent(id)}`));
+    const balanceTransaction = parseBalanceTransaction(
+      await this.request(
+        `balance_transactions/${encodeURIComponent(payout.balance_transaction_id)}`,
+      ),
+    );
+    return {
+      provider: 'stripe',
+      payout_id: id,
+      amount: payout.amount,
+      currency: payout.amount.currency,
+      status: payout.status,
+      balance_transaction_id: payout.balance_transaction_id,
+      balance_transaction_type: balanceTransaction.type,
+      balance_transaction_source: balanceTransaction.source,
+      balance_transaction_amount: balanceTransaction.amount,
+      fee_amount: balanceTransaction.fee,
+      net_amount: balanceTransaction.net,
+      observed_at: new Date().toISOString(),
+    };
   }
 
   private async request(
@@ -276,6 +330,48 @@ export async function reconcileStripeDisputes(
   };
 }
 
+/**
+ * Reconcile a payout with the linked Stripe balance transaction. The signed
+ * balance values remain visible because a payout transaction is a debit from
+ * the Stripe balance; no order or payment linkage is inferred here.
+ */
+export async function reconcileStripePayout(
+  gateway: StripePaymentGateway,
+  input: StripePayoutReconciliationInput,
+): Promise<StripePayoutObservation> {
+  const payoutId = providerId(input.payout_id, 'payout_id');
+  const expectedAmount = validateMoney(input.expected_amount, 'expected_amount');
+  const expectedFee = validateMoney(input.expected_fee, 'expected_fee');
+  if (expectedAmount.currency !== expectedFee.currency)
+    throw new Error('[commerce/stripe] expected payout values use different currencies');
+  const payout = await gateway.retrievePayout(payoutId);
+  if (payout.amount.currency !== expectedAmount.currency)
+    throw new Error('[commerce/stripe] provider payout currency mismatch');
+  if (BigInt(payout.amount.amount_minor) !== BigInt(expectedAmount.amount_minor))
+    throw new Error('[commerce/stripe] provider payout amount does not reconcile');
+  if (BigInt(payout.fee_amount.amount_minor) !== BigInt(expectedFee.amount_minor))
+    throw new Error('[commerce/stripe] provider payout fee does not reconcile');
+  if (input.expected_status !== undefined && payout.status !== input.expected_status)
+    throw new Error('[commerce/stripe] provider payout status does not reconcile');
+  if (payout.balance_transaction_type !== 'payout')
+    throw new Error(
+      '[commerce/stripe] linked balance transaction is not a payout balance transaction',
+    );
+  if (payout.balance_transaction_source !== payoutId)
+    throw new Error('[commerce/stripe] balance transaction source does not link to payout');
+  if (payout.balance_transaction_amount.currency !== expectedAmount.currency)
+    throw new Error('[commerce/stripe] provider balance transaction currency mismatch');
+  if (
+    BigInt(payout.balance_transaction_amount.amount_minor) !== -BigInt(expectedAmount.amount_minor)
+  )
+    throw new Error('[commerce/stripe] payout balance transaction amount does not reconcile');
+  const expectedNet =
+    BigInt(payout.balance_transaction_amount.amount_minor) - BigInt(expectedFee.amount_minor);
+  if (BigInt(payout.net_amount.amount_minor) !== expectedNet)
+    throw new Error('[commerce/stripe] payout balance transaction net does not reconcile');
+  return payout;
+}
+
 function parsePaymentIntent(value: unknown): StripePaymentIntentObservation {
   const object = record(value);
   if (object.object !== 'payment_intent')
@@ -333,6 +429,40 @@ function parseDispute(value: unknown, paymentId: string): StripeDisputeObservati
   };
 }
 
+function parsePayout(value: unknown): {
+  amount: Money;
+  balance_transaction_id: string;
+  status: StripePayoutStatus;
+} {
+  const object = record(value);
+  if (object.object !== 'payout') throw new Error('[commerce/stripe] expected Payout');
+  return {
+    amount: money(object.amount, currencyCode(object.currency), 'payout.amount'),
+    balance_transaction_id: providerId(object.balance_transaction, 'payout.balance_transaction'),
+    status: payoutStatus(object.status),
+  };
+}
+
+function parseBalanceTransaction(value: unknown): {
+  type: string;
+  source: string;
+  amount: StripeSignedMoney;
+  fee: Money;
+  net: StripeSignedMoney;
+} {
+  const object = record(value);
+  if (object.object !== 'balance_transaction')
+    throw new Error('[commerce/stripe] expected BalanceTransaction');
+  const currency = currencyCode(object.currency);
+  return {
+    type: requiredText(object.type, 'balance_transaction.type'),
+    source: providerId(object.source, 'balance_transaction.source'),
+    amount: signedMoney(object.amount, currency, 'balance_transaction.amount'),
+    fee: money(object.fee, currency, 'balance_transaction.fee'),
+    net: signedMoney(object.net, currency, 'balance_transaction.net'),
+  };
+}
+
 function disputeStatus(value: unknown): StripeDisputeStatus {
   if (
     value !== 'warning_needs_response' &&
@@ -345,6 +475,18 @@ function disputeStatus(value: unknown): StripeDisputeStatus {
   return value;
 }
 
+function payoutStatus(value: unknown): StripePayoutStatus {
+  if (
+    value !== 'pending' &&
+    value !== 'in_transit' &&
+    value !== 'paid' &&
+    value !== 'failed' &&
+    value !== 'canceled'
+  )
+    throw new Error('[commerce/stripe] unsupported payout status');
+  return value;
+}
+
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('[commerce/stripe] provider response must be an object');
@@ -354,6 +496,12 @@ function record(value: unknown): Record<string, unknown> {
 function money(value: unknown, currency: string, field: string): Money {
   if (!Number.isSafeInteger(value) || (value as number) < 0)
     throw new Error(`[commerce/stripe] ${field} must be a non-negative safe integer`);
+  return { currency, amount_minor: String(value) };
+}
+
+function signedMoney(value: unknown, currency: string, field: string): StripeSignedMoney {
+  if (!Number.isSafeInteger(value))
+    throw new Error(`[commerce/stripe] ${field} must be a signed safe integer`);
   return { currency, amount_minor: String(value) };
 }
 
