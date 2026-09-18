@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Added freshness enforcement for signed production evidence.** The
+  compliance package now evaluates the bounded `captured_at` timestamp against
+  an operator-selected `AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS` budget.
+  `aqa doctor --production` warns for missing, stale or future-dated policy
+  evidence and only passes when signature, completeness and freshness all
+  hold. This is a temporal/provenance check, not live provider proof. Added
+  unit coverage and updated ADR-206 plus the operator runbook. Next: continue
+  the remaining runtime/provider-backed roadmap gaps.
+
 - **Added the signed production evidence boundary.** `@aqa/compliance` now
   validates and signs bounded observations for KMS/Vault rotation,
   artifact-versioning/Object Lock, PostgreSQL PITR/WAL and IdP/OIDC/mTLS/

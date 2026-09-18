@@ -59,14 +59,21 @@ Set these values in the protected release environment:
 ```text
 AQA_PRODUCTION_EVIDENCE_PATH=/run/secrets/aqa/production-evidence.signed.json
 AQA_PRODUCTION_EVIDENCE_PUBLIC_KEY_PEM=<public key from the approved trust root>
+AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS=168
 ```
 
 Run `aqa doctor --production`. The result is:
 
-- `pass`: signature, schema and every required control assertion verify;
-- `warn`: no pack is configured or the signed pack is structurally valid but
-  incomplete;
+- `pass`: signature, schema, every required control assertion and the configured
+  freshness budget verify;
+- `warn`: no pack is configured, the freshness policy is missing, or the signed
+  pack is structurally valid but incomplete/stale;
 - `fail`: the path, JSON, signature or trust root is invalid.
+
+`AQA_PRODUCTION_EVIDENCE_MAX_AGE_HOURS` is required for a passing production
+check and must be between `1` and `8760`. It compares the signed
+`captured_at` timestamp with the doctor clock; it does not contact providers or
+replace an independent restore drill, identity exercise or provider audit.
 
 This check proves provenance and completeness of the submitted observation. It
 does not contact providers and must be paired with the provider's audit trail,
