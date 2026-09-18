@@ -7,8 +7,8 @@ import {
   Tracer,
   evaluateSlo,
   formatTraceParent,
-  makeEventSpanObserver,
   makeEventMetricsObserver,
+  makeEventSpanObserver,
   parseTraceParent,
   redactText,
   safeErrorMessage,
@@ -85,7 +85,13 @@ describe('@aqa/observability', () => {
       run_id: 'run-1',
       seq: 1,
       actor: { type: 'agent' },
-      payload: { provider: 'fixture', model: 'model-1', tokens_in: 12, tokens_out: 8, cost_usd: 0.04 },
+      payload: {
+        provider: 'fixture',
+        model: 'model-1',
+        tokens_in: 12,
+        tokens_out: 8,
+        cost_usd: 0.04,
+      },
     });
     observe({
       kind: 'budget_exceeded',
@@ -95,8 +101,14 @@ describe('@aqa/observability', () => {
       payload: { provider: 'fixture', model: 'model-1' },
     });
     const text = metrics.renderPrometheus();
-    assert.match(text, /aqa_llm_calls_total\{model="model-1",project="shop",provider="fixture"\} 1/);
-    assert.match(text, /aqa_llm_tokens_total\{direction="in",project="shop",provider="fixture"\} 12/);
+    assert.match(
+      text,
+      /aqa_llm_calls_total\{model="model-1",project="shop",provider="fixture"\} 1/,
+    );
+    assert.match(
+      text,
+      /aqa_llm_tokens_total\{direction="in",project="shop",provider="fixture"\} 12/,
+    );
     assert.match(text, /aqa_llm_cost_usd_total\{project="shop",provider="fixture"\} 0\.04/);
     assert.match(text, /aqa_llm_budget_exceeded_total\{project="shop",provider="fixture"\} 1/);
     assert.doesNotMatch(text, /run-1|model-1.*payload/);

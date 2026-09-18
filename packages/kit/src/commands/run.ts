@@ -46,11 +46,11 @@ import {
   parseEventLines,
 } from '@aqa/compliance';
 import {
+  type MetricsRegistry,
   OtlpHttpSpanExporter,
   Tracer,
   makeEventMetricsObserver,
   makeEventSpanObserver,
-  type MetricsRegistry,
 } from '@aqa/observability';
 import {
   type LoadedPack,

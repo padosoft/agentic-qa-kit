@@ -26,7 +26,10 @@ describe('BudgetedLlmAdapter', () => {
     await adapter.call(input);
     await assert.rejects(() => adapter.call(input), /budget exhausted/);
 
-    assert.deepEqual(events.map((event) => event.kind), ['llm_call', 'budget_exceeded']);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['llm_call', 'budget_exceeded'],
+    );
     assert.equal(events[0]?.tokens_in, 100);
     assert.equal(events[0]?.tokens_out, 100);
     assert.equal(events[1]?.model, input.model);

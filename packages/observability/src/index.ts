@@ -348,7 +348,8 @@ export function makeEventMetricsObserver(
         metrics.counter('aqa_llm_tokens_total', { ...labels, provider, direction: 'in' }, input);
       if (output !== undefined)
         metrics.counter('aqa_llm_tokens_total', { ...labels, provider, direction: 'out' }, output);
-      if (cost !== undefined) metrics.counter('aqa_llm_cost_usd_total', { ...labels, provider }, cost);
+      if (cost !== undefined)
+        metrics.counter('aqa_llm_cost_usd_total', { ...labels, provider }, cost);
     }
   };
 }
