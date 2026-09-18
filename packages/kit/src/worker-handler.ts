@@ -1,4 +1,9 @@
-import { type RunOptions, type RunProbeDrivers, runRun } from './commands/run.js';
+import {
+  type RunOptions,
+  type RunProbeDrivers,
+  type StatefulJourneyBinding,
+  runRun,
+} from './commands/run.js';
 
 export interface RunJob {
   payload: Readonly<Record<string, unknown>>;
@@ -10,6 +15,7 @@ export interface RunJobHandlerOptions {
   packsRoot?: string[];
   /** Host-owned drivers shared by every queued run; never supplied by payloads. */
   probeDrivers?: RunProbeDrivers;
+  statefulJourneys?: Readonly<Record<string, StatefulJourneyBinding>>;
 }
 
 /** Adapt the durable server job contract to the canonical kit orchestrator. */
@@ -27,6 +33,7 @@ export function makeRunJobHandler(opts: RunJobHandlerOptions) {
       ...(seed ? { seed } : {}),
       ...(opts.packsRoot ? { packsRoot: opts.packsRoot } : {}),
       ...(opts.probeDrivers ? { probeDrivers: opts.probeDrivers } : {}),
+      ...(opts.statefulJourneys ? { statefulJourneys: opts.statefulJourneys } : {}),
       signal,
     };
     const result = await runRun(runOptions);

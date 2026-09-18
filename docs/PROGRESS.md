@@ -16,8 +16,14 @@
   injected actor actions with authoritative state read-back, transition-bound
   temporal observers, bounded cancellation/timeout and guaranteed cleanup.
   Callback errors are reduced to safe codes and contexts are never returned.
-  Added 18/18 methodology tests and ADR-273. Next: integrate this runtime
-  contract into the real CLI/worker lifecycle and bind it to trace correlation.
+  Added 18/18 methodology tests and ADR-273.
+
+- **Integrated stateful journeys into the real CLI/worker lifecycle.**
+  `runRun()` and `makeKitWorker()` now accept only host-owned compiled journey
+  bindings, execute them through the canonical run directory and hash-chained
+  audit events, and retain only digest/transition metadata and safe codes.
+  Added a complete run-boundary test; kit-focused suite passes 53/53. Next:
+  bind journey correlation IDs to the federated OTLP trace report.
 
 - **Added bounded OTLP trace federation.** `@aqa/ingest` now normalizes OTLP
   JSON span metadata with ID/time/size limits, redacts credential-like

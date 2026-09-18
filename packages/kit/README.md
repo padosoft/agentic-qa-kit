@@ -149,6 +149,17 @@ release-gate profiles keep container-sandbox precedence for shell probes.
 The same `AQA_PROBE_*` policy is applied by `aqa worker`; queued job payloads
 cannot override it.
 
+### Stateful actor journeys
+
+Embedding hosts can pass `RunOptions.statefulJourneys` (or the equivalent
+`makeKitWorker` option) with a precompiled `@aqa/methodology` journey binding.
+The binding is host-owned: actor contexts and action/cleanup callbacks never
+come from queue payloads or pack files. `aqa run` executes the bound transitions
+through the normal run lifecycle, records only journey IDs/digests, transition
+metadata and safe failure codes in the hash-chained audit log, and requires
+authoritative observed state after each action. This is the integration point
+for checkout, payment, fulfillment and multi-actor ecommerce journeys.
+
 ### Enterprise OIDC admin sessions
 
 `aqa admin` can construct its OIDC login boundary directly from operator-owned

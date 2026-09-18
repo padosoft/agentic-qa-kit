@@ -46,6 +46,12 @@ import {
   parseEventLines,
 } from '@aqa/compliance';
 import {
+  type CompiledStatefulJourney,
+  type JourneyAction,
+  type JourneyCleanup,
+  executeStatefulJourney,
+} from '@aqa/methodology';
+import {
   type MetricsRegistry,
   OtlpHttpSpanExporter,
   Tracer,
@@ -102,6 +108,14 @@ export interface RunProbeDrivers {
   sql?: SqlProbeRunnerOptions;
   postgres?: PostgresSqlProbeRunnerOptions;
   playwright?: Omit<PlaywrightProbeRunnerOptions, 'baseUrl'> & { baseUrl?: string };
+}
+
+/** Host-owned runtime binding for a compiled stateful journey. */
+export interface StatefulJourneyBinding {
+  plan: CompiledStatefulJourney;
+  contexts: Readonly<Record<string, unknown>>;
+  action: JourneyAction<unknown>;
+  cleanup: JourneyCleanup<unknown>;
 }
 
 function envEnabled(value: string | undefined): boolean {
@@ -191,6 +205,8 @@ export interface RunOptions {
   supportedProbeKinds?: ReadonlySet<Scenario.ProbeKind>;
   /** Explicit host-owned drivers for non-HTTP probe kinds. */
   probeDrivers?: RunProbeDrivers;
+  /** Optional host-owned actor journey bindings keyed by scenario id. */
+  statefulJourneys?: Readonly<Record<string, StatefulJourneyBinding>>;
   /** Require trusted Ed25519 signatures and a full pack content digest before execution. */
   requireSignedPacks?: boolean;
   /** Operator trust root keyed by the manifest signing key_id. */
@@ -1003,6 +1019,70 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
                 reason: 'budget_exceeded',
               },
             });
+            return;
+          }
+          const statefulJourney = opts.statefulJourneys?.[scenario.id];
+          if (statefulJourney) {
+            const execution = await executeStatefulJourney(
+              statefulJourney.plan,
+              statefulJourney.contexts,
+              statefulJourney.action,
+              statefulJourney.cleanup,
+              opts.signal,
+            );
+            for (const step of execution.steps) {
+              events.append({
+                ts: new Date().toISOString(),
+                run_id: runId,
+                kind: 'info',
+                actor: { type: 'orchestrator', id: 'stateful-journey' },
+                scenario_id: scenario.id,
+                payload: {
+                  stateful_journey: 'transition',
+                  journey_id: execution.journey_id,
+                  journey_digest: execution.digest,
+                  transition_id: step.transition_id,
+                  actor_id: step.actor_id,
+                  from: step.from,
+                  to: step.to,
+                  ok: step.ok,
+                },
+              });
+            }
+            scenarioOutcomesByOrder.set(order, {
+              scenario_id: scenario.id,
+              outcome: execution.status === 'succeeded' ? 'pass' : 'fail',
+            });
+            events.append({
+              ts: new Date().toISOString(),
+              run_id: runId,
+              kind: 'scenario_finished',
+              actor: { type: 'orchestrator', id: 'kit' },
+              scenario_id: scenario.id,
+              payload: {
+                outcome: execution.status === 'succeeded' ? 'pass' : 'fail',
+                execution_status: execution.status === 'succeeded' ? 'completed' : 'failed',
+                stateful_journey: true,
+                journey_id: execution.journey_id,
+                journey_digest: execution.digest,
+                reached_state: execution.reached_state,
+                steps: execution.steps.length,
+                observers: execution.observers.length,
+                cleanup_ok: execution.cleanup.ok,
+                ...(execution.failure
+                  ? {
+                      failure_phase: execution.failure.phase,
+                      failure_code: execution.failure.code,
+                      ...(execution.failure.id ? { failure_id: execution.failure.id } : {}),
+                    }
+                  : {}),
+              },
+            });
+            if (execution.status !== 'succeeded') {
+              executionErrors.push(
+                `${scenario.id}: stateful journey ${execution.failure?.code ?? execution.status}`,
+              );
+            }
             return;
           }
           const scenarioResult = await runScenario({
