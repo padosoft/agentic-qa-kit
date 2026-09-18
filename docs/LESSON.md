@@ -2437,3 +2437,12 @@ An order amount matching a payout total is not evidence that the order funded
 that payout. Persist the provider source ID at payment/merchant commit time and
 verify its presence in the provider's payout constituent ledger; reject
 incomplete pagination and duplicate expectations before claiming the join.
+
+# 2026-09-18 — OIDC UserInfo alone is not authentication evidence
+
+UserInfo fetched with an access token does not replace validation of the signed
+ID token returned by the authorization-code flow. Bind a nonce to the one-time
+PKCE state, validate issuer/audience/time/signature, refresh JWKS once on an
+unknown `kid`, and require UserInfo `sub` to match the ID-token subject. During a
+rolling PostgreSQL migration, pending rows without a nonce must be rejected,
+not upgraded implicitly.

@@ -5,16 +5,21 @@ User/Role/Permission shapes and a provider-neutral OIDC Authorization Code + PKC
 - `User`, `Role`, `Permission`, `AuthSession` validated via Zod.
 - `rolePermissions` declares the default matrix (viewer/developer/maintainer/admin).
 - `allows(user, permission)` answers per-permission authorization.
-- `OidcAdapter` performs discovery, Authorization Code + PKCE exchange, UserInfo
-  retrieval and strict AQA role mapping. Missing claims, endpoints or secrets fail closed.
+- `OidcAdapter` performs discovery, Authorization Code + PKCE exchange, signed
+  RS256 ID-token validation, UserInfo retrieval and strict AQA role mapping.
+  Issuer, audience, authorized party, `iat`, `exp`, `nonce`, subject binding and
+  `kid`/JWKS rotation are checked; missing claims, endpoint metadata or secrets
+  fail closed. JWKS is cached briefly and refreshed once when a new signing key
+  appears, allowing normal provider rotation without accepting an unknown key.
 
 `OidcSessionManager` supplies a one-time PKCE binding and HttpOnly
 session-cookie boundary. It accepts an `OidcSessionStore` backend for shared
 multi-replica state; `PostgresOidcSessionStore` provides atomic PKCE consumption
 and durable sessions. Synchronous authentication fails closed when an async
-backend is configured, so callers must use `authenticateAsync`. The adapter
-never logs client secrets or bearer tokens and never grants an implicit admin
-role.
+backend is configured, so callers must use `authenticateAsync`. Login state
+contains both a one-time PKCE verifier and a one-time nonce; the PostgreSQL
+store rejects legacy pending rows without a nonce. The adapter never logs client
+secrets or bearer tokens and never grants an implicit admin role.
 
 `RunnerJwtAuthorizer` verifies dedicated runner credentials using an explicit
 RS256 trust root, issuer, audience, bounded clock skew, expiry/not-before and

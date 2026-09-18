@@ -30,6 +30,7 @@ export class PostgresOidcSessionStore implements OidcSessionStore {
       await query(
         'CREATE TABLE IF NOT EXISTS aqa_oidc_pending (state text PRIMARY KEY, verifier text NOT NULL, expires_at timestamptz NOT NULL)',
       );
+      await query('ALTER TABLE aqa_oidc_pending ADD COLUMN IF NOT EXISTS nonce text');
       await query(
         'CREATE TABLE IF NOT EXISTS aqa_oidc_sessions (token text PRIMARY KEY, user_json jsonb NOT NULL, expires_at timestamptz NOT NULL)',
       );
@@ -45,18 +46,20 @@ export class PostgresOidcSessionStore implements OidcSessionStore {
   async putPending(state: string, pending: OidcPendingLogin): Promise<void> {
     await this.query('DELETE FROM aqa_oidc_pending WHERE expires_at <= now()');
     await this.query(
-      'INSERT INTO aqa_oidc_pending (state, verifier, expires_at) VALUES ($1, $2, to_timestamp($3 / 1000.0)) ON CONFLICT (state) DO UPDATE SET verifier = EXCLUDED.verifier, expires_at = EXCLUDED.expires_at',
-      [state, pending.verifier, pending.expires_at],
+      'INSERT INTO aqa_oidc_pending (state, verifier, nonce, expires_at) VALUES ($1, $2, $3, to_timestamp($4 / 1000.0)) ON CONFLICT (state) DO UPDATE SET verifier = EXCLUDED.verifier, nonce = EXCLUDED.nonce, expires_at = EXCLUDED.expires_at',
+      [state, pending.verifier, pending.nonce, pending.expires_at],
     );
   }
 
   async consumePending(state: string): Promise<OidcPendingLogin | null> {
-    const rows = await this.query<{ verifier: string; expires_at: string }>(
-      'DELETE FROM aqa_oidc_pending WHERE state = $1 AND expires_at > now() RETURNING verifier, extract(epoch from expires_at) * 1000 AS expires_at',
+    const rows = await this.query<{ verifier: string; nonce: string; expires_at: string }>(
+      'DELETE FROM aqa_oidc_pending WHERE state = $1 AND nonce IS NOT NULL AND expires_at > now() RETURNING verifier, nonce, extract(epoch from expires_at) * 1000 AS expires_at',
       [state],
     );
     const row = rows[0];
-    return row ? { verifier: row.verifier, expires_at: Number(row.expires_at) } : null;
+    return row
+      ? { verifier: row.verifier, nonce: row.nonce, expires_at: Number(row.expires_at) }
+      : null;
   }
 
   async putSession(token: string, session: OidcStoredSession): Promise<void> {
