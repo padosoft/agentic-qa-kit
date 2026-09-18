@@ -35,6 +35,17 @@
   observability tests passed. Live Prometheus scrape and collector delivery
   remain deployment evidence.
 
+- **M6 enterprise pack batch is complete and merged through PR #137.** The
+  desktop pack was the final originally missing M6 baseline; PRs #121–#137
+  passed the repository integrity, lint, build and unit gates. The pack
+  contracts are now available on `main`. Provider, cluster, OS and regulated
+  production evidence remains intentionally operator/deployment-specific and
+  is not conflated with pack schema validation.
+
+> The individual `Started pack-*` bullets below are historical work-start
+> notes retained for traceability. They are not current “next” items; the
+> consolidated completion status above is authoritative.
+
 - **Started `pack-desktop`.** It closes the M6 pack gap for Electron/Tauri with
   schema-valid IPC sandbox, signed auto-update and authenticated protocol
   contracts. Platform signing and OS evidence remain separate; next: validate
