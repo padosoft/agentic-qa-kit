@@ -1027,6 +1027,12 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
           `checkpoints/${runId}.json`,
           checkpoint,
         );
+        if (
+          externalRef.sha256 !== checkpointRef.sha256 ||
+          externalRef.bytes !== checkpointRef.bytes
+        ) {
+          throw new Error('independent checkpoint digest/size does not match canonical checkpoint');
+        }
         externalCheckpointRef = {
           key: externalRef.key,
           id: externalRef.id,

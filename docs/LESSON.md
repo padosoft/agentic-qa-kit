@@ -2389,6 +2389,14 @@ that owns a lease. A same-scope runner with a valid credential could otherwise
 renew or ACK another runner's job. Carry the verified JWT subject into the
 lease record and require it on every mutation, while preserving token fencing
 and keeping legacy identity-less local mode explicitly non-enterprise.
+
+# 2026-09-18 — Independent publication needs a content join
+
+Publishing the same logical checkpoint to two stores is not enough: a provider
+adapter can transform or truncate bytes while returning success. Compare the
+external reference digest and size to the canonical reference before writing
+the manifest, and fail the run on drift. Keep this separate from provider WORM,
+IAM and retention evidence.
 # 2026-09-18 — Recovery observation must preserve evidence boundaries
 
 A typed restore-drill JSON record is not provider evidence. A useful incremental

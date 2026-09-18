@@ -2426,3 +2426,11 @@
 - This closes only provider payment/refund reconciliation. Disputes, payouts,
   taxes, fulfillment and durable merchant transaction joins remain separate
   production evidence requirements.
+
+# 2026-09-18 — independent checkpoint integrity binding in progress
+
+- Independent WORM/checkpoint publication now fails closed if the external
+  artifact reference's SHA-256 or byte count differs from the canonical
+  checkpoint. Added regression coverage for a transforming/drifting store and
+  ADR-237. This proves cross-store content identity, not provider Object Lock
+  or IAM configuration.
