@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Added the opt-in `pack-compliance-gdpr` enterprise pack (M6).** It ships
+  schema-valid DSAR access, consent withdrawal and erasure scenarios with
+  privacy risks, bounded HTTP oracles, a junior-friendly README and loader
+  regression coverage. It is deliberately not auto-enabled and does not claim
+  legal compliance or provider/downstream deletion proof. Next: continue the
+  remaining enterprise packs and live provider/deployment evidence.
+
 - **Added the M7 fixture management core.** `aqa fixtures snapshot <dir>` now
   creates bounded, versioned JSON fixtures under `.aqa/fixtures/`, with
   deterministic anonymization for common PII/credential fields. `aqa fixtures

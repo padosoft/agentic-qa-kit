@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
+import { Scenario } from '@aqa/schemas';
+import { parse as yamlParse } from 'yaml';
 import { loadPack, loadPacks } from '../dist/loader.js';
 import { loadPackResources, resolvePackScenario } from '../dist/resources.js';
 
@@ -67,6 +69,20 @@ describe('loadPacks', () => {
 });
 
 describe('pack resources', () => {
+  it('ships the GDPR enterprise pack with schema-valid scenarios', () => {
+    const root = join(process.cwd(), 'packs', 'compliance-gdpr');
+    const pack = loadPack(root);
+    const resources = loadPackResources(pack);
+    for (const scenarioPath of pack.manifest.scenarios ?? []) {
+      const scenario = Scenario.Scenario.parse(
+        yamlParse(readFileSync(join(root, scenarioPath), 'utf8')),
+      );
+      assert.ok(scenario.oracles.length > 0);
+      assert.equal(scenario.risk_refs.length, 1);
+    }
+    assert.equal(resources.probes.size, 0);
+  });
+
   it('loads and expands manifest-declared probe and oracle references', () => {
     const root = temp({
       'pack.yaml': `${MIN_VALID}probes: [probes/health.yaml]\noracles: [oracles/status.yaml]\n`,

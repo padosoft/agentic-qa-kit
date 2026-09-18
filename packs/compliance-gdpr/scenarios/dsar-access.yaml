@@ -1,0 +1,30 @@
+schema_version: "1"
+id: scn-gdpr-dsar-access
+title: Data subject access request is accepted for the authenticated subject
+risk_refs: [gdpr-dsar-access]
+invariant_refs: [inv-dsar-access]
+preconditions:
+  - "authenticated subject fixture and tenant are provisioned"
+steps:
+  - id: request-access
+    kind: http
+    with:
+      method: POST
+      url: "/privacy/requests"
+      body: { type: "access", subject_id: "subject-fixture" }
+  - id: request-access-again
+    kind: http
+    with:
+      method: POST
+      url: "/privacy/requests"
+      body: { type: "access", subject_id: "subject-fixture" }
+oracles:
+  - id: access-accepted
+    kind: http_status
+    probe_id: request-access
+    with: { expected: 202 }
+  - id: access-retry-safe
+    kind: http_status
+    probe_id: request-access-again
+    with: { expected: 202 }
+tags: [gdpr, dsar, privacy]

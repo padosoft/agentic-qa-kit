@@ -2050,3 +2050,9 @@ first safe contract narrow (JSON only), record per-file hashes and byte limits,
 anonymize sensitive keys deterministically, reject traversal/absolute restore
 targets, and refuse overwrite by default. Staging extraction and scratch-tenant
 provisioning require provider-specific evidence and should remain explicit.
+## 2026-09-18 — Compliance packs must state their evidence boundary
+
+A privacy pack should provide executable contracts without presenting a passing
+fixture as legal certification. Keep it opt-in, use seeded non-production
+subjects, name the downstream/provider gaps, and make endpoint placeholders
+visible so operators must adapt and review them before use.

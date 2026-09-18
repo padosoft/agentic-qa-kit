@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-compliance-gdpr
+version: 0.1.0
+description: "Provider-neutral GDPR baseline for DSAR, consent withdrawal and erasure workflows."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [compliance-gdpr, gdpr]
+templates: []
+scenarios:
+  - scenarios/dsar-access.yaml
+  - scenarios/consent-withdrawal.yaml
+  - scenarios/erasure-request.yaml
+risks:
+  - risks/gdpr.yaml
+oracles: []
+probes: []

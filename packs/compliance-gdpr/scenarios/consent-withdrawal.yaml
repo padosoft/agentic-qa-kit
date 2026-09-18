@@ -1,0 +1,29 @@
+schema_version: "1"
+id: scn-gdpr-consent-withdrawal
+title: Consent withdrawal disables the processing purpose
+risk_refs: [gdpr-consent-withdrawal]
+invariant_refs: [inv-consent-withdrawal]
+preconditions:
+  - "subject has opted in to the marketing purpose"
+steps:
+  - id: withdraw-consent
+    kind: http
+    with:
+      method: POST
+      url: "/privacy/consents/withdraw"
+      body: { subject_id: "subject-fixture", purpose: "marketing" }
+  - id: read-preferences
+    kind: http
+    with:
+      method: GET
+      url: "/privacy/preferences?subject_id=subject-fixture"
+oracles:
+  - id: withdrawal-accepted
+    kind: http_status
+    probe_id: withdraw-consent
+    with: { expected: 204 }
+  - id: purpose-disabled
+    kind: response_contains
+    probe_id: read-preferences
+    with: { jsonpath: "$.purposes.marketing", equals: false }
+tags: [gdpr, consent, privacy]
