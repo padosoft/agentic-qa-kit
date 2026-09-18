@@ -8,6 +8,15 @@ the connected component first, retain the complete member set, and preserve
 the edge list (IDs, score and method) in the output so semantic grouping stays
 auditable and reversible.
 
+# 2026-09-18 — A state graph is not runtime state evidence
+
+Validating a journey topology can prove that states and transitions are
+declared consistently, but it cannot prove that the merchant, browser, queue
+or database reached them. Keep static graph validation separate from live
+actor sessions, authoritative observers, temporal deadlines and cleanup
+evidence; otherwise a generated path can look complete while no effect was
+actually observed.
+
 # 2026-09-18 — Mutation score is evidence only at an explicit boundary
 
 Stryker/mutmut reports are external observations, not proof that the intended

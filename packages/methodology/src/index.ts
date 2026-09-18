@@ -21,3 +21,12 @@ export {
   type AttackTreeNode,
   type AttackTreeOperator,
 } from './methodology.js';
+export {
+  evaluateStatePath,
+  validateStateGraph,
+  type StateGraph,
+  type StateGraphValidation,
+  type StateNode,
+  type StatePathResult,
+  type StateTransition,
+} from './state-graph.js';
