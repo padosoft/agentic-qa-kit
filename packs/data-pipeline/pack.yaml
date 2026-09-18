@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-data-pipeline
+version: 0.1.0
+description: "Opt-in data pipeline baseline for schema evolution, data quality and replay-safe processing."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [data-pipeline, etl, elt, airflow, dbt, streaming]
+templates: []
+scenarios:
+  - scenarios/schema-compatibility.yaml
+  - scenarios/data-quality.yaml
+  - scenarios/replay-safety.yaml
+risks:
+  - risks/data-pipeline.yaml
+oracles: []
+probes: []

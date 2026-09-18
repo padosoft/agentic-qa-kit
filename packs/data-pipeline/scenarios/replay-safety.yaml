@@ -1,0 +1,28 @@
+schema_version: "1"
+id: scn-data-replay-safety
+title: Pipeline retry and backfill preserve idempotent effects
+risk_refs: [data-replay-duplication]
+invariant_refs: [inv-data-replay-idempotent]
+preconditions:
+  - "a disposable pipeline with a bounded replay fixture and observable sink is available"
+steps:
+  - id: run-replay
+    kind: http
+    with: { method: "POST", url: "/data-pipeline/replay?dataset=orders&fixture=bounded" }
+  - id: inspect-sink
+    kind: http
+    with: { method: "GET", url: "/data-pipeline/replay/result?dataset=orders" }
+oracles:
+  - id: o-idempotent
+    kind: response_contains
+    probe_id: inspect-sink
+    with: { jsonpath: "$.idempotent", equals: true }
+  - id: o-no-loss
+    kind: response_contains
+    probe_id: inspect-sink
+    with: { jsonpath: "$.lost_records", equals: 0 }
+  - id: o-bounded
+    kind: response_contains
+    probe_id: inspect-sink
+    with: { jsonpath: "$.bounded_to_fixture", equals: true }
+tags: [data-pipeline, replay, idempotency]
