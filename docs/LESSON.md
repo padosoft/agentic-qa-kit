@@ -2381,3 +2381,11 @@ Keep the deterministic unit tests and add an endpoint-gated integration job
 against an ephemeral S3-compatible provider. Create a unique locked bucket per
 run, use CI-only environment credentials, and do not claim AWS/KMS/replication
 or restore behavior from a MinIO contract.
+# 2026-09-18 — Recovery observation must preserve evidence boundaries
+
+A typed restore-drill JSON record is not provider evidence. A useful incremental
+boundary is a SELECT-only observation against the actual recovered PostgreSQL
+target, including `pg_is_in_recovery`, replay position and transaction
+read-only state. Keep this record free of DSNs and payloads, fail closed on a
+writable target, and continue to distinguish database observation from provider
+PITR, object-store restore and KMS/WORM evidence.
