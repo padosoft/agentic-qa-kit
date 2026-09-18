@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-pci-segmentation
+title: Payment boundary is deny-by-default and exposes an auditable decision
+risk_refs: [pci-network-boundary]
+invariant_refs: [inv-cde-segmentation]
+preconditions:
+  - "a disposable environment exposes its network policy decision endpoint"
+steps:
+  - id: inspect-boundary
+    kind: http
+    with: { method: "GET", url: "/payments/network-boundary?source=unapproved-service" }
+oracles:
+  - id: o-deny-unapproved
+    kind: response_contains
+    probe_id: inspect-boundary
+    with: { jsonpath: "$.decision", equals: "deny" }
+  - id: o-policy-versioned
+    kind: response_contains
+    probe_id: inspect-boundary
+    with: { jsonpath: "$.policy_version", equals: "fixture-v1" }
+tags: [compliance, pci, payments, segmentation]

@@ -2057,6 +2057,13 @@ fixture as legal certification. Keep it opt-in, use seeded non-production
 subjects, name the downstream/provider gaps, and make endpoint placeholders
 visible so operators must adapt and review them before use.
 
+## 2026-09-18 — PCI packs must never normalize real payment fixtures
+
+Payment-data scenarios should use named sandbox fixtures and explicit
+non-certification boundaries. Redaction, tokenization and segmentation checks
+are useful contracts, but they do not prove PCI scope, QSA assessment, key
+management or production network enforcement.
+
 ## 2026-09-18 — Migration packs must separate contracts from migration engines
 
 Expand/contract and rollback scenarios can prove application compatibility only

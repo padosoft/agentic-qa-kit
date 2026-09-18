@@ -13,6 +13,12 @@
 
 ## 2026-09-18
 
+- **Started the next regulated e-commerce pack: `pack-compliance-pci`.** It
+  defines opt-in, schema-valid contracts for payment-data redaction,
+  tokenization boundaries and deny-by-default segmentation. It explicitly does
+  not claim PCI-DSS certification or production payment evidence; next: run
+  pack integrity and full gates.
+
 - **Started the next M6 enterprise pack: `pack-database-migrations`.** It adds
   opt-in, schema-valid contracts for expand/contract compatibility, rolling
   deploys and rollback/backfill reconciliation. Provider-specific migration

@@ -1,0 +1,7 @@
+{
+  "name": "@aqa/pack-compliance-pci",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["pack.yaml", "risks", "scenarios", "README.md"]
+}

@@ -1,0 +1,21 @@
+schema_version: "1"
+id: scn-pci-payment-redaction
+title: Payment evidence never exposes PAN or authentication data
+risk_refs: [pci-payment-data-leak]
+invariant_refs: [inv-pci-redaction]
+preconditions:
+  - "a seeded non-production payment fixture exists"
+steps:
+  - id: inspect-payment-evidence
+    kind: http
+    with: { method: "GET", url: "/payments/evidence?fixture=redaction" }
+oracles:
+  - id: o-no-pan
+    kind: response_not_contains
+    probe_id: inspect-payment-evidence
+    with: { value: "4111111111111111" }
+  - id: o-no-cvv
+    kind: response_not_contains
+    probe_id: inspect-payment-evidence
+    with: { value: "123" }
+tags: [compliance, pci, payments, redaction]
