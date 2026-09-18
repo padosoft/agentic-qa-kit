@@ -58,6 +58,11 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `verifyStripeWebhookSignature()` validates the raw-body `Stripe-Signature`
   v1 contract, positive replay tolerance and constant-time HMAC comparison;
   it does not perform payment calls or replace durable event idempotency.
+- `StripePaymentGateway` is a bounded REST boundary for PaymentIntent create/
+  retrieve and refund operations. It requires Stripe secret-key format,
+  HTTPS (except localhost test servers), write idempotency keys, bounded
+  responses and typed provider observations; it deliberately does not pretend
+  to own merchant carts, inventory or fulfillment.
 - `applyWebhookEffectOnce()` and the in-memory/PostgreSQL effect ledgers make
   the business side effect idempotent across retries and replicas, rejecting
   reuse of one logical effect key by a different event.
@@ -119,6 +124,12 @@ const journey = await verifyCheckoutJourney(merchant.asAdapter(), {
 Use it as a test merchant, not as a production payment implementation. Real
 merchant/payment adapters must provide authoritative observations; an unavailable
 observer is `unsupported`, never an empty success.
+
+For a real Stripe test-mode boundary, inject the test-mode `sk_test_...` key
+only through a secret manager or process environment and construct
+`StripePaymentGateway` with it. Never place the key in fixtures or logs. The
+adapter is intentionally not exercised by default CI; a live Stripe account,
+webhook endpoint and provider settlement evidence are deployment prerequisites.
 
 Agentic tools must apply `CommerceMutationGate` at the mutation gateway. The
 executor must re-check cart revision and total inside the merchant transaction

@@ -13,6 +13,15 @@
 
 ## 2026-09-18
 
+- **Added a real Stripe payment boundary.** `StripePaymentGateway` now creates
+  and retrieves PaymentIntents and creates refunds through Stripe's REST API,
+  with strict secret-key/HTTPS validation, bounded response parsing, minor-unit
+  money checks, mandatory write idempotency keys and typed provider
+  observations. Commerce suite: **41 passed, 0 failed**; no credentials are
+  used in tests. This closes the repository adapter gap, but a live Stripe
+  test-mode journey, signed webhook ingress, settlement/payout reconciliation
+  and provider fault drills remain deployment evidence.
+
 - **Added the provider-neutral observability deployment bundle.** Versioned an
   OpenTelemetry Collector pipeline, Prometheus recording/alert rules and a
   Grafana operations dashboard under `integrations/observability/`. The bundle
