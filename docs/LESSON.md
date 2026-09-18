@@ -1926,3 +1926,11 @@ configuration from provider proof. Check the presence and completeness of
 required settings, redact all values, and label the result as prerequisites;
 Postgres connectivity, Object Lock enforcement, key rotation and SLO delivery
 still require a real deployment exercise.
+
+# 2026-09-18 — replay must carry the original defect identity
+
+Counting any finding emitted by a retry is not enough: a different oracle can
+fail while the scenario still produces a superficially similar finding. Persist
+a stable digest of the failed-oracle set on the original finding and pass it as
+the expected replay fingerprint. Legacy findings without that field remain
+replay-compatible but cannot claim identity stronger than the older contract.

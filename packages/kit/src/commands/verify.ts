@@ -113,6 +113,7 @@ export async function runVerify(opts: VerifyOptions): Promise<VerifyResult> {
     run_id: finding.run_id,
     attempts,
     probeRunner,
+    ...(finding.failure_fingerprint ? { expected_fingerprint: finding.failure_fingerprint } : {}),
   });
   const runDir = join(opts.root, '.aqa', 'runs', finding.run_id);
   const verificationPath = join(runDir, `verification-${Date.now()}-${randomUUID()}.json`);
