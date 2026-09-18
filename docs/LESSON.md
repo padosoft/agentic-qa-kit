@@ -2649,6 +2649,15 @@ refunding money in CI. Keep the expected amount, currency and status explicit,
 reject live-mode keys, and do not infer settlement, webhook, payout, dispute or
 refund accounting from retrieval evidence.
 
+# 2026-09-18 — mTLS evidence must test both sides of rotation
+
+Reaching an HTTPS endpoint with a client certificate proves only the transport
+trust path. A deployment-grade runner exercise must also assert that the old
+short-lived token is rejected and the newly projected token is accepted. Keep
+certificate material and tokens in protected Environment secrets, use a
+mode-700 temporary directory, disable redirects, and never persist response
+bodies.
+
 # 2026-09-18 — Idempotency keys need an ownership scope
 
 Making an operation ID globally unique can prevent a cross-tenant mutation,
