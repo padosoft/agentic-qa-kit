@@ -1,4 +1,4 @@
-import { type RunOptions, runRun } from './commands/run.js';
+import { type RunOptions, type RunProbeDrivers, runRun } from './commands/run.js';
 
 export interface RunJob {
   payload: Readonly<Record<string, unknown>>;
@@ -8,6 +8,8 @@ export interface RunJobHandlerOptions {
   /** Fixed project root; queue payloads cannot choose arbitrary filesystem paths. */
   root: string;
   packsRoot?: string[];
+  /** Host-owned drivers shared by every queued run; never supplied by payloads. */
+  probeDrivers?: RunProbeDrivers;
 }
 
 /** Adapt the durable server job contract to the canonical kit orchestrator. */
@@ -24,6 +26,7 @@ export function makeRunJobHandler(opts: RunJobHandlerOptions) {
       ...(profile ? { profile } : {}),
       ...(seed ? { seed } : {}),
       ...(opts.packsRoot ? { packsRoot: opts.packsRoot } : {}),
+      ...(opts.probeDrivers ? { probeDrivers: opts.probeDrivers } : {}),
       signal,
     };
     const result = await runRun(runOptions);

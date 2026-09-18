@@ -319,6 +319,42 @@ describe('aqa run', () => {
     }
   });
 
+  it('executes a queued job through the real worker with an explicit SQL driver policy', async () => {
+    const { root, packDir } = fixtureProject();
+    const sqlScenario = SMOKE_SCENARIO.replace(
+      'kind: http\n    with: { method: "GET", url: "/healthz" }',
+      'kind: sql\n    with:\n      query: "SELECT 1 AS value"',
+    ).replace(
+      'kind: http_status\n    with: { expected: 200 }',
+      'kind: response_contains\n    probe_id: probe-noop\n    with: { value: "ok" }',
+    );
+    writeFileSync(join(packDir, 'scenarios', 'smoke-noop.yaml'), sqlScenario, 'utf8');
+    let queryCalled = false;
+    const queue = new RunnerQueue({ lease_ms: 1_000 });
+    const job = queue.enqueue({
+      id: 'worker-sql-journey',
+      payload: { profile: 'smoke' },
+      enqueued_at: new Date().toISOString(),
+    });
+    const worker = makeKitWorker({
+      queue,
+      root,
+      packsRoot: [packDir],
+      poll_ms: 10,
+      probeDrivers: {
+        sql: {
+          query: async () => {
+            queryCalled = true;
+            return [{ value: 'ok' }];
+          },
+        },
+      },
+    });
+    assert.deepEqual(await worker.runOnce(), { status: 'completed', job_id: job.id });
+    assert.equal(queryCalled, true);
+    assert.equal(queue.get(job.id)?.status, 'done');
+  });
+
   it('executes the complete persisted PostgreSQL worker journey when a DSN is configured', async () => {
     const dsn = process.env.AQA_TEST_POSTGRES_DSN;
     if (!dsn) return;
