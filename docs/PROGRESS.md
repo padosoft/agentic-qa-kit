@@ -11,6 +11,16 @@
 
 ## 2026-09-18
 
+- **Added the atomic gift-card ledger boundary.** `@aqa/commerce` now
+  provides deterministic Memory and PostgreSQL implementations for
+  tenant-scoped credit, idempotent redeem and balance observation. Conflicting
+  operation reuse, currency mixing and concurrent overspend fail closed;
+  provider gift-card settlement/expiry remains separate evidence. Targeted
+  suite: **4 passed, 0 failed**, with the live PostgreSQL concurrency contract
+  explicitly skipped without `AQA_TEST_POSTGRES_DSN`. ADR-255 records the
+  boundary. Next: run the full matrix and continue the remaining provider
+  execution evidence.
+
 - **Removed silent CI placeholder passes.** Unit, Node, build and Playwright
   jobs now execute their real commands unconditionally; a missing workspace or
   admin Playwright setup fails the job instead of printing a green skip notice.

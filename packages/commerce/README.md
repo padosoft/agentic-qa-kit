@@ -112,6 +112,12 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   it distinguishes `committed`, `not_committed` and `unknown` outcomes. A
   transport ambiguity never becomes a success and the claimed approval must be
   reconciled before retrying.
+- `InMemoryGiftCardLedger` and `PostgresGiftCardLedger` provide an atomic,
+  tenant-scoped stored-value boundary for gift-card credit and redemption:
+  operation IDs are idempotent, conflicting reuse fails closed, currencies
+  cannot mix and concurrent redemption cannot overspend the balance. The
+  contract does not claim a provider's own gift-card system or settlement
+  evidence.
 
 ## Setup
 
