@@ -2456,3 +2456,15 @@
 - This proves provider payout consistency only. It does not prove bank
   arrival, order inclusion, fee allocation or a durable merchant
   payment/order-to-payout join.
+
+# 2026-09-18 — explicit Stripe payout merchant join in progress
+
+- Extended payout reconciliation with bounded
+  `balance_transactions?payout=...` read-back. When supplied, every
+  merchant-persisted provider source ID must appear in the payout constituent
+  ledger; missing sources, duplicates and incomplete pagination fail closed.
+  Commerce suite now passes **53/53** locally; ADR-241 and package README
+  document the explicit join boundary.
+- This proves provider-source inclusion only. Amount equality cannot fabricate
+  an order join; bank arrival, tax/fee allocation and merchant durable
+  transaction persistence remain separate evidence requirements.

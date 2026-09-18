@@ -45,6 +45,7 @@ export {
   type StripeDisputeReconciliation,
   type StripeDisputeReconciliationInput,
   type StripeDisputeStatus,
+  type StripeBalanceTransactionObservation,
   type StripePayoutObservation,
   type StripePayoutReconciliationInput,
   type StripePayoutStatus,

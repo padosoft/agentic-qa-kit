@@ -102,7 +102,19 @@ export type StripePayoutObservation = {
   balance_transaction_amount: StripeSignedMoney;
   fee_amount: Money;
   net_amount: StripeSignedMoney;
+  balance_transactions: readonly StripeBalanceTransactionObservation[];
   observed_at: string;
+};
+
+export type StripeBalanceTransactionObservation = {
+  provider: 'stripe';
+  transaction_id: string;
+  type: string;
+  source: string;
+  amount: StripeSignedMoney;
+  fee: Money;
+  net: StripeSignedMoney;
+  currency: string;
 };
 
 export type StripePayoutReconciliationInput = {
@@ -110,6 +122,7 @@ export type StripePayoutReconciliationInput = {
   expected_amount: Money;
   expected_fee: Money;
   expected_status?: StripePayoutStatus;
+  expected_balance_transaction_sources?: readonly string[];
 };
 
 /**
@@ -211,6 +224,7 @@ export class StripePaymentGateway {
         `balance_transactions/${encodeURIComponent(payout.balance_transaction_id)}`,
       ),
     );
+    const balanceTransactions = await this.listPayoutBalanceTransactions(id);
     return {
       provider: 'stripe',
       payout_id: id,
@@ -223,8 +237,24 @@ export class StripePaymentGateway {
       balance_transaction_amount: balanceTransaction.amount,
       fee_amount: balanceTransaction.fee,
       net_amount: balanceTransaction.net,
+      balance_transactions: balanceTransactions,
       observed_at: new Date().toISOString(),
     };
+  }
+
+  /** Read the complete bounded set of balance transactions assigned to a payout. */
+  async listPayoutBalanceTransactions(
+    payoutId: string,
+  ): Promise<StripeBalanceTransactionObservation[]> {
+    const id = providerId(payoutId, 'payout_id');
+    const response = record(
+      await this.request(`balance_transactions?payout=${encodeURIComponent(id)}&limit=100`),
+    );
+    if (response.object !== 'list' || !Array.isArray(response.data))
+      throw new Error('[commerce/stripe] payout balance transaction list response is invalid');
+    if (response.has_more === true)
+      throw new Error('[commerce/stripe] payout balance transaction list is incomplete');
+    return response.data.map((item) => parseBalanceTransaction(item));
   }
 
   private async request(
@@ -353,6 +383,22 @@ export async function reconcileStripePayout(
     throw new Error('[commerce/stripe] provider payout fee does not reconcile');
   if (input.expected_status !== undefined && payout.status !== input.expected_status)
     throw new Error('[commerce/stripe] provider payout status does not reconcile');
+  const expectedSources = input.expected_balance_transaction_sources;
+  if (expectedSources !== undefined) {
+    if (!Array.isArray(expectedSources) || expectedSources.length === 0)
+      throw new Error('[commerce/stripe] expected payout sources must be non-empty');
+    const seen = new Set<string>();
+    for (const source of expectedSources) {
+      const normalized = providerId(source, 'expected_balance_transaction_source');
+      if (seen.has(normalized))
+        throw new Error('[commerce/stripe] expected payout sources contain duplicates');
+      seen.add(normalized);
+      if (!payout.balance_transactions.some((item) => item.source === normalized))
+        throw new Error(
+          '[commerce/stripe] expected balance transaction source is absent from payout',
+        );
+    }
+  }
   if (payout.balance_transaction_type !== 'payout')
     throw new Error(
       '[commerce/stripe] linked balance transaction is not a payout balance transaction',
@@ -443,23 +489,20 @@ function parsePayout(value: unknown): {
   };
 }
 
-function parseBalanceTransaction(value: unknown): {
-  type: string;
-  source: string;
-  amount: StripeSignedMoney;
-  fee: Money;
-  net: StripeSignedMoney;
-} {
+function parseBalanceTransaction(value: unknown): StripeBalanceTransactionObservation {
   const object = record(value);
   if (object.object !== 'balance_transaction')
     throw new Error('[commerce/stripe] expected BalanceTransaction');
   const currency = currencyCode(object.currency);
   return {
+    provider: 'stripe',
+    transaction_id: providerId(object.id, 'balance_transaction.id'),
     type: requiredText(object.type, 'balance_transaction.type'),
     source: providerId(object.source, 'balance_transaction.source'),
     amount: signedMoney(object.amount, currency, 'balance_transaction.amount'),
     fee: money(object.fee, currency, 'balance_transaction.fee'),
     net: signedMoney(object.net, currency, 'balance_transaction.net'),
+    currency,
   };
 }
 
