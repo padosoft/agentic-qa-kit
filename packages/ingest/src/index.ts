@@ -85,6 +85,15 @@ export interface MutationThresholdResult {
   violations: string[];
 }
 
+export {
+  evaluateMutationCoverage,
+  parseMutationCoverageManifest,
+  type MutationCoverageLink,
+  type MutationCoverageManifest,
+  type MutationCoveragePolicy,
+  type MutationCoverageResult,
+} from './mutation-coverage.js';
+
 function fingerprint(parts: string[]): string {
   return createHash('sha256')
     .update(parts.map((part) => part.toLowerCase().replace(/\s+/g, ' ').trim()).join('|'))

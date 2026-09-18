@@ -19,6 +19,9 @@ copied into the normalized report.
   mutation reports. `evaluateMutationThreshold(report, minimumScore)` is the
   separate release gate; ignored mutants are excluded, while no-coverage,
   timeout and runtime/compile errors remain visible in the denominator.
+- `parseMutationCoverageManifest(json)` and `evaluateMutationCoverage(...)`
+  bind each evaluated mutant to reviewed risk/scenario IDs and gate mapping
+  completeness plus kill rate, including a per-risk breakdown.
 
 Mutation parsing does not execute Stryker, mutmut or another mutator and does
 not prove that the report was produced by a trusted job. The producer must be

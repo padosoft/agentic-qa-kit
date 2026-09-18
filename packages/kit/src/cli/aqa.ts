@@ -8,7 +8,7 @@ import { runFixturesRestore, runFixturesSnapshot } from '../commands/fixtures.js
 import { runIngest } from '../commands/ingest.js';
 import { runInit } from '../commands/init.js';
 import { runInstallAgentFiles } from '../commands/install-agent-files.js';
-import { runMutationGate } from '../commands/mutation-gate.js';
+import { runMutationCoverageGate, runMutationGate } from '../commands/mutation-gate.js';
 import { runOracleCalibration } from '../commands/oracle-calibrate.js';
 import { runPackNew } from '../commands/pack-new.js';
 import { runReport } from '../commands/report.js';
@@ -63,6 +63,8 @@ const VALUE_FLAGS = new Set([
   'bin-count',
   'max-ece',
   'min-score',
+  'min-mapped-rate',
+  'min-killed-rate',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -139,6 +141,8 @@ ${bold('Commands')}
                                     Calibrate opaque judge scores against a reviewed gold corpus
   mutation gate <report.json> --min-score X
                                     Gate an externally-produced mutation report
+  mutation coverage <report.json> <manifest.json> --min-mapped-rate X --min-killed-rate X
+                                    Gate mutant mapping to risk-linked regression scenarios
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
   pack new <slug>                   Scaffold a new pack at <cwd>/packs/<slug>/ (see the pack authoring
@@ -719,16 +723,52 @@ async function main(): Promise<number> {
     }
     case 'mutation': {
       const subcommand = args.positionals[0];
-      if (subcommand !== 'gate') {
-        console.error(red('aqa mutation: expected `gate`'));
+      if (subcommand !== 'gate' && subcommand !== 'coverage') {
+        console.error(red('aqa mutation: expected `gate` or `coverage`'));
         return 1;
       }
       const inputFile = args.positionals[1];
-      const minScoreValue = args.values.get('min-score');
       if (!inputFile) {
-        console.error(red('aqa mutation gate: missing <report.json>'));
+        console.error(red(`aqa mutation ${subcommand}: missing <report.json>`));
         return 1;
       }
+      if (subcommand === 'coverage') {
+        const manifestFile = args.positionals[2];
+        const mappedValue = args.values.get('min-mapped-rate');
+        const killedValue = args.values.get('min-killed-rate');
+        const mapped = mappedValue === undefined ? undefined : Number(mappedValue);
+        const killed = killedValue === undefined ? undefined : Number(killedValue);
+        if (!manifestFile || mapped === undefined || killed === undefined) {
+          console.error(
+            red(
+              'aqa mutation coverage: report, manifest, --min-mapped-rate and --min-killed-rate are required',
+            ),
+          );
+          return 1;
+        }
+        if (
+          ![mapped, killed].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+        ) {
+          console.error(red('aqa mutation coverage: thresholds must be numbers between 0 and 1'));
+          return 1;
+        }
+        const result = runMutationCoverageGate({
+          root: cwd,
+          inputFile,
+          manifestFile,
+          minMappedRate: mapped,
+          minKilledRate: killed,
+        });
+        if (!result.ok || !result.coverage) {
+          console.error(red(`aqa mutation coverage: ${result.error ?? 'coverage gate failed'}`));
+          return 1;
+        }
+        console.info(
+          `  ${result.gate_ok ? green('✓') : red('✗')} mapped=${result.coverage.mapped_rate.toFixed(6)} killed=${result.coverage.killed_rate.toFixed(6)} unmapped=${result.coverage.unmapped_mutant_ids.length}`,
+        );
+        return result.gate_ok ? 0 : 2;
+      }
+      const minScoreValue = args.values.get('min-score');
       if (minScoreValue === undefined || !Number.isFinite(Number(minScoreValue))) {
         console.error(red('aqa mutation gate: --min-score must be a number between 0 and 1'));
         return 1;

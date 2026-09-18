@@ -9,7 +9,14 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
-## 2026-09-18
+## 2026-09-19
+
+- **Added mutation-to-regression coverage.** The reviewed manifest contract
+  maps evaluated mutants to risk and regression scenario IDs, while
+  `aqa mutation coverage` gates mapping completeness and mapped kill rate and
+  emits per-risk coverage. Ingest/kit tests pass locally; ADR-270 and package
+  docs record that external mutation execution and provenance binding remain
+  separate requirements.
 
 - **Closed the semantic clustering implementation gap.** Added
   `clusterFindingsBySimilarity()` with bounded deterministic token similarity
