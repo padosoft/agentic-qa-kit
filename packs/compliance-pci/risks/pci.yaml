@@ -1,0 +1,27 @@
+schema_version: "1"
+project: pack-compliance-pci
+risks:
+  - id: pci-payment-data-leak
+    category: confidentiality
+    title: PAN or authentication data is exposed in logs, responses or evidence.
+    severity: critical
+    likelihood: possible
+    invariants:
+      - id: inv-pci-redaction
+        statement: PAN, CVV and equivalent authentication data never appear in logs, traces, screenshots or API responses.
+  - id: pci-tokenization-bypass
+    category: integrity
+    title: A payment workflow persists or processes raw card data outside the approved token boundary.
+    severity: critical
+    likelihood: unlikely
+    invariants:
+      - id: inv-tokenization-boundary
+        statement: Payment services accept only provider tokens after the explicitly bounded tokenization step.
+  - id: pci-network-boundary
+    category: compliance
+    title: The cardholder data environment is reachable from an unapproved service boundary.
+    severity: high
+    likelihood: possible
+    invariants:
+      - id: inv-cde-segmentation
+        statement: Only approved payment components can reach the cardholder data environment, with deny-by-default policy.

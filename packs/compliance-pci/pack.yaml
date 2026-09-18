@@ -1,0 +1,17 @@
+schema_version: "1"
+name: pack-compliance-pci
+version: 0.1.0
+description: "Opt-in PCI-DSS baseline for payment-data redaction, tokenization and boundary controls."
+author: Padosoft
+license: Apache-2.0
+applies_when:
+  tags_any: [compliance-pci, pci, payments]
+templates: []
+scenarios:
+  - scenarios/payment-redaction.yaml
+  - scenarios/tokenization.yaml
+  - scenarios/segmentation.yaml
+risks:
+  - risks/pci.yaml
+oracles: []
+probes: []

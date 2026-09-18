@@ -1,0 +1,24 @@
+schema_version: "1"
+id: scn-pci-tokenization
+title: Payment authorization uses a provider token rather than raw card data
+risk_refs: [pci-tokenization-bypass]
+invariant_refs: [inv-tokenization-boundary]
+preconditions:
+  - "a sandbox payment provider and non-production card fixture are configured"
+steps:
+  - id: tokenize-payment
+    kind: http
+    with: { method: "POST", url: "/payments/tokenize", body: { fixture: "sandbox-card" } }
+  - id: authorize-token
+    kind: http
+    with: { method: "POST", url: "/payments/authorize", body: { payment_token: "@tokenize-payment.body.token" } }
+oracles:
+  - id: o-token-created
+    kind: response_contains
+    probe_id: tokenize-payment
+    with: { jsonpath: "$.token_type", equals: "provider" }
+  - id: o-authorization-accepted
+    kind: http_status
+    probe_id: authorize-token
+    with: { expected: 201 }
+tags: [compliance, pci, payments, tokenization]
