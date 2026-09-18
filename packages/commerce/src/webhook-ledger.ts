@@ -3,6 +3,17 @@ import type { Sql } from 'postgres';
 
 export type WebhookClaim = 'claimed' | 'duplicate' | 'conflict';
 
+export type WebhookLedgerOptions = {
+  lease_ms?: number;
+};
+
+function leaseMs(value: number | undefined): number {
+  const result = value ?? 300_000;
+  if (!Number.isSafeInteger(result) || result < 1)
+    throw new Error('[commerce/webhook] lease_ms must be positive');
+  return result;
+}
+
 export interface WebhookEffectLedger {
   claim(effectKey: string, eventId: string): Promise<WebhookClaim>;
   complete?(effectKey: string, eventId: string): Promise<void>;
@@ -13,15 +24,30 @@ export interface WebhookEffectLedger {
 export class InMemoryWebhookEffectLedger implements WebhookEffectLedger {
   private readonly claims = new Map<
     string,
-    { eventId: string; status: 'processing' | 'completed' }
+    { eventId: string; status: 'processing' | 'completed'; claimedAt: number }
   >();
+  private readonly leaseMs: number;
+  private readonly now: () => number;
+
+  constructor(options: WebhookLedgerOptions & { now_ms?: () => number } = {}) {
+    this.leaseMs = leaseMs(options.lease_ms);
+    this.now = options.now_ms ?? Date.now;
+  }
 
   async claim(effectKey: string, eventId: string): Promise<WebhookClaim> {
     if (!effectKey.trim() || !eventId.trim())
       throw new Error('[commerce/webhook] keys are required');
     const existing = this.claims.get(effectKey);
     if (!existing) {
-      this.claims.set(effectKey, { eventId, status: 'processing' });
+      this.claims.set(effectKey, { eventId, status: 'processing', claimedAt: this.now() });
+      return 'claimed';
+    }
+    if (
+      existing.eventId === eventId &&
+      existing.status === 'processing' &&
+      this.now() - existing.claimedAt >= this.leaseMs
+    ) {
+      existing.claimedAt = this.now();
       return 'claimed';
     }
     return existing.eventId === eventId ? 'duplicate' : 'conflict';
@@ -43,8 +69,9 @@ export class PostgresWebhookEffectLedger implements WebhookEffectLedger {
   private readonly sql: Sql;
   private readonly ready: Promise<void>;
 
-  constructor(dsn: string) {
+  constructor(dsn: string, options: WebhookLedgerOptions = {}) {
     if (!dsn.trim()) throw new Error('[commerce/webhook] DSN is empty');
+    this.leaseMs = leaseMs(options.lease_ms);
     this.sql = postgres(dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
     this.ready = this.migrate();
   }
@@ -58,11 +85,18 @@ export class PostgresWebhookEffectLedger implements WebhookEffectLedger {
       [effectKey, eventId],
     );
     if (inserted[0]?.inserted === true) return 'claimed';
-    const existing = await this.query<{ event_id: string }>(
-      'SELECT event_id FROM aqa_webhook_effects WHERE effect_key = $1',
+    const existing = await this.query<{ event_id: string; status: string; claimed_at: string }>(
+      'SELECT event_id, status, claimed_at FROM aqa_webhook_effects WHERE effect_key = $1',
       [effectKey],
     );
-    return existing[0]?.event_id === eventId ? 'duplicate' : 'conflict';
+    const row = existing[0];
+    if (!row || row.event_id !== eventId) return 'conflict';
+    if (row.status === 'completed') return 'duplicate';
+    const reclaimed = await this.query<{ reclaimed: boolean }>(
+      "UPDATE aqa_webhook_effects SET claimed_at = now() WHERE effect_key = $1 AND event_id = $2 AND status = 'processing' AND claimed_at < now() - ($3::double precision * interval '1 millisecond') RETURNING true AS reclaimed",
+      [effectKey, eventId, this.leaseMs],
+    );
+    return reclaimed[0]?.reclaimed === true ? 'claimed' : 'duplicate';
   }
 
   async complete(effectKey: string, eventId: string): Promise<void> {
@@ -107,6 +141,8 @@ export class PostgresWebhookEffectLedger implements WebhookEffectLedger {
   async close(): Promise<void> {
     await this.sql.end({ timeout: 5 });
   }
+
+  private readonly leaseMs: number;
 }
 
 /** Run a business effect only for the first delivery of a logical effect. */

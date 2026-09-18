@@ -40,6 +40,14 @@ transient merchant error permanently turns the next provider retry into a
 false duplicate. Durable webhook ledgers must model recovery, not only
 deduplication.
 
+# 2026-09-18 — Reclaiming a webhook lease does not make effects exactly-once
+
+A stale processing claim must be reclaimable after a crash, but the previous
+consumer may have completed the external side effect just before dying. The
+ledger can prevent duplicate state transitions; only a merchant-side
+idempotency key/effect key can make the external operation safe across that
+reclaim race.
+
 # 2026-09-18 — Clear does not cancel an asynchronous lease probe
 
 `clearInterval()` stops future callbacks but does not cancel a `queue.get()` or

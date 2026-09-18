@@ -13,6 +13,13 @@
 
 ## 2026-09-18
 
+- **Closed the webhook crash-recovery gap at the ledger boundary.** Processing
+  claims now carry a bounded lease; an abandoned in-memory or PostgreSQL claim
+  can be atomically reclaimed, while completed effects remain duplicate-safe.
+  The contract explicitly retains the requirement that business effects are
+  idempotent across a crash/reclaim race. Commerce suite: **45 passed, 0
+  failed** locally; hosted CI is required for this increment.
+
 - **Closed the Stripe webhook side-effect safety gap.** Added
   `StripeWebhookProcessor` for signature verification, body-size bounds,
   supported-event allowlisting and order/provider linkage before invoking a

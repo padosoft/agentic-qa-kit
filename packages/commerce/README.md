@@ -61,7 +61,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
 - `StripeWebhookProcessor` combines raw-body signature verification, bounded
   event parsing, supported-event allowlisting and the durable effect ledger.
   Failed effects release their in-progress claim so provider retries can
-  safely recover; conflicting logical effects fail closed.
+  safely recover; abandoned processing claims are reclaimed after a bounded
+  lease; conflicting logical effects fail closed. Business effects must remain
+  idempotent because a process can crash after the external effect and before
+  marking it completed.
 - `StripePaymentGateway` is a bounded REST boundary for PaymentIntent create/
   retrieve and refund operations. It requires Stripe secret-key format,
   HTTPS (except localhost test servers), write idempotency keys, bounded
