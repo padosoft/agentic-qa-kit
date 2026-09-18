@@ -20,6 +20,15 @@
   repository gates, then promote the slice and continue the remaining external
   KMS/WORM/PITR, IdP and real commerce-provider evidence.
 
+- **Added the bounded HTTP gift-card provider adapter.**
+  `HttpGiftCardProvider` now connects the typed provider snapshot to a real
+  HTTPS boundary with origin allowlisting, manual redirect handling, response
+  limits, URL-credential rejection and explicit loopback-only HTTP for local
+  tests. Four transport/schema regressions are covered without credentials or
+  network access. Next: run the full repository gates, promote this adapter,
+  and configure a protected live issuer journey when provider credentials are
+  available.
+
 - **Hardened stored-value idempotency scope.** Gift-card operation IDs are now
   unique within tenant + gift-card ownership rather than globally, in Memory
   and PostgreSQL lookup/index paths. Added a regression proving equal keys can
