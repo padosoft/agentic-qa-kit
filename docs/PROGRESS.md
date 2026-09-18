@@ -13,6 +13,12 @@
 
 ## 2026-09-18
 
+- **Merged doctor restore-binding sub-task PR #157 into the macro branch.**
+  Hosted CI run **35338960631** passed typecheck/lint, Helm, Bun, Node 22,
+  PostgreSQL, S3, OCI, build, CLI E2E, Playwright admin E2E and live
+  Prometheus/OTLP telemetry. Next: promote the policy increment to `main`,
+  then continue real provider-backed KMS/WORM/PITR and identity exercises.
+
 - **Connected restore-drill binding to `aqa doctor --production`.** When
   `AQA_PRODUCTION_DR_INVENTORY_PATH` and `AQA_PRODUCTION_DR_EVIDENCE_PATH`
   are present, doctor now revalidates the inputs and reuses the canonical
