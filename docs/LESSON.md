@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-18 — Stored-value provider evidence needs a temporal boundary
+
+A merchant ledger can prove local idempotency and overspend prevention, but it
+cannot prove that an external gift-card provider returned the same card,
+currency or balance. A provider status string is also insufficient: expired
+must carry an elapsed timestamp, while active must not carry an already elapsed
+expiry. Keep this adapter-backed reconciliation separate from live provider
+execution and legal expiry claims.
+
 # 2026-09-18 — A write request is not encryption evidence
 
 S3-compatible APIs can accept an encryption option without proving that the

@@ -2476,3 +2476,13 @@ export {
   type GiftCardLedger,
   type GiftCardRedeemResult,
 } from './tender-ledger.js';
+
+export {
+  assertGiftCardProviderReconciliation,
+  verifyGiftCardProviderJourney,
+  GiftCardProviderSnapshot,
+  type GiftCardProviderAdapter,
+  type GiftCardProviderEvidence,
+  type GiftCardProviderReconciliationOptions,
+  type GiftCardProviderReconciliationResult,
+} from './gift-card-provider.js';

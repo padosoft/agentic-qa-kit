@@ -118,6 +118,11 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   cannot mix and concurrent redemption cannot overspend the balance. The
   contract does not claim a provider's own gift-card system or settlement
   evidence.
+- `verifyGiftCardProviderJourney()` reconciles a provider's authoritative
+  gift-card identity, currency, balance, status and expiry observation against
+  the merchant ledger. Identity or balance drift, impossible expiry states and
+  incomplete observations fail closed; this contract does not claim live
+  provider execution until an adapter-backed integration job supplies it.
 
 ## Setup
 

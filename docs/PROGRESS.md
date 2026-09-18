@@ -11,6 +11,15 @@
 
 ## 2026-09-18
 
+- **Added the provider gift-card lifecycle boundary.** `@aqa/commerce` now
+  exposes `verifyGiftCardProviderJourney()` and a schema-validated provider
+  snapshot. It reconciles tenant/card identity, currency and exact balance
+  against the merchant ledger and rejects impossible active/expired timestamp
+  combinations. Five deterministic tests pass; this is adapter contract
+  evidence, not a live issuer/provider execution claim. Next: run the full
+  repository gates, then promote the slice and continue the remaining external
+  KMS/WORM/PITR, IdP and real commerce-provider evidence.
+
 - **Hardened stored-value idempotency scope.** Gift-card operation IDs are now
   unique within tenant + gift-card ownership rather than globally, in Memory
   and PostgreSQL lookup/index paths. Added a regression proving equal keys can
