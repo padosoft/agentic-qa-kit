@@ -2954,3 +2954,8 @@ caller can see different authorization surfaces depending on deployment mode.
   is not a sufficient semantic join for legacy/backfilled rows, so purge must
   delete the artifact by its tenant columns plus validated envelope identity
   and revision. Keep lifecycle and artifact cleanup in the same transaction.
+
+- The hosted scoped contract also requires the caller's scope to remain the
+  authoritative tenant filter during purge; persisted scope columns are a
+  fallback for legacy rows, not a substitute for the operation scope. Apply
+  that rule consistently to artifact deletion and proposal-copy scrubbing.

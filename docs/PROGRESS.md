@@ -22,6 +22,10 @@
   envelope identity/revision inside the same transaction; local gates and a
   fresh hosted contract run are required next.
 
+- The latest hosted attempt showed the operation must prefer its caller scope
+  over nullable legacy row scope columns. Purge and proposal-copy scrubbing
+  now use that authoritative scope with persisted columns as fallback.
+
 ## 2026-09-19 — Methodology diff and publication UI implemented
 
 - Added a live, tenant-scoped previous-revision comparison in the admin review
