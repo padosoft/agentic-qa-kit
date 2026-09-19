@@ -600,7 +600,20 @@ describe('PostgresStore', () => {
         await s.purgeExpiredMethodologyArtifacts('2026-09-21T14:00:00.000Z', specialScope),
         1,
       );
-      assert.equal(await s.loadMethodologyArtifact('retention-contract', 1, specialScope), null);
+      const sameConnectionRetention = await s.loadMethodologyArtifact(
+        'retention-contract',
+        1,
+        specialScope,
+      );
+      const retentionVerifier = new PostgresStore(dsn);
+      try {
+        assert.equal(
+          await retentionVerifier.loadMethodologyArtifact('retention-contract', 1, specialScope),
+          null,
+        );
+      } finally {
+        await retentionVerifier.close();
+      }
       assert.equal(
         (await s.loadMethodologyProposal(retentionProposal.proposal_id, specialScope))?.artifact,
         undefined,
