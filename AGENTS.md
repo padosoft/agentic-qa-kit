@@ -98,7 +98,7 @@ main                              ← protected, stable, deploy-ready
    ```bash
    gh pr create --base <target-branch> --title "..." --body "..."
    ```
-3. **Assign Copilot as reviewer.** First try:
+3. **Assign Copilot as reviewer unless the operator explicitly opts out.** First try:
    ```bash
    gh pr edit <pr-number> --add-reviewer copilot-pull-request-reviewer
    ```
@@ -114,8 +114,8 @@ main                              ← protected, stable, deploy-ready
    gh api graphql -f query="$query" -F pullRequestId='<PR_NODE_ID>' -F botLogins[]='copilot-pull-request-reviewer[bot]' -F union=true
    ```
    The REST `reviewers[]=copilot` endpoint is **not equivalent** and may silently no-op.
-   If both API paths leave `reviewRequests` empty, request Copilot review manually from the PR sidebar. **Do not substitute another reviewer or skip review** unless the user explicitly asks.
-4. **Wait** for CI green AND Copilot comments. Use `gh pr view <pr> --json statusCheckRollup,reviews,comments` to poll.
+   If both API paths leave `reviewRequests` empty, request Copilot review manually from the PR sidebar. **Do not substitute another reviewer or skip review** unless the user explicitly asks. When the operator opts out, record that decision in the PR body and keep all technical CI gates mandatory.
+4. **Wait** for CI green and, unless explicitly opted out, Copilot comments. Use `gh pr view <pr> --json statusCheckRollup,reviews,comments` to poll.
 5. **If green and no blockers** → squash-merge with `gh pr merge --squash --delete-branch`.
 6. **If red or there are comments:**
    a. Fix locally
@@ -142,7 +142,7 @@ A task (sub or macro) is **not done** until **all** of these are true:
    - `docs/LESSON.md` updated with non-obvious discoveries (always after Copilot review iterations)
    - ADR written for any architectural decision
 5. **CI green** (all jobs in `.github/workflows/ci.yml`)
-6. **Copilot review processed** (no blockers, all comments resolved or explicitly rejected with motivation)
+6. **Copilot review processed**, or an explicit operator opt-out is recorded (no unresolved review blockers)
 7. **PR merged** (squash by default)
 
 ## Sub-agent context handoff

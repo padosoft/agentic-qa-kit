@@ -97,9 +97,9 @@ bunx playwright test      # only if UI/UX touched
 
 ## Review rules
 
-- Every PR (sub or macro) **must** request Copilot Code Review. See `AGENTS.md § Branch and PR loop` for the request flow and the GraphQL fallback.
-- The user can ask for additional reviewers (Codex, human) but Copilot is the baseline.
-- Do not merge until CI is green AND Copilot comments are resolved or explicitly rejected with motivation.
+- Every PR (sub or macro) should request Copilot Code Review by default. See `AGENTS.md § Branch and PR loop` for the request flow and GraphQL fallback.
+- An explicit operator opt-out is valid: record it in the PR body, do not substitute an unrequested reviewer, and keep every technical CI gate mandatory.
+- Do not merge until CI is green and either Copilot comments are resolved/rejected with motivation or the explicit opt-out is recorded.
 
 ## Code style
 

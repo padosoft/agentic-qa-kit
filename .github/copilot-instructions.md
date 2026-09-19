@@ -11,7 +11,7 @@
 
 ## Copilot Code Review
 
-This repository **requires** Copilot Code Review on every PR. See `AGENTS.md § Branch and PR loop` for the exact request flow (gh CLI + GraphQL fallback).
+This repository uses Copilot Code Review by default. An operator may explicitly opt out; in that case the PR must record the opt-out and still pass every technical CI gate. See `AGENTS.md § Branch and PR loop` for the exact request flow (gh CLI + GraphQL fallback).
 
 If you are the human reviewer running Copilot, please:
 - Wait for CI green before merging
