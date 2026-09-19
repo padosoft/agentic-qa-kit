@@ -531,7 +531,7 @@ describe('PostgresStore', () => {
             project: 'shop_beta',
             status: 'approved',
           })
-        ).some((record) => record.proposal.artifact_id === 'checkout-tree-postgres'),
+        ).some((record) => record.proposal.artifact_id === 'checkout-durable'),
         true,
       );
       await reopened.saveRun({
