@@ -14,6 +14,7 @@ const SCREENS: { nav: string; expect: RegExp }[] = [
   { nav: 'Runs', expect: /Runs/i },
   { nav: 'Findings', expect: /Findings/i },
   { nav: 'Risk map', expect: /Risk map/i },
+  { nav: 'Methodology review', expect: /Methodology review/i },
   { nav: 'Packs', expect: /Packs/i },
   { nav: 'Scenarios', expect: /Scenarios/i },
   { nav: 'Profiles', expect: /Profiles/i },

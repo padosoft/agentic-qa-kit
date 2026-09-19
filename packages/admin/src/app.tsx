@@ -6722,6 +6722,7 @@ const NAV_TREE = [
       { key: 'findings', label: 'Findings', icon: 'Bug', route: '/findings' },
       { key: 'risk-map', label: 'Risk map', icon: 'Shield', route: '/risk-map' },
       { key: 'risk-coverage', label: 'Risk coverage', icon: 'Shield', route: '/risk-coverage' },
+      { key: 'methodology-review', label: 'Methodology review', icon: 'Audit', route: '/methodology-review' },
     ],
   },
   {
@@ -13885,6 +13886,111 @@ Object.assign(window, {
 // agentic-qa-kit · admin panel — App root
 // =============================================================
 
+function MethodologyStatusBadge({ status }) {
+  const cls = status === 'approved' ? 'success' : status === 'rejected' ? 'failed' : 'pending';
+  return <span className={`badge ${cls}`}>{status}</span>;
+}
+
+const METHODOLOGY_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' };
+
+function PageMethodologyReview({ mode }) {
+  const mockProposals = React.useMemo(() => [{
+    schema_version: '1', proposal_id: 'proposal-demo', artifact_kind: 'risk_map',
+    artifact_id: 'risk-map-shop', artifact_sha256: 'demo-digest', revision: 3,
+    proposed_by: 'agent-a', proposed_at: '2026-09-19T10:00:00.000Z', source: 'agent', status: 'pending',
+  }], []);
+  const [state, setState] = React.useState({ loading: mode === 'live', proposals: mode === 'live' ? [] : mockProposals, error: null });
+  const [selectedId, setSelectedId] = React.useState(null);
+  const [artifact, setArtifact] = React.useState(null);
+  const [artifactLoading, setArtifactLoading] = React.useState(false);
+  const [artifactError, setArtifactError] = React.useState(null);
+  const [reviewerId, setReviewerId] = React.useState(null);
+  const [action, setAction] = React.useState(null);
+  const [notice, setNotice] = React.useState(null);
+
+  const load = React.useCallback(() => {
+    if (mode !== 'live') {
+      setState({ loading: false, proposals: mockProposals, error: null });
+      setSelectedId((current) => current || mockProposals[0]?.proposal_id || null);
+      return () => {};
+    }
+    let active = true;
+    setState((current) => ({ ...current, loading: true, error: null }));
+    fetch(apiUrl('/api/methodology/proposals'), { headers: METHODOLOGY_HEADERS })
+      .then(async (res) => { const body = await res.json().catch(() => ({})); if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body; })
+      .then((body) => { if (active) { const proposals = (Array.isArray(body.proposals) ? body.proposals : []).map((record) => record?.proposal ? { ...record.proposal, ...(record.approval ? { approval: record.approval } : {}) } : record); setState({ loading: false, proposals, error: null }); setSelectedId((current) => current && proposals.some((p) => p.proposal_id === current) ? current : proposals[0]?.proposal_id || null); } })
+      .catch((error) => { if (active) setState({ loading: false, proposals: [], error: error instanceof Error ? error.message : String(error) }); });
+    return () => { active = false; };
+  }, [mode, mockProposals]);
+
+  React.useEffect(() => load(), [load]);
+  React.useEffect(() => {
+    if (mode !== 'live') return undefined;
+    let active = true;
+    fetch(apiUrl('/api/session'), { headers: METHODOLOGY_HEADERS })
+      .then(async (res) => { const body = await res.json().catch(() => ({})); if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body; })
+      .then((body) => { if (active) setReviewerId(body.user?.id || null); })
+      .catch(() => { if (active) setReviewerId(null); });
+    return () => { active = false; };
+  }, [mode]);
+  const selected = state.proposals.find((proposal) => proposal.proposal_id === selectedId) || null;
+  React.useEffect(() => {
+    if (!selected || mode !== 'live') { setArtifact(null); setArtifactError(null); setArtifactLoading(false); return undefined; }
+    let active = true;
+    setArtifact(null); setArtifactError(null); setArtifactLoading(true);
+    fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}`), { headers: METHODOLOGY_HEADERS })
+      .then(async (res) => { const body = await res.json().catch(() => ({})); if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body.proposal?.artifact || null; })
+      .then((value) => { if (active) { if (!value) throw new Error('staged methodology payload is unavailable'); setArtifact(value); setArtifactLoading(false); } })
+      .catch((error) => { if (active) { setArtifact(null); setArtifactLoading(false); setArtifactError(error instanceof Error ? error.message : String(error)); } });
+    return () => { active = false; };
+  }, [mode, selected]);
+
+  async function approve() {
+    if (!selected || selected.status !== 'pending' || mode !== 'live' || !reviewerId || !artifact) return;
+    setAction('approve'); setNotice(null);
+    const now = new Date();
+    const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    try {
+      const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/approve`), {
+        method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ schema_version: '1', approval_id: `approval-${Date.now()}`, proposal_id: selected.proposal_id, artifact_sha256: selected.artifact_sha256, revision: selected.revision, approved_by: reviewerId, approved_at: now.toISOString(), expires_at: expires.toISOString() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      setNotice({ kind: 'success', text: 'Proposal approved and bound to this exact revision.' });
+      load();
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) }); }
+    finally { setAction(null); }
+  }
+
+  return (
+    <div className="page" data-screen-label="09 Methodology review">
+      <PageHeader title="Methodology review" sub="Review the exact digest-bound proposal before it can become durable evidence." badge="HUMAN GATE" actions={<button className="btn sm ghost" onClick={load}><I.Refresh size={12} /> Refresh</button>} />
+      {notice && <Alert kind={notice.kind} title={notice.kind === 'success' ? 'Approval recorded' : 'Approval failed'}>{notice.text}</Alert>}
+      {state.error && <Alert kind="error" title="Proposal queue unavailable">{state.error}</Alert>}
+      {state.loading ? <div className="skeleton" style={{ height: 220 }} aria-label="Loading methodology proposals" /> : state.proposals.length === 0 ? <EmptyState icon={<I.Audit size={22} />} title="No methodology proposals" body="Agent-generated risk maps and reports will appear here when they request human review." /> : (
+        <div className="dash-grid" style={{ marginTop: 16 }}>
+          <div className="panel span-4">
+            <div className="card-head"><h3 className="card-title"><I.Audit size={12} /> Proposals</h3><span className="mono tertiary">{state.proposals.length}</span></div>
+            <div className="card-body flush">{state.proposals.map((proposal) => <button key={proposal.proposal_id} className={`list-row ${proposal.proposal_id === selectedId ? 'selected' : ''}`} onClick={() => setSelectedId(proposal.proposal_id)}><span className="col" style={{ alignItems: 'flex-start', gap: 3 }}><b className="mono">{proposal.proposal_id}</b><small>{proposal.artifact_kind} · rev {proposal.revision}</small></span><MethodologyStatusBadge status={proposal.status} /></button>)}</div>
+          </div>
+          <div className="panel span-8">
+            {!selected ? <EmptyState title="Select a proposal" body="Choose a proposal to inspect its binding and payload." /> : <>
+              <div className="card-head"><div><h3 className="card-title">{selected.artifact_id}</h3><div className="muted mono">{selected.artifact_kind} · revision {selected.revision} · proposed by {selected.proposed_by}</div></div><MethodologyStatusBadge status={selected.status} /></div>
+              <div className="card-body col gap-12">
+                <Alert kind="warning" title="Approval is exact and time-bounded">Verify the payload, identity and digest before approving. This action cannot be reused for another revision.</Alert>
+                <div className="grid-2"><div><div className="field-label">SHA-256 digest</div><code className="code-inline" data-testid="methodology-digest">{selected.artifact_sha256}</code></div><div><div className="field-label">Proposed at</div><span className="mono">{selected.proposed_at}</span></div></div>
+                <div><div className="field-label">Payload preview</div>{artifactLoading ? <div className="skeleton" style={{ height: 140 }} aria-label="Loading staged methodology payload" /> : <pre className="code-block" data-testid="methodology-payload">{JSON.stringify(artifact || { warning: artifactError || 'Staged payload unavailable; approval is disabled.' }, null, 2)}</pre>}</div>
+                {selected.status === 'pending' && <div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action === 'approve' || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div>}
+              </div>
+            </>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   theme: 'dark',
 } /*EDITMODE-END*/;
@@ -13942,6 +14048,11 @@ const ROUTES = {
     section: 'Work',
     parent: 'risk-map',
     render: (ctx) => <PageRiskCoverage {...ctx} />,
+  },
+  'methodology-review': {
+    label: 'Methodology review',
+    section: 'Work',
+    render: (ctx) => <PageMethodologyReview {...ctx} />,
   },
   'risk-edit': {
     label: 'Risk editor',

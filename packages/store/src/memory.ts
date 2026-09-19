@@ -379,17 +379,37 @@ export class MemoryStore implements StoreProvider {
     const record = this.methodologyProposals.get(this.key(proposalId, scope));
     return record ? parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))) : null;
   }
-  async saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void> {
+  async saveMethodologyProposal(
+    proposal: MethodologyProposal,
+    scope?: StoreScope,
+    artifact?: MethodologyArtifactEnvelope,
+  ): Promise<void> {
     const normalized = parseMethodologyProposal(proposal);
     assertMethodologyProposal(normalized);
     if (normalized.status !== 'pending') throw new Error('methodology proposal must be pending');
+    const normalizedArtifact = artifact
+      ? parseMethodologyArtifactEnvelope(JSON.stringify(artifact))
+      : undefined;
+    if (
+      normalizedArtifact &&
+      (normalizedArtifact.artifact_kind !== normalized.artifact_kind ||
+        normalizedArtifact.artifact_id !== normalized.artifact_id ||
+        normalizedArtifact.revision !== normalized.revision ||
+        normalizedArtifact.artifact_sha256 !== normalized.artifact_sha256)
+    )
+      throw new Error('methodology proposal does not bind to artifact');
     const key = this.key(normalized.proposal_id, scope);
     const existing = this.methodologyProposals.get(key);
-    if (existing && JSON.stringify(existing.proposal) !== JSON.stringify(normalized))
+    if (
+      existing &&
+      (JSON.stringify(existing.proposal) !== JSON.stringify(normalized) ||
+        JSON.stringify(existing.artifact) !== JSON.stringify(normalizedArtifact))
+    )
       throw new Error('methodology proposal conflict');
     this.methodologyProposals.set(key, {
       ...(existing ? JSON.parse(JSON.stringify(existing)) : {}),
       proposal: JSON.parse(JSON.stringify(normalized)),
+      ...(normalizedArtifact ? { artifact: JSON.parse(JSON.stringify(normalizedArtifact)) } : {}),
     });
   }
   async approveMethodologyProposal(
@@ -405,6 +425,7 @@ export class MemoryStore implements StoreProvider {
       parseMethodologyApproval(approval),
     );
     this.methodologyProposals.set(key, {
+      ...(existing?.artifact ? { artifact: JSON.parse(JSON.stringify(existing.artifact)) } : {}),
       proposal: result.proposal,
       approval: JSON.parse(JSON.stringify(result.approval)),
     });
@@ -676,11 +697,27 @@ export class MemoryStore implements StoreProvider {
 function parseMethodologyProposalRecord(input: unknown): MethodologyProposalRecord {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new Error('methodology proposal record must be an object');
-  const record = input as { proposal?: unknown; approval?: unknown };
-  if (Object.keys(record).some((key) => key !== 'proposal' && key !== 'approval'))
+  const record = input as { proposal?: unknown; artifact?: unknown; approval?: unknown };
+  if (
+    Object.keys(record).some(
+      (key) => key !== 'proposal' && key !== 'artifact' && key !== 'approval',
+    )
+  )
     throw new Error('methodology proposal record contains an unknown field');
   const proposal = parseMethodologyProposal(record.proposal);
+  const artifact =
+    record.artifact === undefined
+      ? undefined
+      : parseMethodologyArtifactEnvelope(JSON.stringify(record.artifact));
   const approval =
     record.approval === undefined ? undefined : parseMethodologyApproval(record.approval);
-  return { proposal, ...(approval ? { approval } : {}) };
+  if (
+    artifact &&
+    (artifact.artifact_kind !== proposal.artifact_kind ||
+      artifact.artifact_id !== proposal.artifact_id ||
+      artifact.revision !== proposal.revision ||
+      artifact.artifact_sha256 !== proposal.artifact_sha256)
+  )
+    throw new Error('methodology proposal record artifact binding mismatch');
+  return { proposal, ...(artifact ? { artifact } : {}), ...(approval ? { approval } : {}) };
 }

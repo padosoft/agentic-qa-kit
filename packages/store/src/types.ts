@@ -49,6 +49,8 @@ export interface LegacyMigrationResult {
 
 export interface MethodologyProposalRecord {
   proposal: MethodologyProposal;
+  /** Bounded, DLP-checked payload staged for human review before approval. */
+  artifact?: MethodologyArtifactEnvelope;
   approval?: MethodologyApproval;
 }
 
@@ -181,7 +183,11 @@ export interface StoreProvider {
     scope?: StoreScope,
   ): Promise<MethodologyProposalRecord | null>;
   /** Persist a proposal immutably; same id + same content is idempotent. */
-  saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void>;
+  saveMethodologyProposal(
+    proposal: MethodologyProposal,
+    scope?: StoreScope,
+    artifact?: MethodologyArtifactEnvelope,
+  ): Promise<void>;
   /** Atomically approve one pending proposal and retain the approval record. */
   approveMethodologyProposal(
     proposalId: string,

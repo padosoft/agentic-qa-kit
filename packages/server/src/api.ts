@@ -1296,6 +1296,21 @@ export function makeApi(): ApiHandler[] {
       },
     },
 
+    // ============ Authenticated session ============
+    {
+      method: 'GET',
+      path: '/api/session',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const user = await ctx.authenticate(req.headers);
+        return user
+          ? asResponse({
+              user: { id: user.id, name: user.display_name, role: user.roles[0] ?? 'viewer' },
+            })
+          : { status: 401, body: { error: 'unauthorized' } };
+      },
+    },
+
     // ============ Methodology artifacts ============
     {
       method: 'GET',
@@ -1356,12 +1371,30 @@ export function makeApi(): ApiHandler[] {
           status !== 'rejected'
         )
           return { status: 400, body: { error: 'invalid methodology proposal status' } };
-        const proposals = await ctx.store.listMethodologyProposals({
+        const records = await ctx.store.listMethodologyProposals({
           org: s.org,
           project: s.project,
           ...(status ? { status } : {}),
         });
-        return asResponse({ proposals });
+        return asResponse({
+          proposals: records.map(({ proposal, approval }) => ({
+            proposal,
+            ...(approval ? { approval } : {}),
+          })),
+        });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/methodology/proposals/:id',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const proposalId = req.params.id;
+        if (!proposalId) return notFound('methodology proposal');
+        const record = await ctx.store.loadMethodologyProposal(proposalId, s);
+        return record ? asResponse({ proposal: record }) : notFound('methodology proposal');
       },
     },
     {
@@ -1396,7 +1429,7 @@ export function makeApi(): ApiHandler[] {
                 : false;
           if (!hostTrusted)
             throw new Error('methodology proposal origin is not trusted by the host');
-          await ctx.store.saveMethodologyProposal(proposal, s);
+          await ctx.store.saveMethodologyProposal(proposal, s, artifact);
           return asResponse({ proposal }, 201);
         } catch (error) {
           if (error instanceof Error && /conflict|already exists/i.test(error.message))

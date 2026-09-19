@@ -404,9 +404,13 @@ describe('MemoryStore', () => {
       source: 'agent',
     });
     const scope = { org: 'org-a', project: 'shop' };
-    await s.saveMethodologyProposal(proposal, scope);
-    await s.saveMethodologyProposal(proposal, scope);
+    await s.saveMethodologyProposal(proposal, scope, METHODOLOGY_ARTIFACT);
+    await s.saveMethodologyProposal(proposal, scope, METHODOLOGY_ARTIFACT);
     assert.equal((await s.listMethodologyProposals({ ...scope, status: 'pending' })).length, 1);
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.artifact,
+      METHODOLOGY_ARTIFACT,
+    );
     assert.equal((await s.listMethodologyProposals({ org: 'other', project: 'shop' })).length, 0);
     await assert.rejects(
       () => s.saveMethodologyProposal({ ...proposal, proposed_by: 'forged' }, scope),
@@ -426,6 +430,10 @@ describe('MemoryStore', () => {
     assert.deepEqual(
       (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.approval,
       approval,
+    );
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.artifact,
+      METHODOLOGY_ARTIFACT,
     );
     await assert.rejects(
       () => s.approveMethodologyProposal(proposal.proposal_id, approval, scope),
@@ -452,7 +460,7 @@ describe('PostgresStore', () => {
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
       );
-      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' };
+      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' };
       const specialScope = { org: 'org_a with space', project: 'shop_beta' };
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
@@ -471,7 +479,7 @@ describe('PostgresStore', () => {
         proposed_at: '2026-09-18T10:01:00.000Z',
         source: 'agent',
       });
-      await s.saveMethodologyProposal(postgresProposal, specialScope);
+      await s.saveMethodologyProposal(postgresProposal, specialScope, postgresArtifact);
       const postgresApproval = {
         schema_version: '1' as const,
         approval_id: `approval-postgres-${Date.now()}`,
@@ -514,11 +522,11 @@ describe('PostgresStore', () => {
         'a fresh store instance must read state written by the previous process',
       );
       assert.deepEqual(
-        await reopened.loadMethodologyArtifact('checkout-tree-postgres', 1, {
+        await reopened.loadMethodologyArtifact('checkout-durable', 1, {
           org: 'org_a with space',
           project: 'shop_beta',
         }),
-        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' },
+        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' },
       );
       assert.equal(
         (
@@ -527,7 +535,7 @@ describe('PostgresStore', () => {
             project: 'shop_beta',
             status: 'approved',
           })
-        ).some((record) => record.proposal.artifact_id === 'checkout-tree-postgres'),
+        ).some((record) => record.proposal.artifact_id === 'checkout-durable'),
         true,
       );
       await reopened.saveRun({

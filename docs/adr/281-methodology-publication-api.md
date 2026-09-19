@@ -3,7 +3,9 @@
 ## Status
 
 Accepted — tenant-scoped read, durable proposal/approval and approval-bound
-publication routes are shipped; admin review UI remains a follow-up slice.
+publication routes and the first admin review surface are shipped; the
+complete live browser journey and retention/archive policy remain follow-up
+slices.
 
 ## Decision
 
@@ -19,9 +21,13 @@ API boundary:
   The API verifies the envelope digest, proposal identity/kind/revision
   binding and approval freshness before persisting.
 - `GET /api/methodology/proposals` lists tenant-scoped workflow records.
+- `GET /api/methodology/proposals/:id` loads one proposal and its bounded,
+  DLP-checked staged envelope for human review. The list route deliberately
+  omits payloads to avoid multiplying large sensitive responses.
 - `POST /api/methodology/proposals` persists a pending proposal only after
-  binding it to the exact artifact envelope. Human proposals are bound to the
-  authenticated proposer; agent proposals require the host-owned verifier.
+  binding it to the exact artifact envelope; the bounded envelope is retained
+  as review staging data. Human proposals are bound to the authenticated
+  proposer; agent proposals require the host-owned verifier.
 - `POST /api/methodology/proposals/:id/approve` atomically transitions a
   pending proposal to approved and stores the approval record.
 - Publication accepts only an already-approved proposal ID; it does not accept
@@ -38,5 +44,7 @@ reported as a conflict.
 The control-plane boundary cannot turn an unreviewed or cross-tenant artifact
 into durable methodology evidence. The proposal and approval workflow now
 survives process restarts in Postgres and is isolated by tenant. The admin
-review console must still expose the pending queue, artifact diff,
-approve/reject actions and complete browser journey.
+review console exposes the pending queue, exact staged payload and digest-bound
+approval action. A complete authenticated browser journey, explicit reject
+reason workflow, artifact diff against the previous revision and retention /
+archive policy remain required before this workstream is complete.
