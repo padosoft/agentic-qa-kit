@@ -23,6 +23,7 @@
 
 - Rejected methodology payloads that shared DLP would redact before digest acceptance; reads now revalidate payload/digest, MemoryStore returns defensive copies, and Postgres scopes listings by exact `org`/`project` columns instead of `LIKE` prefixes.
 - Added DLP and Postgres tenant/restart regression coverage. Local methodology suite: **28 passed**; store suite: **20 passed, 1 provider skip**; workspace lint remains green. Next: authenticated publication API and admin approval/review UI.
+- Aligned partial-scope semantics across adapters: a project-only query now returns that project across organizations in both MemoryStore and PostgresStore, with regression coverage.
 
 ## 2026-09-19
 

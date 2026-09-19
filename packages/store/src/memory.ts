@@ -60,12 +60,21 @@ export class MemoryStore implements StoreProvider {
 
   private visible<T>(map: Map<string, T>, scope?: StoreScope): T[] {
     if (!scope?.org && !scope?.project) return [...map.values()];
+    if (!scope.org && scope.project) {
+      const encodedProject = encodeURIComponent(scope.project);
+      return [...map.entries()]
+        .filter(([key]) => {
+          const parts = key.split('/');
+          return parts[0] === '@scope' && parts[2] === encodedProject;
+        })
+        .map(([, value]) => value);
+    }
     const prefix =
       scope.org && scope.project
         ? scopedRecordKey('', scope)
         : scope.org
           ? `@scope/${encodeURIComponent(scope.org)}/`
-          : `@scope//${encodeURIComponent(scope.project ?? '')}/`;
+          : '';
     return [...map.entries()]
       .filter(([key]) => isScopedRecordKey(key) && key.startsWith(prefix))
       .map(([, value]) => value);

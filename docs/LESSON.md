@@ -2823,3 +2823,8 @@ An approval digest is not enough if storage can overwrite the approved payload. 
 ## 2026-09-19 — Integrity controls must cover writes, reads and scope predicates
 
 Digest validation only protects an artifact if DLP runs before the digest is accepted, reads revalidate persisted JSON, returned memory values are defensive copies, and tenant filtering cannot be approximated by a pattern over an encoded key. Treat all four as one storage invariant and test the durable adapter, not only the in-memory implementation.
+
+Partial tenant scopes also need one explicit contract: `{ project }` means all
+organizations in that project, while `{ org }` means all projects in that
+organization. Memory and SQL adapters must implement the same semantics or a
+caller can see different authorization surfaces depending on deployment mode.

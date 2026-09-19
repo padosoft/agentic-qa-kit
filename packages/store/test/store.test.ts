@@ -339,7 +339,9 @@ describe('MemoryStore', () => {
         project: 'shop',
       },
     );
+    await s.saveMethodologyArtifact(METHODOLOGY_ARTIFACT, { org: 'org-b', project: 'shop' });
     assert.equal((await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' })).length, 2);
+    assert.equal((await s.listMethodologyArtifacts({ project: 'shop' })).length, 3);
     const loaded = await s.loadMethodologyArtifact('checkout-tree', 1, {
       org: 'org-a',
       project: 'shop',
@@ -364,7 +366,7 @@ describe('MemoryStore', () => {
       'attack-checkout',
     );
     assert.equal(
-      await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-b', project: 'shop' }),
+      await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-c', project: 'shop' }),
       null,
     );
     const conflictingPayload = {
