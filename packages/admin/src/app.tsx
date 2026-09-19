@@ -13955,7 +13955,7 @@ function PageMethodologyReview({ mode }) {
     try {
       const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/approve`), {
         method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ schema_version: '1', approval_id: `approval-${selected.proposal_id}-${selected.revision}`, proposal_id: selected.proposal_id, artifact_sha256: selected.artifact_sha256, revision: selected.revision, approved_by: reviewerId, approved_at: now.toISOString(), expires_at: expires.toISOString() }),
+        body: JSON.stringify({ schema_version: '1', approval_id: `approval-${selected.artifact_sha256.slice(0, 32)}-${selected.revision}`, proposal_id: selected.proposal_id, artifact_sha256: selected.artifact_sha256, revision: selected.revision, approved_by: reviewerId, approved_at: now.toISOString(), expires_at: expires.toISOString() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -13971,7 +13971,7 @@ function PageMethodologyReview({ mode }) {
     try {
       const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/reject`), {
         method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ schema_version: '1', rejection_id: `rejection-${selected.proposal_id}-${selected.revision}`, proposal_id: selected.proposal_id, rejected_by: reviewerId, rejected_at: new Date().toISOString(), reason: rejectReason.trim() }),
+        body: JSON.stringify({ schema_version: '1', rejection_id: `rejection-${selected.artifact_sha256.slice(0, 32)}-${selected.revision}`, proposal_id: selected.proposal_id, rejected_by: reviewerId, rejected_at: new Date().toISOString(), reason: rejectReason.trim() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -14492,6 +14492,7 @@ function App() {
   const ctx = {
     onNavigate: navigate,
     params: routeParams,
+    mode,
     theme: tweaks.theme,
     onTheme: (th) => setTweak('theme', th),
     deletedProfiles,

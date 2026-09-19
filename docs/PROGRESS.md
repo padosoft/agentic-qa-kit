@@ -38,6 +38,10 @@
   in the reopen assertion; no production persistence defect was found. The
   corrected local contract remains **18 passed / 0 failed** and is queued for
   hosted re-verification on commit `5fbf7a0`.
+- The live browser test then exposed a real route-context wiring defect: the
+  shell mode was not passed into routed pages, so methodology review could show
+  Live while remaining action-disabled. The context now carries `mode`; the
+  focused live rejection and mock governance journeys both pass **2/2**.
 
 ## 2026-09-19 — Methodology review slice merged
 

@@ -24,6 +24,14 @@ parsers must re-check status, proposal ID, digest/revision and independent
 actor binding. UI state must also preserve the persisted decision and prevent
 two terminal actions from racing.
 
+# 2026-09-19 — A route context must carry the mode it promises to the page
+
+The top-level admin shell can display a live indicator while a routed page
+still receives an incomplete context and silently behaves as mock/read-only.
+When a page has live-only mutations, pass the authoritative mode through the
+route context and cover both the live request and the mock refusal in browser
+tests.
+
 # 2026-09-19 — A live UI must bind tenant and principal context explicitly
 
 An admin page can look correct in mock mode while every live request is
