@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Re-audited live external readiness.** GitHub currently exposes only the
+  `copilot` Environment, no provider credentials in the repository secret
+  listing, and no protection on `main` (`404 Branch not protected`). No Stripe,
+  gift-card, OIDC, mTLS, PostgreSQL-recovery, artifact/KMS or production DR
+  workflow was started without an operator-owned protected environment. The
+  exact result is recorded in the roadmap audit; this is an external
+  configuration blocker, not a code failure.
+
 - **Bound mutation regression evidence to the workflow revision.** The protected
   gate now passes `${github.sha}` to `aqa mutation regression`, which rejects
   evidence whose `source_revision` belongs to another commit. Added a

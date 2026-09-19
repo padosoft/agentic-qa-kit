@@ -2785,3 +2785,10 @@ Requiring a source revision inside an artifact is only self-attestation. A
 protected workflow must compare it with its own immutable commit SHA before
 accepting the evidence; otherwise a valid artifact from another revision can
 create a false-green release gate.
+
+# 2026-09-19 — Workflow definitions are not provider evidence
+
+Before running manual provider workflows, inspect the live GitHub Environments,
+secret names and branch protection. A checked-in workflow with no protected
+environment is only an executable procedure, not a failed provider journey or
+a production-readiness proof.
