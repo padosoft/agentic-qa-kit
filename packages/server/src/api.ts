@@ -1553,7 +1553,10 @@ export function makeApi(): ApiHandler[] {
             return { status: 409, body: { error: 'methodology artifact revision conflict' } };
           throw error;
         }
-        return asResponse({ artifact }, 201);
+        return asResponse(
+          { artifact, durability: ctx.store.isDurable?.() ? 'durable' : 'ephemeral' },
+          201,
+        );
       },
     },
 
