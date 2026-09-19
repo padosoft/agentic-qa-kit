@@ -548,6 +548,63 @@ describe('PostgresStore', () => {
         (await s.listMethodologyArtifacts({ org: 'org_b', project: 'shop_beta' })).length,
         0,
       );
+      const retainedArtifact = { ...postgresArtifact, artifact_id: 'retention-contract' };
+      const retainedLifecycle = createMethodologyArtifactLifecycle({
+        artifact_kind: retainedArtifact.artifact_kind,
+        artifact_id: retainedArtifact.artifact_id,
+        revision: retainedArtifact.revision,
+        now: '2026-09-19T14:00:00.000Z',
+        updated_by: 'retention-test',
+        retention_days: 1,
+        archive_after_days: 1,
+      });
+      await s.saveMethodologyArtifactWithLifecycle(
+        retainedArtifact,
+        retainedLifecycle,
+        specialScope,
+      );
+      await s.saveMethodologyArtifactWithLifecycle(
+        retainedArtifact,
+        retainedLifecycle,
+        specialScope,
+      );
+      assert.deepEqual(
+        await s.loadMethodologyArtifactLifecycle('retention-contract', 1, specialScope),
+        retainedLifecycle,
+      );
+      const retentionProposal = createMethodologyProposal({
+        proposal_id: 'proposal-retention-contract',
+        artifact_kind: retainedArtifact.artifact_kind,
+        artifact_id: retainedArtifact.artifact_id,
+        artifact: retainedArtifact.payload,
+        revision: retainedArtifact.revision,
+        proposed_by: 'agent-retention',
+        proposed_at: '2026-09-19T14:01:00.000Z',
+        source: 'agent',
+      });
+      await s.saveMethodologyProposal(retentionProposal, specialScope, retainedArtifact);
+      await s.approveMethodologyProposal(
+        retentionProposal.proposal_id,
+        {
+          schema_version: '1',
+          approval_id: 'approval-retention-contract',
+          proposal_id: retentionProposal.proposal_id,
+          artifact_sha256: retentionProposal.artifact_sha256,
+          revision: 1,
+          approved_by: 'reviewer-retention',
+          approved_at: '2026-09-19T14:02:00.000Z',
+        },
+        specialScope,
+      );
+      assert.equal(
+        await s.purgeExpiredMethodologyArtifacts('2026-09-21T14:00:00.000Z', specialScope),
+        1,
+      );
+      assert.equal(await s.loadMethodologyArtifact('retention-contract', 1, specialScope), null);
+      assert.equal(
+        (await s.loadMethodologyProposal(retentionProposal.proposal_id, specialScope))?.artifact,
+        undefined,
+      );
       const postgresProposal = createMethodologyProposal({
         proposal_id: 'proposal-postgres-durable',
         artifact_kind: postgresArtifact.artifact_kind,

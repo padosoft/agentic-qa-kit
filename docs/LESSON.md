@@ -2927,3 +2927,9 @@ caller can see different authorization surfaces depending on deployment mode.
 - Package-local tests must execute through the package's declared runner and
   built boundary; a standalone Bun test can pass while the official Node test
   script silently omits it.
+
+- Locking only the purge path is not enough: a transition that loaded a row
+  before purge can later recreate it. Every lifecycle mutation must lock the
+  lifecycle row and re-check the artifact in the same transaction; the durable
+  contract must exercise this path against the actual adapter when a DSN is
+  available.

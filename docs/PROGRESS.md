@@ -54,6 +54,13 @@
   Provider credentials, hosted WORM/restore evidence and external assurance
   remain deferred final gates by owner decision.
 
+- Follow-up review hardening: lifecycle transitions in PostgreSQL now lock and
+  re-check the governing artifact inside the transaction, MemoryStore publish
+  replay does not reset an existing lifecycle, and the DSN-backed store
+  contract covers atomic publication, lifecycle read-back, expiry purge and
+  terminal proposal scrubbing. Workspace typecheck and store tests pass;
+  this follow-up is queued on PR #234 before merge.
+
 ## 2026-09-19 — Reasoned methodology rejection implemented
 
 - Added a durable `pending → rejected` transition with an independent

@@ -412,6 +412,7 @@ export class MemoryStore implements StoreProvider {
       const existing = this.methodologyArtifacts.get(key);
       if (existing && existing.artifact_sha256 !== validatedArtifact.artifact_sha256)
         throw new Error('methodology artifact revision conflict');
+      if (this.methodologyArtifactLifecycles.has(key)) return;
       this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validatedArtifact)));
       this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validatedLifecycle)));
     });

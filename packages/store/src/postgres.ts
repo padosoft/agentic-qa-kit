@@ -594,11 +594,31 @@ export class PostgresStore implements StoreProvider {
     input: { now: string; updated_by: string; reason: string },
     scope?: StoreScope,
   ): Promise<MethodologyArtifactLifecycle | null> {
-    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
-    if (!current) return null;
-    const updated = archiveMethodologyArtifactLifecycle(current, input);
-    await this.saveMethodologyArtifactLifecycle(updated, scope);
-    return updated;
+    await this.wait();
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const key = scopedRecordKey(`${artifactId}@${revision}`, scope);
+      const rows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact_lifecycle', key],
+      )) as Array<{ payload: unknown }>;
+      const row = rows[0];
+      if (!row) return null;
+      const artifacts = (await query(
+        'SELECT 1 FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+        ['methodology_artifact', key],
+      )) as unknown[];
+      if (artifacts.length === 0) return null;
+      const updated = archiveMethodologyArtifactLifecycle(
+        parseMethodologyArtifactLifecycle(this.decode(row.payload)),
+        input,
+      );
+      await query(
+        'UPDATE aqa_store_records SET payload = $1::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $3',
+        [JSON.stringify(updated), 'methodology_artifact_lifecycle', key],
+      );
+      return updated;
+    });
   }
   async setMethodologyArtifactLegalHold(
     artifactId: string,
@@ -606,11 +626,31 @@ export class PostgresStore implements StoreProvider {
     input: { now: string; updated_by: string; enabled: boolean; reason: string },
     scope?: StoreScope,
   ): Promise<MethodologyArtifactLifecycle | null> {
-    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
-    if (!current) return null;
-    const updated = setMethodologyArtifactLegalHold(current, input);
-    await this.saveMethodologyArtifactLifecycle(updated, scope);
-    return updated;
+    await this.wait();
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const key = scopedRecordKey(`${artifactId}@${revision}`, scope);
+      const rows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact_lifecycle', key],
+      )) as Array<{ payload: unknown }>;
+      const row = rows[0];
+      if (!row) return null;
+      const artifacts = (await query(
+        'SELECT 1 FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+        ['methodology_artifact', key],
+      )) as unknown[];
+      if (artifacts.length === 0) return null;
+      const updated = setMethodologyArtifactLegalHold(
+        parseMethodologyArtifactLifecycle(this.decode(row.payload)),
+        input,
+      );
+      await query(
+        'UPDATE aqa_store_records SET payload = $1::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $3',
+        [JSON.stringify(updated), 'methodology_artifact_lifecycle', key],
+      );
+      return updated;
+    });
   }
   async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
     await this.wait();
