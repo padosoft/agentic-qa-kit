@@ -60,7 +60,12 @@ jobs:
 
       - name: Audit documentation dependency graph
         working-directory: docs-site
-        run: npm audit --audit-level=high
+        # The hosted Node 22 image currently ships npm 10, whose audit-tree
+        # serializer rejects this lockfile's optional/peer graph with a false
+        # "Invalid package tree" response. npm 11 parses the same lockfile
+        # correctly; keep the audit fail-closed on actual advisories while
+        # avoiding a tool-version-specific false red.
+        run: npx --yes npm@11.6.2 audit --audit-level=high
 
       - name: Check documentation source
         working-directory: docs-site

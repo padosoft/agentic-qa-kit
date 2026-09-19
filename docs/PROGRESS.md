@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Added methodology approval governance.** Agent-generated risk maps,
+  attack-tree, FMEA and coverage artifacts can now be represented as bounded
+  digest/revision proposals and become approved only through an independent,
+  time-bounded human approval bound to the exact artifact. Added canonical
+  hashing, expiry/mismatch/self-approval fail-closed checks, 4 tests and
+  ADR-278. Durable persistence and authenticated identity mapping remain host
+  integration work; the local methodology contract is now closed.
+
 - **Parked external promotion gates by explicit owner decision.** Provider
   credentials/live deployment evidence and independent assurance (penetration
   test, SOC2/ISO, legal SLA, references and external sign-off) are now marked
@@ -2906,3 +2914,8 @@ evidence.
 - Evidence: chart source review and `git diff --check` are clean. Helm is not
   installed in the local Windows environment, so `helm lint`/render remain a
   CI gate and must pass before merge.
+## 2026-09-19 — Methodology governance hardened
+
+- Tightened the local methodology proposal/approval contract with runtime enum and schema validation, canonical UTC timestamps, bounded artifact hashing, independent reviewer enforcement, and expiry checks at both issuance and use time.
+- Added regression tests for malformed untrusted JSON-shaped inputs and already-expired approvals; methodology package now passes 24 tests.
+- The next local roadmap slice is durable storage/replay integration for approved methodology artifacts; external provider evidence and independent assurance remain deferred final gates.

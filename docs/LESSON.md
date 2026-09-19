@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-19 — Methodology hypotheses need an approval binding
+
+An agent-generated risk map or attack tree is not methodology evidence merely
+because it validates against a schema. Bind the exact canonical artifact digest
+and revision to an independent human approval, enforce expiry at use time, and
+keep the payload out of governance metadata. Persistence and identity mapping
+can be added by the host without weakening this fail-closed contract.
+
 # 2026-09-19 — A state graph is not runtime evidence
 
 Static path validation must remain separate from execution. A runtime journey
@@ -2806,3 +2814,6 @@ Branch protection and required-reviewer Environments are safe administrative
 controls to configure before provider credentials exist. Keep those controls
 separate from provider execution: an empty protected Environment improves
 release safety but must never be reported as a successful provider journey.
+## 2026-09-19 — Validate TypeScript unions again at JSON boundaries
+
+TypeScript unions disappear at runtime, so persisted or HTTP-loaded methodology records must validate schema version, enums, status, canonical UTC timestamps, digests, and expiry explicitly. Approval should fail closed both when issued and when consumed; otherwise a record can appear valid at creation time but already be unusable or misleading.
