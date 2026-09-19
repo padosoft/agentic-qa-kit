@@ -672,7 +672,7 @@ export class PostgresStore implements StoreProvider {
         ['methodology_artifact', ...filters.values],
       )) as Row[];
       for (const row of legacyRows) {
-        const artifact = parseMethodologyArtifactEnvelope(this.decode(row.payload));
+        const artifact = parseMethodologyArtifactEnvelope(JSON.stringify(this.decode(row.payload)));
         const lifecycle = createMethodologyArtifactLifecycle({
           artifact_kind: artifact.artifact_kind,
           artifact_id: artifact.artifact_id,

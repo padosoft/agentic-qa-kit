@@ -2941,3 +2941,10 @@ caller can see different authorization surfaces depending on deployment mode.
   parsing to receive `undefined`. Select `payload::text` at transaction
   boundaries, pass it through the same decoder, and guard an absent row
   explicitly; MemoryStore and TypeScript cannot reveal this provider detail.
+
+- The follow-up hosted run exposed the same shape difference in the legacy
+  retention backfill query: PostgreSQL returned a JSONB object while the
+  methodology artifact parser intentionally accepts only canonical serialized
+  JSON. Normalize every provider read at the parser boundary, including
+  migration/backfill paths; fixing only the publication transaction is
+  insufficient.

@@ -9,6 +9,14 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
+
+- The latest hosted PostgreSQL contract run found one remaining JSONB shape
+  regression in legacy retention backfill: the artifact parser received the
+  provider's object-shaped JSONB value instead of canonical serialized JSON.
+  Normalized that read boundary and recorded the lesson; rerunning local gates
+  and hosted CI is the next action.
+
 ## 2026-09-19 — Methodology diff and publication UI implemented
 
 - Added a live, tenant-scoped previous-revision comparison in the admin review
