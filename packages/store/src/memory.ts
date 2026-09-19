@@ -1,6 +1,13 @@
 import {
+  type MethodologyApproval,
+  type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
+  type MethodologyProposal,
+  approveMethodologyProposal,
+  assertMethodologyProposal,
+  parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyProposal,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -25,6 +32,7 @@ import {
   findingVerificationAudit,
 } from './audit.js';
 import {
+  type MethodologyProposalRecord,
   type StoreProvider,
   type StoreScope,
   type StoreUserDirectoryEntry,
@@ -46,6 +54,7 @@ export class MemoryStore implements StoreProvider {
   private profiles = new Map<string, Profile.Profile>();
   private risks = new Map<string, RiskMap.Risk>();
   private methodologyArtifacts = new Map<string, MethodologyArtifactEnvelope>();
+  private methodologyProposals = new Map<string, MethodologyProposalRecord>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
   private notifications: Notification.Notification[] = [];
@@ -353,6 +362,55 @@ export class MemoryStore implements StoreProvider {
     this.methodologyArtifacts.set(key, validated);
   }
 
+  // ----- Methodology proposals -----
+  async listMethodologyProposals(
+    opts: { org?: string; project?: string; status?: MethodologyProposal['status'] } = {},
+  ): Promise<MethodologyProposalRecord[]> {
+    let out = this.visible(this.methodologyProposals, opts).map((record) =>
+      parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))),
+    );
+    if (opts.status) out = out.filter((record) => record.proposal.status === opts.status);
+    return out.sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
+  }
+  async loadMethodologyProposal(
+    proposalId: string,
+    scope?: StoreScope,
+  ): Promise<MethodologyProposalRecord | null> {
+    const record = this.methodologyProposals.get(this.key(proposalId, scope));
+    return record ? parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))) : null;
+  }
+  async saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void> {
+    const normalized = parseMethodologyProposal(proposal);
+    assertMethodologyProposal(normalized);
+    if (normalized.status !== 'pending') throw new Error('methodology proposal must be pending');
+    const key = this.key(normalized.proposal_id, scope);
+    const existing = this.methodologyProposals.get(key);
+    if (existing && JSON.stringify(existing.proposal) !== JSON.stringify(normalized))
+      throw new Error('methodology proposal conflict');
+    this.methodologyProposals.set(key, {
+      ...(existing ? JSON.parse(JSON.stringify(existing)) : {}),
+      proposal: JSON.parse(JSON.stringify(normalized)),
+    });
+  }
+  async approveMethodologyProposal(
+    proposalId: string,
+    approval: MethodologyApproval,
+    scope?: StoreScope,
+  ): Promise<MethodologyApprovalResult | null> {
+    const key = this.key(proposalId, scope);
+    const existing = this.methodologyProposals.get(key);
+    if (!existing) return null;
+    const result = approveMethodologyProposal(
+      existing.proposal,
+      parseMethodologyApproval(approval),
+    );
+    this.methodologyProposals.set(key, {
+      proposal: result.proposal,
+      approval: JSON.parse(JSON.stringify(result.approval)),
+    });
+    return JSON.parse(JSON.stringify(result)) as MethodologyApprovalResult;
+  }
+
   // ----- Scenarios -----
   async listScenarios(
     opts: { pack?: string; risk_id?: string; org?: string; project?: string } = {},
@@ -603,6 +661,7 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.methodologyArtifacts.clear();
+    this.methodologyProposals.clear();
     this.agents.clear();
     this.users.clear();
     this.notifications = [];
@@ -612,4 +671,16 @@ export class MemoryStore implements StoreProvider {
     this.projects.clear();
     this.ssoConfig = null;
   }
+}
+
+function parseMethodologyProposalRecord(input: unknown): MethodologyProposalRecord {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('methodology proposal record must be an object');
+  const record = input as { proposal?: unknown; approval?: unknown };
+  if (Object.keys(record).some((key) => key !== 'proposal' && key !== 'approval'))
+    throw new Error('methodology proposal record contains an unknown field');
+  const proposal = parseMethodologyProposal(record.proposal);
+  const approval =
+    record.approval === undefined ? undefined : parseMethodologyApproval(record.approval);
+  return { proposal, ...(approval ? { approval } : {}) };
 }

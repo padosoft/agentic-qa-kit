@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { redactJson } from '@aqa/observability';
 
 export type MethodologyArtifactKind =
   | 'risk_map'
@@ -127,6 +128,89 @@ export function createMethodologyProposal(input: {
   };
 }
 
+/** Parse and normalize an untrusted proposal, rejecting unknown fields. */
+export function parseMethodologyProposal(input: unknown): MethodologyProposal {
+  const record = strictRecord(input, [
+    'schema_version',
+    'proposal_id',
+    'artifact_kind',
+    'artifact_id',
+    'artifact_sha256',
+    'revision',
+    'proposed_by',
+    'proposed_at',
+    'source',
+    'status',
+  ]);
+  const proposal = {
+    schema_version: record.schema_version,
+    proposal_id: record.proposal_id,
+    artifact_kind: record.artifact_kind,
+    artifact_id: record.artifact_id,
+    artifact_sha256: record.artifact_sha256,
+    revision: record.revision,
+    proposed_by: record.proposed_by,
+    proposed_at: record.proposed_at,
+    source: record.source,
+    status: record.status,
+  } as MethodologyProposal;
+  assertStringFields(proposal, [
+    'schema_version',
+    'proposal_id',
+    'artifact_kind',
+    'artifact_id',
+    'artifact_sha256',
+    'proposed_by',
+    'proposed_at',
+    'source',
+    'status',
+  ]);
+  if (typeof proposal.revision !== 'number')
+    throw new Error('methodology proposal revision must be a number');
+  assertDlpClean(proposal);
+  validateProposal(proposal);
+  return proposal;
+}
+
+/** Parse and normalize an untrusted approval, rejecting unknown fields. */
+export function parseMethodologyApproval(input: unknown): MethodologyApproval {
+  const record = strictRecord(input, [
+    'schema_version',
+    'approval_id',
+    'proposal_id',
+    'artifact_sha256',
+    'revision',
+    'approved_by',
+    'approved_at',
+    'expires_at',
+  ]);
+  const approval = {
+    schema_version: record.schema_version,
+    approval_id: record.approval_id,
+    proposal_id: record.proposal_id,
+    artifact_sha256: record.artifact_sha256,
+    revision: record.revision,
+    approved_by: record.approved_by,
+    approved_at: record.approved_at,
+    ...('expires_at' in record ? { expires_at: record.expires_at } : {}),
+  } as MethodologyApproval;
+  assertStringFields(approval, [
+    'schema_version',
+    'approval_id',
+    'proposal_id',
+    'artifact_sha256',
+    'approved_by',
+    'approved_at',
+  ]);
+  if (typeof approval.revision !== 'number')
+    throw new Error('methodology approval revision must be a number');
+  if ('expires_at' in record && typeof record.expires_at !== 'string')
+    throw new Error('methodology approval expires_at must be a string');
+  assertDlpClean(approval);
+  validateApproval(approval);
+  return approval;
+}
+
 /** Approve only the exact pending revision, with an independent human reviewer. */
 export function approveMethodologyProposal(
   proposal: MethodologyProposal,
@@ -146,9 +230,12 @@ export function approveMethodologyProposal(
     throw new Error('methodology approval requires an independent reviewer');
   if (Date.parse(approval.approved_at) > now.getTime())
     throw new Error('methodology approval cannot be issued in the future');
-  if (approval.expires_at && Date.parse(approval.expires_at) <= Date.parse(approval.approved_at))
+  if (
+    approval.expires_at !== undefined &&
+    Date.parse(approval.expires_at) <= Date.parse(approval.approved_at)
+  )
     throw new Error('methodology approval expiry must be after approval time');
-  if (approval.expires_at && Date.parse(approval.expires_at) <= now.getTime())
+  if (approval.expires_at !== undefined && Date.parse(approval.expires_at) <= now.getTime())
     throw new Error('methodology approval has already expired');
   return {
     proposal: { ...proposal, status: 'approved' },
@@ -167,8 +254,13 @@ export function assertMethodologyApproval(
     now,
   );
   if (result.proposal.status !== 'approved') throw new Error('methodology approval is invalid');
-  if (approval.expires_at && Date.parse(approval.expires_at) <= now.getTime())
+  if (approval.expires_at !== undefined && Date.parse(approval.expires_at) <= now.getTime())
     throw new Error('methodology approval has expired');
+}
+
+/** Validate a proposal before a durable adapter accepts it. */
+export function assertMethodologyProposal(proposal: MethodologyProposal): void {
+  validateProposal(proposal);
 }
 
 function validateProposal(proposal: MethodologyProposal): void {
@@ -197,7 +289,30 @@ function validateApproval(approval: MethodologyApproval): void {
   assertTimestamp(approval.approved_at, 'approved_at');
   if (!SHA256.test(approval.artifact_sha256))
     throw new Error('methodology approval digest is invalid');
-  if (approval.expires_at) assertTimestamp(approval.expires_at, 'expires_at');
+  if (approval.expires_at !== undefined) assertTimestamp(approval.expires_at, 'expires_at');
+}
+
+function assertStringFields(value: object, fields: readonly string[]): void {
+  const record = value as Record<string, unknown>;
+  for (const field of fields) {
+    if (typeof record[field] !== 'string')
+      throw new Error(`methodology governance field ${field} must be a string`);
+  }
+}
+
+function strictRecord(input: unknown, allowed: readonly string[]): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('methodology governance record must be an object');
+  const record = input as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.some((key) => !allowed.includes(key)))
+    throw new Error('methodology governance record contains an unknown field');
+  return record;
+}
+
+function assertDlpClean(value: unknown): void {
+  if (canonicalMethodologyArtifact(redactJson(value)) !== canonicalMethodologyArtifact(value))
+    throw new Error('methodology governance record contains sensitive data');
 }
 
 function assertId(value: string, label: string): void {

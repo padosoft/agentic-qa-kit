@@ -2828,3 +2828,18 @@ Partial tenant scopes also need one explicit contract: `{ project }` means all
 organizations in that project, while `{ org }` means all projects in that
 organization. Memory and SQL adapters must implement the same semantics or a
 caller can see different authorization surfaces depending on deployment mode.
+# 2026-09-19 — PostgreSQL parameter inference is part of the contract
+
+- A hosted PostgreSQL run caught a real regression that MemoryStore and
+  TypeScript could not expose: an atomic `UPDATE` passed unused `$3/$4`
+  parameters while using `$5` for the payload, so PostgreSQL raised `42P18`
+  (`could not determine data type of parameter $3`). Keep SQL placeholders
+  contiguous and run the hosted provider contract whenever a new durable path
+  is added; local adapter tests alone are insufficient.
+- The follow-up hosted run showed that a syntactically valid JSONB path
+  predicate can still fail to match a persisted envelope in the provider
+  contract. Prefer explicit `#>>` path extraction for state transitions and
+  keep a restart/approval assertion against the real database.
+- TypeScript casts at a JSON API boundary do not strip unknown properties.
+  Proposal and approval records need strict runtime allowlists, DLP checks and
+  read-time validation before persistence or response serialization.

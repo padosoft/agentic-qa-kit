@@ -1,4 +1,9 @@
-import type { MethodologyArtifactEnvelope } from '@aqa/methodology';
+import type {
+  MethodologyApproval,
+  MethodologyApprovalResult,
+  MethodologyArtifactEnvelope,
+  MethodologyProposal,
+} from '@aqa/methodology';
 import type {
   Agent,
   ApiToken,
@@ -40,6 +45,11 @@ export interface LegacyMigrationResult {
   migrated: number;
   skipped: number;
   conflicts: string[];
+}
+
+export interface MethodologyProposalRecord {
+  proposal: MethodologyProposal;
+  approval?: MethodologyApproval;
 }
 
 /** Stable key namespace for tenant-scoped resources while preserving legacy keys. */
@@ -160,6 +170,24 @@ export interface StoreProvider {
   ): Promise<MethodologyArtifactEnvelope | null>;
   /** Persist one revision; same revision + different digest is a hard conflict. */
   saveMethodologyArtifact(artifact: MethodologyArtifactEnvelope, scope?: StoreScope): Promise<void>;
+  /** List pending/decided proposal records in a tenant scope. */
+  listMethodologyProposals(opts?: {
+    org?: string;
+    project?: string;
+    status?: MethodologyProposal['status'];
+  }): Promise<MethodologyProposalRecord[]>;
+  loadMethodologyProposal(
+    proposalId: string,
+    scope?: StoreScope,
+  ): Promise<MethodologyProposalRecord | null>;
+  /** Persist a proposal immutably; same id + same content is idempotent. */
+  saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void>;
+  /** Atomically approve one pending proposal and retain the approval record. */
+  approveMethodologyProposal(
+    proposalId: string,
+    approval: MethodologyApproval,
+    scope?: StoreScope,
+  ): Promise<MethodologyApprovalResult | null>;
 
   // ----- Scenarios -----
   listScenarios(opts?: {

@@ -51,9 +51,12 @@ export {
 export {
   approveMethodologyProposal,
   assertMethodologyApproval,
+  assertMethodologyProposal,
   canonicalMethodologyArtifact,
   createMethodologyProposal,
   methodologyArtifactSha256,
+  parseMethodologyApproval,
+  parseMethodologyProposal,
   type MethodologyApproval,
   type MethodologyApprovalResult,
   type MethodologyArtifactKind,
