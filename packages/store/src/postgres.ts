@@ -744,6 +744,14 @@ export class PostgresStore implements StoreProvider {
           throw new Error(
             `methodology retention purge could not delete artifact ${current.artifact_id}@${current.revision}`,
           );
+        const remainingArtifacts = (await query(
+          `SELECT record_key, org, project FROM aqa_store_records WHERE kind = 'methodology_artifact' AND payload->>'artifact_id' = $1 AND (payload->>'revision')::integer = $2`,
+          [current.artifact_id, current.revision],
+        )) as Array<{ record_key: string; org: string | null; project: string | null }>;
+        if (remainingArtifacts.length > 0)
+          throw new Error(
+            `methodology retention purge left artifact rows: ${JSON.stringify(remainingArtifacts)}`,
+          );
         await query(
           `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
           [tenantOrg, tenantProject, current.artifact_id, current.revision],
