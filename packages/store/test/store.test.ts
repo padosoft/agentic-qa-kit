@@ -605,8 +605,8 @@ describe('PostgresStore', () => {
           q: (sql: string, values: unknown[]) => Promise<unknown[]>;
         }
       ).q(
-        "SELECT kind, record_key, org, project, payload->>'artifact_id' AS artifact_id, payload->>'revision' AS revision FROM aqa_store_records WHERE record_key = $1 OR record_key = $2",
-        ['@scope/org_a%20with%20space/shop_beta/retention-contract@1', 'retention-contract@1'],
+        "SELECT kind, record_key, org, project, payload->>'artifact_id' AS artifact_id, payload->>'revision' AS revision FROM aqa_store_records WHERE kind = 'methodology_artifact' AND payload->>'artifact_id' = 'retention-contract'",
+        [],
       );
       assert.deepEqual(debugRows, []);
       assert.equal(await s.loadMethodologyArtifact('retention-contract', 1, specialScope), null);
