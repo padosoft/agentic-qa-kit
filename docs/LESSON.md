@@ -2778,3 +2778,10 @@ Adding regression artifacts to a reusable workflow must preserve old callers,
 but an omitted artifact cannot silently pass as execution evidence. Keep the
 second gate conditional, validate its artifact-relative path and threshold only
 when supplied, and document the resulting evidence boundary explicitly.
+
+# 2026-09-19 — Provenance fields need an authoritative comparator
+
+Requiring a source revision inside an artifact is only self-attestation. A
+protected workflow must compare it with its own immutable commit SHA before
+accepting the evidence; otherwise a valid artifact from another revision can
+create a false-green release gate.

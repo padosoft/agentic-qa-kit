@@ -758,13 +758,16 @@ async function main(): Promise<number> {
           );
           return 1;
         }
-        const result = runMutationRegressionGate({
+        const regressionOptions: Parameters<typeof runMutationRegressionGate>[0] = {
           root: cwd,
           inputFile,
           manifestFile,
           evidenceFile,
           minKillRate,
-        });
+        };
+        const sourceRevision = args.values.get('source-revision');
+        if (sourceRevision !== undefined) regressionOptions.expectedSourceRevision = sourceRevision;
+        const result = runMutationRegressionGate(regressionOptions);
         if (!result.ok || !result.regression) {
           console.error(
             red(`aqa mutation regression: ${result.error ?? 'regression gate failed'}`),

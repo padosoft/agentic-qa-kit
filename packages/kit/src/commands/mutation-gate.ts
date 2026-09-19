@@ -51,6 +51,7 @@ export interface MutationRegressionGateOptions {
   manifestFile: string;
   evidenceFile: string;
   minKillRate: number;
+  expectedSourceRevision?: string;
 }
 
 export interface MutationRegressionGateResult {
@@ -137,6 +138,12 @@ export function runMutationRegressionGate(
     const evidence = parseMutationRegressionEvidence(
       JSON.parse(readFileSync(evidencePath, 'utf8')) as unknown,
     );
+    if (
+      options.expectedSourceRevision !== undefined &&
+      evidence.source_revision !== options.expectedSourceRevision
+    ) {
+      throw new Error('mutation regression source revision does not match the expected revision');
+    }
     const regression = evaluateMutationRegressionEvidence(
       report,
       manifest,

@@ -83,6 +83,8 @@ the source revision and artifact checkpoint separately.
 one bounded observation for every reviewed mutant/scenario pair, including a
 run ID and source revision. Missing, unreviewed or contradictory observations
 produce a non-zero gate; the command still never executes project code.
+In a protected workflow, pass `--source-revision` (normally `${{ github.sha }}`)
+so evidence from another commit cannot be accepted accidentally.
 
 ### Oracle calibration
 

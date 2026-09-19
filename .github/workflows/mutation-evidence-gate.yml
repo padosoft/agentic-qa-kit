@@ -94,6 +94,7 @@ jobs:
           REGRESSION_ARTIFACT: ${{ inputs.regression_artifact }}
           REGRESSION_FILE: ${{ inputs.regression_file }}
           MIN_REGRESSION_KILL_RATE: ${{ inputs.min_regression_kill_rate }}
+          SOURCE_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
           case "$REPORT_FILE" in /*|*..*|*\\*) echo '::error::unsafe report_file'; exit 1;; esac
@@ -136,7 +137,8 @@ jobs:
             ".aqa/mutation/report/$REPORT_FILE" \
             ".aqa/mutation/manifest/$MANIFEST_FILE" \
             ".aqa/mutation/regression/$REGRESSION_FILE" \
-            --min-kill-rate "$MIN_REGRESSION_KILL_RATE" 2>&1 | tee -a .aqa/mutation/evidence/gate.log
+            --min-kill-rate "$MIN_REGRESSION_KILL_RATE" \
+            --source-revision "$SOURCE_REVISION" 2>&1 | tee -a .aqa/mutation/evidence/gate.log
 
       - name: Upload redacted gate evidence
         if: always()
