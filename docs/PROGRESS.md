@@ -23,6 +23,10 @@
   approve → publish journey, then retention/archive controls. Provider-backed
   evidence, penetration testing and independent assurance remain deferred final
   promotion gates by explicit owner decision.
+- Hosted PostgreSQL initially rejected a timestamp-based test ID as a possible
+  PAN through the DLP guard. The fixture now uses deterministic semantic IDs;
+  the local store suite is **18 passed / 0 failed**, and the required hosted
+  PostgreSQL contract must re-run on this revision.
 
 ## 2026-09-19 — Methodology review slice merged
 

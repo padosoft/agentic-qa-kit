@@ -490,7 +490,7 @@ describe('PostgresStore', () => {
         0,
       );
       const postgresProposal = createMethodologyProposal({
-        proposal_id: `proposal-postgres-${Date.now()}`,
+        proposal_id: 'proposal-postgres-durable',
         artifact_kind: postgresArtifact.artifact_kind,
         artifact_id: postgresArtifact.artifact_id,
         artifact: postgresArtifact.payload,
@@ -502,7 +502,7 @@ describe('PostgresStore', () => {
       await s.saveMethodologyProposal(postgresProposal, specialScope, postgresArtifact);
       const postgresApproval = {
         schema_version: '1' as const,
-        approval_id: `approval-postgres-${Date.now()}`,
+        approval_id: 'approval-postgres-durable',
         proposal_id: postgresProposal.proposal_id,
         artifact_sha256: postgresProposal.artifact_sha256,
         revision: postgresProposal.revision,

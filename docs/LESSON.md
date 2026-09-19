@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-19 — Test identifiers must not look like payment data
+
+Timestamp-based fixture IDs can contain a 13–19 digit sequence that passes a
+PAN heuristic and are correctly rejected by the DLP boundary. Use deterministic
+semantic IDs in persistence contracts; never weaken redaction just to make a
+fixture pass. This also makes hosted provider failures reproducible.
+
 # 2026-09-19 — Rejection must be a first-class terminal decision
 
 A review queue that supports approval but only informal dismissal loses the
