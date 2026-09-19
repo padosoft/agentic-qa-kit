@@ -1,3 +1,4 @@
+import { redactJson } from '@aqa/observability';
 import type { MethodologyArtifactKind } from './methodology-governance.js';
 
 export type MethodologyArtifactLifecycleState = 'active' | 'archived';
@@ -104,6 +105,7 @@ export function parseMethodologyArtifactLifecycle(input: unknown): MethodologyAr
     (typeof value.reason !== 'string' || value.reason.length > 2000)
   )
     throw new Error('methodology lifecycle reason is invalid');
+  assertDlpClean(value.reason);
   return value as unknown as MethodologyArtifactLifecycle;
 }
 
@@ -116,6 +118,7 @@ export function archiveMethodologyArtifactLifecycle(
   assertIdentity(input.updated_by, 'updated_by');
   if (!input.reason.trim() || input.reason.length > 2000)
     throw new Error('archive reason is invalid');
+  assertDlpClean(input.reason);
   if (current.legal_hold) throw new Error('methodology artifact is protected by legal hold');
   return {
     ...current,
@@ -135,6 +138,7 @@ export function setMethodologyArtifactLegalHold(
   assertIdentity(input.updated_by, 'updated_by');
   if (!input.reason.trim() || input.reason.length > 2000)
     throw new Error('legal hold reason is invalid');
+  assertDlpClean(input.reason);
   return {
     ...current,
     legal_hold: input.enabled,
@@ -167,4 +171,9 @@ function assertTimestamp(value: string, name: string): void {
 function assertDays(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 1 || value > MAX_RETENTION_DAYS)
     throw new Error(`${name} is outside the supported retention range`);
+}
+
+function assertDlpClean(value: unknown): void {
+  if (redactJson(value) !== value)
+    throw new Error('methodology lifecycle reason contains sensitive data');
 }

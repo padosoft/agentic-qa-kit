@@ -10,6 +10,7 @@ import {
   archiveMethodologyArtifactLifecycle,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
+  createMethodologyArtifactLifecycle,
   isMethodologyArtifactExpired,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
@@ -68,6 +69,7 @@ export class MemoryStore implements StoreProvider {
   private risks = new Map<string, RiskMap.Risk>();
   private methodologyArtifacts = new Map<string, MethodologyArtifactEnvelope>();
   private methodologyArtifactLifecycles = new Map<string, MethodologyArtifactLifecycle>();
+  private methodologyLifecycleLocks = new Map<string, Promise<void>>();
   private methodologyProposals = new Map<string, MethodologyProposalRecord>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
@@ -105,6 +107,23 @@ export class MemoryStore implements StoreProvider {
 
   private key(key: string, scope?: StoreScope): string {
     return scopedRecordKey(key, scope);
+  }
+
+  private async withMethodologyLifecycleLock<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.methodologyLifecycleLocks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.methodologyLifecycleLocks.set(key, current);
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.methodologyLifecycleLocks.get(key) === current)
+        this.methodologyLifecycleLocks.delete(key);
+    }
   }
 
   // ----- Runs -----
@@ -373,7 +392,29 @@ export class MemoryStore implements StoreProvider {
     const existing = this.methodologyArtifacts.get(key);
     if (existing && existing.artifact_sha256 !== validated.artifact_sha256)
       throw new Error('methodology artifact revision conflict');
-    this.methodologyArtifacts.set(key, validated);
+    this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validated)));
+  }
+  async saveMethodologyArtifactWithLifecycle(
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validatedArtifact = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const validatedLifecycle = parseMethodologyArtifactLifecycle(lifecycle);
+    if (
+      validatedArtifact.artifact_kind !== validatedLifecycle.artifact_kind ||
+      validatedArtifact.artifact_id !== validatedLifecycle.artifact_id ||
+      validatedArtifact.revision !== validatedLifecycle.revision
+    )
+      throw new Error('methodology artifact lifecycle binding mismatch');
+    const key = this.key(`${validatedArtifact.artifact_id}@${validatedArtifact.revision}`, scope);
+    await this.withMethodologyLifecycleLock(key, async () => {
+      const existing = this.methodologyArtifacts.get(key);
+      if (existing && existing.artifact_sha256 !== validatedArtifact.artifact_sha256)
+        throw new Error('methodology artifact revision conflict');
+      this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validatedArtifact)));
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validatedLifecycle)));
+    });
   }
 
   async loadMethodologyArtifactLifecycle(
@@ -395,10 +436,17 @@ export class MemoryStore implements StoreProvider {
     const validated = parseMethodologyArtifactLifecycle(lifecycle);
     if (!(await this.loadMethodologyArtifact(validated.artifact_id, validated.revision, scope)))
       throw new Error('methodology artifact does not exist');
-    this.methodologyArtifactLifecycles.set(
-      this.key(`${validated.artifact_id}@${validated.revision}`, scope),
-      validated,
+    const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
+    const artifact = await this.loadMethodologyArtifact(
+      validated.artifact_id,
+      validated.revision,
+      scope,
     );
+    if (!artifact || artifact.artifact_kind !== validated.artifact_kind)
+      throw new Error('methodology lifecycle does not bind to artifact');
+    await this.withMethodologyLifecycleLock(key, async () => {
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validated)));
+    });
   }
   async archiveMethodologyArtifact(
     artifactId: string,
@@ -406,11 +454,14 @@ export class MemoryStore implements StoreProvider {
     input: { now: string; updated_by: string; reason: string },
     scope?: StoreScope,
   ): Promise<MethodologyArtifactLifecycle | null> {
-    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
-    if (!current) return null;
-    const updated = archiveMethodologyArtifactLifecycle(current, input);
-    await this.saveMethodologyArtifactLifecycle(updated, scope);
-    return updated;
+    const key = this.key(`${artifactId}@${revision}`, scope);
+    return this.withMethodologyLifecycleLock(key, async () => {
+      const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+      if (!current) return null;
+      const updated = archiveMethodologyArtifactLifecycle(current, input);
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(updated)));
+      return updated;
+    });
   }
   async setMethodologyArtifactLegalHold(
     artifactId: string,
@@ -418,13 +469,33 @@ export class MemoryStore implements StoreProvider {
     input: { now: string; updated_by: string; enabled: boolean; reason: string },
     scope?: StoreScope,
   ): Promise<MethodologyArtifactLifecycle | null> {
-    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
-    if (!current) return null;
-    const updated = setMethodologyArtifactLegalHold(current, input);
-    await this.saveMethodologyArtifactLifecycle(updated, scope);
-    return updated;
+    const key = this.key(`${artifactId}@${revision}`, scope);
+    return this.withMethodologyLifecycleLock(key, async () => {
+      const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+      if (!current) return null;
+      const updated = setMethodologyArtifactLegalHold(current, input);
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(updated)));
+      return updated;
+    });
   }
   async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
+    for (const [key, artifact] of this.methodologyArtifacts.entries()) {
+      if (
+        !this.visible(new Map([[key, artifact]]), scope).length ||
+        this.methodologyArtifactLifecycles.has(key)
+      )
+        continue;
+      const lifecycle = createMethodologyArtifactLifecycle({
+        artifact_kind: artifact.artifact_kind,
+        artifact_id: artifact.artifact_id,
+        revision: artifact.revision,
+        now: artifact.created_at,
+        updated_by: 'retention-migration',
+        retention_days: 365,
+        archive_after_days: 365,
+      });
+      this.methodologyArtifactLifecycles.set(key, lifecycle);
+    }
     let purged = 0;
     for (const [key, lifecycle] of this.methodologyArtifactLifecycles.entries()) {
       if (!this.visible(new Map([[key, lifecycle]]), scope).length) continue;
@@ -446,6 +517,17 @@ export class MemoryStore implements StoreProvider {
       if (!isMethodologyArtifactExpired(current, now)) continue;
       this.methodologyArtifactLifecycles.delete(key);
       this.methodologyArtifacts.delete(key);
+      for (const [proposalKey, record] of this.methodologyProposals.entries()) {
+        if (!this.visible(new Map([[proposalKey, record]]), scope).length) continue;
+        if (
+          (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
+          record.artifact?.artifact_id === current.artifact_id &&
+          record.artifact.revision === current.revision
+        ) {
+          const { artifact: _artifact, ...scrubbed } = record;
+          this.methodologyProposals.set(proposalKey, scrubbed);
+        }
+      }
       purged += 1;
     }
     return purged;
@@ -791,6 +873,8 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.methodologyArtifacts.clear();
+    this.methodologyArtifactLifecycles.clear();
+    this.methodologyLifecycleLocks.clear();
     this.methodologyProposals.clear();
     this.agents.clear();
     this.users.clear();

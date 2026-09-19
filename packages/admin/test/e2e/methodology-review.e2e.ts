@@ -121,6 +121,7 @@ test('live approved methodology compares the previous revision and publishes it'
 }) => {
   let publishedBody: Record<string, unknown> | undefined;
   let published = false;
+  let legalHold = false;
   let detailReads = 0;
   const approvedProposal = {
     ...proposal,
@@ -206,6 +207,19 @@ test('live approved methodology compares the previous revision and publishes it'
   });
   await page.route('**/api/methodology/artifacts/**', async (route) => {
     const url = new URL(route.request().url());
+    if (route.request().method() === 'POST' && url.pathname.endsWith('/legal-hold')) {
+      legalHold = !legalHold;
+      await route.fulfill({
+        json: {
+          lifecycle: {
+            state: 'active',
+            legal_hold: legalHold,
+            retained_until: '2027-09-19T10:00:00.000Z',
+          },
+        },
+      });
+      return;
+    }
     if (route.request().method() === 'POST' && url.pathname.endsWith('/archive')) {
       await route.fulfill({
         json: {
@@ -264,6 +278,15 @@ test('live approved methodology compares the previous revision and publishes it'
   await expect(page.getByText('Publication recorded')).toBeVisible();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('[data-testid="methodology-payload"]')).toContainText('checkout-total');
+  await page.getByLabel('Lifecycle reason').fill('Preserve evidence for operator review');
+  await page.locator('[data-testid="methodology-legal-hold"]').click();
+  await expect(page.locator('[data-testid="methodology-lifecycle"]')).toContainText('legal hold');
+  await expect(page.locator('[data-testid="methodology-legal-hold"]')).toContainText(
+    'Release legal hold',
+  );
+  await page.getByLabel('Lifecycle reason').fill('Operator review completed');
+  await page.locator('[data-testid="methodology-legal-hold"]').click();
+  await expect(page.locator('[data-testid="methodology-lifecycle"]')).toContainText('active');
   await page.getByLabel('Lifecycle reason').fill('Superseded by a reviewed revision');
   await page.locator('[data-testid="methodology-archive"]').click();
   await expect(page.getByText('Archive recorded')).toBeVisible();

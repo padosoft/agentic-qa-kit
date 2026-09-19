@@ -13912,6 +13912,7 @@ function PageMethodologyReview({ mode }) {
   const [previousArtifactLoading, setPreviousArtifactLoading] = React.useState(false);
   const [previousArtifactError, setPreviousArtifactError] = React.useState(null);
   const [lifecycle, setLifecycle] = React.useState(null);
+  const [lifecycleError, setLifecycleError] = React.useState(null);
   const [lifecycleReason, setLifecycleReason] = React.useState('');
   const [reviewerId, setReviewerId] = React.useState(null);
   const [action, setAction] = React.useState(null);
@@ -13957,12 +13958,13 @@ function PageMethodologyReview({ mode }) {
   }, [mode, selected]);
 
   React.useEffect(() => {
-    if (!selected || mode !== 'live') { setLifecycle(null); return undefined; }
+    if (!selected || mode !== 'live') { setLifecycle(null); setLifecycleError(null); return undefined; }
     let active = true;
+    setLifecycle(null); setLifecycleError(null);
     fetch(apiUrl(`/api/methodology/artifacts/${encodeURIComponent(selected.artifact_id)}/${selected.revision}/lifecycle`), { headers: METHODOLOGY_HEADERS })
       .then(async (res) => { const body = await res.json().catch(() => ({})); if (res.status === 404) return null; if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body.lifecycle || null; })
       .then((value) => { if (active) setLifecycle(value); })
-      .catch(() => { if (active) setLifecycle(null); });
+      .catch((error) => { if (active) { setLifecycle(null); setLifecycleError(error instanceof Error ? error.message : String(error)); } });
     return () => { active = false; };
   }, [mode, selected]);
 
@@ -14066,6 +14068,7 @@ function PageMethodologyReview({ mode }) {
               <div className="card-body col gap-12">
                 <Alert kind="warning" title="Approval is exact and time-bounded">Verify the payload, identity and digest before approving. This action cannot be reused for another revision.</Alert>
                 <div className="grid-2"><div><div className="field-label">SHA-256 digest</div><code className="code-inline" data-testid="methodology-digest">{selected.artifact_sha256}</code></div><div><div className="field-label">Proposed at</div><span className="mono">{selected.proposed_at}</span></div></div>
+                {lifecycleError && <Alert kind="error" title="Retention lifecycle unavailable">{lifecycleError}</Alert>}
                 {lifecycle && <div className="col gap-8" data-testid="methodology-lifecycle"><div className="row" style={{ justifyContent: 'space-between' }}><div><div className="field-label">Retention lifecycle</div><span className={`badge ${lifecycle.state === 'archived' ? 'failed' : 'success'}`}>{lifecycle.state}{lifecycle.legal_hold ? ' · legal hold' : ''}</span></div><div className="muted mono">retained until {lifecycle.retained_until}</div></div>{mode === 'live' && <><input className="input" aria-label="Lifecycle reason" value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} placeholder="Reason for archive or legal-hold change" maxLength={2000} /><div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn danger" data-testid="methodology-archive" onClick={() => changeLifecycle('archive')} disabled={action !== null || lifecycle.state === 'archived' || lifecycle.legal_hold || !lifecycleReason.trim()}>Archive revision</button><button className="btn ghost" data-testid="methodology-legal-hold" onClick={() => changeLifecycle('legal-hold')} disabled={action !== null || !lifecycleReason.trim()}>{lifecycle.legal_hold ? 'Release legal hold' : 'Place legal hold'}</button></div></>}</div>}
                 <div><div className="field-label">Payload preview</div>{artifactLoading ? <div className="skeleton" style={{ height: 140 }} aria-label="Loading staged methodology payload" /> : <pre className="code-block" data-testid="methodology-payload">{JSON.stringify(artifact || { warning: artifactError || 'Staged payload unavailable; approval is disabled.' }, null, 2)}</pre>}</div>
                 <div className="col gap-8" data-testid="methodology-revision-diff"><div className="field-label">Previous revision comparison</div>{selected.revision <= 1 ? <div className="muted">Revision 1 has no previous published revision.</div> : previousArtifactLoading ? <div className="skeleton" style={{ height: 120 }} aria-label="Loading previous methodology revision" /> : previousArtifact ? <div className="methodology-diff-grid"><MethodologyJsonPanel title={`Revision ${selected.revision - 1}`} artifact={previousArtifact} empty="Previous revision unavailable." /><MethodologyJsonPanel title={`Revision ${selected.revision}`} artifact={artifact} empty={artifactError || 'Current revision unavailable.'} /></div> : <div className="muted">{previousArtifactError || 'No published previous revision is available for comparison.'}</div>}</div>

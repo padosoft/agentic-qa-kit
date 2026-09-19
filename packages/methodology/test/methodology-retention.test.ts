@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'bun:test';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   archiveMethodologyArtifactLifecycle,
   createMethodologyArtifactLifecycle,
   isMethodologyArtifactExpired,
   parseMethodologyArtifactLifecycle,
   setMethodologyArtifactLegalHold,
-} from '../src/index.js';
+} from '../dist/index.js';
 
 const input = {
   artifact_kind: 'risk_map' as const,
@@ -20,11 +21,11 @@ const input = {
 describe('methodology retention lifecycle', () => {
   it('creates a bounded lifecycle and expires only after retention', () => {
     const lifecycle = createMethodologyArtifactLifecycle(input);
-    expect(lifecycle.state).toBe('active');
-    expect(lifecycle.archive_after).toBe('2026-09-26T10:00:00.000Z');
-    expect(lifecycle.retained_until).toBe('2026-10-19T10:00:00.000Z');
-    expect(isMethodologyArtifactExpired(lifecycle, '2026-10-18T23:59:59.999Z')).toBe(false);
-    expect(isMethodologyArtifactExpired(lifecycle, '2026-10-19T10:00:00.000Z')).toBe(true);
+    assert.equal(lifecycle.state, 'active');
+    assert.equal(lifecycle.archive_after, '2026-09-26T10:00:00.000Z');
+    assert.equal(lifecycle.retained_until, '2026-10-19T10:00:00.000Z');
+    assert.equal(isMethodologyArtifactExpired(lifecycle, '2026-10-18T23:59:59.999Z'), false);
+    assert.equal(isMethodologyArtifactExpired(lifecycle, '2026-10-19T10:00:00.000Z'), true);
   });
 
   it('archives with an operator reason and blocks archive under legal hold', () => {
@@ -35,37 +36,50 @@ describe('methodology retention lifecycle', () => {
       enabled: true,
       reason: 'Customer litigation hold',
     });
-    expect(() =>
-      archiveMethodologyArtifactLifecycle(held, {
-        now: '2026-09-21T10:00:00.000Z',
-        updated_by: 'reviewer-1',
-        reason: 'Cleanup',
-      }),
-    ).toThrow('legal hold');
+    assert.throws(
+      () =>
+        archiveMethodologyArtifactLifecycle(held, {
+          now: '2026-09-21T10:00:00.000Z',
+          updated_by: 'reviewer-1',
+          reason: 'Cleanup',
+        }),
+      /legal hold/,
+    );
     const released = setMethodologyArtifactLegalHold(held, {
       now: '2026-09-22T10:00:00.000Z',
       updated_by: 'legal-1',
       enabled: false,
       reason: 'Hold released',
     });
-    expect(
+    assert.equal(
       archiveMethodologyArtifactLifecycle(released, {
         now: '2026-09-23T10:00:00.000Z',
         updated_by: 'reviewer-1',
         reason: 'Superseded by revision 3',
       }).state,
-    ).toBe('archived');
+      'archived',
+    );
   });
 
   it('rejects invalid retention and unknown persisted fields', () => {
-    expect(() =>
-      createMethodologyArtifactLifecycle({ ...input, archive_after_days: 31 }),
-    ).toThrow();
-    expect(() =>
-      parseMethodologyArtifactLifecycle({
-        ...createMethodologyArtifactLifecycle(input),
-        extra: true,
-      }),
-    ).toThrow('unknown field');
+    assert.throws(() => createMethodologyArtifactLifecycle({ ...input, archive_after_days: 31 }));
+    assert.throws(
+      () =>
+        parseMethodologyArtifactLifecycle({
+          ...createMethodologyArtifactLifecycle(input),
+          extra: true,
+        }),
+      /unknown field/,
+    );
+    assert.throws(
+      () =>
+        setMethodologyArtifactLegalHold(createMethodologyArtifactLifecycle(input), {
+          now: input.now,
+          updated_by: input.updated_by,
+          enabled: true,
+          reason: 'authorization=secret',
+        }),
+      /sensitive data/,
+    );
   });
 });

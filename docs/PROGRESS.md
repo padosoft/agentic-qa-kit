@@ -45,6 +45,15 @@
   next is the real authenticated provider journey. External assurance remains
   a final promotion gate.
 
+- Automated technical review then exposed retention edge cases; hardened the
+  slice with DLP-checked reasons, lifecycle binding/cloning, serialized
+  in-memory transitions, transactional PostgreSQL publication and purge,
+  terminal-proposal payload scrubbing, legacy-artifact backfill, explicit UI
+  lifecycle errors and official package-test registration. Follow-up evidence:
+  methodology **33 passed**, store/server **136 passed**, browser **5/5**.
+  Provider credentials, hosted WORM/restore evidence and external assurance
+  remain deferred final gates by owner decision.
+
 ## 2026-09-19 — Reasoned methodology rejection implemented
 
 - Added a durable `pending → rejected` transition with an independent

@@ -1573,8 +1573,8 @@ export function makeApi(): ApiHandler[] {
               retention_days: retentionDays,
               archive_after_days: archiveAfterDays,
             });
-          await ctx.store.saveMethodologyArtifact(artifact, s);
-          if (!existingLifecycle) await ctx.store.saveMethodologyArtifactLifecycle(lifecycle, s);
+          if (existingLifecycle) await ctx.store.saveMethodologyArtifact(artifact, s);
+          else await ctx.store.saveMethodologyArtifactWithLifecycle(artifact, lifecycle, s);
         } catch (error) {
           if (error instanceof Error && /conflict|already exists/i.test(error.message))
             return { status: 409, body: { error: 'methodology artifact revision conflict' } };

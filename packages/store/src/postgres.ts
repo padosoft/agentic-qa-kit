@@ -10,6 +10,7 @@ import {
   archiveMethodologyArtifactLifecycle,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
+  createMethodologyArtifactLifecycle,
   isMethodologyArtifactExpired,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
@@ -70,7 +71,7 @@ type Kind =
   | 'project'
   | 'user'
   | 'sso';
-type Row = { record_key: string; payload: unknown };
+type Row = { record_key: string; payload: unknown; org?: string | null; project?: string | null };
 
 /** Durable PostgreSQL StoreProvider backed by schema-owned JSONB envelopes. */
 export class PostgresStore implements StoreProvider {
@@ -130,7 +131,7 @@ export class PostgresStore implements StoreProvider {
     await this.wait();
     const namespaced = scopedRecordKey(key, scope);
     const rows = await this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
+      'SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
       [kind, namespaced],
     );
     return rows[0] ?? null;
@@ -139,21 +140,21 @@ export class PostgresStore implements StoreProvider {
     await this.wait();
     if (scope?.org && scope.project)
       return this.q<Row>(
-        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 AND project = $3 ORDER BY updated_at DESC, record_key',
+        'SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 AND project = $3 ORDER BY updated_at DESC, record_key',
         [kind, scope.org, scope.project],
       );
     if (scope?.org)
       return this.q<Row>(
-        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 ORDER BY updated_at DESC, record_key',
+        'SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 ORDER BY updated_at DESC, record_key',
         [kind, scope.org],
       );
     if (scope?.project)
       return this.q<Row>(
-        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND project = $2 ORDER BY updated_at DESC, record_key',
+        'SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND project = $2 ORDER BY updated_at DESC, record_key',
         [kind, scope.project],
       );
     return this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 ORDER BY updated_at DESC, record_key',
+      'SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 ORDER BY updated_at DESC, record_key',
       [kind],
     );
   }
@@ -507,6 +508,55 @@ export class PostgresStore implements StoreProvider {
     }
   }
 
+  async saveMethodologyArtifactWithLifecycle(
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const lifecycleValue = parseMethodologyArtifactLifecycle(lifecycle);
+    if (
+      validated.artifact_kind !== lifecycleValue.artifact_kind ||
+      validated.artifact_id !== lifecycleValue.artifact_id ||
+      validated.revision !== lifecycleValue.revision
+    )
+      throw new Error('methodology artifact lifecycle binding mismatch');
+    await this.wait();
+    await this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const recordKey = scopedRecordKey(`${validated.artifact_id}@${validated.revision}`, scope);
+      await query(
+        'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+        [
+          'methodology_artifact',
+          recordKey,
+          scope?.org ?? null,
+          scope?.project ?? null,
+          JSON.stringify(validated),
+        ],
+      );
+      const existing = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact', recordKey],
+      )) as Array<{ payload: unknown }>;
+      const existingArtifact = parseMethodologyArtifactEnvelope(
+        JSON.stringify(existing[0]?.payload),
+      );
+      if (existingArtifact.artifact_sha256 !== validated.artifact_sha256)
+        throw new Error('methodology artifact revision conflict');
+      await query(
+        'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+        [
+          'methodology_artifact_lifecycle',
+          recordKey,
+          scope?.org ?? null,
+          scope?.project ?? null,
+          JSON.stringify(lifecycleValue),
+        ],
+      );
+    });
+  }
+
   async loadMethodologyArtifactLifecycle(
     artifactId: string,
     revision: number,
@@ -522,7 +572,12 @@ export class PostgresStore implements StoreProvider {
     scope?: StoreScope,
   ): Promise<void> {
     const validated = parseMethodologyArtifactLifecycle(lifecycle);
-    if (!(await this.loadMethodologyArtifact(validated.artifact_id, validated.revision, scope)))
+    const artifact = await this.loadMethodologyArtifact(
+      validated.artifact_id,
+      validated.revision,
+      scope,
+    );
+    if (!artifact || artifact.artifact_kind !== validated.artifact_kind)
       throw new Error('methodology artifact does not exist');
     await this.put(
       'methodology_artifact_lifecycle',
@@ -558,40 +613,85 @@ export class PostgresStore implements StoreProvider {
     return updated;
   }
   async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
-    const lifecycles = (await this.many('methodology_artifact_lifecycle', scope)).map((row) =>
-      parseMethodologyArtifactLifecycle(this.decode(row.payload)),
-    );
-    let purged = 0;
-    for (const lifecycle of lifecycles) {
-      let current = lifecycle;
-      if (
-        !current.legal_hold &&
-        current.state === 'active' &&
-        Date.parse(now) >= Date.parse(current.archive_after)
-      ) {
-        current = {
-          ...current,
-          state: 'archived',
-          updated_at: now,
-          updated_by: 'retention-reconciler',
-          reason: 'Retention archive threshold reached',
-        };
-        await this.saveMethodologyArtifactLifecycle(current, scope);
+    await this.wait();
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const filters =
+        scope?.org && scope.project
+          ? { sql: ' AND org = $2 AND project = $3', values: [scope.org, scope.project] }
+          : scope?.org
+            ? { sql: ' AND org = $2', values: [scope.org] }
+            : scope?.project
+              ? { sql: ' AND project = $2', values: [scope.project] }
+              : { sql: '', values: [] };
+      const legacyRows = (await query(
+        `SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1${filters.sql} AND NOT EXISTS (SELECT 1 FROM aqa_store_records l WHERE l.kind = 'methodology_artifact_lifecycle' AND l.record_key = aqa_store_records.record_key) FOR UPDATE`,
+        ['methodology_artifact', ...filters.values],
+      )) as Row[];
+      for (const row of legacyRows) {
+        const artifact = parseMethodologyArtifactEnvelope(this.decode(row.payload));
+        const lifecycle = createMethodologyArtifactLifecycle({
+          artifact_kind: artifact.artifact_kind,
+          artifact_id: artifact.artifact_id,
+          revision: artifact.revision,
+          now: artifact.created_at,
+          updated_by: 'retention-migration',
+          retention_days: 365,
+          archive_after_days: 365,
+        });
+        await query(
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+          [
+            'methodology_artifact_lifecycle',
+            row.record_key,
+            row.org ?? null,
+            row.project ?? null,
+            JSON.stringify(lifecycle),
+          ],
+        );
       }
-      if (!isMethodologyArtifactExpired(current, now)) continue;
-      await this.remove(
-        'methodology_artifact_lifecycle',
-        `${current.artifact_id}@${current.revision}`,
-        scope,
-      );
-      await this.remove(
-        'methodology_artifact',
-        `${current.artifact_id}@${current.revision}`,
-        scope,
-      );
-      purged += 1;
-    }
-    return purged;
+      const rows = (await query(
+        `SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1${filters.sql} ORDER BY record_key FOR UPDATE`,
+        ['methodology_artifact_lifecycle', ...filters.values],
+      )) as Row[];
+      let purged = 0;
+      for (const row of rows) {
+        let current = parseMethodologyArtifactLifecycle(this.decode(row.payload));
+        const key = row.record_key;
+        if (
+          !current.legal_hold &&
+          current.state === 'active' &&
+          Date.parse(now) >= Date.parse(current.archive_after)
+        ) {
+          current = {
+            ...current,
+            state: 'archived',
+            updated_at: now,
+            updated_by: 'retention-reconciler',
+            reason: 'Retention archive threshold reached',
+          };
+          await query(
+            'UPDATE aqa_store_records SET payload = $1::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $3',
+            [JSON.stringify(current), 'methodology_artifact_lifecycle', key],
+          );
+        }
+        if (!isMethodologyArtifactExpired(current, now)) continue;
+        await query('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
+          'methodology_artifact_lifecycle',
+          key,
+        ]);
+        await query('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
+          'methodology_artifact',
+          key,
+        ]);
+        await query(
+          `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
+          [row.org ?? null, row.project ?? null, current.artifact_id, current.revision],
+        );
+        purged += 1;
+      }
+      return purged;
+    });
   }
 
   // ----- Methodology proposals -----

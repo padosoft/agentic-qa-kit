@@ -2916,3 +2916,14 @@ caller can see different authorization surfaces depending on deployment mode.
 - Memory and PostgreSQL adapters share the same contract, but local tests do
   not prove hosted backup/WORM semantics. Provider retention read-back,
   restore/PITR and external assurance remain final deployment evidence gaps.
+
+# 2026-09-20 — Retention must cover every persisted copy and race boundary
+
+- A lifecycle row alone was insufficient: approved/rejected proposals retained
+  the full staged envelope after artifact purge, and PostgreSQL load/transform/
+  save could race a legal hold. Retention now scrubs terminal proposal copies,
+  backfills lifecycle records for legacy artifacts, serializes memory updates,
+  and performs hosted purge decisions and deletes inside one transaction.
+- Package-local tests must execute through the package's declared runner and
+  built boundary; a standalone Bun test can pass while the official Node test
+  script silently omits it.

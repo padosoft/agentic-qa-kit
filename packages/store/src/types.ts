@@ -178,6 +178,12 @@ export interface StoreProvider {
   ): Promise<MethodologyArtifactEnvelope | null>;
   /** Persist one revision; same revision + different digest is a hard conflict. */
   saveMethodologyArtifact(artifact: MethodologyArtifactEnvelope, scope?: StoreScope): Promise<void>;
+  /** Atomically persist a revision and its initial retention lifecycle. */
+  saveMethodologyArtifactWithLifecycle(
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void>;
   loadMethodologyArtifactLifecycle(
     artifact_id: string,
     revision: number,
