@@ -393,6 +393,24 @@ describe('makeApi', () => {
       c,
     );
     assert.equal((pendingProposals?.body as { proposals: unknown[] }).proposals.length, 1);
+    assert.equal(
+      Object.hasOwn(
+        (pendingProposals?.body as { proposals: Array<Record<string, unknown>> }).proposals[0],
+        'artifact',
+      ),
+      false,
+    );
+    const proposalDetail = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/methodology/proposals/:id',
+    );
+    const detail = await proposalDetail?.handle(
+      { headers: TENANT_HEADERS, params: { id: proposal.proposal_id } },
+      c,
+    );
+    assert.deepEqual(
+      (detail?.body as { proposal: { artifact: unknown } }).proposal.artifact,
+      artifact,
+    );
     const invalidProposalStatus = await proposalList?.handle(
       { headers: TENANT_HEADERS, params: {}, query: { status: 'invalid' } },
       c,

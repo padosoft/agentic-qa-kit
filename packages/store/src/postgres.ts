@@ -511,12 +511,30 @@ export class PostgresStore implements StoreProvider {
     const value = this.payload<unknown>(await this.one('methodology_proposal', proposalId, scope));
     return value === null ? null : parseMethodologyProposalRecord(value);
   }
-  async saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void> {
+  async saveMethodologyProposal(
+    proposal: MethodologyProposal,
+    scope?: StoreScope,
+    artifact?: MethodologyArtifactEnvelope,
+  ): Promise<void> {
     const normalized = parseMethodologyProposal(proposal);
     assertMethodologyProposal(normalized);
     if (normalized.status !== 'pending') throw new Error('methodology proposal must be pending');
+    const normalizedArtifact = artifact
+      ? parseMethodologyArtifactEnvelope(JSON.stringify(artifact))
+      : undefined;
+    if (
+      normalizedArtifact &&
+      (normalizedArtifact.artifact_kind !== normalized.artifact_kind ||
+        normalizedArtifact.artifact_id !== normalized.artifact_id ||
+        normalizedArtifact.revision !== normalized.revision ||
+        normalizedArtifact.artifact_sha256 !== normalized.artifact_sha256)
+    )
+      throw new Error('methodology proposal does not bind to artifact');
     await this.wait();
-    const record: MethodologyProposalRecord = { proposal: normalized };
+    const record: MethodologyProposalRecord = {
+      proposal: normalized,
+      ...(normalizedArtifact ? { artifact: normalizedArtifact } : {}),
+    };
     const rows = await this.q<{ record_key: string }>(
       'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key',
       [
@@ -529,7 +547,11 @@ export class PostgresStore implements StoreProvider {
     );
     if (rows.length === 0) {
       const existing = await this.loadMethodologyProposal(proposal.proposal_id, scope);
-      if (!existing || JSON.stringify(existing.proposal) !== JSON.stringify(normalized))
+      if (
+        !existing ||
+        JSON.stringify(existing.proposal) !== JSON.stringify(normalized) ||
+        JSON.stringify(existing.artifact) !== JSON.stringify(normalizedArtifact)
+      )
         throw new Error('methodology proposal conflict');
     }
   }
@@ -793,11 +815,27 @@ export class PostgresStore implements StoreProvider {
 function parseMethodologyProposalRecord(input: unknown): MethodologyProposalRecord {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new Error('methodology proposal record must be an object');
-  const record = input as { proposal?: unknown; approval?: unknown };
-  if (Object.keys(record).some((key) => key !== 'proposal' && key !== 'approval'))
+  const record = input as { proposal?: unknown; artifact?: unknown; approval?: unknown };
+  if (
+    Object.keys(record).some(
+      (key) => key !== 'proposal' && key !== 'artifact' && key !== 'approval',
+    )
+  )
     throw new Error('methodology proposal record contains an unknown field');
   const proposal = parseMethodologyProposal(record.proposal);
+  const artifact =
+    record.artifact === undefined
+      ? undefined
+      : parseMethodologyArtifactEnvelope(JSON.stringify(record.artifact));
   const approval =
     record.approval === undefined ? undefined : parseMethodologyApproval(record.approval);
-  return { proposal, ...(approval ? { approval } : {}) };
+  if (
+    artifact &&
+    (artifact.artifact_kind !== proposal.artifact_kind ||
+      artifact.artifact_id !== proposal.artifact_id ||
+      artifact.revision !== proposal.revision ||
+      artifact.artifact_sha256 !== proposal.artifact_sha256)
+  )
+    throw new Error('methodology proposal record artifact binding mismatch');
+  return { proposal, ...(artifact ? { artifact } : {}), ...(approval ? { approval } : {}) };
 }

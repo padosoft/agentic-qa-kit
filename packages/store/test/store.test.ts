@@ -404,9 +404,13 @@ describe('MemoryStore', () => {
       source: 'agent',
     });
     const scope = { org: 'org-a', project: 'shop' };
-    await s.saveMethodologyProposal(proposal, scope);
-    await s.saveMethodologyProposal(proposal, scope);
+    await s.saveMethodologyProposal(proposal, scope, METHODOLOGY_ARTIFACT);
+    await s.saveMethodologyProposal(proposal, scope, METHODOLOGY_ARTIFACT);
     assert.equal((await s.listMethodologyProposals({ ...scope, status: 'pending' })).length, 1);
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.artifact,
+      METHODOLOGY_ARTIFACT,
+    );
     assert.equal((await s.listMethodologyProposals({ org: 'other', project: 'shop' })).length, 0);
     await assert.rejects(
       () => s.saveMethodologyProposal({ ...proposal, proposed_by: 'forged' }, scope),
@@ -471,7 +475,7 @@ describe('PostgresStore', () => {
         proposed_at: '2026-09-18T10:01:00.000Z',
         source: 'agent',
       });
-      await s.saveMethodologyProposal(postgresProposal, specialScope);
+      await s.saveMethodologyProposal(postgresProposal, specialScope, postgresArtifact);
       const postgresApproval = {
         schema_version: '1' as const,
         approval_id: `approval-postgres-${Date.now()}`,

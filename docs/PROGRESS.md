@@ -9,6 +9,21 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Admin methodology review UI started
+
+- Added the first control-plane review surface at `/methodology-review`: tenant
+  proposal queue, exact revision/digest/payload inspection, explicit human-gate
+  warning, and live approval against the authenticated operator. Mock mode is
+  intentionally read-only and cannot fabricate an approval.
+- Added the navigation smoke assertion. Local admin typecheck and production
+  build pass. Next: wire a complete live browser journey with authenticated
+  proposal creation → review → approval → artifact publication, then add
+  retention/archive controls.
+- Corrected the review boundary before delivery: pending proposals now retain
+  a validated staging envelope, list responses omit the payload, and a
+  tenant-scoped detail route supplies the exact content to reviewers. This
+  prevents a UI-only preview from being mistaken for evidence.
+
 ## 2026-09-19 — Authenticated methodology publication API
 
 - Added ADR-281 and tenant-scoped methodology list/detail routes plus an

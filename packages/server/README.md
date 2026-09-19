@@ -49,11 +49,16 @@ Methodology revisions are exposed through the tenant-scoped
 `GET /api/methodology/artifacts` and
 `GET /api/methodology/artifacts/:id/:revision` routes. Publication through
 `POST /api/methodology/proposals` creates a tenant-scoped pending proposal and
-`POST /api/methodology/proposals/:id/approve` performs the durable independent
-approval transition. `POST /api/methodology/artifacts` then accepts only the
-approved proposal ID plus its exact envelope. Agent-origin proposals require a
-host-owned verifier; bare payloads, forged identities and mismatched approvals
-are rejected. The admin review console is the next roadmap slice.
+retains its bounded, DLP-checked envelope for review. The list route returns
+metadata only; `GET /api/methodology/proposals/:id` returns the exact staged
+envelope to an authorized reviewer. `POST /api/methodology/proposals/:id/approve`
+performs the durable independent approval transition. `POST
+/api/methodology/artifacts` then accepts only the approved proposal ID plus its
+exact envelope. Agent-origin proposals require a host-owned verifier; bare
+payloads, forged identities and mismatched approvals are rejected. The admin
+console now exposes the review queue and digest-bound approval action; the
+complete authenticated browser journey, reject reasons, revision diff and
+retention/archive policy remain roadmap work.
 
 The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick
 using `AQA_BUDGET_LEDGER_DSN`. It is intended for a Kubernetes CronJob or

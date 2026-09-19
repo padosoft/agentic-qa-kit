@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-19 — Mock admin mode must never simulate governance
+
+The methodology review UI can render representative proposals in mock mode, but
+approval must remain disabled there. A polished preview that reports a fake
+approval would contaminate audit expectations; only the live authenticated API
+may create the approval record and bind it to the exact digest/revision.
+
 # 2026-09-19 — Methodology hypotheses need an approval binding
 
 An agent-generated risk map or attack tree is not methodology evidence merely
