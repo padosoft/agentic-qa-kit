@@ -25,6 +25,10 @@
 - The latest hosted attempt showed the operation must prefer its caller scope
   over nullable legacy row scope columns. Purge and proposal-copy scrubbing
   now use that authoritative scope with persisted columns as fallback.
+- Restart verification isolated the remaining issue to the reused PostgreSQL
+  store instance: a fresh instance saw the purge while the original could
+  read stale prepared-query state. The adapter now uses parameterized simple
+  protocol queries (`prepare: false`); hosted CI must revalidate this boundary.
 
 ## 2026-09-19 — Methodology diff and publication UI implemented
 

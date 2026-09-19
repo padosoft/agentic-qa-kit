@@ -84,7 +84,16 @@ export class PostgresStore implements StoreProvider {
   constructor(dsn: string) {
     if (!dsn || !dsn.trim())
       throw new Error('[store/postgres] DSN is empty — refusing to construct.');
-    this.sql = postgres(dsn, { max: 10, idle_timeout: 20, connect_timeout: 10 });
+    // Use the simple query protocol for this JSONB-heavy adapter. Every SQL
+    // statement remains parameterized, while disabling prepared statements
+    // avoids stale statement/session behavior across transactional purge and
+    // subsequent read-back on a reused pool connection.
+    this.sql = postgres(dsn, {
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      prepare: false,
+    });
     this.ready = this.migrate();
   }
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {

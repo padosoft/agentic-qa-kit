@@ -2959,3 +2959,9 @@ caller can see different authorization surfaces depending on deployment mode.
   authoritative tenant filter during purge; persisted scope columns are a
   fallback for legacy rows, not a substitute for the operation scope. Apply
   that rule consistently to artifact deletion and proposal-copy scrubbing.
+
+- The hosted retention contract isolated a provider-specific read-after-write
+  discrepancy: a fresh PostgreSQL store saw the purge, while the reused store
+  instance could read stale prepared-query state. The adapter now disables
+  prepared statements while retaining parameterized SQL, so transactional DML
+  and subsequent reads use the same current database state.
