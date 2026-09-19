@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Parked external promotion gates by explicit owner decision.** Provider
+  credentials/live deployment evidence and independent assurance (penetration
+  test, SOC2/ISO, legal SLA, references and external sign-off) are now marked
+  `deferred-final-gate` in the roadmap audit. They remain mandatory for future
+  production/customer promotion, but do not block side-project development;
+  repository-testable contracts, local complete journeys and ecommerce gaps
+  remain active. Next: resume the first still-open local workstream.
+
 - **Aligned review governance with the operator decision.** `AGENTS.md`,
   `docs/RULES.md` and Copilot instructions now make Copilot review the default,
   while permitting an explicit documented operator opt-out; technical CI and

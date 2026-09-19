@@ -309,7 +309,7 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v0.0.1-governance` | Bootstrap | Process docs, CI, Copilot review automation, admin spec |
 | `v0.1.x` | Foundation | Schemas, CLI (init/doctor/validate), 5 base packs, 4 adapters, runner+smoke, reports, admin viewer |
 | `v0.2.x` | Determinism & cost | 3-level replay, cost governance, container sandbox default |
-| `v0.3.x` | Enterprise table-stakes | Postgres backend, SSO/RBAC, pack signing, on-prem LLM, Helm chart, air-gap installer |
+| `v0.3.x` | Enterprise table-stakes — repository scope shipped | Postgres backend, SSO/RBAC, pack signing, on-prem LLM, Helm chart, air-gap installer; live KMS/WORM/IdP deployment evidence is a deferred final gate |
 | `v0.4.x` | Admin editing | Scenario Studio, AI-generation with review workflow |
 | `v0.5.x` | Multi-team | Server + runner fleet, findings dedup, bug→fix→verify-fix loop |
 | `v0.6.x` | Methodology rigor | STRIDE/FMEA/OWASP integration, oracle ensemble, judge calibration |
@@ -325,16 +325,17 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.9` | **Junior quick-start truthing — shipped** | `aqa install-agent-files` + `aqa report` + `aqa admin` CLI verbs (previously documented but unwired), `@aqa/pack-author` extracted to break kit↔server build cycle, esbuild bundled `dist/cli.cjs`, GitHub Packages publish workflow on `v*` tags, README quick-start rewritten to match the actually-shipped CLI surface |
 | `v2.0` | **Enterprise truth and safety — in progress** | Fail-closed runner/oracles, canonical outcomes, durable persistence, scoped authorization, SLO/coverage evidence, external-result ingestion, risk discovery, sandbox and secret-redaction hardening; live deployment proofs remain required |
 | `v2.1` | **Commerce Assurance pilot — contracts shipped** | Commerce pack, money/order/payment/inventory contracts, provider and merchant adapters, webhook/retry/race journeys, refund reconciliation and safe synthetic fixtures; live provider evidence remains deployment-scoped |
-| `v2.2` | **Stateful agentic QA — partial** | Capability preflight, temporal assertions and multi-actor context are present; evidence graph federation, mutation-to-regression automation and trace federation remain open |
+| `v2.2` | **Stateful agentic QA — repository contracts shipped** | Capability preflight, temporal assertions, multi-actor execution, trace federation and mutation-to-regression evidence are implemented; protected producer scale and production provenance are deferred final gates |
 
 ## Status
 
-**Enterprise truth status (2026-09-18).** The repository has moved beyond the
+**Enterprise truth status (2026-09-19).** The repository has moved beyond the
 historical `v1.9` review: the enterprise control-plane, commerce contracts,
 runner fencing, observability and protected provider-evidence handoffs are now
-implemented and covered by hosted technical CI. Production readiness is still
-conditional on executing the protected workflows against operator-owned
-providers and completing the independent security/compliance work. See the
+implemented and covered by hosted technical CI. Provider execution evidence and
+independent security/compliance assurance are intentionally deferred to the
+final promotion gate while the owner validates the kit against side projects;
+they are not claimed as complete and do not block local development. See the
 [roadmap completion audit](docs/internal/roadmap-completion-audit-2026-09-18.md)
 for the requirement-by-requirement status; “implemented” is never treated as
 live provider evidence.
