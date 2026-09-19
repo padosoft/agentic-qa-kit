@@ -11,21 +11,29 @@
 
 ## 2026-09-19
 
+- **Aligned review governance with the operator decision.** `AGENTS.md`,
+  `docs/RULES.md` and Copilot instructions now make Copilot review the default,
+  while permitting an explicit documented operator opt-out; technical CI and
+  the human branch-protection review remain mandatory. This prevents process
+docs from contradicting the active operating instruction.
+
 - **Enabled live repository governance controls.** `main` now requires the
   technical CI matrix and one pull-request approval, enforces linear history
   and conversation resolution, and disallows force-push/delete exceptions.
   Created the six protected provider/evidence Environments with required
   reviewer and protected-branch policy. Provider secrets remain intentionally
   absent, so this closes governance configuration but not provider execution
-  evidence.
+evidence.
 
-- **Re-audited live external readiness.** GitHub currently exposes only the
-  `copilot` Environment, no provider credentials in the repository secret
-  listing, and no protection on `main` (`404 Branch not protected`). No Stripe,
-  gift-card, OIDC, mTLS, PostgreSQL-recovery, artifact/KMS or production DR
-  workflow was started without an operator-owned protected environment. The
-  exact result is recorded in the roadmap audit; this is an external
-  configuration blocker, not a code failure.
+- **Re-audited live external readiness before governance activation.** The
+  earlier snapshot found only the `copilot` Environment, no provider
+  credentials, and no protection on `main` (`404 Branch not protected`). That
+  snapshot is superseded by the governance controls recorded above; provider
+  credentials and live provider execution evidence remain outstanding. No
+  Stripe, gift-card, OIDC, mTLS, PostgreSQL-recovery, artifact/KMS or
+  production DR workflow was started without an operator-owned protected
+  environment. The exact result is recorded in the roadmap audit; this is an
+  external configuration blocker, not a code failure.
 
 - **Bound mutation regression evidence to the workflow revision.** The protected
   gate now passes `${github.sha}` to `aqa mutation regression`, which rejects
