@@ -2792,3 +2792,10 @@ Before running manual provider workflows, inspect the live GitHub Environments,
 secret names and branch protection. A checked-in workflow with no protected
 environment is only an executable procedure, not a failed provider journey or
 a production-readiness proof.
+
+# 2026-09-19 — Governance can be automated without fabricating evidence
+
+Branch protection and required-reviewer Environments are safe administrative
+controls to configure before provider credentials exist. Keep those controls
+separate from provider execution: an empty protected Environment improves
+release safety but must never be reported as a successful provider journey.
