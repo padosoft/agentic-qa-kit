@@ -78,23 +78,30 @@ export class PostgresStore implements StoreProvider {
   isDurable(): boolean {
     return true;
   }
-  private readonly sql: Sql;
-  private readonly ready: Promise<void>;
+  private readonly dsn: string;
+  private sql: Sql;
+  private ready: Promise<void>;
 
   constructor(dsn: string) {
     if (!dsn || !dsn.trim())
       throw new Error('[store/postgres] DSN is empty — refusing to construct.');
-    // Use the simple query protocol for this JSONB-heavy adapter. Every SQL
-    // statement remains parameterized, while disabling prepared statements
-    // avoids stale statement/session behavior across transactional purge and
-    // subsequent read-back on a reused pool connection.
-    this.sql = postgres(dsn, {
+    this.dsn = dsn;
+    this.sql = this.createClient();
+    this.ready = this.migrate();
+  }
+  private createClient(): Sql {
+    return postgres(this.dsn, {
       max: 10,
       idle_timeout: 20,
       connect_timeout: 10,
       prepare: false,
     });
+  }
+  private async rotateConnection(): Promise<void> {
+    await this.sql.end({ timeout: 5 });
+    this.sql = this.createClient();
     this.ready = this.migrate();
+    await this.ready;
   }
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
     const unsafe = this.sql.unsafe as unknown as (
@@ -776,6 +783,7 @@ export class PostgresStore implements StoreProvider {
         'methodology_artifact',
         artifactKey,
       ]);
+    if (purgedArtifactKeys.length > 0) await this.rotateConnection();
     return purged;
   }
 
