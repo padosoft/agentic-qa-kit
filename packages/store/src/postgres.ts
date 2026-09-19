@@ -68,6 +68,9 @@ type Row = { record_key: string; payload: unknown };
 
 /** Durable PostgreSQL StoreProvider backed by schema-owned JSONB envelopes. */
 export class PostgresStore implements StoreProvider {
+  isDurable(): boolean {
+    return true;
+  }
   private readonly sql: Sql;
   private readonly ready: Promise<void>;
 

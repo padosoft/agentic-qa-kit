@@ -51,6 +51,9 @@ import {
  * adapter has identical semantics and tests share fixtures.
  */
 export class MemoryStore implements StoreProvider {
+  isDurable(): boolean {
+    return false;
+  }
   private runs = new Map<string, Run.Run>();
   private events = new Map<string, Event.Event[]>();
   private audit: Event.Event[] = [];

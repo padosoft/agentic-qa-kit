@@ -68,6 +68,9 @@ const METHODOLOGY_ARTIFACT = createMethodologyArtifactEnvelope({
 });
 
 describe('MemoryStore', () => {
+  it('identifies its process-local durability boundary', () => {
+    assert.equal(new MemoryStore().isDurable?.(), false);
+  });
   it('round-trips a Run', async () => {
     const s = new MemoryStore();
     await s.saveRun(RUN);

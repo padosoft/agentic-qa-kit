@@ -2898,3 +2898,10 @@ caller can see different authorization surfaces depending on deployment mode.
   current data. The publish action must reuse the already loaded digest-bound
   envelope and proposal ID; it must not reconstruct or edit the payload in the
   browser.
+
+# 2026-09-19 — “Published” must state its durability boundary
+
+- The default admin process uses `MemoryStore` when no `AQA_STORE_DSN` is
+  configured. A successful write there is process-local, not restart-durable;
+  API responses and UI notices must expose that distinction instead of making
+  an unconditional enterprise evidence claim.

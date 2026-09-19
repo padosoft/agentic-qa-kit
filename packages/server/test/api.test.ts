@@ -481,6 +481,7 @@ describe('makeApi', () => {
       c,
     );
     assert.equal(response?.status, 201);
+    assert.equal((response?.body as { durability: string }).durability, 'ephemeral');
     const list = makeApi().find(
       (r) => r.method === 'GET' && r.path === '/api/methodology/artifacts',
     );

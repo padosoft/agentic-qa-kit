@@ -21,6 +21,11 @@
 - Next: define and implement durable retention/archive/expiry controls for
   methodology artifacts and decisions. The real provider/authenticated
   proposal-creation journey and external assurance remain deferred final gates.
+- Technical hardening after automated review: publication now reports the
+  store durability boundary (`durable` vs `ephemeral`), revision 1 renders an
+  explicit no-history state, the diff uses a real responsive two-column style,
+  and browser evidence asserts mock read-only behavior, tenant headers and the
+  exact published envelope.
 
 ## 2026-09-19 — Reasoned methodology rejection implemented
 

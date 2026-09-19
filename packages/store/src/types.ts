@@ -82,6 +82,8 @@ export function isScopedRecordKey(key: string): boolean {
  * remain visible only to an explicitly unscoped administrative migration.
  */
 export interface StoreProvider {
+  /** Whether records survive process restart through an operator-managed backend. */
+  isDurable?(): boolean;
   // ----- Runs -----
   saveRun(run: Run.Run): Promise<void>;
   loadRun(id: string): Promise<Run.Run | null>;

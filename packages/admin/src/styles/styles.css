@@ -1094,6 +1094,12 @@ hr {
   grid-template-columns: repeat(2, 1fr);
 }
 
+.methodology-diff-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .kpi {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

@@ -188,14 +188,19 @@ test('live approved methodology compares the previous revision and publishes it'
   await page.route('**/api/methodology/artifacts', async (route) => {
     if (route.request().method() === 'POST') {
       publishedBody = route.request().postDataJSON();
-      await route.fulfill({ status: 201, json: { artifact: approvedArtifact } });
+      await route.fulfill({
+        status: 201,
+        json: { artifact: approvedArtifact, durability: 'durable' },
+      });
       return;
     }
     await route.fulfill({ json: { artifacts: [] } });
   });
   await page.route('**/api/methodology/artifacts/**', async (route) => {
     const url = new URL(route.request().url());
-    expect(url.pathname).toContain('/1');
+    expect(url.pathname).toBe('/api/methodology/artifacts/risk-map-publish/1');
+    expect(route.request().headers()['x-aqa-org']).toBe('padosoft');
+    expect(route.request().headers()['x-aqa-project']).toBe('gescat');
     await route.fulfill({ json: { artifact: previousArtifact } });
   });
   await page.goto('/');
@@ -215,5 +220,43 @@ test('live approved methodology compares the previous revision and publishes it'
   );
   await page.locator('[data-testid="methodology-publish"]').click();
   await expect.poll(() => publishedBody?.proposal_id).toBe(approvedProposal.proposal_id);
+  expect(publishedBody?.artifact).toEqual(approvedArtifact);
   await expect(page.getByText('Publication recorded')).toBeVisible();
+});
+
+test('mock approved methodology remains read-only and never publishes', async ({ page }) => {
+  let publishCalls = 0;
+  await page.route('**/api/methodology/proposals**', async (route) => {
+    await route.fulfill({
+      json: {
+        proposals: [
+          {
+            ...proposal,
+            status: 'approved',
+            approval: {
+              approval_id: 'approval-demo',
+              proposal_id: proposal.proposal_id,
+              artifact_sha256: proposal.artifact_sha256,
+              revision: proposal.revision,
+              approved_by: 'reviewer',
+              approved_at: '2026-09-19T10:01:00.000Z',
+            },
+          },
+        ],
+      },
+    });
+  });
+  await page.route('**/api/methodology/artifacts', async (route) => {
+    publishCalls += 1;
+    await route.fulfill({ status: 500, json: { error: 'must not be called' } });
+  });
+  await page.goto('/');
+  const modePill = page.locator('.mode-pill').first();
+  if ((await modePill.getAttribute('class'))?.includes('live')) {
+    await modePill.click();
+    await modePill.click();
+  }
+  await page.locator('.nav-item', { hasText: /^Methodology review/ }).click();
+  await expect(page.locator('[data-testid="methodology-publish"]')).toHaveCount(0);
+  expect(publishCalls).toBe(0);
 });
