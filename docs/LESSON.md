@@ -2890,3 +2890,11 @@ caller can see different authorization surfaces depending on deployment mode.
 - TypeScript casts at a JSON API boundary do not strip unknown properties.
   Proposal and approval records need strict runtime allowlists, DLP checks and
   read-time validation before persistence or response serialization.
+# 2026-09-19 — Revision comparison must not invent history
+
+- A methodology diff is only evidence when the prior revision is loaded from
+  the tenant-scoped artifact API. For revision 1 or a missing revision, the UI
+  must show an explicit unavailable state rather than comparing against mock or
+  current data. The publish action must reuse the already loaded digest-bound
+  envelope and proposal ID; it must not reconstruct or edit the payload in the
+  browser.

@@ -13891,6 +13891,10 @@ function MethodologyStatusBadge({ status }) {
   return <span className={`badge ${cls}`}>{status}</span>;
 }
 
+function MethodologyJsonPanel({ title, artifact, empty }) {
+  return <div className="col gap-4"><div className="field-label">{title}</div><pre className="code-block" data-testid={`methodology-${title.toLowerCase().replaceAll(' ', '-')}`}>{artifact ? JSON.stringify(artifact, null, 2) : empty}</pre></div>;
+}
+
 const METHODOLOGY_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' };
 
 function PageMethodologyReview({ mode }) {
@@ -13904,6 +13908,9 @@ function PageMethodologyReview({ mode }) {
   const [artifact, setArtifact] = React.useState(null);
   const [artifactLoading, setArtifactLoading] = React.useState(false);
   const [artifactError, setArtifactError] = React.useState(null);
+  const [previousArtifact, setPreviousArtifact] = React.useState(null);
+  const [previousArtifactLoading, setPreviousArtifactLoading] = React.useState(false);
+  const [previousArtifactError, setPreviousArtifactError] = React.useState(null);
   const [reviewerId, setReviewerId] = React.useState(null);
   const [action, setAction] = React.useState(null);
   const [notice, setNotice] = React.useState(null);
@@ -13947,6 +13954,20 @@ function PageMethodologyReview({ mode }) {
     return () => { active = false; };
   }, [mode, selected]);
 
+  React.useEffect(() => {
+    if (!selected || mode !== 'live' || selected.revision <= 1) {
+      setPreviousArtifact(null); setPreviousArtifactError(null); setPreviousArtifactLoading(false);
+      return undefined;
+    }
+    let active = true;
+    setPreviousArtifact(null); setPreviousArtifactError(null); setPreviousArtifactLoading(true);
+    fetch(apiUrl(`/api/methodology/artifacts/${encodeURIComponent(selected.artifact_id)}/${selected.revision - 1}`), { headers: METHODOLOGY_HEADERS })
+      .then(async (res) => { const body = await res.json().catch(() => ({})); if (res.status === 404) return null; if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body.artifact || null; })
+      .then((value) => { if (active) { setPreviousArtifact(value); setPreviousArtifactLoading(false); } })
+      .catch((error) => { if (active) { setPreviousArtifactLoading(false); setPreviousArtifactError(error instanceof Error ? error.message : String(error)); } });
+    return () => { active = false; };
+  }, [mode, selected]);
+
   async function approve() {
     if (!selected || selected.status !== 'pending' || mode !== 'live' || !reviewerId || !artifact) return;
     setAction('approve'); setNotice(null);
@@ -13981,10 +14002,25 @@ function PageMethodologyReview({ mode }) {
     finally { setAction(null); }
   }
 
+  async function publish() {
+    if (!selected || selected.status !== 'approved' || mode !== 'live' || !artifact) return;
+    setAction('publish'); setNotice(null);
+    try {
+      const res = await fetch(apiUrl('/api/methodology/artifacts'), {
+        method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ artifact, proposal_id: selected.proposal_id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      setNotice({ kind: 'success', action: 'publish', text: 'Approved methodology revision published as durable evidence.' });
+    } catch (error) { setNotice({ kind: 'error', action: 'publish', text: error instanceof Error ? error.message : String(error) }); }
+    finally { setAction(null); }
+  }
+
   return (
     <div className="page" data-screen-label="09 Methodology review">
       <PageHeader title="Methodology review" sub="Review the exact digest-bound proposal before it can become durable evidence." badge="HUMAN GATE" actions={<button className="btn sm ghost" onClick={load}><I.Refresh size={12} /> Refresh</button>} />
-      {notice && <Alert kind={notice.kind} title={notice.kind === 'success' ? (notice.action === 'reject' ? 'Rejection recorded' : 'Approval recorded') : (notice.action === 'reject' ? 'Rejection failed' : 'Approval failed')}>{notice.text}</Alert>}
+      {notice && <Alert kind={notice.kind} title={notice.kind === 'success' ? (notice.action === 'reject' ? 'Rejection recorded' : notice.action === 'publish' ? 'Publication recorded' : 'Approval recorded') : (notice.action === 'reject' ? 'Rejection failed' : notice.action === 'publish' ? 'Publication failed' : 'Approval failed')}>{notice.text}</Alert>}
       {state.error && <Alert kind="error" title="Proposal queue unavailable">{state.error}</Alert>}
       {state.loading ? <div className="skeleton" style={{ height: 220 }} aria-label="Loading methodology proposals" /> : state.proposals.length === 0 ? <EmptyState icon={<I.Audit size={22} />} title="No methodology proposals" body="Agent-generated risk maps and reports will appear here when they request human review." /> : (
         <div className="dash-grid" style={{ marginTop: 16 }}>
@@ -13999,8 +14035,10 @@ function PageMethodologyReview({ mode }) {
                 <Alert kind="warning" title="Approval is exact and time-bounded">Verify the payload, identity and digest before approving. This action cannot be reused for another revision.</Alert>
                 <div className="grid-2"><div><div className="field-label">SHA-256 digest</div><code className="code-inline" data-testid="methodology-digest">{selected.artifact_sha256}</code></div><div><div className="field-label">Proposed at</div><span className="mono">{selected.proposed_at}</span></div></div>
                 <div><div className="field-label">Payload preview</div>{artifactLoading ? <div className="skeleton" style={{ height: 140 }} aria-label="Loading staged methodology payload" /> : <pre className="code-block" data-testid="methodology-payload">{JSON.stringify(artifact || { warning: artifactError || 'Staged payload unavailable; approval is disabled.' }, null, 2)}</pre>}</div>
+                {selected.revision > 1 && <div className="col gap-8" data-testid="methodology-revision-diff"><div className="field-label">Previous revision comparison</div>{previousArtifactLoading ? <div className="skeleton" style={{ height: 120 }} aria-label="Loading previous methodology revision" /> : previousArtifact ? <div className="grid-2"><MethodologyJsonPanel title={`Revision ${selected.revision - 1}`} artifact={previousArtifact} empty="Previous revision unavailable." /><MethodologyJsonPanel title={`Revision ${selected.revision}`} artifact={artifact} empty={artifactError || 'Current revision unavailable.'} /></div> : <div className="muted">{previousArtifactError || 'No published previous revision is available for comparison.'}</div>}</div>}
                 {selected.rejection && <Alert kind="error" title={`Rejected by ${selected.rejection.rejected_by}`}>{selected.rejection.reason}</Alert>}
 {selected.status === 'pending' && <div className="col gap-8"><label className="field-label" htmlFor="methodology-reject-reason">Reject reason *</label><textarea id="methodology-reject-reason" className="input" rows={3} maxLength={2000} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Explain the missing invariant, unsafe assumption or required correction." /><div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn danger" data-testid="methodology-reject" onClick={reject} disabled={action !== null || mode !== 'live' || !reviewerId || !rejectReason.trim()}><I.X size={12} />{action === 'reject' ? 'Rejecting…' : 'Reject with reason'}</button><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action !== null || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div></div>}
+                {selected.status === 'approved' && <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn primary" data-testid="methodology-publish" onClick={publish} disabled={action !== null || mode !== 'live' || artifactLoading || !artifact}>{action === 'publish' ? 'Publishing…' : 'Publish approved revision'}</button></div>}
               </div>
             </>}
           </div>

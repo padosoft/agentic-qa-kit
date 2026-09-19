@@ -115,3 +115,105 @@ test('mock methodology review cannot fabricate a rejection', async ({ page }) =>
   await reason.fill('Missing checkout invariant');
   await expect(page.locator('[data-testid="methodology-reject"]')).toBeDisabled();
 });
+
+test('live approved methodology compares the previous revision and publishes it', async ({
+  page,
+}) => {
+  let publishedBody: Record<string, unknown> | undefined;
+  const approvedProposal = {
+    ...proposal,
+    proposal_id: 'proposal-browser-publish',
+    artifact_id: 'risk-map-publish',
+    revision: 2,
+    artifact_sha256: 'b'.repeat(64),
+    status: 'approved',
+  };
+  const approvedArtifact = {
+    ...artifact,
+    artifact_id: 'risk-map-publish',
+    revision: 2,
+    artifact_sha256: 'b'.repeat(64),
+    payload: { risks: [{ id: 'checkout-total', severity: 'high' }] },
+  };
+  const previousArtifact = {
+    ...approvedArtifact,
+    revision: 1,
+    artifact_sha256: 'c'.repeat(64),
+    payload: { risks: [] },
+  };
+  await page.route('**/api/session', (route) =>
+    route.fulfill({
+      json: { user: { id: 'reviewer-browser', name: 'Reviewer', role: 'qa-lead' } },
+    }),
+  );
+  await page.route('**/api/methodology/proposals**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/proposal-browser-publish')) {
+      await route.fulfill({
+        json: {
+          proposal: {
+            proposal: approvedProposal,
+            artifact: approvedArtifact,
+            approval: {
+              approval_id: 'approval-publish',
+              proposal_id: approvedProposal.proposal_id,
+              artifact_sha256: approvedArtifact.artifact_sha256,
+              revision: 2,
+              approved_by: 'reviewer-browser',
+              approved_at: '2026-09-19T10:01:00.000Z',
+            },
+          },
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        proposals: [
+          {
+            proposal: approvedProposal,
+            approval: {
+              approval_id: 'approval-publish',
+              proposal_id: approvedProposal.proposal_id,
+              artifact_sha256: approvedArtifact.artifact_sha256,
+              revision: 2,
+              approved_by: 'reviewer-browser',
+              approved_at: '2026-09-19T10:01:00.000Z',
+            },
+          },
+        ],
+      },
+    });
+  });
+  await page.route('**/api/methodology/artifacts', async (route) => {
+    if (route.request().method() === 'POST') {
+      publishedBody = route.request().postDataJSON();
+      await route.fulfill({ status: 201, json: { artifact: approvedArtifact } });
+      return;
+    }
+    await route.fulfill({ json: { artifacts: [] } });
+  });
+  await page.route('**/api/methodology/artifacts/**', async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.pathname).toContain('/1');
+    await route.fulfill({ json: { artifact: previousArtifact } });
+  });
+  await page.goto('/');
+  const modePill = page.locator('.mode-pill').first();
+  const modeClass = await modePill.getAttribute('class');
+  if (modeClass?.includes('failed')) {
+    await modePill.click();
+    await modePill.click();
+  } else if (modeClass?.includes('mock')) await modePill.click();
+  await expect(modePill).toHaveClass(/live/);
+  await page.locator('.nav-item', { hasText: /^Methodology review/ }).click();
+  await expect(page.locator('[data-testid="methodology-revision-diff"]')).toContainText(
+    'Revision 1',
+  );
+  await expect(page.locator('[data-testid="methodology-revision-diff"]')).toContainText(
+    'checkout-total',
+  );
+  await page.locator('[data-testid="methodology-publish"]').click();
+  await expect.poll(() => publishedBody?.proposal_id).toBe(approvedProposal.proposal_id);
+  await expect(page.getByText('Publication recorded')).toBeVisible();
+});

@@ -9,6 +9,19 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Methodology diff and publication UI implemented
+
+- Added a live, tenant-scoped previous-revision comparison in the admin review
+  workspace. Revision `N` loads only the published `N-1` artifact; revision 1
+  and missing previous revisions fail closed with an explicit empty state.
+- Added the live `approved → publish` action. It sends the exact staged payload
+  and proposal ID to the existing approval-bound publication API; mock mode
+  remains unable to publish. Browser evidence: methodology review **3/3
+  passed**, including previous-revision comparison and publication request.
+- Next: define and implement durable retention/archive/expiry controls for
+  methodology artifacts and decisions. The real provider/authenticated
+  proposal-creation journey and external assurance remain deferred final gates.
+
 ## 2026-09-19 — Reasoned methodology rejection implemented
 
 - Added a durable `pending → rejected` transition with an independent
