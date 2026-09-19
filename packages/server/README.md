@@ -45,6 +45,16 @@ complete persisted `oracle_evaluated` event groups through
 `@aqa/methodology`; incomplete scenario evidence is omitted rather than
 reported as a pass.
 
+Methodology revisions are exposed through the tenant-scoped
+`GET /api/methodology/artifacts` and
+`GET /api/methodology/artifacts/:id/:revision` routes. Publication through
+`POST /api/methodology/artifacts` requires `risk-map:edit`, a validated
+digest-bound envelope, a matching proposal, and an independent approval whose
+actor is the authenticated user. The host must also provide a trusted proposal
+origin verifier; without it publication fails closed. Bare payloads and
+mismatched approvals are rejected; durable proposal workflow and the admin
+review console are the next roadmap slice.
+
 The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick
 using `AQA_BUDGET_LEDGER_DSN`. It is intended for a Kubernetes CronJob or
 systemd timer; it prints only a bounded count and fails when the DSN is absent.

@@ -5,7 +5,16 @@ import { ScimProvisioner } from '@aqa/auth';
 import type { ScimDirectory, ScimDirectoryUser, ScimUserResource } from '@aqa/auth';
 import { verifyEventChain } from '@aqa/compliance';
 import type { BudgetHaltController } from '@aqa/cost';
-import { measureRiskCoverage } from '@aqa/methodology';
+import {
+  assertMethodologyApproval,
+  measureRiskCoverage,
+  parseMethodologyArtifactEnvelope,
+} from '@aqa/methodology';
+import type {
+  MethodologyApproval,
+  MethodologyArtifactKind,
+  MethodologyProposal,
+} from '@aqa/methodology';
 import { safeErrorMessage } from '@aqa/observability';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
@@ -74,6 +83,12 @@ export interface ApiContext {
   scimRateLimit?: (org: string) => Promise<boolean> | boolean;
   /** Trusted Ed25519 pack keys keyed by operator-managed key_id. */
   packTrustedKeys?: Readonly<Record<string, string>>;
+  /** Host-owned verification of the proposal origin before publication. */
+  verifyMethodologyProposal?: (
+    proposal: MethodologyProposal,
+    artifact: ReturnType<typeof parseMethodologyArtifactEnvelope>,
+    scope: { org: string; project: string },
+  ) => Promise<boolean>;
   /** Require every imported pack to declare a verifiable signature. Defaults true. */
   packRequireSignature?: boolean;
   /** Required policy when a pack declares a Sigstore bundle. */
@@ -1280,6 +1295,109 @@ export function makeApi(): ApiHandler[] {
           runs: observations,
         });
         return asResponse({ coverage, generated_at: new Date().toISOString() });
+      },
+    },
+
+    // ============ Methodology artifacts ============
+    {
+      method: 'GET',
+      path: '/api/methodology/artifacts',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const kind = req.query?.kind ?? req.params.kind;
+        const supportedKinds: ReadonlyArray<MethodologyArtifactKind> = [
+          'risk_map',
+          'attack_tree',
+          'fmea_report',
+          'coverage_report',
+        ];
+        if (
+          kind !== undefined &&
+          (!kind || !supportedKinds.includes(kind as MethodologyArtifactKind))
+        )
+          return { status: 400, body: { error: 'invalid methodology artifact kind' } };
+        const artifacts = await ctx.store.listMethodologyArtifacts({
+          org: s.org,
+          project: s.project,
+          ...(typeof kind === 'string' && kind.length > 0
+            ? { artifact_kind: kind as MethodologyArtifactKind }
+            : {}),
+        });
+        return asResponse({ artifacts });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/methodology/artifacts/:id/:revision',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const id = req.params.id;
+        const revision = Number(req.params.revision);
+        if (!id || !Number.isSafeInteger(revision) || revision < 1)
+          return notFound('methodology artifact');
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const artifact = await ctx.store.loadMethodologyArtifact(id, revision, s);
+        return artifact ? asResponse({ artifact }) : notFound('methodology artifact');
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/artifacts',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body))
+          return { status: 400, body: { error: 'methodology publication body must be an object' } };
+        const body = req.body as {
+          artifact?: unknown;
+          proposal?: unknown;
+          approval?: unknown;
+        };
+        if (!body.artifact || !body.proposal || !body.approval)
+          return {
+            status: 400,
+            body: { error: 'artifact, proposal and approval are required' },
+          };
+        let artifact: ReturnType<typeof parseMethodologyArtifactEnvelope>;
+        try {
+          artifact = parseMethodologyArtifactEnvelope(JSON.stringify(body.artifact));
+          const proposal = body.proposal as MethodologyProposal;
+          const approval = body.approval as MethodologyApproval;
+          if (
+            proposal.artifact_kind !== artifact.artifact_kind ||
+            proposal.artifact_id !== artifact.artifact_id ||
+            proposal.revision !== artifact.revision ||
+            proposal.artifact_sha256 !== artifact.artifact_sha256
+          )
+            throw new Error('methodology proposal does not bind to artifact');
+          if (approval.approved_by !== user.id)
+            throw new Error('methodology approval actor does not match authenticated user');
+          assertMethodologyApproval(proposal, approval);
+          if (
+            !ctx.verifyMethodologyProposal ||
+            !(await ctx.verifyMethodologyProposal(proposal, artifact, s))
+          )
+            throw new Error('methodology proposal origin is not trusted by the host');
+        } catch (error) {
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology publication rejected') },
+          };
+        }
+        try {
+          await ctx.store.saveMethodologyArtifact(artifact, s);
+        } catch (error) {
+          if (error instanceof Error && /conflict|already exists/i.test(error.message))
+            return { status: 409, body: { error: 'methodology artifact revision conflict' } };
+          throw error;
+        }
+        return asResponse({ artifact }, 201);
       },
     },
 

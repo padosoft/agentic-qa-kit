@@ -9,6 +9,20 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Authenticated methodology publication API
+
+- Added ADR-281 and tenant-scoped methodology list/detail routes plus an
+  approval-bound publication route. The API validates the envelope and DLP
+  boundary, binds proposal kind/id/revision/digest, requires `risk-map:edit`,
+  checks independent approval, authenticated reviewer identity and a
+  host-owned proposal-origin verifier, and keeps idempotent/conflicting
+  revisions safe through the durable store. The HTTP adapter's query/params
+  boundary is covered, including invalid kind filtering and digest conflicts.
+- Server evidence: **147 tests passed / 0 failed / 1 intentional Postgres DSN
+  skip**, typecheck and Biome passed. Next: durable pending proposal/approval
+  records and the admin review/diff UI; external provider and assurance gates
+  remain deferred-final-gate.
+
 ## 2026-09-19 — Versioned methodology artifact envelope
 
 - Added ADR-279 and a provider-neutral envelope for methodology artifacts: bounded canonical payload, schema version, stable identity, revision, UTC timestamp, SHA-256 digest, and attack-tree validation on create/reload.
