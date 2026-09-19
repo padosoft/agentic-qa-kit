@@ -235,10 +235,16 @@ test('live approved methodology compares the previous revision and publishes it'
 });
 
 test('live revision one shows an explicit no-history state', async ({ page }) => {
-  const revisionOne = { ...proposal, proposal_id: 'proposal-browser-revision-one', status: 'approved' };
+  const revisionOne = {
+    ...proposal,
+    proposal_id: 'proposal-browser-revision-one',
+    status: 'approved',
+  };
   const revisionOneArtifact = { ...artifact, payload: { risks: [] } };
   await page.route('**/api/session', (route) =>
-    route.fulfill({ json: { user: { id: 'reviewer-browser', name: 'Reviewer', role: 'qa-lead' } } }),
+    route.fulfill({
+      json: { user: { id: 'reviewer-browser', name: 'Reviewer', role: 'qa-lead' } },
+    }),
   );
   await page.route('**/api/methodology/proposals**', async (route) => {
     const url = new URL(route.request().url());
