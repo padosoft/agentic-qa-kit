@@ -11,6 +11,12 @@
 
 ## 2026-09-19
 
+- **Aligned review governance with the operator decision.** `AGENTS.md`,
+  `docs/RULES.md` and Copilot instructions now make Copilot review the default,
+  while permitting an explicit documented operator opt-out; technical CI and
+  the human branch-protection review remain mandatory. This prevents process
+  docs from contradicting the active operating instruction.
+
 - **Re-audited live external readiness.** GitHub currently exposes only the
   `copilot` Environment, no provider credentials in the repository secret
   listing, and no protection on `main` (`404 Branch not protected`). No Stripe,

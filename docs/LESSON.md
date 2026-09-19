@@ -2792,3 +2792,10 @@ Before running manual provider workflows, inspect the live GitHub Environments,
 secret names and branch protection. A checked-in workflow with no protected
 environment is only an executable procedure, not a failed provider journey or
 a production-readiness proof.
+
+# 2026-09-19 — Explicit reviewer opt-out must be documented
+
+Review automation defaults and operator instructions can conflict. Keep the
+default reviewer policy, but make an explicit opt-out a recorded exception and
+never let it weaken technical CI or the independent human approval required by
+protected `main`.
