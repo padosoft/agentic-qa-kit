@@ -1,3 +1,7 @@
+import {
+  type MethodologyArtifactEnvelope,
+  parseMethodologyArtifactEnvelope,
+} from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
   Agent,
@@ -36,6 +40,7 @@ type Kind =
   | 'pack'
   | 'profile'
   | 'risk'
+  | 'methodology_artifact'
   | 'scenario'
   | 'agent'
   | 'notification'
@@ -412,6 +417,61 @@ export class PostgresStore implements StoreProvider {
   }
   async deleteRisk(id: string, scope?: StoreScope): Promise<void> {
     await this.remove('risk', id, scope);
+  }
+
+  // ----- Methodology artifacts -----
+  async listMethodologyArtifacts(
+    opts: {
+      org?: string;
+      project?: string;
+      artifact_kind?: MethodologyArtifactEnvelope['artifact_kind'];
+    } = {},
+  ): Promise<MethodologyArtifactEnvelope[]> {
+    const out = this.values<MethodologyArtifactEnvelope>(
+      await this.many('methodology_artifact', opts),
+    );
+    const filtered = opts.artifact_kind
+      ? out.filter((artifact) => artifact.artifact_kind === opts.artifact_kind)
+      : out;
+    return filtered.sort((a, b) =>
+      a.artifact_id === b.artifact_id
+        ? b.revision - a.revision
+        : a.artifact_id.localeCompare(b.artifact_id),
+    );
+  }
+  async loadMethodologyArtifact(
+    artifactId: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactEnvelope | null> {
+    return this.payload(await this.one('methodology_artifact', `${artifactId}@${revision}`, scope));
+  }
+  async saveMethodologyArtifact(
+    artifact: MethodologyArtifactEnvelope,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const key = `${validated.artifact_id}@${validated.revision}`;
+    await this.wait();
+    const rows = await this.q<{ record_key: string }>(
+      'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key',
+      [
+        'methodology_artifact',
+        scopedRecordKey(key, scope),
+        scope?.org ?? null,
+        scope?.project ?? null,
+        JSON.stringify(validated),
+      ],
+    );
+    if (rows.length === 0) {
+      const existing = await this.loadMethodologyArtifact(
+        validated.artifact_id,
+        validated.revision,
+        scope,
+      );
+      if (!existing || existing.artifact_sha256 !== validated.artifact_sha256)
+        throw new Error('methodology artifact revision conflict');
+    }
   }
   async listScenarios(
     opts: { risk_id?: string; org?: string; project?: string } = {},

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { createMethodologyArtifactEnvelope, methodologyArtifactSha256 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
 
 const RUN = {
@@ -48,6 +49,19 @@ const FINDING = {
   evidence: [],
   tags: [],
 };
+
+const METHODOLOGY_ARTIFACT = createMethodologyArtifactEnvelope({
+  artifact_kind: 'attack_tree',
+  artifact_id: 'checkout-tree',
+  revision: 1,
+  created_at: '2026-09-19T14:00:00.000Z',
+  payload: {
+    id: 'attack-checkout',
+    kind: 'node',
+    operator: 'any',
+    children: [{ id: 'checkout-payment', kind: 'leaf', statement: 'Payment is captured twice' }],
+  },
+});
 
 describe('MemoryStore', () => {
   it('round-trips a Run', async () => {
@@ -313,6 +327,39 @@ describe('MemoryStore', () => {
       'Other User',
     );
     assert.equal((await s.listUsers({ org: 'org-a', project: 'other' })).length, 0);
+  });
+
+  it('persists immutable methodology revisions by tenant scope', async () => {
+    const s = new MemoryStore();
+    await s.saveMethodologyArtifact(METHODOLOGY_ARTIFACT, { org: 'org-a', project: 'shop' });
+    await s.saveMethodologyArtifact(
+      { ...METHODOLOGY_ARTIFACT, revision: 2 },
+      {
+        org: 'org-a',
+        project: 'shop',
+      },
+    );
+    assert.equal((await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' })).length, 2);
+    assert.equal(
+      await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-b', project: 'shop' }),
+      null,
+    );
+    const conflictingPayload = {
+      ...(METHODOLOGY_ARTIFACT.payload as Record<string, unknown>),
+      id: 'attack-conflict',
+    };
+    await assert.rejects(
+      () =>
+        s.saveMethodologyArtifact(
+          {
+            ...METHODOLOGY_ARTIFACT,
+            payload: conflictingPayload,
+            artifact_sha256: methodologyArtifactSha256(conflictingPayload),
+          },
+          { org: 'org-a', project: 'shop' },
+        ),
+      /revision conflict/,
+    );
   });
 });
 

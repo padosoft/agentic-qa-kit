@@ -14,6 +14,11 @@
 - Added ADR-279 and a provider-neutral envelope for methodology artifacts: bounded canonical payload, schema version, stable identity, revision, UTC timestamp, SHA-256 digest, and attack-tree validation on create/reload.
 - Added tamper, schema-drift, malformed-tree, and round-trip tests. Durable Postgres/S3 persistence, tenant authorization, migrations, retention, and admin visualization remain the next local slices; external evidence gates remain deferred to final promotion.
 
+## 2026-09-19 — Durable methodology artifact store
+
+- Added ADR-280 and `StoreProvider` methods for immutable methodology revisions. `MemoryStore` and `PostgresStore` now revalidate envelopes, isolate records by tenant scope, retain revisions, support idempotent replays, and reject same-revision digest conflicts atomically in Postgres.
+- Store package evidence: typecheck passed, 20 tests passed and 1 provider test skipped without DSN; Biome and diff checks passed. Next: authenticated API/control-plane publication and admin review UI, then retention/archive policy.
+
 ## 2026-09-19
 
 - **Added methodology approval governance.** Agent-generated risk maps,

@@ -247,6 +247,7 @@
       "name": "@aqa/store",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/methodology": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "postgres": "^3.4.9",
       },

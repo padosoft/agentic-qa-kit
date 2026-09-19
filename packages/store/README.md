@@ -12,6 +12,14 @@ Storage abstraction. Single `StoreProvider` interface; two adapters:
 
 Swap adapter via configuration; the runner only depends on `StoreProvider`.
 
+Methodology artifacts use `saveMethodologyArtifact`,
+`loadMethodologyArtifact` and `listMethodologyArtifacts`. Both adapters
+re-validate the versioned envelope before persistence, isolate records by
+`org`/`project`, retain every revision, and reject a second payload for the
+same artifact revision. Postgres uses an atomic insert-on-conflict boundary;
+provider retention, authorization middleware and UI approval remain above this
+storage contract.
+
 Legacy global configuration is never exposed through scoped reads. An
 administrator can explicitly move packs, profiles, risks and scenarios to a
 tenant with `migrateLegacyConfiguration({ org, project })`; the operation is

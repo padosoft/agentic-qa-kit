@@ -2817,3 +2817,6 @@ release safety but must never be reported as a successful provider journey.
 ## 2026-09-19 — Validate TypeScript unions again at JSON boundaries
 
 TypeScript unions disappear at runtime, so persisted or HTTP-loaded methodology records must validate schema version, enums, status, canonical UTC timestamps, digests, and expiry explicitly. Approval should fail closed both when issued and when consumed; otherwise a record can appear valid at creation time but already be unusable or misleading.
+## 2026-09-19 — Immutable methodology storage needs an atomic revision key
+
+An approval digest is not enough if storage can overwrite the approved payload. The durable key must include the artifact identity and revision; duplicate writes with the same digest are idempotent, while a different digest at the same revision is a conflict. PostgreSQL must use an atomic insert boundary rather than a check-then-update sequence, or concurrent writers can silently replace evidence.
