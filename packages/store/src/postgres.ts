@@ -703,6 +703,10 @@ export class PostgresStore implements StoreProvider {
         const lifecycleKey = row.record_key;
         const tenantOrg = scope?.org ?? row.org ?? null;
         const tenantProject = scope?.project ?? row.project ?? null;
+        const artifactKey = scopedRecordKey(`${current.artifact_id}@${current.revision}`, {
+          ...(tenantOrg ? { org: tenantOrg } : {}),
+          ...(tenantProject ? { project: tenantProject } : {}),
+        });
         if (
           !current.legal_hold &&
           current.state === 'active' &&
@@ -726,8 +730,8 @@ export class PostgresStore implements StoreProvider {
           lifecycleKey,
         ]);
         await query(
-          `DELETE FROM aqa_store_records WHERE kind = 'methodology_artifact' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->>'artifact_id' = $3 AND (payload->>'revision')::integer = $4`,
-          [tenantOrg, tenantProject, current.artifact_id, current.revision],
+          `DELETE FROM aqa_store_records WHERE kind = 'methodology_artifact' AND (record_key = $1 OR (org IS NOT DISTINCT FROM $2 AND project IS NOT DISTINCT FROM $3 AND payload->>'artifact_id' = $4 AND (payload->>'revision')::integer = $5))`,
+          [artifactKey, tenantOrg, tenantProject, current.artifact_id, current.revision],
         );
         await query(
           `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
