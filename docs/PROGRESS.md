@@ -9,6 +9,21 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Reasoned methodology rejection implemented
+
+- Added a durable `pending → rejected` transition with an independent
+  authenticated reviewer, a bounded reason, DLP validation, strict parsing and
+  conflict-safe Memory/Postgres persistence. Rejected records retain the
+  staged envelope and cannot also contain an approval.
+- Added the server route and live admin action; mock mode remains read-only.
+  Local methodology **30 passed**, store **21 passed / 1 intentional provider
+  skip**, server **147 passed / 0 failed / 1 intentional Postgres DSN skip**;
+  workspace typecheck/lint and admin build/typecheck passed.
+- Next: implement previous-revision side-by-side diff and the live
+  approve → publish journey, then retention/archive controls. Provider-backed
+  evidence, penetration testing and independent assurance remain deferred final
+  promotion gates by explicit owner decision.
+
 ## 2026-09-19 — Methodology review slice merged
 
 - PR #231 merged after protected hosted CI passed: PostgreSQL 16, S3, OCI,

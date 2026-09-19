@@ -3,6 +3,8 @@ import type {
   MethodologyApprovalResult,
   MethodologyArtifactEnvelope,
   MethodologyProposal,
+  MethodologyRejection,
+  MethodologyRejectionResult,
 } from '@aqa/methodology';
 import type {
   Agent,
@@ -52,6 +54,7 @@ export interface MethodologyProposalRecord {
   /** Bounded, DLP-checked payload staged for human review before approval. */
   artifact?: MethodologyArtifactEnvelope;
   approval?: MethodologyApproval;
+  rejection?: MethodologyRejection;
 }
 
 /** Stable key namespace for tenant-scoped resources while preserving legacy keys. */
@@ -194,6 +197,11 @@ export interface StoreProvider {
     approval: MethodologyApproval,
     scope?: StoreScope,
   ): Promise<MethodologyApprovalResult | null>;
+  rejectMethodologyProposal(
+    proposalId: string,
+    rejection: MethodologyRejection,
+    scope?: StoreScope,
+  ): Promise<MethodologyRejectionResult | null>;
 
   // ----- Scenarios -----
   listScenarios(opts?: {

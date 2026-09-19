@@ -53,11 +53,14 @@ retains its bounded, DLP-checked envelope for review. The list route returns
 metadata only; `GET /api/methodology/proposals/:id` returns the exact staged
 envelope to an authorized reviewer. `POST /api/methodology/proposals/:id/approve`
 performs the durable independent approval transition. `POST
+/api/methodology/proposals/:id/reject` performs the durable independent
+ rejection transition and requires a bounded, DLP-checked reason. Rejection is
+ terminal and cannot be issued by the proposer. `POST
 /api/methodology/artifacts` then accepts only the approved proposal ID plus its
 exact envelope. Agent-origin proposals require a host-owned verifier; bare
 payloads, forged identities and mismatched approvals are rejected. The admin
-console now exposes the review queue and digest-bound approval action; the
-complete authenticated browser journey, reject reasons, revision diff and
+console now exposes the review queue, digest-bound approval action and reasoned
+rejection action; the complete authenticated browser journey, revision diff and
 retention/archive policy remain roadmap work.
 
 The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick

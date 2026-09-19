@@ -428,6 +428,36 @@ describe('makeApi', () => {
     const approve = makeApi().find(
       (r) => r.method === 'POST' && r.path === '/api/methodology/proposals/:id/approve',
     );
+    const reject = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/methodology/proposals/:id/reject',
+    );
+    const rejectedProposal = { ...proposal, proposal_id: 'proposal-checkout-tree-rejected' };
+    const rejectedProposalResponse = await propose?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal: rejectedProposal } },
+      c,
+    );
+    assert.equal(rejectedProposalResponse?.status, 201);
+    const rejectedResponse = await reject?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: rejectedProposal.proposal_id },
+        body: {
+          schema_version: '1',
+          rejection_id: 'rejection-checkout-tree',
+          proposal_id: rejectedProposal.proposal_id,
+          rejected_by: FAKE_USER.id,
+          rejected_at: '2026-09-18T10:02:00.000Z',
+          reason: 'The generated tree omits the provider callback invariant.',
+        },
+      },
+      c,
+    );
+    assert.equal(rejectedResponse?.status, 200);
+    const rejectedProposals = await proposalList?.handle(
+      { headers: TENANT_HEADERS, params: {}, query: { status: 'rejected' } },
+      c,
+    );
+    assert.equal((rejectedProposals?.body as { proposals: unknown[] }).proposals.length, 1);
     const approved = await approve?.handle(
       {
         headers: TENANT_HEADERS,

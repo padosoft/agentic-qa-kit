@@ -13907,6 +13907,7 @@ function PageMethodologyReview({ mode }) {
   const [reviewerId, setReviewerId] = React.useState(null);
   const [action, setAction] = React.useState(null);
   const [notice, setNotice] = React.useState(null);
+  const [rejectReason, setRejectReason] = React.useState('');
 
   const load = React.useCallback(() => {
     if (mode !== 'live') {
@@ -13963,6 +13964,22 @@ function PageMethodologyReview({ mode }) {
     finally { setAction(null); }
   }
 
+  async function reject() {
+    if (!selected || selected.status !== 'pending' || mode !== 'live' || !reviewerId || !rejectReason.trim()) return;
+    setAction('reject'); setNotice(null);
+    try {
+      const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/reject`), {
+        method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ schema_version: '1', rejection_id: `rejection-${Date.now()}`, proposal_id: selected.proposal_id, rejected_by: reviewerId, rejected_at: new Date().toISOString(), reason: rejectReason.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      setNotice({ kind: 'success', text: 'Proposal rejected with an auditable reason.' });
+      setRejectReason(''); load();
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) }); }
+    finally { setAction(null); }
+  }
+
   return (
     <div className="page" data-screen-label="09 Methodology review">
       <PageHeader title="Methodology review" sub="Review the exact digest-bound proposal before it can become durable evidence." badge="HUMAN GATE" actions={<button className="btn sm ghost" onClick={load}><I.Refresh size={12} /> Refresh</button>} />
@@ -13981,7 +13998,8 @@ function PageMethodologyReview({ mode }) {
                 <Alert kind="warning" title="Approval is exact and time-bounded">Verify the payload, identity and digest before approving. This action cannot be reused for another revision.</Alert>
                 <div className="grid-2"><div><div className="field-label">SHA-256 digest</div><code className="code-inline" data-testid="methodology-digest">{selected.artifact_sha256}</code></div><div><div className="field-label">Proposed at</div><span className="mono">{selected.proposed_at}</span></div></div>
                 <div><div className="field-label">Payload preview</div>{artifactLoading ? <div className="skeleton" style={{ height: 140 }} aria-label="Loading staged methodology payload" /> : <pre className="code-block" data-testid="methodology-payload">{JSON.stringify(artifact || { warning: artifactError || 'Staged payload unavailable; approval is disabled.' }, null, 2)}</pre>}</div>
-                {selected.status === 'pending' && <div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action === 'approve' || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div>}
+                {selected.rejection && <Alert kind="error" title={`Rejected by ${selected.rejection.rejected_by}`}>{selected.rejection.reason}</Alert>}
+                {selected.status === 'pending' && <div className="col gap-8"><label className="field-label" htmlFor="methodology-reject-reason">Reject reason *</label><textarea id="methodology-reject-reason" className="input" rows={3} maxLength={2000} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Explain the missing invariant, unsafe assumption or required correction." /><div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn danger" data-testid="methodology-reject" onClick={reject} disabled={action === 'reject' || mode !== 'live' || !reviewerId || !rejectReason.trim()}><I.X size={12} />{action === 'reject' ? 'Rejecting…' : 'Reject with reason'}</button><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action === 'approve' || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div></div>}
               </div>
             </>}
           </div>

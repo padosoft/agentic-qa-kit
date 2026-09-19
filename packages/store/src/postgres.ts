@@ -3,11 +3,15 @@ import {
   type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
   type MethodologyProposal,
+  type MethodologyRejection,
+  type MethodologyRejectionResult,
   approveMethodologyProposal,
   assertMethodologyProposal,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
   parseMethodologyProposal,
+  parseMethodologyRejection,
+  rejectMethodologyProposal,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -580,6 +584,34 @@ export class PostgresStore implements StoreProvider {
     if (rows.length === 0) throw new Error('methodology proposal approval conflict');
     return result;
   }
+  async rejectMethodologyProposal(
+    proposalId: string,
+    rejection: MethodologyRejection,
+    scope?: StoreScope,
+  ): Promise<MethodologyRejectionResult | null> {
+    const current = await this.loadMethodologyProposal(proposalId, scope);
+    if (!current) return null;
+    const result = rejectMethodologyProposal(
+      current.proposal,
+      parseMethodologyRejection(rejection),
+    );
+    await this.wait();
+    const rows = await this.q<{ payload: unknown }>(
+      'UPDATE aqa_store_records SET payload = $4::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2 AND payload = $3::jsonb RETURNING payload',
+      [
+        'methodology_proposal',
+        scopedRecordKey(proposalId, scope),
+        JSON.stringify(current),
+        JSON.stringify({
+          proposal: result.proposal,
+          ...(current.artifact ? { artifact: current.artifact } : {}),
+          rejection: result.rejection,
+        }),
+      ],
+    );
+    if (rows.length === 0) throw new Error('methodology proposal rejection conflict');
+    return result;
+  }
   async listScenarios(
     opts: { risk_id?: string; org?: string; project?: string } = {},
   ): Promise<Scenario.Scenario[]> {
@@ -819,10 +851,16 @@ export class PostgresStore implements StoreProvider {
 function parseMethodologyProposalRecord(input: unknown): MethodologyProposalRecord {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new Error('methodology proposal record must be an object');
-  const record = input as { proposal?: unknown; artifact?: unknown; approval?: unknown };
+  const record = input as {
+    proposal?: unknown;
+    artifact?: unknown;
+    approval?: unknown;
+    rejection?: unknown;
+  };
   if (
     Object.keys(record).some(
-      (key) => key !== 'proposal' && key !== 'artifact' && key !== 'approval',
+      (key) =>
+        key !== 'proposal' && key !== 'artifact' && key !== 'approval' && key !== 'rejection',
     )
   )
     throw new Error('methodology proposal record contains an unknown field');
@@ -833,6 +871,8 @@ function parseMethodologyProposalRecord(input: unknown): MethodologyProposalReco
       : parseMethodologyArtifactEnvelope(JSON.stringify(record.artifact));
   const approval =
     record.approval === undefined ? undefined : parseMethodologyApproval(record.approval);
+  const rejection =
+    record.rejection === undefined ? undefined : parseMethodologyRejection(record.rejection);
   if (
     artifact &&
     (artifact.artifact_kind !== proposal.artifact_kind ||
@@ -841,5 +881,11 @@ function parseMethodologyProposalRecord(input: unknown): MethodologyProposalReco
       artifact.artifact_sha256 !== proposal.artifact_sha256)
   )
     throw new Error('methodology proposal record artifact binding mismatch');
-  return { proposal, ...(artifact ? { artifact } : {}), ...(approval ? { approval } : {}) };
+  if (approval && rejection) throw new Error('methodology proposal record has two decisions');
+  return {
+    proposal,
+    ...(artifact ? { artifact } : {}),
+    ...(approval ? { approval } : {}),
+    ...(rejection ? { rejection } : {}),
+  };
 }

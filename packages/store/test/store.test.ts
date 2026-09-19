@@ -439,6 +439,26 @@ describe('MemoryStore', () => {
       () => s.approveMethodologyProposal(proposal.proposal_id, approval, scope),
       /not pending/,
     );
+    const rejectedProposal = { ...proposal, proposal_id: 'proposal-reject-memory' };
+    await s.saveMethodologyProposal(rejectedProposal, scope, METHODOLOGY_ARTIFACT);
+    const rejection = {
+      schema_version: '1' as const,
+      rejection_id: 'rejection-memory',
+      proposal_id: rejectedProposal.proposal_id,
+      rejected_by: 'reviewer-1',
+      rejected_at: '2026-09-18T10:03:00.000Z',
+      reason: 'Missing payment callback invariant',
+    };
+    const rejected = await s.rejectMethodologyProposal(
+      rejectedProposal.proposal_id,
+      rejection,
+      scope,
+    );
+    assert.equal(rejected?.proposal.status, 'rejected');
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(rejectedProposal.proposal_id, scope))?.rejection,
+      rejection,
+    );
   });
 });
 

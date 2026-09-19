@@ -7,6 +7,7 @@ import {
   methodologyArtifactSha256,
   parseMethodologyApproval,
   parseMethodologyProposal,
+  rejectMethodologyProposal,
 } from '../dist/index.js';
 
 const artifact = { risks: [{ id: 'r-1', severity: 'high' }], version: 1 };
@@ -137,6 +138,29 @@ describe('methodology governance', () => {
       /expires_at must be a string/,
     );
     assert.throws(() => parseMethodologyProposal({ ...p, untrusted: 'secret' }), /unknown field/);
+  });
+
+  it('requires a reasoned independent rejection and preserves the decision binding', () => {
+    const p = proposal();
+    const rejection = {
+      schema_version: '1' as const,
+      rejection_id: 'rejection-1',
+      proposal_id: p.proposal_id,
+      rejected_by: 'operator-a',
+      rejected_at: '2026-09-19T10:02:00.000Z',
+      reason: 'The generated risk map omits the payment provider callback invariant.',
+    };
+    const result = rejectMethodologyProposal(p, rejection, new Date('2026-09-19T12:00:00.000Z'));
+    assert.equal(result.proposal.status, 'rejected');
+    assert.deepEqual(result.rejection, rejection);
+    assert.throws(
+      () => rejectMethodologyProposal(p, { ...rejection, reason: ' ' }),
+      /reason is invalid/,
+    );
+    assert.throws(
+      () => rejectMethodologyProposal(p, { ...rejection, rejected_by: p.proposed_by }),
+      /independent reviewer/,
+    );
   });
 });
 

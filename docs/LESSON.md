@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-19 — Rejection must be a first-class terminal decision
+
+A review queue that supports approval but only informal dismissal loses the
+reason, actor and audit boundary needed to explain why generated methodology
+was not accepted. Persist rejection as a mutually exclusive decision with a
+bounded DLP-checked reason, require an independent reviewer, preserve the
+staged evidence and make the UI action live-only. This keeps rejection
+auditable without allowing mock mode or a later approval to rewrite history.
+
 # 2026-09-19 — A live UI must bind tenant and principal context explicitly
 
 An admin page can look correct in mock mode while every live request is
