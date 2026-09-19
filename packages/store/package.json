@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@aqa/methodology": "workspace:*",
+    "@aqa/observability": "workspace:*",
     "@aqa/schemas": "workspace:*",
     "postgres": "^3.4.9"
   },

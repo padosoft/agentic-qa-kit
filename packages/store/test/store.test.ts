@@ -340,6 +340,29 @@ describe('MemoryStore', () => {
       },
     );
     assert.equal((await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' })).length, 2);
+    const loaded = await s.loadMethodologyArtifact('checkout-tree', 1, {
+      org: 'org-a',
+      project: 'shop',
+    });
+    assert.ok(loaded);
+    (loaded.payload as Record<string, unknown>).id = 'caller-mutated';
+    assert.equal(
+      (
+        (await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-a', project: 'shop' }))
+          ?.payload as Record<string, unknown>
+      ).id,
+      'attack-checkout',
+    );
+    const listed = await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' });
+    assert.ok(listed[0]);
+    (listed[0].payload as Record<string, unknown>).id = 'list-mutated';
+    assert.equal(
+      (
+        (await s.loadMethodologyArtifact('checkout-tree', 2, { org: 'org-a', project: 'shop' }))
+          ?.payload as Record<string, unknown>
+      ).id,
+      'attack-checkout',
+    );
     assert.equal(
       await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-b', project: 'shop' }),
       null,
@@ -381,6 +404,15 @@ describe('PostgresStore', () => {
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
       );
+      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' };
+      const specialScope = { org: 'org_a with space', project: 'shop_beta' };
+      await s.saveMethodologyArtifact(postgresArtifact, specialScope);
+      await s.saveMethodologyArtifact(postgresArtifact, specialScope);
+      assert.equal((await s.listMethodologyArtifacts(specialScope)).length, 1);
+      assert.equal(
+        (await s.listMethodologyArtifacts({ org: 'org_b', project: 'shop_beta' })).length,
+        0,
+      );
     } finally {
       await s.close();
     }
@@ -391,6 +423,13 @@ describe('PostgresStore', () => {
         await reopened.loadRun(RUN.id),
         RUN,
         'a fresh store instance must read state written by the previous process',
+      );
+      assert.deepEqual(
+        await reopened.loadMethodologyArtifact('checkout-tree-postgres', 1, {
+          org: 'org_a with space',
+          project: 'shop_beta',
+        }),
+        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' },
       );
       await reopened.saveRun({
         ...RUN,

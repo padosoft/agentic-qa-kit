@@ -114,17 +114,24 @@ export class PostgresStore implements StoreProvider {
   }
   private async many(kind: Kind, scope?: StoreScope): Promise<Row[]> {
     await this.wait();
-    const prefix =
-      scope?.org && scope.project
-        ? `${scopedRecordKey('', scope)}%`
-        : scope?.org
-          ? `@scope/${encodeURIComponent(scope.org)}/%`
-          : scope?.project
-            ? `@scope//${encodeURIComponent(scope.project)}/%`
-            : null;
+    if (scope?.org && scope.project)
+      return this.q<Row>(
+        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 AND project = $3 ORDER BY updated_at DESC, record_key',
+        [kind, scope.org, scope.project],
+      );
+    if (scope?.org)
+      return this.q<Row>(
+        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND org = $2 ORDER BY updated_at DESC, record_key',
+        [kind, scope.org],
+      );
+    if (scope?.project)
+      return this.q<Row>(
+        'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND project = $2 ORDER BY updated_at DESC, record_key',
+        [kind, scope.project],
+      );
     return this.q<Row>(
-      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 AND ($2::text IS NULL OR record_key LIKE $2) ORDER BY updated_at DESC, record_key',
-      [kind, prefix],
+      'SELECT record_key, payload FROM aqa_store_records WHERE kind = $1 ORDER BY updated_at DESC, record_key',
+      [kind],
     );
   }
   private async put(
@@ -427,8 +434,8 @@ export class PostgresStore implements StoreProvider {
       artifact_kind?: MethodologyArtifactEnvelope['artifact_kind'];
     } = {},
   ): Promise<MethodologyArtifactEnvelope[]> {
-    const out = this.values<MethodologyArtifactEnvelope>(
-      await this.many('methodology_artifact', opts),
+    const out = this.values<unknown>(await this.many('methodology_artifact', opts)).map((value) =>
+      parseMethodologyArtifactEnvelope(JSON.stringify(value)),
     );
     const filtered = opts.artifact_kind
       ? out.filter((artifact) => artifact.artifact_kind === opts.artifact_kind)
@@ -444,7 +451,10 @@ export class PostgresStore implements StoreProvider {
     revision: number,
     scope?: StoreScope,
   ): Promise<MethodologyArtifactEnvelope | null> {
-    return this.payload(await this.one('methodology_artifact', `${artifactId}@${revision}`, scope));
+    const value = this.payload<unknown>(
+      await this.one('methodology_artifact', `${artifactId}@${revision}`, scope),
+    );
+    return value === null ? null : parseMethodologyArtifactEnvelope(JSON.stringify(value));
   }
   async saveMethodologyArtifact(
     artifact: MethodologyArtifactEnvelope,

@@ -313,7 +313,9 @@ export class MemoryStore implements StoreProvider {
       artifact_kind?: MethodologyArtifactEnvelope['artifact_kind'];
     } = {},
   ): Promise<MethodologyArtifactEnvelope[]> {
-    let out = this.visible(this.methodologyArtifacts, opts);
+    let out = this.visible(this.methodologyArtifacts, opts).map((artifact) =>
+      parseMethodologyArtifactEnvelope(JSON.stringify(artifact)),
+    );
     if (opts.artifact_kind)
       out = out.filter((artifact) => artifact.artifact_kind === opts.artifact_kind);
     return out.sort((a, b) =>
@@ -327,7 +329,8 @@ export class MemoryStore implements StoreProvider {
     revision: number,
     scope?: StoreScope,
   ): Promise<MethodologyArtifactEnvelope | null> {
-    return this.methodologyArtifacts.get(this.key(`${artifactId}@${revision}`, scope)) ?? null;
+    const artifact = this.methodologyArtifacts.get(this.key(`${artifactId}@${revision}`, scope));
+    return artifact ? parseMethodologyArtifactEnvelope(JSON.stringify(artifact)) : null;
   }
   async saveMethodologyArtifact(
     artifact: MethodologyArtifactEnvelope,

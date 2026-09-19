@@ -19,6 +19,11 @@
 - Added ADR-280 and `StoreProvider` methods for immutable methodology revisions. `MemoryStore` and `PostgresStore` now revalidate envelopes, isolate records by tenant scope, retain revisions, support idempotent replays, and reject same-revision digest conflicts atomically in Postgres.
 - Store package evidence: typecheck passed, 20 tests passed and 1 provider test skipped without DSN; Biome and diff checks passed. Next: authenticated API/control-plane publication and admin review UI, then retention/archive policy.
 
+## 2026-09-19 — Storage hardening after adversarial review
+
+- Rejected methodology payloads that shared DLP would redact before digest acceptance; reads now revalidate payload/digest, MemoryStore returns defensive copies, and Postgres scopes listings by exact `org`/`project` columns instead of `LIKE` prefixes.
+- Added DLP and Postgres tenant/restart regression coverage. Local methodology suite: **28 passed**; store suite: **20 passed, 1 provider skip**; workspace lint remains green. Next: authenticated publication API and admin approval/review UI.
+
 ## 2026-09-19
 
 - **Added methodology approval governance.** Agent-generated risk maps,

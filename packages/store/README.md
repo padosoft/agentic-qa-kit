@@ -16,7 +16,9 @@ Methodology artifacts use `saveMethodologyArtifact`,
 `loadMethodologyArtifact` and `listMethodologyArtifacts`. Both adapters
 re-validate the versioned envelope before persistence, isolate records by
 `org`/`project`, retain every revision, and reject a second payload for the
-same artifact revision. Postgres uses an atomic insert-on-conflict boundary;
+same artifact revision. Postgres uses an atomic insert-on-conflict boundary,
+revalidates envelopes on reads, and scopes SQL by exact tenant columns. The
+shared DLP policy rejects payloads that would be redacted before hashing;
 provider retention, authorization middleware and UI approval remain above this
 storage contract.
 

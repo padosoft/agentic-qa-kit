@@ -65,4 +65,27 @@ describe('methodology artifact envelope', () => {
       /1..16 children/,
     );
   });
+
+  it('rejects payloads that shared DLP would redact', () => {
+    assert.throws(
+      () =>
+        createMethodologyArtifactEnvelope({
+          artifact_kind: 'attack_tree',
+          artifact_id: 'checkout-tree',
+          revision: 1,
+          created_at: '2026-09-19T13:00:00.000Z',
+          payload: {
+            ...tree,
+            children: [
+              {
+                id: 'checkout-payment',
+                kind: 'leaf',
+                statement: 'token=super-secret-value-123',
+              },
+            ],
+          },
+        }),
+      /contains sensitive data/,
+    );
+  });
 });

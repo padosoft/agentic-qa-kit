@@ -2820,3 +2820,6 @@ TypeScript unions disappear at runtime, so persisted or HTTP-loaded methodology 
 ## 2026-09-19 — Immutable methodology storage needs an atomic revision key
 
 An approval digest is not enough if storage can overwrite the approved payload. The durable key must include the artifact identity and revision; duplicate writes with the same digest are idempotent, while a different digest at the same revision is a conflict. PostgreSQL must use an atomic insert boundary rather than a check-then-update sequence, or concurrent writers can silently replace evidence.
+## 2026-09-19 — Integrity controls must cover writes, reads and scope predicates
+
+Digest validation only protects an artifact if DLP runs before the digest is accepted, reads revalidate persisted JSON, returned memory values are defensive copies, and tenant filtering cannot be approximated by a pattern over an encoded key. Treat all four as one storage invariant and test the durable adapter, not only the in-memory implementation.
