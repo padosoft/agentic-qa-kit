@@ -729,8 +729,8 @@ export class PostgresStore implements StoreProvider {
           'methodology_artifact_lifecycle',
           lifecycleKey,
         ]);
-        await query(
-          `DELETE FROM aqa_store_records WHERE kind = 'methodology_artifact' AND (record_key = $1 OR record_key = $2 OR (org IS NOT DISTINCT FROM $3 AND project IS NOT DISTINCT FROM $4 AND payload->>'artifact_id' = $5 AND (payload->>'revision')::integer = $6))`,
+        const deletedArtifacts = (await query(
+          `DELETE FROM aqa_store_records WHERE kind = 'methodology_artifact' AND (record_key = $1 OR record_key = $2 OR (org IS NOT DISTINCT FROM $3 AND project IS NOT DISTINCT FROM $4 AND payload->>'artifact_id' = $5 AND (payload->>'revision')::integer = $6)) RETURNING record_key`,
           [
             artifactKey,
             lifecycleKey,
@@ -739,7 +739,11 @@ export class PostgresStore implements StoreProvider {
             current.artifact_id,
             current.revision,
           ],
-        );
+        )) as Array<{ record_key: string }>;
+        if (deletedArtifacts.length === 0)
+          throw new Error(
+            `methodology retention purge could not delete artifact ${current.artifact_id}@${current.revision}`,
+          );
         await query(
           `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
           [tenantOrg, tenantProject, current.artifact_id, current.revision],
