@@ -2817,3 +2817,14 @@ release safety but must never be reported as a successful provider journey.
 ## 2026-09-19 — Validate TypeScript unions again at JSON boundaries
 
 TypeScript unions disappear at runtime, so persisted or HTTP-loaded methodology records must validate schema version, enums, status, canonical UTC timestamps, digests, and expiry explicitly. Approval should fail closed both when issued and when consumed; otherwise a record can appear valid at creation time but already be unusable or misleading.
+## 2026-09-19 — Immutable methodology storage needs an atomic revision key
+
+An approval digest is not enough if storage can overwrite the approved payload. The durable key must include the artifact identity and revision; duplicate writes with the same digest are idempotent, while a different digest at the same revision is a conflict. PostgreSQL must use an atomic insert boundary rather than a check-then-update sequence, or concurrent writers can silently replace evidence.
+## 2026-09-19 — Integrity controls must cover writes, reads and scope predicates
+
+Digest validation only protects an artifact if DLP runs before the digest is accepted, reads revalidate persisted JSON, returned memory values are defensive copies, and tenant filtering cannot be approximated by a pattern over an encoded key. Treat all four as one storage invariant and test the durable adapter, not only the in-memory implementation.
+
+Partial tenant scopes also need one explicit contract: `{ project }` means all
+organizations in that project, while `{ org }` means all projects in that
+organization. Memory and SQL adapters must implement the same semantics or a
+caller can see different authorization surfaces depending on deployment mode.

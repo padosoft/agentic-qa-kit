@@ -1,3 +1,4 @@
+import type { MethodologyArtifactEnvelope } from '@aqa/methodology';
 import type {
   Agent,
   ApiToken,
@@ -144,6 +145,21 @@ export interface StoreProvider {
   loadRisk(id: string, scope?: StoreScope): Promise<RiskMap.Risk | null>;
   saveRisk(risk: RiskMap.Risk, scope?: StoreScope): Promise<void>;
   deleteRisk(id: string, scope?: StoreScope): Promise<void>;
+
+  // ----- Methodology artifacts -----
+  /** List immutable, digest-bound methodology revisions in a tenant scope. */
+  listMethodologyArtifacts(opts?: {
+    org?: string;
+    project?: string;
+    artifact_kind?: MethodologyArtifactEnvelope['artifact_kind'];
+  }): Promise<MethodologyArtifactEnvelope[]>;
+  loadMethodologyArtifact(
+    artifact_id: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactEnvelope | null>;
+  /** Persist one revision; same revision + different digest is a hard conflict. */
+  saveMethodologyArtifact(artifact: MethodologyArtifactEnvelope, scope?: StoreScope): Promise<void>;
 
   // ----- Scenarios -----
   listScenarios(opts?: {

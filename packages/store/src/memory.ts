@@ -1,3 +1,7 @@
+import {
+  type MethodologyArtifactEnvelope,
+  parseMethodologyArtifactEnvelope,
+} from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
   Agent,
@@ -41,6 +45,7 @@ export class MemoryStore implements StoreProvider {
   private packs = new Map<string, PackManifest.PackManifest>();
   private profiles = new Map<string, Profile.Profile>();
   private risks = new Map<string, RiskMap.Risk>();
+  private methodologyArtifacts = new Map<string, MethodologyArtifactEnvelope>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
   private notifications: Notification.Notification[] = [];
@@ -55,12 +60,21 @@ export class MemoryStore implements StoreProvider {
 
   private visible<T>(map: Map<string, T>, scope?: StoreScope): T[] {
     if (!scope?.org && !scope?.project) return [...map.values()];
+    if (!scope.org && scope.project) {
+      const encodedProject = encodeURIComponent(scope.project);
+      return [...map.entries()]
+        .filter(([key]) => {
+          const parts = key.split('/');
+          return parts[0] === '@scope' && parts[2] === encodedProject;
+        })
+        .map(([, value]) => value);
+    }
     const prefix =
       scope.org && scope.project
         ? scopedRecordKey('', scope)
         : scope.org
           ? `@scope/${encodeURIComponent(scope.org)}/`
-          : `@scope//${encodeURIComponent(scope.project ?? '')}/`;
+          : '';
     return [...map.entries()]
       .filter(([key]) => isScopedRecordKey(key) && key.startsWith(prefix))
       .map(([, value]) => value);
@@ -298,6 +312,45 @@ export class MemoryStore implements StoreProvider {
   }
   async deleteRisk(id: string, scope?: StoreScope): Promise<void> {
     this.risks.delete(this.key(id, scope));
+  }
+
+  // ----- Methodology artifacts -----
+  async listMethodologyArtifacts(
+    opts: {
+      org?: string;
+      project?: string;
+      artifact_kind?: MethodologyArtifactEnvelope['artifact_kind'];
+    } = {},
+  ): Promise<MethodologyArtifactEnvelope[]> {
+    let out = this.visible(this.methodologyArtifacts, opts).map((artifact) =>
+      parseMethodologyArtifactEnvelope(JSON.stringify(artifact)),
+    );
+    if (opts.artifact_kind)
+      out = out.filter((artifact) => artifact.artifact_kind === opts.artifact_kind);
+    return out.sort((a, b) =>
+      a.artifact_id === b.artifact_id
+        ? b.revision - a.revision
+        : a.artifact_id.localeCompare(b.artifact_id),
+    );
+  }
+  async loadMethodologyArtifact(
+    artifactId: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactEnvelope | null> {
+    const artifact = this.methodologyArtifacts.get(this.key(`${artifactId}@${revision}`, scope));
+    return artifact ? parseMethodologyArtifactEnvelope(JSON.stringify(artifact)) : null;
+  }
+  async saveMethodologyArtifact(
+    artifact: MethodologyArtifactEnvelope,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
+    const existing = this.methodologyArtifacts.get(key);
+    if (existing && existing.artifact_sha256 !== validated.artifact_sha256)
+      throw new Error('methodology artifact revision conflict');
+    this.methodologyArtifacts.set(key, validated);
   }
 
   // ----- Scenarios -----
@@ -549,6 +602,7 @@ export class MemoryStore implements StoreProvider {
     this.profiles.clear();
     this.risks.clear();
     this.scenarios.clear();
+    this.methodologyArtifacts.clear();
     this.agents.clear();
     this.users.clear();
     this.notifications = [];

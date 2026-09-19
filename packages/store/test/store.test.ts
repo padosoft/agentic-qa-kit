@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { createMethodologyArtifactEnvelope, methodologyArtifactSha256 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
 
 const RUN = {
@@ -48,6 +49,19 @@ const FINDING = {
   evidence: [],
   tags: [],
 };
+
+const METHODOLOGY_ARTIFACT = createMethodologyArtifactEnvelope({
+  artifact_kind: 'attack_tree',
+  artifact_id: 'checkout-tree',
+  revision: 1,
+  created_at: '2026-09-19T14:00:00.000Z',
+  payload: {
+    id: 'attack-checkout',
+    kind: 'node',
+    operator: 'any',
+    children: [{ id: 'checkout-payment', kind: 'leaf', statement: 'Payment is captured twice' }],
+  },
+});
 
 describe('MemoryStore', () => {
   it('round-trips a Run', async () => {
@@ -314,6 +328,64 @@ describe('MemoryStore', () => {
     );
     assert.equal((await s.listUsers({ org: 'org-a', project: 'other' })).length, 0);
   });
+
+  it('persists immutable methodology revisions by tenant scope', async () => {
+    const s = new MemoryStore();
+    await s.saveMethodologyArtifact(METHODOLOGY_ARTIFACT, { org: 'org-a', project: 'shop' });
+    await s.saveMethodologyArtifact(
+      { ...METHODOLOGY_ARTIFACT, revision: 2 },
+      {
+        org: 'org-a',
+        project: 'shop',
+      },
+    );
+    await s.saveMethodologyArtifact(METHODOLOGY_ARTIFACT, { org: 'org-b', project: 'shop' });
+    assert.equal((await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' })).length, 2);
+    assert.equal((await s.listMethodologyArtifacts({ project: 'shop' })).length, 3);
+    const loaded = await s.loadMethodologyArtifact('checkout-tree', 1, {
+      org: 'org-a',
+      project: 'shop',
+    });
+    assert.ok(loaded);
+    (loaded.payload as Record<string, unknown>).id = 'caller-mutated';
+    assert.equal(
+      (
+        (await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-a', project: 'shop' }))
+          ?.payload as Record<string, unknown>
+      ).id,
+      'attack-checkout',
+    );
+    const listed = await s.listMethodologyArtifacts({ org: 'org-a', project: 'shop' });
+    assert.ok(listed[0]);
+    (listed[0].payload as Record<string, unknown>).id = 'list-mutated';
+    assert.equal(
+      (
+        (await s.loadMethodologyArtifact('checkout-tree', 2, { org: 'org-a', project: 'shop' }))
+          ?.payload as Record<string, unknown>
+      ).id,
+      'attack-checkout',
+    );
+    assert.equal(
+      await s.loadMethodologyArtifact('checkout-tree', 1, { org: 'org-c', project: 'shop' }),
+      null,
+    );
+    const conflictingPayload = {
+      ...(METHODOLOGY_ARTIFACT.payload as Record<string, unknown>),
+      id: 'attack-conflict',
+    };
+    await assert.rejects(
+      () =>
+        s.saveMethodologyArtifact(
+          {
+            ...METHODOLOGY_ARTIFACT,
+            payload: conflictingPayload,
+            artifact_sha256: methodologyArtifactSha256(conflictingPayload),
+          },
+          { org: 'org-a', project: 'shop' },
+        ),
+      /revision conflict/,
+    );
+  });
 });
 
 describe('PostgresStore', () => {
@@ -334,6 +406,15 @@ describe('PostgresStore', () => {
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
       );
+      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' };
+      const specialScope = { org: 'org_a with space', project: 'shop_beta' };
+      await s.saveMethodologyArtifact(postgresArtifact, specialScope);
+      await s.saveMethodologyArtifact(postgresArtifact, specialScope);
+      assert.equal((await s.listMethodologyArtifacts(specialScope)).length, 1);
+      assert.equal(
+        (await s.listMethodologyArtifacts({ org: 'org_b', project: 'shop_beta' })).length,
+        0,
+      );
     } finally {
       await s.close();
     }
@@ -344,6 +425,13 @@ describe('PostgresStore', () => {
         await reopened.loadRun(RUN.id),
         RUN,
         'a fresh store instance must read state written by the previous process',
+      );
+      assert.deepEqual(
+        await reopened.loadMethodologyArtifact('checkout-tree-postgres', 1, {
+          org: 'org_a with space',
+          project: 'shop_beta',
+        }),
+        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' },
       );
       await reopened.saveRun({
         ...RUN,

@@ -1,3 +1,4 @@
+import { redactJson } from '@aqa/observability';
 import {
   type MethodologyArtifactKind,
   canonicalMethodologyArtifact,
@@ -34,6 +35,7 @@ export function createMethodologyArtifactEnvelope(input: {
 }): MethodologyArtifactEnvelope {
   assertEnvelopeMetadata(input);
   const payload = JSON.parse(canonicalMethodologyArtifact(input.payload)) as unknown;
+  assertDlpClean(payload);
   validatePayload(input.artifact_kind, payload);
   return {
     schema_version: '1',
@@ -70,6 +72,7 @@ export function parseMethodologyArtifactEnvelope(serialized: string): Methodolog
   const envelope = parsed as unknown as MethodologyArtifactEnvelope;
   assertEnvelopeMetadata(envelope);
   const payload = JSON.parse(canonicalMethodologyArtifact(envelope.payload)) as unknown;
+  assertDlpClean(payload);
   validatePayload(envelope.artifact_kind, payload);
   if (methodologyArtifactSha256(payload) !== envelope.artifact_sha256)
     throw new Error('methodology artifact envelope digest mismatch');
@@ -93,6 +96,12 @@ function assertEnvelopeMetadata(value: {
 
 function validatePayload(kind: MethodologyArtifactKind, payload: unknown): void {
   if (kind === 'attack_tree') validateAttackTree(payload as AttackTree);
+}
+
+function assertDlpClean(payload: unknown): void {
+  const redacted = redactJson(payload);
+  if (canonicalMethodologyArtifact(redacted) !== canonicalMethodologyArtifact(payload))
+    throw new Error('methodology artifact payload contains sensitive data');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

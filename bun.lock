@@ -155,6 +155,7 @@
       "name": "@aqa/methodology",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/observability": "workspace:*",
         "@aqa/schemas": "workspace:*",
       },
     },
@@ -247,6 +248,8 @@
       "name": "@aqa/store",
       "version": "0.0.1",
       "dependencies": {
+        "@aqa/methodology": "workspace:*",
+        "@aqa/observability": "workspace:*",
         "@aqa/schemas": "workspace:*",
         "postgres": "^3.4.9",
       },
