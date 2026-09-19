@@ -2933,3 +2933,11 @@ caller can see different authorization surfaces depending on deployment mode.
   lifecycle row and re-check the artifact in the same transaction; the durable
   contract must exercise this path against the actual adapter when a DSN is
   available.
+
+# 2026-09-20 — PostgreSQL JSONB driver shape needs an explicit boundary
+
+- A real hosted run caught that a transaction-local JSONB read-back could be
+  shaped differently from the regular adapter helper, causing strict envelope
+  parsing to receive `undefined`. Select `payload::text` at transaction
+  boundaries, pass it through the same decoder, and guard an absent row
+  explicitly; MemoryStore and TypeScript cannot reveal this provider detail.

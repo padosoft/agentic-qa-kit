@@ -61,6 +61,12 @@
   terminal proposal scrubbing. Workspace typecheck and store tests pass;
   this follow-up is queued on PR #234 before merge.
 
+- Hosted PostgreSQL caught one real regression in the new transaction path:
+  JSONB read-back from the `postgres` driver was not normalized before strict
+  envelope parsing. The boundary now selects `payload::text`, decodes it via
+  the shared adapter helper and fails explicitly if the row disappears;
+  local typecheck/build/store/server tests pass and CI must re-prove the fix.
+
 ## 2026-09-19 — Reasoned methodology rejection implemented
 
 - Added a durable `pending → rejected` transition with an independent
