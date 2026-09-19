@@ -34,6 +34,10 @@
   boundary tests, Postgres durability assertions and a Playwright mock-mode
   governance test. Local typecheck, admin build, methodology/store/server
   tests and the focused Playwright test pass.
+- The hosted PostgreSQL rerun exposed and fixed a test-only fixture-scope error
+  in the reopen assertion; no production persistence defect was found. The
+  corrected local contract remains **18 passed / 0 failed** and is queued for
+  hosted re-verification on commit `5fbf7a0`.
 
 ## 2026-09-19 — Methodology review slice merged
 
