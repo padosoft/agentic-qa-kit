@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { createMethodologyArtifactEnvelope, createMethodologyProposal } from '@aqa/methodology';
 import { manifestDigest } from '@aqa/pack-scanner';
 import { MemoryStore } from '@aqa/store';
 import {
@@ -31,6 +32,11 @@ function ctx(
     packTrustedKeys?: Readonly<Record<string, string>>;
     packRequireSignature?: boolean;
     packSigstorePolicy?: { certificate_identity: string; certificate_oidc_issuer: string };
+    verifyMethodologyProposal?: (
+      proposal: unknown,
+      artifact: unknown,
+      scope: { org: string; project: string },
+    ) => Promise<boolean>;
     budgetControl?: {
       halt: (key: string, reason: string) => Promise<void>;
       getHaltReason: (key: string) => Promise<string | null>;
@@ -51,6 +57,9 @@ function ctx(
     ...(opts.packTrustedKeys ? { packTrustedKeys: opts.packTrustedKeys } : {}),
     packRequireSignature: opts.packRequireSignature ?? false,
     ...(opts.packSigstorePolicy ? { packSigstorePolicy: opts.packSigstorePolicy } : {}),
+    ...(opts.verifyMethodologyProposal
+      ? { verifyMethodologyProposal: opts.verifyMethodologyProposal }
+      : {}),
     ...(opts.budgetControl ? { budgetControl: opts.budgetControl } : {}),
     ...(opts.runnerAuthorize ? { runnerAuthorize: opts.runnerAuthorize } : {}),
     // The server is configured at boot with the on-disk project root
@@ -82,6 +91,15 @@ after(() => {
 });
 
 const TENANT_HEADERS = { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'demo' };
+
+const METHODOLOGY_TREE = {
+  id: 'attack-checkout',
+  kind: 'node' as const,
+  operator: 'any' as const,
+  children: [
+    { id: 'checkout-payment', kind: 'leaf' as const, statement: 'Payment is captured twice' },
+  ],
+};
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, current) => {
@@ -314,6 +332,119 @@ describe('makeApi', () => {
       await c.store.loadProfile(profile.name, { org: 'padosoft', project: 'demo' }),
       profile,
     );
+  });
+
+  it('publishes methodology artifacts only with a bound independent approval', async () => {
+    const c = ctx({ verifyMethodologyProposal: async () => true });
+    const artifact = createMethodologyArtifactEnvelope({
+      artifact_kind: 'attack_tree',
+      artifact_id: 'checkout-tree',
+      revision: 1,
+      created_at: '2026-09-18T10:00:00.000Z',
+      payload: METHODOLOGY_TREE,
+    });
+    const proposal = createMethodologyProposal({
+      proposal_id: 'proposal-checkout-tree',
+      artifact_kind: artifact.artifact_kind,
+      artifact_id: artifact.artifact_id,
+      artifact: artifact.payload,
+      revision: artifact.revision,
+      proposed_by: 'agent-1',
+      proposed_at: '2026-09-18T10:01:00.000Z',
+      source: 'agent',
+    });
+    const approval = {
+      schema_version: '1' as const,
+      approval_id: 'approval-checkout-tree',
+      proposal_id: proposal.proposal_id,
+      artifact_sha256: artifact.artifact_sha256,
+      revision: artifact.revision,
+      approved_by: FAKE_USER.id,
+      approved_at: '2026-09-18T10:02:00.000Z',
+    };
+    const publish = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/methodology/artifacts',
+    );
+    const response = await publish?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval } },
+      c,
+    );
+    assert.equal(response?.status, 201);
+    const list = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/methodology/artifacts',
+    );
+    const listed = await list?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal((listed?.body as { artifacts: unknown[] }).artifacts.length, 1);
+    const filtered = await list?.handle(
+      { headers: TENANT_HEADERS, params: { kind: 'attack_tree' } },
+      c,
+    );
+    assert.equal((filtered?.body as { artifacts: unknown[] }).artifacts.length, 1);
+    const invalidFilter = await list?.handle(
+      { headers: TENANT_HEADERS, params: { kind: 'not-a-kind' } },
+      c,
+    );
+    assert.equal(invalidFilter?.status, 400);
+    const crossTenant = await list?.handle(
+      { headers: { 'x-aqa-org': 'other', 'x-aqa-project': 'demo' }, params: {} },
+      c,
+    );
+    assert.equal((crossTenant?.body as { artifacts: unknown[] }).artifacts.length, 0);
+
+    const replay = await publish?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval } },
+      c,
+    );
+    assert.equal(replay?.status, 201);
+
+    const forged = {
+      ...approval,
+      approval_id: 'approval-forged',
+      approved_by: 'other-reviewer',
+    };
+    const rejected = await publish?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval: forged } },
+      c,
+    );
+    assert.equal(rejected?.status, 400);
+
+    const conflictingArtifact = createMethodologyArtifactEnvelope({
+      ...artifact,
+      payload: {
+        ...METHODOLOGY_TREE,
+        children: [
+          { id: 'checkout-payment', kind: 'leaf' as const, statement: 'Payment is captured once' },
+        ],
+      },
+    });
+    const conflictingProposal = createMethodologyProposal({
+      proposal_id: 'proposal-conflicting-tree',
+      artifact_kind: conflictingArtifact.artifact_kind,
+      artifact_id: conflictingArtifact.artifact_id,
+      artifact: conflictingArtifact.payload,
+      revision: conflictingArtifact.revision,
+      proposed_by: proposal.proposed_by,
+      proposed_at: proposal.proposed_at,
+      source: proposal.source,
+    });
+    const conflict = await publish?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: {},
+        body: {
+          artifact: conflictingArtifact,
+          proposal: conflictingProposal,
+          approval: {
+            ...approval,
+            approval_id: 'approval-conflicting-tree',
+            proposal_id: conflictingProposal.proposal_id,
+            artifact_sha256: conflictingArtifact.artifact_sha256,
+          },
+        },
+      },
+      c,
+    );
+    assert.equal(conflict?.status, 409);
   });
 
   it('GET /api/runs/:id 404s when missing', async () => {
