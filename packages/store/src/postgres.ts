@@ -536,12 +536,12 @@ export class PostgresStore implements StoreProvider {
         ],
       );
       const existing = (await query(
-        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
         ['methodology_artifact', recordKey],
       )) as Array<{ payload: unknown }>;
-      const existingArtifact = parseMethodologyArtifactEnvelope(
-        JSON.stringify(existing[0]?.payload),
-      );
+      const existingRow = existing[0];
+      if (!existingRow) throw new Error('methodology artifact disappeared during atomic publish');
+      const existingArtifact = parseMethodologyArtifactEnvelope(this.decode(existingRow.payload));
       if (existingArtifact.artifact_sha256 !== validated.artifact_sha256)
         throw new Error('methodology artifact revision conflict');
       await query(
