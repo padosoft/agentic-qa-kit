@@ -7,6 +7,7 @@ import {
   methodologyArtifactSha256,
 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
+import { scopedRecordKey } from '../dist/types.js';
 
 const RUN = {
   schema_version: '1' as const,
@@ -605,8 +606,8 @@ describe('PostgresStore', () => {
           q: (sql: string, values: unknown[]) => Promise<unknown[]>;
         }
       ).q(
-        "SELECT kind, record_key, org, project, payload->>'artifact_id' AS artifact_id, payload->>'revision' AS revision FROM aqa_store_records WHERE kind = 'methodology_artifact' AND payload->>'artifact_id' = 'retention-contract'",
-        [],
+        'SELECT kind, record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
+        ['methodology_artifact', scopedRecordKey('retention-contract@1', specialScope)],
       );
       assert.deepEqual(debugRows, []);
       assert.equal(await s.loadMethodologyArtifact('retention-contract', 1, specialScope), null);
