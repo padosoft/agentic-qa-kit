@@ -425,6 +425,7 @@ export class MemoryStore implements StoreProvider {
       parseMethodologyApproval(approval),
     );
     this.methodologyProposals.set(key, {
+      ...(existing?.artifact ? { artifact: JSON.parse(JSON.stringify(existing.artifact)) } : {}),
       proposal: result.proposal,
       approval: JSON.parse(JSON.stringify(result.approval)),
     });

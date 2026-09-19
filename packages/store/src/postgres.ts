@@ -570,7 +570,11 @@ export class PostgresStore implements StoreProvider {
         'methodology_proposal',
         scopedRecordKey(proposalId, scope),
         JSON.stringify(current),
-        JSON.stringify({ proposal: result.proposal, approval: result.approval }),
+        JSON.stringify({
+          proposal: result.proposal,
+          ...(current.artifact ? { artifact: current.artifact } : {}),
+          approval: result.approval,
+        }),
       ],
     );
     if (rows.length === 0) throw new Error('methodology proposal approval conflict');

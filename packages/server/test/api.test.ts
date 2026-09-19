@@ -336,6 +336,10 @@ describe('makeApi', () => {
 
   it('publishes methodology artifacts only with a bound independent approval', async () => {
     const c = ctx({ verifyMethodologyProposal: async () => true });
+    const session = makeApi().find((r) => r.method === 'GET' && r.path === '/api/session');
+    assert.deepEqual((await session?.handle({ headers: TENANT_HEADERS, params: {} }, c))?.body, {
+      user: { id: FAKE_USER.id, name: FAKE_USER.display_name, role: FAKE_USER.roles[0] },
+    });
     const artifact = createMethodologyArtifactEnvelope({
       artifact_kind: 'attack_tree',
       artifact_id: 'checkout-tree',

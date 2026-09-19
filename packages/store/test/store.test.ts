@@ -431,6 +431,10 @@ describe('MemoryStore', () => {
       (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.approval,
       approval,
     );
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.artifact,
+      METHODOLOGY_ARTIFACT,
+    );
     await assert.rejects(
       () => s.approveMethodologyProposal(proposal.proposal_id, approval, scope),
       /not pending/,

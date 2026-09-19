@@ -23,6 +23,13 @@
   a validated staging envelope, list responses omit the payload, and a
   tenant-scoped detail route supplies the exact content to reviewers. This
   prevents a UI-only preview from being mistaken for evidence.
+- Hardened the live journey after adversarial review: admin requests now carry
+  tenant scope, unwrap the API record contract, resolve the authenticated
+  reviewer identity from `/api/session`, and keep approval disabled until the
+  staged payload is loaded. Store approval transitions retain the staged
+  envelope for audit/review. Local server **147 passed**, store **21 passed / 1
+  intentional provider skip**, admin build/typecheck and workspace typecheck
+  pass; hosted CI must re-prove this revision.
 
 ## 2026-09-19 — Authenticated methodology publication API
 

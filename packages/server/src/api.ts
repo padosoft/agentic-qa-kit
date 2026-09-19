@@ -1296,6 +1296,21 @@ export function makeApi(): ApiHandler[] {
       },
     },
 
+    // ============ Authenticated session ============
+    {
+      method: 'GET',
+      path: '/api/session',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const user = await ctx.authenticate(req.headers);
+        return user
+          ? asResponse({
+              user: { id: user.id, name: user.display_name, role: user.roles[0] ?? 'viewer' },
+            })
+          : { status: 401, body: { error: 'unauthorized' } };
+      },
+    },
+
     // ============ Methodology artifacts ============
     {
       method: 'GET',
