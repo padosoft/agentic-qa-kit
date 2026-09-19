@@ -31,6 +31,19 @@ has actually run with an operator-owned environment.
 
 ## Protected provider evidence now available
 
+## External readiness snapshot — 2026-09-19
+
+The repository-side checks were repeated against the live GitHub repository
+before this audit update. The GitHub API reports only the `copilot` Environment;
+the provider-specific Environments required by the workflows are not present.
+The repository secret listing contains no provider credentials (only the
+Copilot integration entry), and `main` returns `404 Branch not protected` from
+the branch-protection API. Therefore no provider workflow was started: there
+is no operator-owned protected resource to exercise, and starting a workflow
+without it would create a false negative rather than evidence of readiness.
+
+This snapshot is metadata-only and contains no secret values.
+
 These workflows are intentionally manual and fail closed when the required
 Environment configuration is absent:
 
