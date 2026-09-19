@@ -19,9 +19,27 @@
   revisions safe through the durable store. The HTTP adapter's query/params
   boundary is covered, including invalid kind filtering and digest conflicts.
 - Server evidence: **147 tests passed / 0 failed / 1 intentional Postgres DSN
-  skip**, typecheck and Biome passed. Next: durable pending proposal/approval
-  records and the admin review/diff UI; external provider and assurance gates
-  remain deferred-final-gate.
+  skip**, typecheck and Biome passed.
+- Added durable tenant-scoped proposal records and atomic Postgres approval
+  transitions. Publication now accepts only an approved persisted proposal ID;
+  proposals survive restart and same-ID conflicts fail closed.
+- Evidence: store **21 passed / 1 intentional recovery skip**, server **147
+  passed / 1 intentional Postgres DSN skip**, methodology/build/typecheck and
+  Biome passed. Next: admin review/diff UI and browser complete journey;
+  external provider and assurance gates remain deferred-final-gate.
+- Hosted CI caught and the local fix corrected a PostgreSQL `42P18` parameter
+  inference regression in the atomic approval update; the required provider
+  contract must be rerun before this slice can merge.
+- A second hosted run exposed a JSONB status-predicate mismatch in the same
+  atomic transition; the implementation now uses a full-record JSONB
+  compare-and-swap.
+  The hosted contract must pass on this revision before merge.
+- Hardened the workflow after adversarial review: strict allowlisted proposal
+  and approval parsers reject unknown/DLP-sensitive fields, new proposals must
+  be pending, persisted records are revalidated on reads, human proposer
+  identity cannot be delegated to the agent verifier, and the Postgres contract
+  now races two approvals to prove a single winner. Local methodology/store/
+  server tests, full typecheck and lint pass; CI must re-prove this revision.
 
 ## 2026-09-19 — Versioned methodology artifact envelope
 

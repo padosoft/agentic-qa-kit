@@ -1,6 +1,13 @@
 import {
+  type MethodologyApproval,
+  type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
+  type MethodologyProposal,
+  approveMethodologyProposal,
+  assertMethodologyProposal,
+  parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyProposal,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -28,6 +35,7 @@ import {
 } from './audit.js';
 import {
   type LegacyMigrationResult,
+  type MethodologyProposalRecord,
   type StoreProvider,
   type StoreScope,
   type StoreUserDirectoryEntry,
@@ -41,6 +49,7 @@ type Kind =
   | 'profile'
   | 'risk'
   | 'methodology_artifact'
+  | 'methodology_proposal'
   | 'scenario'
   | 'agent'
   | 'notification'
@@ -483,6 +492,68 @@ export class PostgresStore implements StoreProvider {
         throw new Error('methodology artifact revision conflict');
     }
   }
+
+  // ----- Methodology proposals -----
+  async listMethodologyProposals(
+    opts: { org?: string; project?: string; status?: MethodologyProposal['status'] } = {},
+  ): Promise<MethodologyProposalRecord[]> {
+    const records = this.values<unknown>(await this.many('methodology_proposal', opts)).map(
+      parseMethodologyProposalRecord,
+    );
+    return records
+      .filter((record) => !opts.status || record.proposal.status === opts.status)
+      .sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
+  }
+  async loadMethodologyProposal(
+    proposalId: string,
+    scope?: StoreScope,
+  ): Promise<MethodologyProposalRecord | null> {
+    const value = this.payload<unknown>(await this.one('methodology_proposal', proposalId, scope));
+    return value === null ? null : parseMethodologyProposalRecord(value);
+  }
+  async saveMethodologyProposal(proposal: MethodologyProposal, scope?: StoreScope): Promise<void> {
+    const normalized = parseMethodologyProposal(proposal);
+    assertMethodologyProposal(normalized);
+    if (normalized.status !== 'pending') throw new Error('methodology proposal must be pending');
+    await this.wait();
+    const record: MethodologyProposalRecord = { proposal: normalized };
+    const rows = await this.q<{ record_key: string }>(
+      'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING RETURNING record_key',
+      [
+        'methodology_proposal',
+        scopedRecordKey(normalized.proposal_id, scope),
+        scope?.org ?? null,
+        scope?.project ?? null,
+        JSON.stringify(record),
+      ],
+    );
+    if (rows.length === 0) {
+      const existing = await this.loadMethodologyProposal(proposal.proposal_id, scope);
+      if (!existing || JSON.stringify(existing.proposal) !== JSON.stringify(normalized))
+        throw new Error('methodology proposal conflict');
+    }
+  }
+  async approveMethodologyProposal(
+    proposalId: string,
+    approval: MethodologyApproval,
+    scope?: StoreScope,
+  ): Promise<MethodologyApprovalResult | null> {
+    const current = await this.loadMethodologyProposal(proposalId, scope);
+    if (!current) return null;
+    const result = approveMethodologyProposal(current.proposal, parseMethodologyApproval(approval));
+    await this.wait();
+    const rows = await this.q<{ payload: unknown }>(
+      'UPDATE aqa_store_records SET payload = $4::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2 AND payload = $3::jsonb RETURNING payload',
+      [
+        'methodology_proposal',
+        scopedRecordKey(proposalId, scope),
+        JSON.stringify(current),
+        JSON.stringify({ proposal: result.proposal, approval: result.approval }),
+      ],
+    );
+    if (rows.length === 0) throw new Error('methodology proposal approval conflict');
+    return result;
+  }
   async listScenarios(
     opts: { risk_id?: string; org?: string; project?: string } = {},
   ): Promise<Scenario.Scenario[]> {
@@ -717,4 +788,16 @@ export class PostgresStore implements StoreProvider {
     await this.wait();
     await this.sql.end({ timeout: 5 });
   }
+}
+
+function parseMethodologyProposalRecord(input: unknown): MethodologyProposalRecord {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('methodology proposal record must be an object');
+  const record = input as { proposal?: unknown; approval?: unknown };
+  if (Object.keys(record).some((key) => key !== 'proposal' && key !== 'approval'))
+    throw new Error('methodology proposal record contains an unknown field');
+  const proposal = parseMethodologyProposal(record.proposal);
+  const approval =
+    record.approval === undefined ? undefined : parseMethodologyApproval(record.approval);
+  return { proposal, ...(approval ? { approval } : {}) };
 }

@@ -5,6 +5,8 @@ import {
   assertMethodologyApproval,
   createMethodologyProposal,
   methodologyArtifactSha256,
+  parseMethodologyApproval,
+  parseMethodologyProposal,
 } from '../dist/index.js';
 
 const artifact = { risks: [{ id: 'r-1', severity: 'high' }], version: 1 };
@@ -123,6 +125,18 @@ describe('methodology governance', () => {
         ),
       /already expired/,
     );
+  });
+
+  it('rejects malformed or extended governance records at the JSON boundary', () => {
+    const p = proposal();
+    assert.deepEqual(parseMethodologyProposal(p), p);
+    assert.deepEqual(parseMethodologyApproval(approval(p)), approval(p));
+    assert.throws(() => parseMethodologyProposal({ ...p, proposal_id: null }), /must be a string/);
+    assert.throws(
+      () => parseMethodologyApproval({ ...approval(p), expires_at: null }),
+      /expires_at must be a string/,
+    );
+    assert.throws(() => parseMethodologyProposal({ ...p, untrusted: 'secret' }), /unknown field/);
   });
 });
 

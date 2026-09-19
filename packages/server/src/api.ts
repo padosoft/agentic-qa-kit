@@ -8,13 +8,11 @@ import type { BudgetHaltController } from '@aqa/cost';
 import {
   assertMethodologyApproval,
   measureRiskCoverage,
+  parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyProposal,
 } from '@aqa/methodology';
-import type {
-  MethodologyApproval,
-  MethodologyArtifactKind,
-  MethodologyProposal,
-} from '@aqa/methodology';
+import type { MethodologyArtifactKind, MethodologyProposal } from '@aqa/methodology';
 import { safeErrorMessage } from '@aqa/observability';
 import { runPackNew } from '@aqa/pack-author';
 import type { PackNewErrorCode } from '@aqa/pack-author';
@@ -1344,6 +1342,104 @@ export function makeApi(): ApiHandler[] {
       },
     },
     {
+      method: 'GET',
+      path: '/api/methodology/proposals',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const status = req.query?.status ?? req.params.status;
+        if (
+          status !== undefined &&
+          status !== 'pending' &&
+          status !== 'approved' &&
+          status !== 'rejected'
+        )
+          return { status: 400, body: { error: 'invalid methodology proposal status' } };
+        const proposals = await ctx.store.listMethodologyProposals({
+          org: s.org,
+          project: s.project,
+          ...(status ? { status } : {}),
+        });
+        return asResponse({ proposals });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/proposals',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const body = req.body as { artifact?: unknown; proposal?: unknown } | undefined;
+        if (!body?.artifact || !body.proposal)
+          return { status: 400, body: { error: 'artifact and proposal are required' } };
+        try {
+          const artifact = parseMethodologyArtifactEnvelope(JSON.stringify(body.artifact));
+          const proposal = parseMethodologyProposal(body.proposal);
+          if (proposal.status !== 'pending')
+            throw new Error('methodology proposal must be pending');
+          if (
+            proposal.artifact_kind !== artifact.artifact_kind ||
+            proposal.artifact_id !== artifact.artifact_id ||
+            proposal.revision !== artifact.revision ||
+            proposal.artifact_sha256 !== artifact.artifact_sha256
+          )
+            throw new Error('methodology proposal does not bind to artifact');
+          const hostTrusted =
+            proposal.source === 'human'
+              ? proposal.proposed_by === user.id
+              : proposal.source === 'agent' && ctx.verifyMethodologyProposal
+                ? await ctx.verifyMethodologyProposal(proposal, artifact, s)
+                : false;
+          if (!hostTrusted)
+            throw new Error('methodology proposal origin is not trusted by the host');
+          await ctx.store.saveMethodologyProposal(proposal, s);
+          return asResponse({ proposal }, 201);
+        } catch (error) {
+          if (error instanceof Error && /conflict|already exists/i.test(error.message))
+            return { status: 409, body: { error: 'methodology proposal conflict' } };
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology proposal rejected') },
+          };
+        }
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/proposals/:id/approve',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const proposalId = req.params.id;
+        if (!proposalId || !req.body)
+          return { status: 400, body: { error: 'proposal id and approval are required' } };
+        try {
+          const approval = parseMethodologyApproval(req.body);
+          if (approval.approved_by !== user.id)
+            return {
+              status: 400,
+              body: { error: 'approval actor does not match authenticated user' },
+            };
+          const result = await ctx.store.approveMethodologyProposal(proposalId, approval, s);
+          return result ? asResponse(result) : notFound('methodology proposal');
+        } catch (error) {
+          if (error instanceof Error && /conflict|not pending/i.test(error.message))
+            return { status: 409, body: { error: 'methodology proposal is no longer pending' } };
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology approval rejected') },
+          };
+        }
+      },
+    },
+    {
       method: 'POST',
       path: '/api/methodology/artifacts',
       requires: 'risk-map:edit',
@@ -1356,19 +1452,20 @@ export function makeApi(): ApiHandler[] {
           return { status: 400, body: { error: 'methodology publication body must be an object' } };
         const body = req.body as {
           artifact?: unknown;
-          proposal?: unknown;
-          approval?: unknown;
+          proposal_id?: unknown;
         };
-        if (!body.artifact || !body.proposal || !body.approval)
+        if (!body.artifact || typeof body.proposal_id !== 'string' || !body.proposal_id)
           return {
             status: 400,
-            body: { error: 'artifact, proposal and approval are required' },
+            body: { error: 'artifact and proposal_id are required' },
           };
         let artifact: ReturnType<typeof parseMethodologyArtifactEnvelope>;
         try {
           artifact = parseMethodologyArtifactEnvelope(JSON.stringify(body.artifact));
-          const proposal = body.proposal as MethodologyProposal;
-          const approval = body.approval as MethodologyApproval;
+          const record = await ctx.store.loadMethodologyProposal(body.proposal_id, s);
+          if (!record || record.proposal.status !== 'approved' || !record.approval)
+            throw new Error('methodology proposal is not approved');
+          const { proposal, approval } = record;
           if (
             proposal.artifact_kind !== artifact.artifact_kind ||
             proposal.artifact_id !== artifact.artifact_id ||
@@ -1376,14 +1473,7 @@ export function makeApi(): ApiHandler[] {
             proposal.artifact_sha256 !== artifact.artifact_sha256
           )
             throw new Error('methodology proposal does not bind to artifact');
-          if (approval.approved_by !== user.id)
-            throw new Error('methodology approval actor does not match authenticated user');
           assertMethodologyApproval(proposal, approval);
-          if (
-            !ctx.verifyMethodologyProposal ||
-            !(await ctx.verifyMethodologyProposal(proposal, artifact, s))
-          )
-            throw new Error('methodology proposal origin is not trusted by the host');
         } catch (error) {
           return {
             status: 400,

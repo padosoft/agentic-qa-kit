@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createMethodologyArtifactEnvelope, methodologyArtifactSha256 } from '@aqa/methodology';
+import {
+  createMethodologyArtifactEnvelope,
+  createMethodologyProposal,
+  methodologyArtifactSha256,
+} from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
 
 const RUN = {
@@ -386,6 +390,48 @@ describe('MemoryStore', () => {
       /revision conflict/,
     );
   });
+
+  it('persists methodology proposals and approves them exactly once by tenant scope', async () => {
+    const s = new MemoryStore();
+    const proposal = createMethodologyProposal({
+      proposal_id: 'proposal-memory',
+      artifact_kind: METHODOLOGY_ARTIFACT.artifact_kind,
+      artifact_id: METHODOLOGY_ARTIFACT.artifact_id,
+      artifact: METHODOLOGY_ARTIFACT.payload,
+      revision: METHODOLOGY_ARTIFACT.revision,
+      proposed_by: 'agent-1',
+      proposed_at: '2026-09-18T10:01:00.000Z',
+      source: 'agent',
+    });
+    const scope = { org: 'org-a', project: 'shop' };
+    await s.saveMethodologyProposal(proposal, scope);
+    await s.saveMethodologyProposal(proposal, scope);
+    assert.equal((await s.listMethodologyProposals({ ...scope, status: 'pending' })).length, 1);
+    assert.equal((await s.listMethodologyProposals({ org: 'other', project: 'shop' })).length, 0);
+    await assert.rejects(
+      () => s.saveMethodologyProposal({ ...proposal, proposed_by: 'forged' }, scope),
+      /proposal conflict/,
+    );
+    const approval = {
+      schema_version: '1' as const,
+      approval_id: 'approval-memory',
+      proposal_id: proposal.proposal_id,
+      artifact_sha256: proposal.artifact_sha256,
+      revision: proposal.revision,
+      approved_by: 'reviewer-1',
+      approved_at: '2026-09-18T10:02:00.000Z',
+    };
+    const result = await s.approveMethodologyProposal(proposal.proposal_id, approval, scope);
+    assert.equal(result?.proposal.status, 'approved');
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(proposal.proposal_id, scope))?.approval,
+      approval,
+    );
+    await assert.rejects(
+      () => s.approveMethodologyProposal(proposal.proposal_id, approval, scope),
+      /not pending/,
+    );
+  });
 });
 
 describe('PostgresStore', () => {
@@ -415,6 +461,47 @@ describe('PostgresStore', () => {
         (await s.listMethodologyArtifacts({ org: 'org_b', project: 'shop_beta' })).length,
         0,
       );
+      const postgresProposal = createMethodologyProposal({
+        proposal_id: `proposal-postgres-${Date.now()}`,
+        artifact_kind: postgresArtifact.artifact_kind,
+        artifact_id: postgresArtifact.artifact_id,
+        artifact: postgresArtifact.payload,
+        revision: postgresArtifact.revision,
+        proposed_by: 'agent-postgres',
+        proposed_at: '2026-09-18T10:01:00.000Z',
+        source: 'agent',
+      });
+      await s.saveMethodologyProposal(postgresProposal, specialScope);
+      const postgresApproval = {
+        schema_version: '1' as const,
+        approval_id: `approval-postgres-${Date.now()}`,
+        proposal_id: postgresProposal.proposal_id,
+        artifact_sha256: postgresProposal.artifact_sha256,
+        revision: postgresProposal.revision,
+        approved_by: 'reviewer-postgres',
+        approved_at: '2026-09-18T10:02:00.000Z',
+      };
+      const concurrentApprovals = await Promise.allSettled([
+        s.approveMethodologyProposal(postgresProposal.proposal_id, postgresApproval, specialScope),
+        s.approveMethodologyProposal(
+          postgresProposal.proposal_id,
+          {
+            ...postgresApproval,
+            approval_id: `${postgresApproval.approval_id}-race`,
+            approved_by: 'reviewer-postgres-race',
+          },
+          specialScope,
+        ),
+      ]);
+      assert.equal(concurrentApprovals.filter((result) => result.status === 'fulfilled').length, 1);
+      for (const result of concurrentApprovals) {
+        if (result.status === 'rejected')
+          assert.match(String(result.reason), /conflict|not pending/);
+      }
+      assert.equal(
+        (await s.listMethodologyProposals({ ...specialScope, status: 'approved' })).length,
+        1,
+      );
     } finally {
       await s.close();
     }
@@ -432,6 +519,16 @@ describe('PostgresStore', () => {
           project: 'shop_beta',
         }),
         { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' },
+      );
+      assert.equal(
+        (
+          await reopened.listMethodologyProposals({
+            org: 'org_a with space',
+            project: 'shop_beta',
+            status: 'approved',
+          })
+        ).some((record) => record.proposal.artifact_id === 'checkout-tree-postgres'),
+        true,
       );
       await reopened.saveRun({
         ...RUN,

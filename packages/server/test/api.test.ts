@@ -365,8 +365,67 @@ describe('makeApi', () => {
     const publish = makeApi().find(
       (r) => r.method === 'POST' && r.path === '/api/methodology/artifacts',
     );
+    const propose = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/methodology/proposals',
+    );
+    const invalidProposal = await propose?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: {},
+        body: {
+          artifact,
+          proposal: { ...proposal, proposal_id: 'proposal-invalid-status', status: 'approved' },
+        },
+      },
+      c,
+    );
+    assert.equal(invalidProposal?.status, 400);
+    const proposed = await propose?.handle(
+      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal } },
+      c,
+    );
+    assert.equal(proposed?.status, 201);
+    const proposalList = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/methodology/proposals',
+    );
+    const pendingProposals = await proposalList?.handle(
+      { headers: TENANT_HEADERS, params: {}, query: { status: 'pending' } },
+      c,
+    );
+    assert.equal((pendingProposals?.body as { proposals: unknown[] }).proposals.length, 1);
+    const invalidProposalStatus = await proposalList?.handle(
+      { headers: TENANT_HEADERS, params: {}, query: { status: 'invalid' } },
+      c,
+    );
+    assert.equal(invalidProposalStatus?.status, 400);
+    const crossTenantProposals = await proposalList?.handle(
+      { headers: { 'x-aqa-org': 'other', 'x-aqa-project': 'demo' }, params: {} },
+      c,
+    );
+    assert.equal((crossTenantProposals?.body as { proposals: unknown[] }).proposals.length, 0);
+    const approve = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/methodology/proposals/:id/approve',
+    );
+    const approved = await approve?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: proposal.proposal_id },
+        body: approval,
+      },
+      c,
+    );
+    assert.equal(approved?.status, 200);
+    const approvedProposals = await proposalList?.handle(
+      { headers: TENANT_HEADERS, params: {}, query: { status: 'approved' } },
+      c,
+    );
+    assert.equal((approvedProposals?.body as { proposals: unknown[] }).proposals.length, 1);
     const response = await publish?.handle(
-      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval } },
+      {
+        headers: TENANT_HEADERS,
+        params: {},
+        body: { artifact, proposal_id: proposal.proposal_id },
+      },
       c,
     );
     assert.equal(response?.status, 201);
@@ -392,7 +451,11 @@ describe('makeApi', () => {
     assert.equal((crossTenant?.body as { artifacts: unknown[] }).artifacts.length, 0);
 
     const replay = await publish?.handle(
-      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval } },
+      {
+        headers: TENANT_HEADERS,
+        params: {},
+        body: { artifact, proposal_id: proposal.proposal_id },
+      },
       c,
     );
     assert.equal(replay?.status, 201);
@@ -402,8 +465,12 @@ describe('makeApi', () => {
       approval_id: 'approval-forged',
       approved_by: 'other-reviewer',
     };
-    const rejected = await publish?.handle(
-      { headers: TENANT_HEADERS, params: {}, body: { artifact, proposal, approval: forged } },
+    const rejected = await approve?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: proposal.proposal_id },
+        body: { ...forged, secret: 'token=must-not-persist' },
+      },
       c,
     );
     assert.equal(rejected?.status, 400);
@@ -427,19 +494,44 @@ describe('makeApi', () => {
       proposed_at: proposal.proposed_at,
       source: proposal.source,
     });
+    assert.equal(
+      (
+        await propose?.handle(
+          {
+            headers: TENANT_HEADERS,
+            params: {},
+            body: { artifact: conflictingArtifact, proposal: conflictingProposal },
+          },
+          c,
+        )
+      )?.status,
+      201,
+    );
+    assert.equal(
+      (
+        await approve?.handle(
+          {
+            headers: TENANT_HEADERS,
+            params: { id: conflictingProposal.proposal_id },
+            body: {
+              ...approval,
+              approval_id: 'approval-conflicting-tree',
+              proposal_id: conflictingProposal.proposal_id,
+              artifact_sha256: conflictingArtifact.artifact_sha256,
+            },
+          },
+          c,
+        )
+      )?.status,
+      200,
+    );
     const conflict = await publish?.handle(
       {
         headers: TENANT_HEADERS,
         params: {},
         body: {
           artifact: conflictingArtifact,
-          proposal: conflictingProposal,
-          approval: {
-            ...approval,
-            approval_id: 'approval-conflicting-tree',
-            proposal_id: conflictingProposal.proposal_id,
-            artifact_sha256: conflictingArtifact.artifact_sha256,
-          },
+          proposal_id: conflictingProposal.proposal_id,
         },
       },
       c,
