@@ -2959,9 +2959,3 @@ caller can see different authorization surfaces depending on deployment mode.
   authoritative tenant filter during purge; persisted scope columns are a
   fallback for legacy rows, not a substitute for the operation scope. Apply
   that rule consistently to artifact deletion and proposal-copy scrubbing.
-
-- A provider read can expose an apparent key/read-back mismatch even when a
-  transaction reports the expected delete. Tenant-scoped artifact reads now
-  fail closed on persisted tenant columns plus envelope identity/revision,
-  rather than trusting only the namespaced record key. This makes the read
-  invariant explicit and prevents a stale or malformed row from resurfacing.

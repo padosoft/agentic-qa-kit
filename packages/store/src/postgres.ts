@@ -475,21 +475,9 @@ export class PostgresStore implements StoreProvider {
     revision: number,
     scope?: StoreScope,
   ): Promise<MethodologyArtifactEnvelope | null> {
-    const row = scope
-      ? (
-          await this.q<Row>(
-            `SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND org IS NOT DISTINCT FROM $2 AND project IS NOT DISTINCT FROM $3 AND payload->>'artifact_id' = $4 AND (payload->>'revision')::integer = $5`,
-            [
-              'methodology_artifact',
-              scope.org ?? null,
-              scope.project ?? null,
-              artifactId,
-              revision,
-            ],
-          )
-        )[0]
-      : await this.one('methodology_artifact', `${artifactId}@${revision}`);
-    const value = this.payload<unknown>(row ?? null);
+    const value = this.payload<unknown>(
+      await this.one('methodology_artifact', `${artifactId}@${revision}`, scope),
+    );
     return value === null ? null : parseMethodologyArtifactEnvelope(JSON.stringify(value));
   }
   async saveMethodologyArtifact(
