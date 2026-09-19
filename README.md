@@ -329,12 +329,13 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 
 ## Status
 
-**Enterprise truth status (2026-09-18).** The repository has moved beyond the
+**Enterprise truth status (2026-09-19).** The repository has moved beyond the
 historical `v1.9` review: the enterprise control-plane, commerce contracts,
 runner fencing, observability and protected provider-evidence handoffs are now
-implemented and covered by hosted technical CI. Production readiness is still
-conditional on executing the protected workflows against operator-owned
-providers and completing the independent security/compliance work. See the
+implemented and covered by hosted technical CI. Provider execution evidence and
+independent security/compliance assurance are intentionally deferred to the
+final promotion gate while the owner validates the kit against side projects;
+they are not claimed as complete and do not block local development. See the
 [roadmap completion audit](docs/internal/roadmap-completion-audit-2026-09-18.md)
 for the requirement-by-requirement status; “implemented” is never treated as
 live provider evidence.

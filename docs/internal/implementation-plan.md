@@ -1505,6 +1505,17 @@ La roadmap originale è community-first e accelera troppo verso feature "wow" (A
 - Copilot Cloud Agent integration
 - Cloud SaaS offering (se voluto)
 
+### Project-stage execution policy
+
+During the side-project validation stage, provider credentials, production trust
+roots, penetration-test reports and compliance attestations are intentionally
+not prerequisites for repository work. They are final promotion gates, to be
+executed only when AQA is adopted by the owner's company or customers. The
+active roadmap must therefore prioritize every repository-testable contract,
+local complete journey, ecommerce invariant, deployment simulation, failure
+mode and operational runbook first. Deferred external gates remain explicitly
+tracked and may never be represented as verified evidence before execution.
+
 **Cosa è ESPLICITAMENTE rimandato:**
 - Marketplace community **fino a dopo** pack signing + scanning
 - AI-generation auto-apply (sempre review umana)
