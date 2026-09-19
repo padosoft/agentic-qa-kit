@@ -60,3 +60,9 @@ export {
   type MethodologyProposal,
   type MethodologyProposalSource,
 } from './methodology-governance.js';
+export {
+  createMethodologyArtifactEnvelope,
+  parseMethodologyArtifactEnvelope,
+  serializeMethodologyArtifactEnvelope,
+  type MethodologyArtifactEnvelope,
+} from './artifact-envelope.js';

@@ -9,6 +9,11 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Versioned methodology artifact envelope
+
+- Added ADR-279 and a provider-neutral envelope for methodology artifacts: bounded canonical payload, schema version, stable identity, revision, UTC timestamp, SHA-256 digest, and attack-tree validation on create/reload.
+- Added tamper, schema-drift, malformed-tree, and round-trip tests. Durable Postgres/S3 persistence, tenant authorization, migrations, retention, and admin visualization remain the next local slices; external evidence gates remain deferred to final promotion.
+
 ## 2026-09-19
 
 - **Added methodology approval governance.** Agent-generated risk maps,
