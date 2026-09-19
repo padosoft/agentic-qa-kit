@@ -13919,12 +13919,13 @@ function PageMethodologyReview({ mode }) {
     setState((current) => ({ ...current, loading: true, error: null }));
     fetch(apiUrl('/api/methodology/proposals'), { headers: METHODOLOGY_HEADERS })
       .then(async (res) => { const body = await res.json().catch(() => ({})); if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`); return body; })
-      .then((body) => { if (active) { const proposals = (Array.isArray(body.proposals) ? body.proposals : []).map((record) => record?.proposal ? { ...record.proposal, ...(record.approval ? { approval: record.approval } : {}) } : record); setState({ loading: false, proposals, error: null }); setSelectedId((current) => current && proposals.some((p) => p.proposal_id === current) ? current : proposals[0]?.proposal_id || null); } })
+      .then((body) => { if (active) { const proposals = (Array.isArray(body.proposals) ? body.proposals : []).map((record) => record?.proposal ? { ...record.proposal, ...(record.approval ? { approval: record.approval } : {}), ...(record.rejection ? { rejection: record.rejection } : {}) } : record); setState({ loading: false, proposals, error: null }); setSelectedId((current) => current && proposals.some((p) => p.proposal_id === current) ? current : proposals[0]?.proposal_id || null); } })
       .catch((error) => { if (active) setState({ loading: false, proposals: [], error: error instanceof Error ? error.message : String(error) }); });
     return () => { active = false; };
   }, [mode, mockProposals]);
 
   React.useEffect(() => load(), [load]);
+  React.useEffect(() => { setRejectReason(''); }, [selectedId]);
   React.useEffect(() => {
     if (mode !== 'live') return undefined;
     let active = true;
@@ -13954,13 +13955,13 @@ function PageMethodologyReview({ mode }) {
     try {
       const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/approve`), {
         method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ schema_version: '1', approval_id: `approval-${Date.now()}`, proposal_id: selected.proposal_id, artifact_sha256: selected.artifact_sha256, revision: selected.revision, approved_by: reviewerId, approved_at: now.toISOString(), expires_at: expires.toISOString() }),
+        body: JSON.stringify({ schema_version: '1', approval_id: `approval-${selected.proposal_id}-${selected.revision}`, proposal_id: selected.proposal_id, artifact_sha256: selected.artifact_sha256, revision: selected.revision, approved_by: reviewerId, approved_at: now.toISOString(), expires_at: expires.toISOString() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setNotice({ kind: 'success', text: 'Proposal approved and bound to this exact revision.' });
+      setNotice({ kind: 'success', action: 'approve', text: 'Proposal approved and bound to this exact revision.' });
       load();
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) }); }
+    } catch (error) { setNotice({ kind: 'error', action: 'approve', text: error instanceof Error ? error.message : String(error) }); }
     finally { setAction(null); }
   }
 
@@ -13970,20 +13971,20 @@ function PageMethodologyReview({ mode }) {
     try {
       const res = await fetch(apiUrl(`/api/methodology/proposals/${encodeURIComponent(selected.proposal_id)}/reject`), {
         method: 'POST', headers: { ...METHODOLOGY_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ schema_version: '1', rejection_id: `rejection-${Date.now()}`, proposal_id: selected.proposal_id, rejected_by: reviewerId, rejected_at: new Date().toISOString(), reason: rejectReason.trim() }),
+        body: JSON.stringify({ schema_version: '1', rejection_id: `rejection-${selected.proposal_id}-${selected.revision}`, proposal_id: selected.proposal_id, rejected_by: reviewerId, rejected_at: new Date().toISOString(), reason: rejectReason.trim() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setNotice({ kind: 'success', text: 'Proposal rejected with an auditable reason.' });
+      setNotice({ kind: 'success', action: 'reject', text: 'Proposal rejected with an auditable reason.' });
       setRejectReason(''); load();
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) }); }
+    } catch (error) { setNotice({ kind: 'error', action: 'reject', text: error instanceof Error ? error.message : String(error) }); }
     finally { setAction(null); }
   }
 
   return (
     <div className="page" data-screen-label="09 Methodology review">
       <PageHeader title="Methodology review" sub="Review the exact digest-bound proposal before it can become durable evidence." badge="HUMAN GATE" actions={<button className="btn sm ghost" onClick={load}><I.Refresh size={12} /> Refresh</button>} />
-      {notice && <Alert kind={notice.kind} title={notice.kind === 'success' ? 'Approval recorded' : 'Approval failed'}>{notice.text}</Alert>}
+      {notice && <Alert kind={notice.kind} title={notice.kind === 'success' ? (notice.action === 'reject' ? 'Rejection recorded' : 'Approval recorded') : (notice.action === 'reject' ? 'Rejection failed' : 'Approval failed')}>{notice.text}</Alert>}
       {state.error && <Alert kind="error" title="Proposal queue unavailable">{state.error}</Alert>}
       {state.loading ? <div className="skeleton" style={{ height: 220 }} aria-label="Loading methodology proposals" /> : state.proposals.length === 0 ? <EmptyState icon={<I.Audit size={22} />} title="No methodology proposals" body="Agent-generated risk maps and reports will appear here when they request human review." /> : (
         <div className="dash-grid" style={{ marginTop: 16 }}>
@@ -13999,7 +14000,7 @@ function PageMethodologyReview({ mode }) {
                 <div className="grid-2"><div><div className="field-label">SHA-256 digest</div><code className="code-inline" data-testid="methodology-digest">{selected.artifact_sha256}</code></div><div><div className="field-label">Proposed at</div><span className="mono">{selected.proposed_at}</span></div></div>
                 <div><div className="field-label">Payload preview</div>{artifactLoading ? <div className="skeleton" style={{ height: 140 }} aria-label="Loading staged methodology payload" /> : <pre className="code-block" data-testid="methodology-payload">{JSON.stringify(artifact || { warning: artifactError || 'Staged payload unavailable; approval is disabled.' }, null, 2)}</pre>}</div>
                 {selected.rejection && <Alert kind="error" title={`Rejected by ${selected.rejection.rejected_by}`}>{selected.rejection.reason}</Alert>}
-                {selected.status === 'pending' && <div className="col gap-8"><label className="field-label" htmlFor="methodology-reject-reason">Reject reason *</label><textarea id="methodology-reject-reason" className="input" rows={3} maxLength={2000} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Explain the missing invariant, unsafe assumption or required correction." /><div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn danger" data-testid="methodology-reject" onClick={reject} disabled={action === 'reject' || mode !== 'live' || !reviewerId || !rejectReason.trim()}><I.X size={12} />{action === 'reject' ? 'Rejecting…' : 'Reject with reason'}</button><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action === 'approve' || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div></div>}
+{selected.status === 'pending' && <div className="col gap-8"><label className="field-label" htmlFor="methodology-reject-reason">Reject reason *</label><textarea id="methodology-reject-reason" className="input" rows={3} maxLength={2000} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Explain the missing invariant, unsafe assumption or required correction." /><div className="row gap-8" style={{ justifyContent: 'flex-end' }}><button className="btn danger" data-testid="methodology-reject" onClick={reject} disabled={action !== null || mode !== 'live' || !reviewerId || !rejectReason.trim()}><I.X size={12} />{action === 'reject' ? 'Rejecting…' : 'Reject with reason'}</button><button className="btn primary" data-testid="methodology-approve" onClick={approve} disabled={action !== null || mode !== 'live' || !reviewerId || artifactLoading || !artifact}><I.Check size={12} />{action === 'approve' ? 'Approving…' : mode !== 'live' ? 'Live mode required' : !reviewerId ? 'Session unavailable' : !artifact ? 'Payload required' : 'Approve exact revision'}</button></div></div>}
               </div>
             </>}
           </div>

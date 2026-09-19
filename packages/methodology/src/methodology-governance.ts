@@ -326,6 +326,40 @@ export function assertMethodologyProposal(proposal: MethodologyProposal): void {
   validateProposal(proposal);
 }
 
+/** Revalidate the mutually exclusive terminal decision on persisted records. */
+export function assertMethodologyDecisionBinding(
+  proposal: MethodologyProposal,
+  approval?: MethodologyApproval,
+  rejection?: MethodologyRejection,
+): void {
+  if (approval && rejection) throw new Error('methodology proposal record has two decisions');
+  if (!approval && !rejection) {
+    if (proposal.status !== 'pending')
+      throw new Error('methodology proposal decision is missing for terminal status');
+    return;
+  }
+  if (approval) {
+    if (proposal.status !== 'approved')
+      throw new Error('methodology approval status binding mismatch');
+    if (
+      approval.proposal_id !== proposal.proposal_id ||
+      approval.artifact_sha256 !== proposal.artifact_sha256 ||
+      approval.revision !== proposal.revision
+    )
+      throw new Error('methodology approval binding mismatch');
+    if (approval.approved_by === proposal.proposed_by)
+      throw new Error('methodology approval requires an independent reviewer');
+    return;
+  }
+  if (proposal.status !== 'rejected')
+    throw new Error('methodology rejection status binding mismatch');
+  if (!rejection) throw new Error('methodology rejection decision is missing');
+  if (rejection.proposal_id !== proposal.proposal_id)
+    throw new Error('methodology rejection binding mismatch');
+  if (rejection.rejected_by === proposal.proposed_by)
+    throw new Error('methodology rejection requires an independent reviewer');
+}
+
 function validateProposal(proposal: MethodologyProposal): void {
   if (proposal.schema_version !== '1')
     throw new Error('methodology proposal schema version is unsupported');

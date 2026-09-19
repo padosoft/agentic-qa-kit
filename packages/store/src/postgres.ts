@@ -6,6 +6,7 @@ import {
   type MethodologyRejection,
   type MethodologyRejectionResult,
   approveMethodologyProposal,
+  assertMethodologyDecisionBinding,
   assertMethodologyProposal,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
@@ -882,6 +883,7 @@ function parseMethodologyProposalRecord(input: unknown): MethodologyProposalReco
   )
     throw new Error('methodology proposal record artifact binding mismatch');
   if (approval && rejection) throw new Error('methodology proposal record has two decisions');
+  assertMethodologyDecisionBinding(proposal, approval, rejection);
   return {
     proposal,
     ...(artifact ? { artifact } : {}),

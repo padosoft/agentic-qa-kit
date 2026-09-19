@@ -530,6 +530,26 @@ describe('PostgresStore', () => {
         (await s.listMethodologyProposals({ ...specialScope, status: 'approved' })).length,
         1,
       );
+      const postgresRejectedProposal = {
+        ...postgresProposal,
+        proposal_id: 'proposal-postgres-rejected',
+      };
+      await s.saveMethodologyProposal(postgresRejectedProposal, specialScope, postgresArtifact);
+      const postgresRejection = {
+        schema_version: '1' as const,
+        rejection_id: 'rejection-postgres-durable',
+        proposal_id: postgresRejectedProposal.proposal_id,
+        rejected_by: 'reviewer-postgres-reject',
+        rejected_at: '2026-09-18T10:03:00.000Z',
+        reason: 'The checkout tree omits the payment callback invariant.',
+      };
+      const rejectedResult = await s.rejectMethodologyProposal(
+        postgresRejectedProposal.proposal_id,
+        postgresRejection,
+        specialScope,
+      );
+      assert.equal(rejectedResult?.proposal.status, 'rejected');
+      assert.deepEqual(rejectedResult?.rejection, postgresRejection);
     } finally {
       await s.close();
     }
@@ -558,6 +578,20 @@ describe('PostgresStore', () => {
         ).some((record) => record.proposal.artifact_id === 'checkout-durable'),
         true,
       );
+      const reopenedRejected = await reopened.loadMethodologyProposal(
+        'proposal-postgres-rejected',
+        { org: 'org_a with space', project: 'shop_beta' },
+      );
+      assert.equal(reopenedRejected?.proposal.status, 'rejected');
+      assert.deepEqual(reopenedRejected?.rejection, {
+        schema_version: '1',
+        rejection_id: 'rejection-postgres-durable',
+        proposal_id: 'proposal-postgres-rejected',
+        rejected_by: 'reviewer-postgres-reject',
+        rejected_at: '2026-09-18T10:03:00.000Z',
+        reason: 'The checkout tree omits the payment callback invariant.',
+      });
+      assert.deepEqual(reopenedRejected?.artifact, postgresArtifact);
       await reopened.saveRun({
         ...RUN,
         id: 'cost-run',

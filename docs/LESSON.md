@@ -16,6 +16,14 @@ bounded DLP-checked reason, require an independent reviewer, preserve the
 staged evidence and make the UI action live-only. This keeps rejection
 auditable without allowing mock mode or a later approval to rewrite history.
 
+# 2026-09-19 — Revalidate terminal decisions when reading durable records
+
+Validating a decision only on the write path is insufficient: JSONB records can
+be malformed, migrated or tampered with before a later list/detail read. Read
+parsers must re-check status, proposal ID, digest/revision and independent
+actor binding. UI state must also preserve the persisted decision and prevent
+two terminal actions from racing.
+
 # 2026-09-19 — A live UI must bind tenant and principal context explicitly
 
 An admin page can look correct in mock mode while every live request is

@@ -50,6 +50,7 @@ export {
 } from './stateful-journey.js';
 export {
   approveMethodologyProposal,
+  assertMethodologyDecisionBinding,
   rejectMethodologyProposal,
   assertMethodologyApproval,
   assertMethodologyProposal,

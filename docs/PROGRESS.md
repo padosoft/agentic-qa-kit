@@ -27,6 +27,13 @@
   PAN through the DLP guard. The fixture now uses deterministic semantic IDs;
   the local store suite is **18 passed / 0 failed**, and the required hosted
   PostgreSQL contract must re-run on this revision.
+- Hardened the rejection slice after technical review: persisted decision
+  invariants are revalidated on read, terminal UI actions are mutually
+  disabled, rejection reasons survive normalization, notices identify the
+  correct action, and proposal selection clears stale reasons. Added parser
+  boundary tests, Postgres durability assertions and a Playwright mock-mode
+  governance test. Local typecheck, admin build, methodology/store/server
+  tests and the focused Playwright test pass.
 
 ## 2026-09-19 — Methodology review slice merged
 
