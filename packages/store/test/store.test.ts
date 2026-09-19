@@ -518,11 +518,11 @@ describe('PostgresStore', () => {
         'a fresh store instance must read state written by the previous process',
       );
       assert.deepEqual(
-        await reopened.loadMethodologyArtifact('checkout-tree-postgres', 1, {
+        await reopened.loadMethodologyArtifact('checkout-durable', 1, {
           org: 'org_a with space',
           project: 'shop_beta',
         }),
-        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-tree-postgres' },
+        { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' },
       );
       assert.equal(
         (
