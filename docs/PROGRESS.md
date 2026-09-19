@@ -26,6 +26,9 @@
   explicit no-history state, the diff uses a real responsive two-column style,
   and browser evidence asserts mock read-only behavior, tenant headers and the
   exact published envelope.
+- Added hosted-journey coverage for revision-one no-history behavior and a
+  post-publication refresh/read-back assertion; focused methodology browser
+  evidence is now **5/5 passed**.
 
 ## 2026-09-19 — Reasoned methodology rejection implemented
 

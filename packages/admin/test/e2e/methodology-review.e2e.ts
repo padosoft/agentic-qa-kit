@@ -120,6 +120,8 @@ test('live approved methodology compares the previous revision and publishes it'
   page,
 }) => {
   let publishedBody: Record<string, unknown> | undefined;
+  let published = false;
+  let detailReads = 0;
   const approvedProposal = {
     ...proposal,
     proposal_id: 'proposal-browser-publish',
@@ -149,6 +151,11 @@ test('live approved methodology compares the previous revision and publishes it'
   await page.route('**/api/methodology/proposals**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/proposal-browser-publish')) {
+      detailReads += 1;
+      if (detailReads > 1 && !published) {
+        await route.fulfill({ status: 500, json: { error: 'publication was not persisted' } });
+        return;
+      }
       await route.fulfill({
         json: {
           proposal: {
@@ -188,6 +195,7 @@ test('live approved methodology compares the previous revision and publishes it'
   await page.route('**/api/methodology/artifacts', async (route) => {
     if (route.request().method() === 'POST') {
       publishedBody = route.request().postDataJSON();
+      published = true;
       await route.fulfill({
         status: 201,
         json: { artifact: approvedArtifact, durability: 'durable' },
@@ -222,6 +230,48 @@ test('live approved methodology compares the previous revision and publishes it'
   await expect.poll(() => publishedBody?.proposal_id).toBe(approvedProposal.proposal_id);
   expect(publishedBody?.artifact).toEqual(approvedArtifact);
   await expect(page.getByText('Publication recorded')).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.locator('[data-testid="methodology-payload"]')).toContainText('checkout-total');
+});
+
+test('live revision one shows an explicit no-history state', async ({ page }) => {
+  const revisionOne = { ...proposal, proposal_id: 'proposal-browser-revision-one', status: 'approved' };
+  const revisionOneArtifact = { ...artifact, payload: { risks: [] } };
+  await page.route('**/api/session', (route) =>
+    route.fulfill({ json: { user: { id: 'reviewer-browser', name: 'Reviewer', role: 'qa-lead' } } }),
+  );
+  await page.route('**/api/methodology/proposals**', async (route) => {
+    const url = new URL(route.request().url());
+    const record = {
+      proposal: revisionOne,
+      artifact: revisionOneArtifact,
+      approval: {
+        approval_id: 'approval-revision-one',
+        proposal_id: revisionOne.proposal_id,
+        artifact_sha256: revisionOne.artifact_sha256,
+        revision: 1,
+        approved_by: 'reviewer-browser',
+        approved_at: '2026-09-19T10:01:00.000Z',
+      },
+    };
+    await route.fulfill({
+      json: url.pathname.endsWith('/proposal-browser-revision-one')
+        ? { proposal: record }
+        : { proposals: [record] },
+    });
+  });
+  await page.goto('/');
+  const modePill = page.locator('.mode-pill').first();
+  const modeClass = await modePill.getAttribute('class');
+  if (modeClass?.includes('failed')) {
+    await modePill.click();
+    await modePill.click();
+  } else if (modeClass?.includes('mock')) await modePill.click();
+  await expect(modePill).toHaveClass(/live/);
+  await page.locator('.nav-item', { hasText: /^Methodology review/ }).click();
+  await expect(page.locator('[data-testid="methodology-revision-diff"]')).toContainText(
+    'Revision 1 has no previous published revision.',
+  );
 });
 
 test('mock approved methodology remains read-only and never publishes', async ({ page }) => {
