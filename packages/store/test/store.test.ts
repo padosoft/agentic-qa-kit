@@ -600,7 +600,7 @@ describe('PostgresStore', () => {
         await s.purgeExpiredMethodologyArtifacts('2026-09-21T14:00:00.000Z', specialScope),
         1,
       );
-      const sameConnectionRetention = await s.loadMethodologyArtifact(
+      const _sameConnectionRetention = await s.loadMethodologyArtifact(
         'retention-contract',
         1,
         specialScope,
