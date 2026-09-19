@@ -16,6 +16,11 @@
   provider's object-shaped JSONB value instead of canonical serialized JSON.
   Normalized that read boundary and recorded the lesson; rerunning local gates
   and hosted CI is the next action.
+- The rerun then exposed a second hosted-only retention defect: purge returned
+  one expired lifecycle but scoped artifact read-back still found the artifact.
+  The deletion path now derives the artifact namespace from validated lifecycle
+  identity plus stored tenant scope; local gates and a fresh hosted contract
+  run are required next.
 
 ## 2026-09-19 — Methodology diff and publication UI implemented
 

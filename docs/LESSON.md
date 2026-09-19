@@ -2948,3 +2948,10 @@ caller can see different authorization surfaces depending on deployment mode.
   JSON. Normalize every provider read at the parser boundary, including
   migration/backfill paths; fixing only the publication transaction is
   insufficient.
+
+- The next hosted retention run showed that a purge count is not enough:
+  scoped artifact read-back must be asserted after deletion. Derive the
+  artifact namespace from the validated lifecycle identity plus its stored
+  tenant scope, then delete lifecycle and artifact rows using their explicit
+  keys. This keeps legacy/backfilled lifecycle rows from relying on an
+  implicit key equivalence.

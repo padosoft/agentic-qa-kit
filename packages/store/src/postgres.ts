@@ -700,7 +700,11 @@ export class PostgresStore implements StoreProvider {
       let purged = 0;
       for (const row of rows) {
         let current = parseMethodologyArtifactLifecycle(this.decode(row.payload));
-        const key = row.record_key;
+        const lifecycleKey = row.record_key;
+        const artifactKey = scopedRecordKey(`${current.artifact_id}@${current.revision}`, {
+          ...(row.org ? { org: row.org } : {}),
+          ...(row.project ? { project: row.project } : {}),
+        });
         if (
           !current.legal_hold &&
           current.state === 'active' &&
@@ -715,17 +719,17 @@ export class PostgresStore implements StoreProvider {
           };
           await query(
             'UPDATE aqa_store_records SET payload = $1::jsonb, updated_at = now() WHERE kind = $2 AND record_key = $3',
-            [JSON.stringify(current), 'methodology_artifact_lifecycle', key],
+            [JSON.stringify(current), 'methodology_artifact_lifecycle', lifecycleKey],
           );
         }
         if (!isMethodologyArtifactExpired(current, now)) continue;
         await query('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
           'methodology_artifact_lifecycle',
-          key,
+          lifecycleKey,
         ]);
         await query('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
           'methodology_artifact',
-          key,
+          artifactKey,
         ]);
         await query(
           `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
