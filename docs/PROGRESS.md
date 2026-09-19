@@ -18,9 +18,9 @@
   and proposal ID to the existing approval-bound publication API; mock mode
   remains unable to publish. Browser evidence: methodology review **3/3
   passed**, including previous-revision comparison and publication request.
-- Next: define and implement durable retention/archive/expiry controls for
-  methodology artifacts and decisions. The real provider/authenticated
-  proposal-creation journey and external assurance remain deferred final gates.
+- Retention/archive/expiry controls are now implemented; the real
+  provider/authenticated proposal-creation journey and external assurance
+  remain deferred final gates.
 - Technical hardening after automated review: publication now reports the
   store durability boundary (`durable` vs `ephemeral`), revision 1 renders an
   explicit no-history state, the diff uses a real responsive two-column style,
@@ -29,6 +29,21 @@
 - Added hosted-journey coverage for revision-one no-history behavior and a
   post-publication refresh/read-back assertion; focused methodology browser
   evidence is now **5/5 passed**.
+
+## 2026-09-19 — Methodology retention lifecycle implemented
+
+- Added validated tenant-scoped lifecycle records for published methodology
+  revisions: active/archived state, bounded retention and archive deadlines,
+  operator reason, and legal hold.
+- Added Memory/Postgres persistence, authenticated lifecycle inspection,
+  archive, legal-hold and retention-reconcile routes. Expiry purge deletes the
+  lifecycle and artifact only when the record is not under legal hold.
+- Evidence: methodology/store/server focused suite **139 passed / 0 failed**;
+  full adapter-hosted PostgreSQL retention evidence and external WORM/backup
+  proof remain to be run or supplied.
+- Operator retention controls are now exposed in the admin review workspace;
+  next is the real authenticated provider journey. External assurance remains
+  a final promotion gate.
 
 ## 2026-09-19 — Reasoned methodology rejection implemented
 

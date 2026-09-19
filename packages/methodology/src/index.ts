@@ -74,3 +74,12 @@ export {
   serializeMethodologyArtifactEnvelope,
   type MethodologyArtifactEnvelope,
 } from './artifact-envelope.js';
+export {
+  archiveMethodologyArtifactLifecycle,
+  createMethodologyArtifactLifecycle,
+  isMethodologyArtifactExpired,
+  parseMethodologyArtifactLifecycle,
+  setMethodologyArtifactLegalHold,
+  type MethodologyArtifactLifecycle,
+  type MethodologyArtifactLifecycleState,
+} from './methodology-retention.js';

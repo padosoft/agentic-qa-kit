@@ -58,10 +58,11 @@ performs the durable independent approval transition. `POST
  terminal and cannot be issued by the proposer. `POST
 /api/methodology/artifacts` then accepts only the approved proposal ID plus its
 exact envelope. Agent-origin proposals require a host-owned verifier; bare
-payloads, forged identities and mismatched approvals are rejected. The admin
-console now exposes the review queue, digest-bound approval action and reasoned
-rejection action; the complete authenticated browser journey, revision diff and
-retention/archive policy remain roadmap work.
+payloads, forged identities and mismatched approvals are rejected. Publication
+also creates a bounded lifecycle record. Lifecycle metadata is available from
+the detail/lifecycle routes; authenticated operators can archive revisions, set
+or release legal holds, and reconcile expired non-held revisions. The complete
+authenticated provider journey remains deployment evidence.
 
 The `aqa-budget-reaper` binary performs one PostgreSQL reservation cleanup tick
 using `AQA_BUDGET_LEDGER_DSN`. It is intended for a Kubernetes CronJob or

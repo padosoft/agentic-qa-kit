@@ -2905,3 +2905,14 @@ caller can see different authorization surfaces depending on deployment mode.
   configured. A successful write there is process-local, not restart-durable;
   API responses and UI notices must expose that distinction instead of making
   an unconditional enterprise evidence claim.
+
+# 2026-09-19 — Retention controls need a lifecycle, not only a delete job
+
+- Published methodology evidence now carries an explicit tenant-scoped
+  lifecycle with bounded retention, archive deadline, operator reason and
+  legal hold. Reconciliation archives first and purges only expired records
+  without a hold; this keeps an auditable state transition instead of making
+  deletion the only observable outcome.
+- Memory and PostgreSQL adapters share the same contract, but local tests do
+  not prove hosted backup/WORM semantics. Provider retention read-back,
+  restore/PITR and external assurance remain final deployment evidence gaps.

@@ -2,17 +2,22 @@ import {
   type MethodologyApproval,
   type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
+  type MethodologyArtifactLifecycle,
   type MethodologyProposal,
   type MethodologyRejection,
   type MethodologyRejectionResult,
   approveMethodologyProposal,
+  archiveMethodologyArtifactLifecycle,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
+  isMethodologyArtifactExpired,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyArtifactLifecycle,
   parseMethodologyProposal,
   parseMethodologyRejection,
   rejectMethodologyProposal,
+  setMethodologyArtifactLegalHold,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -54,6 +59,7 @@ type Kind =
   | 'profile'
   | 'risk'
   | 'methodology_artifact'
+  | 'methodology_artifact_lifecycle'
   | 'methodology_proposal'
   | 'scenario'
   | 'agent'
@@ -499,6 +505,93 @@ export class PostgresStore implements StoreProvider {
       if (!existing || existing.artifact_sha256 !== validated.artifact_sha256)
         throw new Error('methodology artifact revision conflict');
     }
+  }
+
+  async loadMethodologyArtifactLifecycle(
+    artifactId: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const value = this.payload<unknown>(
+      await this.one('methodology_artifact_lifecycle', `${artifactId}@${revision}`, scope),
+    );
+    return value === null ? null : parseMethodologyArtifactLifecycle(value);
+  }
+  async saveMethodologyArtifactLifecycle(
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactLifecycle(lifecycle);
+    if (!(await this.loadMethodologyArtifact(validated.artifact_id, validated.revision, scope)))
+      throw new Error('methodology artifact does not exist');
+    await this.put(
+      'methodology_artifact_lifecycle',
+      `${validated.artifact_id}@${validated.revision}`,
+      validated,
+      undefined,
+      undefined,
+      scope,
+    );
+  }
+  async archiveMethodologyArtifact(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+    if (!current) return null;
+    const updated = archiveMethodologyArtifactLifecycle(current, input);
+    await this.saveMethodologyArtifactLifecycle(updated, scope);
+    return updated;
+  }
+  async setMethodologyArtifactLegalHold(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; enabled: boolean; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+    if (!current) return null;
+    const updated = setMethodologyArtifactLegalHold(current, input);
+    await this.saveMethodologyArtifactLifecycle(updated, scope);
+    return updated;
+  }
+  async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
+    const lifecycles = (await this.many('methodology_artifact_lifecycle', scope)).map((row) =>
+      parseMethodologyArtifactLifecycle(this.decode(row.payload)),
+    );
+    let purged = 0;
+    for (const lifecycle of lifecycles) {
+      let current = lifecycle;
+      if (
+        !current.legal_hold &&
+        current.state === 'active' &&
+        Date.parse(now) >= Date.parse(current.archive_after)
+      ) {
+        current = {
+          ...current,
+          state: 'archived',
+          updated_at: now,
+          updated_by: 'retention-reconciler',
+          reason: 'Retention archive threshold reached',
+        };
+        await this.saveMethodologyArtifactLifecycle(current, scope);
+      }
+      if (!isMethodologyArtifactExpired(current, now)) continue;
+      await this.remove(
+        'methodology_artifact_lifecycle',
+        `${current.artifact_id}@${current.revision}`,
+        scope,
+      );
+      await this.remove(
+        'methodology_artifact',
+        `${current.artifact_id}@${current.revision}`,
+        scope,
+      );
+      purged += 1;
+    }
+    return purged;
   }
 
   // ----- Methodology proposals -----

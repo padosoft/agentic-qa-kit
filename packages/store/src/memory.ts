@@ -2,17 +2,22 @@ import {
   type MethodologyApproval,
   type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
+  type MethodologyArtifactLifecycle,
   type MethodologyProposal,
   type MethodologyRejection,
   type MethodologyRejectionResult,
   approveMethodologyProposal,
+  archiveMethodologyArtifactLifecycle,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
+  isMethodologyArtifactExpired,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyArtifactLifecycle,
   parseMethodologyProposal,
   parseMethodologyRejection,
   rejectMethodologyProposal,
+  setMethodologyArtifactLegalHold,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -62,6 +67,7 @@ export class MemoryStore implements StoreProvider {
   private profiles = new Map<string, Profile.Profile>();
   private risks = new Map<string, RiskMap.Risk>();
   private methodologyArtifacts = new Map<string, MethodologyArtifactEnvelope>();
+  private methodologyArtifactLifecycles = new Map<string, MethodologyArtifactLifecycle>();
   private methodologyProposals = new Map<string, MethodologyProposalRecord>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
@@ -368,6 +374,81 @@ export class MemoryStore implements StoreProvider {
     if (existing && existing.artifact_sha256 !== validated.artifact_sha256)
       throw new Error('methodology artifact revision conflict');
     this.methodologyArtifacts.set(key, validated);
+  }
+
+  async loadMethodologyArtifactLifecycle(
+    artifactId: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const lifecycle = this.methodologyArtifactLifecycles.get(
+      this.key(`${artifactId}@${revision}`, scope),
+    );
+    return lifecycle
+      ? parseMethodologyArtifactLifecycle(JSON.parse(JSON.stringify(lifecycle)))
+      : null;
+  }
+  async saveMethodologyArtifactLifecycle(
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactLifecycle(lifecycle);
+    if (!(await this.loadMethodologyArtifact(validated.artifact_id, validated.revision, scope)))
+      throw new Error('methodology artifact does not exist');
+    this.methodologyArtifactLifecycles.set(
+      this.key(`${validated.artifact_id}@${validated.revision}`, scope),
+      validated,
+    );
+  }
+  async archiveMethodologyArtifact(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+    if (!current) return null;
+    const updated = archiveMethodologyArtifactLifecycle(current, input);
+    await this.saveMethodologyArtifactLifecycle(updated, scope);
+    return updated;
+  }
+  async setMethodologyArtifactLegalHold(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; enabled: boolean; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+    if (!current) return null;
+    const updated = setMethodologyArtifactLegalHold(current, input);
+    await this.saveMethodologyArtifactLifecycle(updated, scope);
+    return updated;
+  }
+  async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
+    let purged = 0;
+    for (const [key, lifecycle] of this.methodologyArtifactLifecycles.entries()) {
+      if (!this.visible(new Map([[key, lifecycle]]), scope).length) continue;
+      let current = lifecycle;
+      if (
+        !current.legal_hold &&
+        current.state === 'active' &&
+        Date.parse(now) >= Date.parse(current.archive_after)
+      ) {
+        current = {
+          ...current,
+          state: 'archived',
+          updated_at: now,
+          updated_by: 'retention-reconciler',
+          reason: 'Retention archive threshold reached',
+        };
+        this.methodologyArtifactLifecycles.set(key, current);
+      }
+      if (!isMethodologyArtifactExpired(current, now)) continue;
+      this.methodologyArtifactLifecycles.delete(key);
+      this.methodologyArtifacts.delete(key);
+      purged += 1;
+    }
+    return purged;
   }
 
   // ----- Methodology proposals -----

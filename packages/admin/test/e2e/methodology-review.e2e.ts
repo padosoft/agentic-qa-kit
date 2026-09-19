@@ -206,6 +206,37 @@ test('live approved methodology compares the previous revision and publishes it'
   });
   await page.route('**/api/methodology/artifacts/**', async (route) => {
     const url = new URL(route.request().url());
+    if (route.request().method() === 'POST' && url.pathname.endsWith('/archive')) {
+      await route.fulfill({
+        json: {
+          lifecycle: {
+            state: 'archived',
+            legal_hold: false,
+            retained_until: '2027-09-19T10:00:00.000Z',
+          },
+        },
+      });
+      return;
+    }
+    if (url.pathname.endsWith('/2/lifecycle')) {
+      await route.fulfill({
+        json: {
+          lifecycle: {
+            schema_version: '1',
+            artifact_kind: 'risk_map',
+            artifact_id: 'risk-map-publish',
+            revision: 2,
+            state: 'active',
+            retained_until: '2027-09-19T10:00:00.000Z',
+            archive_after: '2027-03-19T10:00:00.000Z',
+            legal_hold: false,
+            updated_at: '2026-09-19T10:00:00.000Z',
+            updated_by: 'reviewer-browser',
+          },
+        },
+      });
+      return;
+    }
     expect(url.pathname).toBe('/api/methodology/artifacts/risk-map-publish/1');
     expect(route.request().headers()['x-aqa-org']).toBe('padosoft');
     expect(route.request().headers()['x-aqa-project']).toBe('gescat');
@@ -226,12 +257,16 @@ test('live approved methodology compares the previous revision and publishes it'
   await expect(page.locator('[data-testid="methodology-revision-diff"]')).toContainText(
     'checkout-total',
   );
+  await expect(page.locator('[data-testid="methodology-lifecycle"]')).toContainText('active');
   await page.locator('[data-testid="methodology-publish"]').click();
   await expect.poll(() => publishedBody?.proposal_id).toBe(approvedProposal.proposal_id);
   expect(publishedBody?.artifact).toEqual(approvedArtifact);
   await expect(page.getByText('Publication recorded')).toBeVisible();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('[data-testid="methodology-payload"]')).toContainText('checkout-total');
+  await page.getByLabel('Lifecycle reason').fill('Superseded by a reviewed revision');
+  await page.locator('[data-testid="methodology-archive"]').click();
+  await expect(page.getByText('Archive recorded')).toBeVisible();
 });
 
 test('live revision one shows an explicit no-history state', async ({ page }) => {

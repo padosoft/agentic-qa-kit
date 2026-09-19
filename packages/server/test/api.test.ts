@@ -482,6 +482,67 @@ describe('makeApi', () => {
     );
     assert.equal(response?.status, 201);
     assert.equal((response?.body as { durability: string }).durability, 'ephemeral');
+    assert.equal((response?.body as { lifecycle: { state: string } }).lifecycle.state, 'active');
+    const lifecycleRoute = makeApi().find(
+      (r) => r.method === 'GET' && r.path === '/api/methodology/artifacts/:id/:revision/lifecycle',
+    );
+    const lifecycleResponse = await lifecycleRoute?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: artifact.artifact_id, revision: String(artifact.revision) },
+      },
+      c,
+    );
+    assert.equal(
+      (lifecycleResponse?.body as { lifecycle: { state: string } }).lifecycle.state,
+      'active',
+    );
+    const legalHold = makeApi().find(
+      (r) =>
+        r.method === 'POST' && r.path === '/api/methodology/artifacts/:id/:revision/legal-hold',
+    );
+    const held = await legalHold?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: artifact.artifact_id, revision: String(artifact.revision) },
+        body: { enabled: true, reason: 'Preserve evidence for operator review' },
+      },
+      c,
+    );
+    assert.equal((held?.body as { lifecycle: { legal_hold: boolean } }).lifecycle.legal_hold, true);
+    const archive = makeApi().find(
+      (r) => r.method === 'POST' && r.path === '/api/methodology/artifacts/:id/:revision/archive',
+    );
+    const blockedArchive = await archive?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: artifact.artifact_id, revision: String(artifact.revision) },
+        body: { reason: 'This must be blocked while held' },
+      },
+      c,
+    );
+    assert.equal(blockedArchive?.status, 409);
+    const released = await legalHold?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: artifact.artifact_id, revision: String(artifact.revision) },
+        body: { enabled: false, reason: 'Operator review completed' },
+      },
+      c,
+    );
+    assert.equal(
+      (released?.body as { lifecycle: { legal_hold: boolean } }).lifecycle.legal_hold,
+      false,
+    );
+    const archived = await archive?.handle(
+      {
+        headers: TENANT_HEADERS,
+        params: { id: artifact.artifact_id, revision: String(artifact.revision) },
+        body: { reason: 'Superseded by a reviewed revision' },
+      },
+      c,
+    );
+    assert.equal((archived?.body as { lifecycle: { state: string } }).lifecycle.state, 'archived');
     const list = makeApi().find(
       (r) => r.method === 'GET' && r.path === '/api/methodology/artifacts',
     );
@@ -512,6 +573,7 @@ describe('makeApi', () => {
       c,
     );
     assert.equal(replay?.status, 201);
+    assert.equal((replay?.body as { lifecycle: { state: string } }).lifecycle.state, 'archived');
 
     const forged = {
       ...approval,
