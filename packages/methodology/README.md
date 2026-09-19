@@ -17,6 +17,9 @@ auditors and architects expect (Task 21).
   through injected runtime actions, require authoritative observed state after
   every transition, run temporal observers, enforce abort/timeout signalling
   and run cleanup after action or observer failure.
+- `createMethodologyProposal()` / `approveMethodologyProposal()` — bind a risk,
+  attack-tree, FMEA or coverage artifact to a canonical digest and require an
+  independent, time-bounded human approval before it becomes approved.
 
 State graphs reject unknown endpoints, duplicate IDs, unreachable states,
 non-terminal dead ends and transitions out of terminal states. Path evaluation

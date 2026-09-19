@@ -48,3 +48,15 @@ export {
   type StatefulJourneyDefinition,
   type StatefulJourneyExecution,
 } from './stateful-journey.js';
+export {
+  approveMethodologyProposal,
+  assertMethodologyApproval,
+  canonicalMethodologyArtifact,
+  createMethodologyProposal,
+  methodologyArtifactSha256,
+  type MethodologyApproval,
+  type MethodologyApprovalResult,
+  type MethodologyArtifactKind,
+  type MethodologyProposal,
+  type MethodologyProposalSource,
+} from './methodology-governance.js';
