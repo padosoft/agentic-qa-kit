@@ -25,6 +25,10 @@
 - The latest hosted attempt showed the operation must prefer its caller scope
   over nullable legacy row scope columns. Purge and proposal-copy scrubbing
   now use that authoritative scope with persisted columns as fallback.
+- The diagnostic hosted contract showed a key/read-back mismatch after purge.
+  Tenant-scoped artifact reads now require persisted tenant scope and envelope
+  identity/revision, failing closed instead of trusting only a namespaced key;
+  temporary diagnostic SQL was removed before rerunning CI.
 
 ## 2026-09-19 — Methodology diff and publication UI implemented
 

@@ -7,7 +7,6 @@ import {
   methodologyArtifactSha256,
 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
-import { scopedRecordKey } from '../dist/types.js';
 
 const RUN = {
   schema_version: '1' as const,
@@ -601,15 +600,6 @@ describe('PostgresStore', () => {
         await s.purgeExpiredMethodologyArtifacts('2026-09-21T14:00:00.000Z', specialScope),
         1,
       );
-      const debugRows = await (
-        s as unknown as {
-          q: (sql: string, values: unknown[]) => Promise<unknown[]>;
-        }
-      ).q(
-        'SELECT kind, record_key, org, project, payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
-        ['methodology_artifact', scopedRecordKey('retention-contract@1', specialScope)],
-      );
-      assert.deepEqual(debugRows, []);
       assert.equal(await s.loadMethodologyArtifact('retention-contract', 1, specialScope), null);
       assert.equal(
         (await s.loadMethodologyProposal(retentionProposal.proposal_id, specialScope))?.artifact,
