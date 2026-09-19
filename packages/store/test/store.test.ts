@@ -472,6 +472,7 @@ describe('PostgresStore', () => {
       assert.ok(true, 'integration contract requires AQA_TEST_POSTGRES_DSN');
       return;
     }
+    const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' };
     const s = new PostgresStore(dsn);
     try {
       await s.saveRun(RUN);
@@ -480,7 +481,6 @@ describe('PostgresStore', () => {
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
       );
-      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' };
       const specialScope = { org: 'org_a with space', project: 'shop_beta' };
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
