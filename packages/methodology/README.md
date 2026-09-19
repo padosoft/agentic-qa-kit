@@ -20,6 +20,10 @@ auditors and architects expect (Task 21).
 - `createMethodologyProposal()` / `approveMethodologyProposal()` — bind a risk,
   attack-tree, FMEA or coverage artifact to a canonical digest and require an
   independent, time-bounded human approval before it becomes approved.
+- `rejectMethodologyProposal()` / `parseMethodologyRejection()` — record a
+  bounded, DLP-checked reason for an independent terminal rejection; persisted
+  records must remain mutually exclusive with approval and bound to the exact
+  proposal identity.
 - `createMethodologyArtifactEnvelope()` / `serializeMethodologyArtifactEnvelope()` /
   `parseMethodologyArtifactEnvelope()` — provide a versioned, digest-bound
   serialization boundary that validates attack trees before a durable adapter

@@ -1,5 +1,37 @@
 # Lessons
 
+# 2026-09-19 — Test identifiers must not look like payment data
+
+Timestamp-based fixture IDs can contain a 13–19 digit sequence that passes a
+PAN heuristic and are correctly rejected by the DLP boundary. Use deterministic
+semantic IDs in persistence contracts; never weaken redaction just to make a
+fixture pass. This also makes hosted provider failures reproducible.
+
+# 2026-09-19 — Rejection must be a first-class terminal decision
+
+A review queue that supports approval but only informal dismissal loses the
+reason, actor and audit boundary needed to explain why generated methodology
+was not accepted. Persist rejection as a mutually exclusive decision with a
+bounded DLP-checked reason, require an independent reviewer, preserve the
+staged evidence and make the UI action live-only. This keeps rejection
+auditable without allowing mock mode or a later approval to rewrite history.
+
+# 2026-09-19 — Revalidate terminal decisions when reading durable records
+
+Validating a decision only on the write path is insufficient: JSONB records can
+be malformed, migrated or tampered with before a later list/detail read. Read
+parsers must re-check status, proposal ID, digest/revision and independent
+actor binding. UI state must also preserve the persisted decision and prevent
+two terminal actions from racing.
+
+# 2026-09-19 — A route context must carry the mode it promises to the page
+
+The top-level admin shell can display a live indicator while a routed page
+still receives an incomplete context and silently behaves as mock/read-only.
+When a page has live-only mutations, pass the authoritative mode through the
+route context and cover both the live request and the mock refusal in browser
+tests.
+
 # 2026-09-19 — A live UI must bind tenant and principal context explicitly
 
 An admin page can look correct in mock mode while every live request is

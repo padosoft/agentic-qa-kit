@@ -37,6 +37,20 @@ export interface MethodologyApprovalResult {
   approval: MethodologyApproval;
 }
 
+export interface MethodologyRejection {
+  schema_version: '1';
+  rejection_id: string;
+  proposal_id: string;
+  rejected_by: string;
+  rejected_at: string;
+  reason: string;
+}
+
+export interface MethodologyRejectionResult {
+  proposal: MethodologyProposal & { status: 'rejected' };
+  rejection: MethodologyRejection;
+}
+
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const MAX_DEPTH = 16;
@@ -211,6 +225,37 @@ export function parseMethodologyApproval(input: unknown): MethodologyApproval {
   return approval;
 }
 
+/** Parse and normalize an untrusted rejection, rejecting unknown fields. */
+export function parseMethodologyRejection(input: unknown): MethodologyRejection {
+  const record = strictRecord(input, [
+    'schema_version',
+    'rejection_id',
+    'proposal_id',
+    'rejected_by',
+    'rejected_at',
+    'reason',
+  ]);
+  const rejection = {
+    schema_version: record.schema_version,
+    rejection_id: record.rejection_id,
+    proposal_id: record.proposal_id,
+    rejected_by: record.rejected_by,
+    rejected_at: record.rejected_at,
+    reason: record.reason,
+  } as MethodologyRejection;
+  assertStringFields(rejection, [
+    'schema_version',
+    'rejection_id',
+    'proposal_id',
+    'rejected_by',
+    'rejected_at',
+    'reason',
+  ]);
+  assertDlpClean(rejection);
+  validateRejection(rejection);
+  return rejection;
+}
+
 /** Approve only the exact pending revision, with an independent human reviewer. */
 export function approveMethodologyProposal(
   proposal: MethodologyProposal,
@@ -258,9 +303,61 @@ export function assertMethodologyApproval(
     throw new Error('methodology approval has expired');
 }
 
+/** Reject only the exact pending proposal, with an independent reviewer decision. */
+export function rejectMethodologyProposal(
+  proposal: MethodologyProposal,
+  rejection: MethodologyRejection,
+  now = new Date(),
+): MethodologyRejectionResult {
+  validateProposal(proposal);
+  const normalized = parseMethodologyRejection(rejection);
+  if (proposal.status !== 'pending') throw new Error('methodology proposal is not pending');
+  if (normalized.proposal_id !== proposal.proposal_id)
+    throw new Error('methodology rejection proposal mismatch');
+  if (normalized.rejected_by === proposal.proposed_by)
+    throw new Error('methodology rejection requires an independent reviewer');
+  if (Date.parse(normalized.rejected_at) > now.getTime())
+    throw new Error('methodology rejection cannot be issued in the future');
+  return { proposal: { ...proposal, status: 'rejected' }, rejection: normalized };
+}
+
 /** Validate a proposal before a durable adapter accepts it. */
 export function assertMethodologyProposal(proposal: MethodologyProposal): void {
   validateProposal(proposal);
+}
+
+/** Revalidate the mutually exclusive terminal decision on persisted records. */
+export function assertMethodologyDecisionBinding(
+  proposal: MethodologyProposal,
+  approval?: MethodologyApproval,
+  rejection?: MethodologyRejection,
+): void {
+  if (approval && rejection) throw new Error('methodology proposal record has two decisions');
+  if (!approval && !rejection) {
+    if (proposal.status !== 'pending')
+      throw new Error('methodology proposal decision is missing for terminal status');
+    return;
+  }
+  if (approval) {
+    if (proposal.status !== 'approved')
+      throw new Error('methodology approval status binding mismatch');
+    if (
+      approval.proposal_id !== proposal.proposal_id ||
+      approval.artifact_sha256 !== proposal.artifact_sha256 ||
+      approval.revision !== proposal.revision
+    )
+      throw new Error('methodology approval binding mismatch');
+    if (approval.approved_by === proposal.proposed_by)
+      throw new Error('methodology approval requires an independent reviewer');
+    return;
+  }
+  if (proposal.status !== 'rejected')
+    throw new Error('methodology rejection status binding mismatch');
+  if (!rejection) throw new Error('methodology rejection decision is missing');
+  if (rejection.proposal_id !== proposal.proposal_id)
+    throw new Error('methodology rejection binding mismatch');
+  if (rejection.rejected_by === proposal.proposed_by)
+    throw new Error('methodology rejection requires an independent reviewer');
 }
 
 function validateProposal(proposal: MethodologyProposal): void {
@@ -290,6 +387,17 @@ function validateApproval(approval: MethodologyApproval): void {
   if (!SHA256.test(approval.artifact_sha256))
     throw new Error('methodology approval digest is invalid');
   if (approval.expires_at !== undefined) assertTimestamp(approval.expires_at, 'expires_at');
+}
+
+function validateRejection(rejection: MethodologyRejection): void {
+  if (rejection.schema_version !== '1')
+    throw new Error('methodology rejection schema version is unsupported');
+  assertId(rejection.rejection_id, 'rejection_id');
+  assertId(rejection.proposal_id, 'proposal_id');
+  assertActor(rejection.rejected_by, 'rejected_by');
+  assertTimestamp(rejection.rejected_at, 'rejected_at');
+  if (!rejection.reason.trim() || rejection.reason.length > 2_000)
+    throw new Error('methodology rejection reason is invalid');
 }
 
 function assertStringFields(value: object, fields: readonly string[]): void {

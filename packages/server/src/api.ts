@@ -11,6 +11,7 @@ import {
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
   parseMethodologyProposal,
+  parseMethodologyRejection,
 } from '@aqa/methodology';
 import type { MethodologyArtifactKind, MethodologyProposal } from '@aqa/methodology';
 import { safeErrorMessage } from '@aqa/observability';
@@ -1377,9 +1378,10 @@ export function makeApi(): ApiHandler[] {
           ...(status ? { status } : {}),
         });
         return asResponse({
-          proposals: records.map(({ proposal, approval }) => ({
+          proposals: records.map(({ proposal, approval, rejection }) => ({
             proposal,
             ...(approval ? { approval } : {}),
+            ...(rejection ? { rejection } : {}),
           })),
         });
       },
@@ -1468,6 +1470,37 @@ export function makeApi(): ApiHandler[] {
           return {
             status: 400,
             body: { error: safeErrorMessage(error, 'methodology approval rejected') },
+          };
+        }
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/proposals/:id/reject',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const proposalId = req.params.id;
+        if (!proposalId || !req.body)
+          return { status: 400, body: { error: 'proposal id and rejection are required' } };
+        try {
+          const rejection = parseMethodologyRejection(req.body);
+          if (rejection.rejected_by !== user.id)
+            return {
+              status: 400,
+              body: { error: 'rejection actor does not match authenticated user' },
+            };
+          const result = await ctx.store.rejectMethodologyProposal(proposalId, rejection, s);
+          return result ? asResponse(result) : notFound('methodology proposal');
+        } catch (error) {
+          if (error instanceof Error && /conflict|not pending/i.test(error.message))
+            return { status: 409, body: { error: 'methodology proposal is no longer pending' } };
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology rejection rejected') },
           };
         }
       },

@@ -30,10 +30,15 @@ API boundary:
   proposer; agent proposals require the host-owned verifier.
 - `POST /api/methodology/proposals/:id/approve` atomically transitions a
   pending proposal to approved and stores the approval record.
+- `POST /api/methodology/proposals/:id/reject` atomically transitions a
+  pending proposal to rejected and stores a bounded, DLP-checked reason plus
+  the authenticated independent reviewer identity.
 - Publication accepts only an already-approved proposal ID; it does not accept
   proposal/approval objects supplied ad hoc by the publishing request.
 
-The API never accepts a bare payload as a published artifact. Without a
+The API never accepts a bare payload as a published artifact. Rejection is a
+terminal, auditable decision: it requires a non-empty reason, cannot be issued
+by the proposer, and cannot be silently replaced by an approval. Without a
 host-owned proposal verifier it fails closed; comparing two identities supplied
 by the same request is not considered independent evidence. Same-revision
 same-digest retries remain idempotent through the store; a different digest is
@@ -44,7 +49,7 @@ reported as a conflict.
 The control-plane boundary cannot turn an unreviewed or cross-tenant artifact
 into durable methodology evidence. The proposal and approval workflow now
 survives process restarts in Postgres and is isolated by tenant. The admin
-review console exposes the pending queue, exact staged payload and digest-bound
-approval action. A complete authenticated browser journey, explicit reject
-reason workflow, artifact diff against the previous revision and retention /
-archive policy remain required before this workstream is complete.
+review console exposes the pending queue, exact staged payload and
+digest-bound approval/rejection actions. A complete authenticated browser
+journey, artifact diff against the previous revision and retention / archive
+policy remain required before this workstream is complete.

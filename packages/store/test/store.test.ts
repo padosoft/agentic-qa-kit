@@ -439,6 +439,26 @@ describe('MemoryStore', () => {
       () => s.approveMethodologyProposal(proposal.proposal_id, approval, scope),
       /not pending/,
     );
+    const rejectedProposal = { ...proposal, proposal_id: 'proposal-reject-memory' };
+    await s.saveMethodologyProposal(rejectedProposal, scope, METHODOLOGY_ARTIFACT);
+    const rejection = {
+      schema_version: '1' as const,
+      rejection_id: 'rejection-memory',
+      proposal_id: rejectedProposal.proposal_id,
+      rejected_by: 'reviewer-1',
+      rejected_at: '2026-09-18T10:03:00.000Z',
+      reason: 'Missing payment callback invariant',
+    };
+    const rejected = await s.rejectMethodologyProposal(
+      rejectedProposal.proposal_id,
+      rejection,
+      scope,
+    );
+    assert.equal(rejected?.proposal.status, 'rejected');
+    assert.deepEqual(
+      (await s.loadMethodologyProposal(rejectedProposal.proposal_id, scope))?.rejection,
+      rejection,
+    );
   });
 });
 
@@ -452,6 +472,7 @@ describe('PostgresStore', () => {
       assert.ok(true, 'integration contract requires AQA_TEST_POSTGRES_DSN');
       return;
     }
+    const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' };
     const s = new PostgresStore(dsn);
     try {
       await s.saveRun(RUN);
@@ -460,7 +481,6 @@ describe('PostgresStore', () => {
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
       );
-      const postgresArtifact = { ...METHODOLOGY_ARTIFACT, artifact_id: 'checkout-durable' };
       const specialScope = { org: 'org_a with space', project: 'shop_beta' };
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
       await s.saveMethodologyArtifact(postgresArtifact, specialScope);
@@ -470,7 +490,7 @@ describe('PostgresStore', () => {
         0,
       );
       const postgresProposal = createMethodologyProposal({
-        proposal_id: `proposal-postgres-${Date.now()}`,
+        proposal_id: 'proposal-postgres-durable',
         artifact_kind: postgresArtifact.artifact_kind,
         artifact_id: postgresArtifact.artifact_id,
         artifact: postgresArtifact.payload,
@@ -482,7 +502,7 @@ describe('PostgresStore', () => {
       await s.saveMethodologyProposal(postgresProposal, specialScope, postgresArtifact);
       const postgresApproval = {
         schema_version: '1' as const,
-        approval_id: `approval-postgres-${Date.now()}`,
+        approval_id: 'approval-postgres-durable',
         proposal_id: postgresProposal.proposal_id,
         artifact_sha256: postgresProposal.artifact_sha256,
         revision: postgresProposal.revision,
@@ -510,6 +530,26 @@ describe('PostgresStore', () => {
         (await s.listMethodologyProposals({ ...specialScope, status: 'approved' })).length,
         1,
       );
+      const postgresRejectedProposal = {
+        ...postgresProposal,
+        proposal_id: 'proposal-postgres-rejected',
+      };
+      await s.saveMethodologyProposal(postgresRejectedProposal, specialScope, postgresArtifact);
+      const postgresRejection = {
+        schema_version: '1' as const,
+        rejection_id: 'rejection-postgres-durable',
+        proposal_id: postgresRejectedProposal.proposal_id,
+        rejected_by: 'reviewer-postgres-reject',
+        rejected_at: '2026-09-18T10:03:00.000Z',
+        reason: 'The checkout tree omits the payment callback invariant.',
+      };
+      const rejectedResult = await s.rejectMethodologyProposal(
+        postgresRejectedProposal.proposal_id,
+        postgresRejection,
+        specialScope,
+      );
+      assert.equal(rejectedResult?.proposal.status, 'rejected');
+      assert.deepEqual(rejectedResult?.rejection, postgresRejection);
     } finally {
       await s.close();
     }
@@ -538,6 +578,20 @@ describe('PostgresStore', () => {
         ).some((record) => record.proposal.artifact_id === 'checkout-durable'),
         true,
       );
+      const reopenedRejected = await reopened.loadMethodologyProposal(
+        'proposal-postgres-rejected',
+        { org: 'org_a with space', project: 'shop_beta' },
+      );
+      assert.equal(reopenedRejected?.proposal.status, 'rejected');
+      assert.deepEqual(reopenedRejected?.rejection, {
+        schema_version: '1',
+        rejection_id: 'rejection-postgres-durable',
+        proposal_id: 'proposal-postgres-rejected',
+        rejected_by: 'reviewer-postgres-reject',
+        rejected_at: '2026-09-18T10:03:00.000Z',
+        reason: 'The checkout tree omits the payment callback invariant.',
+      });
+      assert.deepEqual(reopenedRejected?.artifact, postgresArtifact);
       await reopened.saveRun({
         ...RUN,
         id: 'cost-run',

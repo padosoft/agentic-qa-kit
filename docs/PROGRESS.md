@@ -9,6 +9,55 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-19 — Reasoned methodology rejection implemented
+
+- Added a durable `pending → rejected` transition with an independent
+  authenticated reviewer, a bounded reason, DLP validation, strict parsing and
+  conflict-safe Memory/Postgres persistence. Rejected records retain the
+  staged envelope and cannot also contain an approval.
+- Added the server route and live admin action; mock mode remains read-only.
+  Local methodology **30 passed**, store **21 passed / 1 intentional provider
+  skip**, server **147 passed / 0 failed / 1 intentional Postgres DSN skip**;
+  workspace typecheck/lint and admin build/typecheck passed.
+- Next: implement previous-revision side-by-side diff and the live
+  approve → publish journey, then retention/archive controls. Provider-backed
+  evidence, penetration testing and independent assurance remain deferred final
+  promotion gates by explicit owner decision.
+- Hosted PostgreSQL initially rejected a timestamp-based test ID as a possible
+  PAN through the DLP guard. The fixture now uses deterministic semantic IDs;
+  the local store suite is **18 passed / 0 failed**, and the required hosted
+  PostgreSQL contract must re-run on this revision.
+- Hardened the rejection slice after technical review: persisted decision
+  invariants are revalidated on read, terminal UI actions are mutually
+  disabled, rejection reasons survive normalization, notices identify the
+  correct action, and proposal selection clears stale reasons. Added parser
+  boundary tests, Postgres durability assertions and a Playwright mock-mode
+  governance test. Local typecheck, admin build, methodology/store/server
+  tests and the focused Playwright test pass.
+- The hosted PostgreSQL rerun exposed and fixed a test-only fixture-scope error
+  in the reopen assertion; no production persistence defect was found. The
+  corrected local contract remains **18 passed / 0 failed** and is queued for
+  hosted re-verification on commit `5fbf7a0`.
+- The live browser test then exposed a real route-context wiring defect: the
+  shell mode was not passed into routed pages, so methodology review could show
+  Live while remaining action-disabled. The context now carries `mode`; the
+  focused live rejection and mock governance journeys both pass **2/2**.
+
+## 2026-09-19 — Methodology review slice merged
+
+- PR #231 merged after protected hosted CI passed: PostgreSQL 16, S3, OCI,
+  Bun, Node22, build, CLI smoke, admin Playwright and live telemetry all
+  passed; branch protection remains strict with 12 required contexts.
+- Completed in this slice: tenant-scoped proposal detail, bounded staged
+  envelope, metadata-only queue, authenticated reviewer resolution,
+  fail-closed payload loading and approval, and payload retention across the
+  atomic approval transition.
+- Remaining for this local workstream: authenticated complete browser journey
+  through proposal creation → review → approve → publish, explicit reject
+  reason/audit semantics, side-by-side previous-revision diff, retention and
+  archive policy. External provider evidence and independent assurance remain
+  deferred final promotion gates by explicit owner decision.
+
 ## 2026-09-19 — Admin methodology review UI started
 
 - Added the first control-plane review surface at `/methodology-review`: tenant
