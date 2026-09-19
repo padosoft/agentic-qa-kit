@@ -2950,8 +2950,7 @@ caller can see different authorization surfaces depending on deployment mode.
   insufficient.
 
 - The next hosted retention run showed that a purge count is not enough:
-  scoped artifact read-back must be asserted after deletion. Derive the
-  artifact namespace from the validated lifecycle identity plus its stored
-  tenant scope, then delete lifecycle and artifact rows using their explicit
-  keys. This keeps legacy/backfilled lifecycle rows from relying on an
-  implicit key equivalence.
+  scoped artifact read-back must be asserted after deletion. A lifecycle key
+  is not a sufficient semantic join for legacy/backfilled rows, so purge must
+  delete the artifact by its tenant columns plus validated envelope identity
+  and revision. Keep lifecycle and artifact cleanup in the same transaction.
