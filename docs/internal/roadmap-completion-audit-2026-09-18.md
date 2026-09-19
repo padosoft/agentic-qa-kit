@@ -34,13 +34,20 @@ has actually run with an operator-owned environment.
 ## External readiness snapshot — 2026-09-19
 
 The repository-side checks were repeated against the live GitHub repository
-before this audit update. The GitHub API reports only the `copilot` Environment;
-the provider-specific Environments required by the workflows are not present.
-The repository secret listing contains no provider credentials (only the
-Copilot integration entry), and `main` returns `404 Branch not protected` from
-the branch-protection API. Therefore no provider workflow was started: there
-is no operator-owned protected resource to exercise, and starting a workflow
-without it would create a false negative rather than evidence of readiness.
+before this audit update. `main` is now protected through the GitHub API with
+the technical CI matrix, one required pull-request approval, stale-review
+dismissal, linear history, conversation resolution, admin enforcement and no
+force-push/delete exceptions. The six provider/evidence Environments are also
+present with a required reviewer and protected-branch deployment policy:
+`commerce-provider-evidence`, `production-evidence`,
+`production-database-evidence`, `production-identity-evidence`,
+`methodology-mutation-evidence` and `production-artifact-evidence`.
+
+The repository secret listing still contains no provider credentials (only the
+Copilot integration entry). Therefore no provider workflow was started: the
+governance controls now exist, but there is still no operator-owned protected
+resource to exercise, and starting a workflow without it would create a false
+negative rather than evidence of readiness.
 
 This snapshot is metadata-only and contains no secret values.
 

@@ -2799,3 +2799,10 @@ Review automation defaults and operator instructions can conflict. Keep the
 default reviewer policy, but make an explicit opt-out a recorded exception and
 never let it weaken technical CI or the independent human approval required by
 protected `main`.
+
+# 2026-09-19 — Governance can be automated without fabricating evidence
+
+Branch protection and required-reviewer Environments are safe administrative
+controls to configure before provider credentials exist. Keep those controls
+separate from provider execution: an empty protected Environment improves
+release safety but must never be reported as a successful provider journey.
