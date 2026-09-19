@@ -541,7 +541,10 @@ export class PostgresStore implements StoreProvider {
       )) as Array<{ payload: unknown }>;
       const existingRow = existing[0];
       if (!existingRow) throw new Error('methodology artifact disappeared during atomic publish');
-      const existingArtifact = parseMethodologyArtifactEnvelope(this.decode(existingRow.payload));
+      const decodedPayload = this.decode(existingRow.payload);
+      const existingArtifact = parseMethodologyArtifactEnvelope(
+        typeof decodedPayload === 'string' ? decodedPayload : JSON.stringify(decodedPayload),
+      );
       if (existingArtifact.artifact_sha256 !== validated.artifact_sha256)
         throw new Error('methodology artifact revision conflict');
       await query(
