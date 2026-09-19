@@ -11,6 +11,14 @@
 
 ## 2026-09-19
 
+- **Enabled live repository governance controls.** `main` now requires the
+  technical CI matrix and one pull-request approval, enforces linear history
+  and conversation resolution, and disallows force-push/delete exceptions.
+  Created the six protected provider/evidence Environments with required
+  reviewer and protected-branch policy. Provider secrets remain intentionally
+  absent, so this closes governance configuration but not provider execution
+  evidence.
+
 - **Re-audited live external readiness.** GitHub currently exposes only the
   `copilot` Environment, no provider credentials in the repository secret
   listing, and no protection on `main` (`404 Branch not protected`). No Stripe,
