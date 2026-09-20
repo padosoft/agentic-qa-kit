@@ -11744,12 +11744,13 @@ function PageAudit({ onNavigate }) {
   // PR #39 Copilot iter 6: re-check the cancellation guard AFTER
   // await res.json() so an unmount mid-parse can't setState.
   const [liveEvents, setLiveEvents] = React.useState(null);
+  const [liveSummary, setLiveSummary] = React.useState(null);
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(apiUrl('/api/audit'), {
-          headers: { 'x-aqa-org': 'padosoft' },
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
@@ -11763,6 +11764,25 @@ function PageAudit({ onNavigate }) {
       cancelled = true;
     };
   }, []);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/audit/summary'), {
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
+        });
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled && body?.summary?.total !== undefined) setLiveSummary(body.summary);
+      } catch {
+        /* mock mode — the event list remains the source of truth */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const auditTotal = liveSummary?.total ?? liveEvents?.length;
   return (
     <div className="page" data-screen-label="17 Audit log">
       <PageHeader
@@ -11777,7 +11797,7 @@ function PageAudit({ onNavigate }) {
           // the viewer below (`!== null`) — an empty server list
           // is a valid loaded state, not a fixture-fallback.
           liveEvents !== null
-            ? `${liveEvents.length} events · live from /api/audit`
+            ? `${auditTotal} events · live from /api/audit`
             : 'Hash-chained, tamper-evident event log · verify in-browser with Web Crypto'
         }
         actions={
@@ -11793,6 +11813,13 @@ function PageAudit({ onNavigate }) {
           </>
         }
       />
+      {liveEvents !== null && liveSummary && (
+        <div className="text-muted" data-testid="audit-summary">
+          {Object.entries(liveSummary.by_kind ?? {})
+            .map(([kind, count]) => `${kind}: ${count}`)
+            .join(' · ')}
+        </div>
+      )}
       <AuditChainViewer
         initialChain={liveEvents !== null ? normalizeAuditEventsForViewer(liveEvents) : undefined}
         demoGood={
