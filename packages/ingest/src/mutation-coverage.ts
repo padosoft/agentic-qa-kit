@@ -155,13 +155,22 @@ function boundedCount(value: number, field: string): number {
 }
 
 /** Validate a reviewed mapping from mutations to the regressions that kill them. */
-export function parseMutationCoverageManifest(value: unknown): MutationCoverageManifest {
+export function parseMutationCoverageManifest(
+  value: unknown,
+  allowEmpty = false,
+): MutationCoverageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('mutation coverage manifest must be an object');
   const root = value as Record<string, unknown>;
   if (root.schema_version !== '1') throw new Error('mutation coverage schema_version must be "1"');
-  if (!Array.isArray(root.links) || root.links.length === 0 || root.links.length > MAX_LINKS)
-    throw new Error(`mutation coverage links must contain 1..${MAX_LINKS} links`);
+  if (
+    !Array.isArray(root.links) ||
+    (!allowEmpty && root.links.length === 0) ||
+    root.links.length > MAX_LINKS
+  )
+    throw new Error(
+      `mutation coverage links must contain ${allowEmpty ? '0' : '1'}..${MAX_LINKS} links`,
+    );
   const seen = new Set<string>();
   const links = root.links.map((raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -195,7 +204,7 @@ export function parseMutationHoldoutSplit(value: unknown): MutationHoldoutSplit 
   if (typeof root.plan_digest !== 'string' || !/^[a-f0-9]{64}$/u.test(root.plan_digest))
     throw new Error('mutation holdout split plan_digest must be sha256');
   const train = parseMutationCoverageManifest(root.train);
-  const holdout = parseMutationCoverageManifest(root.holdout);
+  const holdout = parseMutationCoverageManifest(root.holdout, true);
   const split = {
     schema_version: '1' as const,
     split_key: root.split_key,

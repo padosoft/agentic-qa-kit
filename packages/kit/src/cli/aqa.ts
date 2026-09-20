@@ -69,6 +69,7 @@ const VALUE_FLAGS = new Set([
   'min-score',
   'min-mapped-rate',
   'min-killed-rate',
+  'holdout-split',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {

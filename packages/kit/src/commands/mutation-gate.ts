@@ -150,6 +150,27 @@ export function runMutationRegressionGate(
     ) {
       throw new Error('mutation regression source revision does not match the expected revision');
     }
+    const holdoutSplit =
+      evidence.plan_digest !== undefined && holdoutSplitPath !== undefined
+        ? parseMutationHoldoutSplit(JSON.parse(readFileSync(holdoutSplitPath, 'utf8')) as unknown)
+        : undefined;
+    if (holdoutSplit !== undefined) {
+      const supplied = new Map(
+        manifest.links.map((link) => [link.mutation_id, JSON.stringify(link)]),
+      );
+      const planned = [...holdoutSplit.train.links, ...holdoutSplit.holdout.links];
+      const plannedIds = new Set(planned.map((link) => link.mutation_id));
+      if (plannedIds.size !== planned.length || planned.length !== supplied.size)
+        throw new Error(
+          'mutation holdout split is not an exact partition of the supplied manifest',
+        );
+      for (const link of planned) {
+        if (supplied.get(link.mutation_id) !== JSON.stringify(link))
+          throw new Error(
+            'mutation holdout split is not an exact partition of the supplied manifest',
+          );
+      }
+    }
     const regression =
       evidence.plan_digest !== undefined
         ? holdoutSplitPath === undefined
@@ -158,9 +179,7 @@ export function runMutationRegressionGate(
             })()
           : evaluateMutationHoldoutRegressionEvidence(
               report,
-              parseMutationHoldoutSplit(
-                JSON.parse(readFileSync(holdoutSplitPath, 'utf8')) as unknown,
-              ),
+              holdoutSplit!,
               evidence,
               options.minKillRate,
             )
