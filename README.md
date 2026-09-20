@@ -336,7 +336,7 @@ implemented and covered by hosted technical CI. Provider execution evidence and
 independent security/compliance assurance are intentionally deferred to the
 final promotion gate while the owner validates the kit against side projects;
 they are not claimed as complete and do not block local development. See the
-[roadmap completion audit](docs/internal/roadmap-completion-audit-2026-09-18.md)
+[roadmap completion audit](docs/internal/roadmap-completion-audit-2026-09-20.md)
 for the requirement-by-requirement status; “implemented” is never treated as
 live provider evidence.
 
