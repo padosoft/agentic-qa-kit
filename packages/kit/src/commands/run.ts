@@ -516,7 +516,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   }
   const runnerId = opts.runner_id?.trim() || 'aqa-cli';
   if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(runnerId)) {
-    return makeError('--runner-id must contain only bounded identifier characters');
+    return makeError('runner_id must contain only bounded identifier characters');
   }
 
   const projectPath = join(opts.root, '.aqa', 'project.yaml');
@@ -639,7 +639,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     onEvent = (event) => {
       for (const observer of observers) observer(event);
     };
-  const events = new EventChainWriter(eventsPath, onEvent ? { onEvent } : {});
+  const events = new EventChainWriter(eventsPath, {
+    ...(onEvent ? { onEvent } : {}),
+    runner_id: runnerId,
+  });
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,
   // even when a clean run produces zero findings. Wrap in try/catch so a

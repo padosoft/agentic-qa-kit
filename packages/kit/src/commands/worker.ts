@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { HttpRunnerQueue, PostgresRunnerQueue } from '@aqa/server';
-import { makeKitWorker } from '../worker.js';
+import { makeKitWorker, normalizeRunnerId } from '../worker.js';
 import { type RunProbeDrivers, probeDriversFromEnvironment } from './run.js';
 
 export type RunnerWorkerConfig = {
@@ -54,6 +54,7 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
     throw new Error('[worker] AQA_SERVER_URL is required when a runner token is configured');
   if (!root) throw new Error('[worker] AQA_RUNNER_ROOT is required');
   if (!scopes) throw new Error('[worker] AQA_RUNNER_SCOPES is required');
+  const normalizedRunnerId = normalizeRunnerId(runnerId);
   const rawPoll = env.AQA_RUNNER_POLL_MS?.trim();
   const pollMs = rawPoll ? Number(rawPoll) : 250;
   if (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 60_000)
@@ -71,7 +72,7 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
     ...(serverUrl ? { server_url: serverUrl } : {}),
     ...(runnerToken ? { runner_token: runnerToken } : {}),
     ...(runnerTokenFile ? { runner_token_file: resolve(runnerTokenFile) } : {}),
-    ...(runnerId ? { runner_id: runnerId } : {}),
+    ...(normalizedRunnerId ? { runner_id: normalizedRunnerId } : {}),
     root: resolve(root),
     poll_ms: pollMs,
     scopes: parseRunnerScopes(scopes),

@@ -31,6 +31,8 @@ export interface EventDraft {
 
 export interface EventChainWriterOptions {
   persist?: boolean;
+  /** Host-owned worker provenance copied into every redacted event payload. */
+  runner_id?: string;
   /** Non-blocking hook for traces/metrics/event-bus integrations. */
   onEvent?: (event: Event.Event) => void;
 }
@@ -49,11 +51,13 @@ export class EventChainWriter {
   private readonly events: Event.Event[] = [];
   private readonly persist: boolean;
   private readonly onEvent: ((event: Event.Event) => void) | undefined;
+  private readonly runnerId: string | undefined;
 
   constructor(path: string, opts: EventChainWriterOptions = { persist: true }) {
     this.path = path;
     this.persist = opts.persist ?? true;
     this.onEvent = opts.onEvent;
+    this.runnerId = opts.runner_id;
     if (this.persist) mkdirSync(dirname(path), { recursive: true });
   }
 
@@ -68,7 +72,10 @@ export class EventChainWriter {
       actor: draft.actor,
       scenario_id: draft.scenario_id,
       finding_id: draft.finding_id,
-      payload: redactJson(draft.payload ?? {}) as Record<string, unknown>,
+      payload: redactJson({
+        ...(draft.payload ?? {}),
+        ...(this.runnerId ? { runner_id: this.runnerId } : {}),
+      }) as Record<string, unknown>,
     };
     const hashInput = this.prevHash + canonicalise(rest);
     const hash = createHash('sha256').update(hashInput).digest('hex');

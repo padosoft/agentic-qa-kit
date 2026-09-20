@@ -36,6 +36,19 @@ describe('runner worker deployment configuration', () => {
     );
   });
 
+  it('rejects an unsafe runner identity before the worker can start', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_QUEUE_DSN: 'postgres://redacted',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+          AQA_RUNNER_ID: 'runner/with-path',
+        }),
+      /runner_id must contain only bounded identifier characters/,
+    );
+  });
+
   it('requires a credential for a remote control-plane worker and resolves token files', () => {
     assert.throws(
       () =>

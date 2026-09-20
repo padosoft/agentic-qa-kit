@@ -247,8 +247,15 @@ describe('remote runner identity journey', () => {
             },
         );
       const started = events.find((event) => event.kind === 'run_started');
+      const finished = events.find((event) => event.kind === 'run_finished');
+      const intermediate = events.find(
+        (event) => event.kind !== 'run_started' && event.kind !== 'run_finished',
+      );
       assert.equal(started?.actor.id, 'runner-a');
       assert.equal(started?.payload?.runner_id, 'runner-a');
+      assert.equal(finished?.actor.id, 'runner-a');
+      assert.equal(finished?.payload?.runner_id, 'runner-a');
+      assert.equal(intermediate?.payload?.runner_id, 'runner-a');
     } finally {
       await boot.close();
       await new Promise<void>((resolve, reject) =>

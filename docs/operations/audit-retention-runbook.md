@@ -64,25 +64,32 @@ records owned by the first scope.
 
 ### 3. Verify integrity before archive or release use
 
-For filesystem run evidence, use the normal report boundary, which refuses to
-reconstruct a run from a malformed chain:
+For filesystem run evidence, run the verifier from the project root and select
+the exact run ID. The report command does not accept a directory positional
+argument; never assume a directory name selected the target run:
 
 ```text
-aqa report <run-directory>
+aqa report --run-id <run-id>
 ```
 
-For a checkpointed run, verify the checkpoint against the exact event sequence,
+Confirm that the report output names the intended run before continuing. For a
+checkpointed run, verify the checkpoint against the exact event sequence,
 count, head hash and run ID. If the checkpoint is signed, verify it with the
 approved public trust root. A successful local verification is necessary but
 does not prove that the external object is immutable.
 
 ### 4. Archive safely
 
-Archive the complete bounded range plus its checkpoint and a redacted manifest.
+Archive a complete per-run canonical stream plus its checkpoint and a redacted manifest.
 Keep the checkpoint reference, SHA-256, sequence range, tenant scope and
 capture time together. Preserve the original event order. Do not rewrite
 payloads during archival; redaction must happen before the canonical digest is
 created.
+
+The current checkpoint verifier requires one run ID, `first_seq: 0` and a
+contiguous sequence. Arbitrary tenant/time slices and suffixes after a deleted
+prefix are therefore not valid purge units. Keep the full canonical stream, or
+do not proceed until a future boundary-aware signed-range verifier exists.
 
 If the archive store cannot prove the requested retention mode, encryption
 metadata and read-back digest, stop and classify the operation as
@@ -92,7 +99,8 @@ metadata and read-back digest, stop and classify the operation as
 
 Before a destructive operation, independently check:
 
-- the checkpoint is present and verifies;
+- the checkpoint is present, independently governed, signed, and verifies with
+  the approved trust root and exact key ID;
 - the archive read-back digest matches;
 - no legal hold overlaps the range;
 - the range is outside the approved hot window;
@@ -100,9 +108,12 @@ Before a destructive operation, independently check:
 - a restore/recovery observation exists for the current backup generation.
 
 If any check fails, do not delete. Record the reason and open an incident or
-policy exception. After purge, query the same scope and a fresh database
-session, verify that retained events remain contiguous from the checkpoint
-boundary, and record counts/digests. A purge count alone is not evidence.
+policy exception. The current repository cannot verify a shortened suffix after
+deleting a prefix, so it must classify such a destructive request as
+`evidence_incomplete` and retain the full chain. After any supported purge in
+the future, query the same scope and a fresh database session, verify the
+boundary-aware chain, and record counts/digests. A purge count alone is not
+evidence.
 
 ## Failure handling
 
