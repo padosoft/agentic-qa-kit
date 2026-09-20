@@ -82,6 +82,7 @@ export class PostgresStore implements StoreProvider {
   private readonly dsn: string;
   private sql: Sql;
   private ready: Promise<void>;
+  private runScopes = new Map<string, StoreScope | null>();
 
   constructor(dsn: string) {
     if (!dsn || !dsn.trim())
@@ -210,6 +211,15 @@ export class PostgresStore implements StoreProvider {
 
   async saveRun(run: Run.Run): Promise<void> {
     await this.put('run', run.id, run, undefined, run.project);
+    this.runScopes.set(
+      run.id,
+      run.org || run.project
+        ? {
+            ...(run.org ? { org: run.org } : {}),
+            ...(run.project ? { project: run.project } : {}),
+          }
+        : null,
+    );
   }
   async loadRun(id: string): Promise<Run.Run | null> {
     return this.payload(await this.one('run', id));
@@ -237,13 +247,24 @@ export class PostgresStore implements StoreProvider {
     let org = scope?.org ?? null;
     let project = scope?.project ?? null;
     if (runId && (!org || !project)) {
-      const runRows = (await this.q<{ payload: unknown }>(
-        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
-        ['run', runId],
-      )) as Array<{ payload: unknown }>;
-      const run = runRows[0] ? this.decode<Run.Run>(runRows[0].payload) : undefined;
-      org ??= run?.org ?? null;
-      project ??= run?.project ?? null;
+      let runScope = this.runScopes.get(runId);
+      if (!this.runScopes.has(runId)) {
+        const runRows = (await this.q<{ payload: unknown }>(
+          'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+          ['run', runId],
+        )) as Array<{ payload: unknown }>;
+        const run = runRows[0] ? this.decode<Run.Run>(runRows[0].payload) : undefined;
+        runScope =
+          run && (run.org || run.project)
+            ? {
+                ...(run.org ? { org: run.org } : {}),
+                ...(run.project ? { project: run.project } : {}),
+              }
+            : null;
+        this.runScopes.set(runId, runScope);
+      }
+      org ??= runScope?.org ?? null;
+      project ??= runScope?.project ?? null;
     }
     await this.q(
       'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) ON CONFLICT (event_hash) DO NOTHING',
@@ -1338,6 +1359,7 @@ export class PostgresStore implements StoreProvider {
     return result;
   }
   async close(): Promise<void> {
+    this.runScopes.clear();
     await this.wait();
     await this.sql.end({ timeout: 5 });
   }

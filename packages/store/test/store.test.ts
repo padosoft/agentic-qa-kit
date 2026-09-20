@@ -662,6 +662,17 @@ describe('PostgresStore', () => {
       await s.appendEvent(tenantEvent);
       assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
       assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
+      const preRunTenantEvent = {
+        ...tenantEvent,
+        seq: 3,
+        run_id: 'run-a-tenant-late',
+        prev_hash: tenantEvent.hash,
+        hash: '',
+      };
+      preRunTenantEvent.hash = hashEvent(preRunTenantEvent, tenantEvent.hash);
+      await s.appendEvent(preRunTenantEvent);
+      await s.saveRun({ ...tenantRun, id: preRunTenantEvent.run_id });
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
       assert.equal(
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
