@@ -8,6 +8,7 @@ import {
   type MethodologyRejectionResult,
   approveMethodologyProposal,
   archiveMethodologyArtifactLifecycle,
+  assertMethodologyApproval,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
   createMethodologyArtifactLifecycle,
@@ -582,6 +583,106 @@ export class PostgresStore implements StoreProvider {
         );
     });
   }
+  async publishMethodologyArtifact(
+    proposalId: string,
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const lifecycleValue = parseMethodologyArtifactLifecycle(lifecycle);
+    if (
+      validated.artifact_kind !== lifecycleValue.artifact_kind ||
+      validated.artifact_id !== lifecycleValue.artifact_id ||
+      validated.revision !== lifecycleValue.revision
+    )
+      throw new Error('methodology artifact lifecycle binding mismatch');
+    await this.wait();
+    await this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const artifactKey = scopedRecordKey(`${validated.artifact_id}@${validated.revision}`, scope);
+      const proposalKey = scopedRecordKey(proposalId, scope);
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [artifactKey]);
+      const proposalRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_proposal', proposalKey],
+      )) as Array<{ payload: unknown }>;
+      const proposalRow = proposalRows[0];
+      if (!proposalRow) throw new Error('methodology proposal artifact has been purged or changed');
+      const decodedProposal = this.decode<unknown>(proposalRow.payload);
+      const record = parseMethodologyProposalRecord(
+        typeof decodedProposal === 'string' ? this.decode(decodedProposal) : decodedProposal,
+      );
+      if (
+        record.proposal.status !== 'approved' ||
+        !record.approval ||
+        !record.artifact ||
+        record.artifact.artifact_sha256 !== validated.artifact_sha256 ||
+        record.artifact.artifact_kind !== validated.artifact_kind ||
+        record.artifact.artifact_id !== validated.artifact_id ||
+        record.artifact.revision !== validated.revision
+      )
+        throw new Error('methodology proposal artifact has been purged or changed');
+      assertMethodologyDecisionBinding(record.proposal, record.approval, record.rejection);
+      assertMethodologyApproval(record.proposal, record.approval);
+      const artifactRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact', artifactKey],
+      )) as Array<{ payload: unknown }>;
+      const existingArtifactRow = artifactRows[0];
+      if (existingArtifactRow) {
+        const decodedArtifact = this.decode<unknown>(existingArtifactRow.payload);
+        const existingArtifact = parseMethodologyArtifactEnvelope(
+          typeof decodedArtifact === 'string'
+            ? JSON.stringify(this.decode<unknown>(decodedArtifact))
+            : JSON.stringify(decodedArtifact),
+        );
+        if (
+          existingArtifact.artifact_sha256 !== validated.artifact_sha256 ||
+          existingArtifact.artifact_kind !== validated.artifact_kind
+        )
+          throw new Error('methodology artifact revision conflict');
+      } else {
+        await query(
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+          [
+            'methodology_artifact',
+            artifactKey,
+            scope?.org ?? null,
+            scope?.project ?? null,
+            JSON.stringify(validated),
+          ],
+        );
+      }
+      const lifecycleRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact_lifecycle', artifactKey],
+      )) as Array<{ payload: unknown }>;
+      const existingLifecycleRow = lifecycleRows[0];
+      if (existingLifecycleRow) {
+        const decodedLifecycle = this.decode<unknown>(existingLifecycleRow.payload);
+        const existingLifecycle = parseMethodologyArtifactLifecycle(
+          JSON.stringify(
+            typeof decodedLifecycle === 'string'
+              ? this.decode<unknown>(decodedLifecycle)
+              : decodedLifecycle,
+          ),
+        );
+        if (JSON.stringify(existingLifecycle) !== JSON.stringify(lifecycleValue))
+          throw new Error('methodology artifact lifecycle conflict');
+      } else
+        await query(
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+          [
+            'methodology_artifact_lifecycle',
+            artifactKey,
+            scope?.org ?? null,
+            scope?.project ?? null,
+            JSON.stringify(lifecycleValue),
+          ],
+        );
+    });
+  }
 
   async loadMethodologyArtifactLifecycle(
     artifactId: string,
@@ -806,13 +907,10 @@ export class PostgresStore implements StoreProvider {
           const proposalRecord = parseMethodologyProposalRecord(
             typeof decodedProposal === 'string' ? this.decode(decodedProposal) : decodedProposal,
           );
-          const terminal =
-            proposalRecord.proposal.status === 'approved' ||
-            proposalRecord.proposal.status === 'rejected';
           const matchesArtifact =
             proposalRecord.artifact?.artifact_id === current.artifact_id &&
             proposalRecord.artifact.revision === current.revision;
-          if (!terminal || !matchesArtifact) continue;
+          if (!matchesArtifact) continue;
           await query(
             "UPDATE aqa_store_records SET payload = CASE jsonb_typeof(payload) WHEN 'object' THEN payload - 'artifact' WHEN 'string' THEN ((payload #>> '{}')::jsonb) - 'artifact' ELSE payload END, updated_at = now() WHERE kind = $1 AND record_key = $2",
             ['methodology_proposal', proposalRow.record_key],
@@ -833,7 +931,7 @@ export class PostgresStore implements StoreProvider {
       parseMethodologyProposalRecord,
     );
     return records
-      .filter((record) => record.proposal.status === 'pending' || record.artifact !== undefined)
+      .filter((record) => record.artifact !== undefined)
       .filter((record) => !opts.status || record.proposal.status === opts.status)
       .sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }
@@ -893,25 +991,57 @@ export class PostgresStore implements StoreProvider {
     approval: MethodologyApproval,
     scope?: StoreScope,
   ): Promise<MethodologyApprovalResult | null> {
-    const current = await this.loadMethodologyProposal(proposalId, scope);
-    if (!current) return null;
-    const result = approveMethodologyProposal(current.proposal, parseMethodologyApproval(approval));
     await this.wait();
-    const rows = await this.q<{ payload: unknown }>(
-      'UPDATE aqa_store_records SET payload = $4::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2 AND payload = $3::jsonb RETURNING payload',
-      [
-        'methodology_proposal',
-        scopedRecordKey(proposalId, scope),
-        JSON.stringify(current),
-        JSON.stringify({
-          proposal: result.proposal,
-          ...(current.artifact ? { artifact: current.artifact } : {}),
-          approval: result.approval,
-        }),
-      ],
-    );
-    if (rows.length === 0) throw new Error('methodology proposal approval conflict');
-    return result;
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const proposalKey = scopedRecordKey(proposalId, scope);
+      const initialRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
+        ['methodology_proposal', proposalKey],
+      )) as Array<{ payload: unknown }>;
+      const initialRow = initialRows[0];
+      if (!initialRow) return null;
+      const initialDecoded = this.decode<unknown>(initialRow.payload);
+      const initial = parseMethodologyProposalRecord(
+        typeof initialDecoded === 'string' ? this.decode(initialDecoded) : initialDecoded,
+      );
+      if (!initial.artifact)
+        throw new Error('methodology proposal artifact has been purged or changed');
+      const artifactKey = scopedRecordKey(
+        `${initial.artifact.artifact_id}@${initial.artifact.revision}`,
+        scope,
+      );
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [artifactKey]);
+      const lockedRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_proposal', proposalKey],
+      )) as Array<{ payload: unknown }>;
+      const lockedRow = lockedRows[0];
+      if (!lockedRow) return null;
+      const lockedDecoded = this.decode<unknown>(lockedRow.payload);
+      const current = parseMethodologyProposalRecord(
+        typeof lockedDecoded === 'string' ? this.decode(lockedDecoded) : lockedDecoded,
+      );
+      if (!current.artifact)
+        throw new Error('methodology proposal artifact has been purged or changed');
+      const result = approveMethodologyProposal(
+        current.proposal,
+        parseMethodologyApproval(approval),
+      );
+      await query(
+        'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2',
+        [
+          'methodology_proposal',
+          proposalKey,
+          JSON.stringify({
+            proposal: result.proposal,
+            artifact: current.artifact,
+            approval: result.approval,
+          }),
+        ],
+      );
+      return result;
+    });
   }
   async rejectMethodologyProposal(
     proposalId: string,

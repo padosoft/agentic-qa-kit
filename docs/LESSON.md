@@ -1,5 +1,17 @@
 # Lessons
 
+# 2026-09-20 — Retention must fence both staged proposals and publication
+
+An artifact can be present only as a staged copy inside a pending methodology
+proposal; requiring a row in the published-artifact table would reject valid
+approvals. The safe protocol is to lock the artifact identity, re-read the
+proposal, require its staged copy, and then perform the approval or the
+artifact+lifecycle publication. Retention must scrub that staged copy for every
+proposal status, and operational lists must hide scrubbed records while direct
+lookup remains available for audit-safe diagnosis. The same protocol must be
+implemented in the in-memory and PostgreSQL adapters so tests do not validate a
+weaker concurrency model than production.
+
 # 2026-09-19 — Test identifiers must not look like payment data
 
 Timestamp-based fixture IDs can contain a 13–19 digit sequence that passes a
