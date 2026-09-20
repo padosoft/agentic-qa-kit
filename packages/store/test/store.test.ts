@@ -409,6 +409,17 @@ describe('MemoryStore', () => {
       archive_after_days: 7,
     });
     await s.saveMethodologyArtifactLifecycle(lifecycle, scope);
+    const pendingProposal = createMethodologyProposal({
+      proposal_id: 'proposal-retention-pending-memory',
+      artifact_kind: METHODOLOGY_ARTIFACT.artifact_kind,
+      artifact_id: METHODOLOGY_ARTIFACT.artifact_id,
+      artifact: METHODOLOGY_ARTIFACT.payload,
+      revision: METHODOLOGY_ARTIFACT.revision,
+      proposed_by: 'agent-retention',
+      proposed_at: '2026-09-19T10:01:00.000Z',
+      source: 'agent',
+    });
+    await s.saveMethodologyProposal(pendingProposal, scope, METHODOLOGY_ARTIFACT);
     const held = await s.setMethodologyArtifactLegalHold(
       'checkout-tree',
       1,
@@ -448,6 +459,28 @@ describe('MemoryStore', () => {
     assert.equal(await s.purgeExpiredMethodologyArtifacts('2026-10-22T10:00:00.000Z', scope), 1);
     assert.equal(await s.loadMethodologyArtifact('checkout-tree', 1, scope), null);
     assert.equal(await s.loadMethodologyArtifactLifecycle('checkout-tree', 1, scope), null);
+    assert.equal(
+      (await s.loadMethodologyProposal(pendingProposal.proposal_id, scope))?.artifact,
+      undefined,
+    );
+    assert.equal((await s.listMethodologyProposals({ ...scope, status: 'pending' })).length, 0);
+    await assert.rejects(
+      () =>
+        s.approveMethodologyProposal(
+          pendingProposal.proposal_id,
+          {
+            schema_version: '1',
+            approval_id: 'approval-retention-pending-memory',
+            proposal_id: pendingProposal.proposal_id,
+            artifact_sha256: pendingProposal.artifact_sha256,
+            revision: pendingProposal.revision,
+            approved_by: 'reviewer-retention',
+            approved_at: '2026-10-22T10:01:00.000Z',
+          },
+          scope,
+        ),
+      /purged or changed/,
+    );
   });
 
   it('persists methodology proposals and approves them exactly once by tenant scope', async () => {
@@ -583,6 +616,17 @@ describe('PostgresStore', () => {
         source: 'agent',
       });
       await s.saveMethodologyProposal(retentionProposal, specialScope, retainedArtifact);
+      const pendingRetentionProposal = createMethodologyProposal({
+        proposal_id: 'proposal-retention-pending-postgres',
+        artifact_kind: retainedArtifact.artifact_kind,
+        artifact_id: retainedArtifact.artifact_id,
+        artifact: retainedArtifact.payload,
+        revision: retainedArtifact.revision,
+        proposed_by: 'agent-retention-pending',
+        proposed_at: '2026-09-19T14:01:30.000Z',
+        source: 'agent',
+      });
+      await s.saveMethodologyProposal(pendingRetentionProposal, specialScope, retainedArtifact);
       await s.approveMethodologyProposal(
         retentionProposal.proposal_id,
         {
@@ -604,6 +648,32 @@ describe('PostgresStore', () => {
       assert.equal(
         (await s.loadMethodologyProposal(retentionProposal.proposal_id, specialScope))?.artifact,
         undefined,
+      );
+      assert.equal(
+        (await s.loadMethodologyProposal(pendingRetentionProposal.proposal_id, specialScope))
+          ?.artifact,
+        undefined,
+      );
+      assert.equal(
+        (await s.listMethodologyProposals({ ...specialScope, status: 'pending' })).length,
+        0,
+      );
+      await assert.rejects(
+        () =>
+          s.approveMethodologyProposal(
+            pendingRetentionProposal.proposal_id,
+            {
+              schema_version: '1',
+              approval_id: 'approval-retention-pending-postgres',
+              proposal_id: pendingRetentionProposal.proposal_id,
+              artifact_sha256: pendingRetentionProposal.artifact_sha256,
+              revision: pendingRetentionProposal.revision,
+              approved_by: 'reviewer-retention',
+              approved_at: '2026-09-21T14:01:00.000Z',
+            },
+            specialScope,
+          ),
+        /purged or changed/,
       );
       const postgresProposal = createMethodologyProposal({
         proposal_id: 'proposal-postgres-durable',

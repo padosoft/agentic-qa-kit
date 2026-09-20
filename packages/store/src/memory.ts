@@ -425,6 +425,51 @@ export class MemoryStore implements StoreProvider {
       this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validatedLifecycle)));
     });
   }
+  async publishMethodologyArtifact(
+    proposalId: string,
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validatedArtifact = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const validatedLifecycle = parseMethodologyArtifactLifecycle(lifecycle);
+    if (
+      validatedArtifact.artifact_kind !== validatedLifecycle.artifact_kind ||
+      validatedArtifact.artifact_id !== validatedLifecycle.artifact_id ||
+      validatedArtifact.revision !== validatedLifecycle.revision
+    )
+      throw new Error('methodology artifact lifecycle binding mismatch');
+    const artifactKey = this.key(
+      `${validatedArtifact.artifact_id}@${validatedArtifact.revision}`,
+      scope,
+    );
+    const proposalKey = this.key(proposalId, scope);
+    await this.withMethodologyLifecycleLock(artifactKey, async () => {
+      const record = this.methodologyProposals.get(proposalKey);
+      if (
+        !record ||
+        record.proposal.status !== 'approved' ||
+        !record.approval ||
+        !record.artifact ||
+        record.artifact.artifact_sha256 !== validatedArtifact.artifact_sha256 ||
+        record.artifact.artifact_kind !== validatedArtifact.artifact_kind ||
+        record.artifact.artifact_id !== validatedArtifact.artifact_id ||
+        record.artifact.revision !== validatedArtifact.revision
+      )
+        throw new Error('methodology proposal artifact has been purged or changed');
+      assertMethodologyDecisionBinding(record.proposal, record.approval, record.rejection);
+      const existing = this.methodologyArtifacts.get(artifactKey);
+      if (existing && existing.artifact_sha256 !== validatedArtifact.artifact_sha256)
+        throw new Error('methodology artifact revision conflict');
+      if (!existing)
+        this.methodologyArtifacts.set(artifactKey, JSON.parse(JSON.stringify(validatedArtifact)));
+      if (!this.methodologyArtifactLifecycles.has(artifactKey))
+        this.methodologyArtifactLifecycles.set(
+          artifactKey,
+          JSON.parse(JSON.stringify(validatedLifecycle)),
+        );
+    });
+  }
 
   async loadMethodologyArtifactLifecycle(
     artifactId: string,
@@ -539,7 +584,6 @@ export class MemoryStore implements StoreProvider {
           )
             continue;
           if (
-            (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
             record.artifact?.artifact_id === current.artifact_id &&
             record.artifact.revision === current.revision
           ) {
@@ -560,9 +604,7 @@ export class MemoryStore implements StoreProvider {
     let out = this.visible(this.methodologyProposals, opts).map((record) =>
       parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))),
     );
-    out = out.filter(
-      (record) => record.proposal.status === 'pending' || record.artifact !== undefined,
-    );
+    out = out.filter((record) => record.artifact !== undefined);
     if (opts.status) out = out.filter((record) => record.proposal.status === opts.status);
     return out.sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }
@@ -612,18 +654,30 @@ export class MemoryStore implements StoreProvider {
     scope?: StoreScope,
   ): Promise<MethodologyApprovalResult | null> {
     const key = this.key(proposalId, scope);
-    const existing = this.methodologyProposals.get(key);
-    if (!existing) return null;
-    const result = approveMethodologyProposal(
-      existing.proposal,
-      parseMethodologyApproval(approval),
+    const initial = this.methodologyProposals.get(key);
+    if (!initial) return null;
+    if (!initial.artifact)
+      throw new Error('methodology proposal artifact has been purged or changed');
+    const artifactKey = this.key(
+      `${initial.artifact.artifact_id}@${initial.artifact.revision}`,
+      scope,
     );
-    this.methodologyProposals.set(key, {
-      ...(existing?.artifact ? { artifact: JSON.parse(JSON.stringify(existing.artifact)) } : {}),
-      proposal: result.proposal,
-      approval: JSON.parse(JSON.stringify(result.approval)),
+    return this.withMethodologyLifecycleLock(artifactKey, async () => {
+      const existing = this.methodologyProposals.get(key);
+      if (!existing) return null;
+      if (!existing.artifact)
+        throw new Error('methodology proposal artifact has been purged or changed');
+      const result = approveMethodologyProposal(
+        existing.proposal,
+        parseMethodologyApproval(approval),
+      );
+      this.methodologyProposals.set(key, {
+        artifact: JSON.parse(JSON.stringify(existing.artifact)),
+        proposal: result.proposal,
+        approval: JSON.parse(JSON.stringify(result.approval)),
+      });
+      return JSON.parse(JSON.stringify(result)) as MethodologyApprovalResult;
     });
-    return JSON.parse(JSON.stringify(result)) as MethodologyApprovalResult;
   }
   async rejectMethodologyProposal(
     proposalId: string,

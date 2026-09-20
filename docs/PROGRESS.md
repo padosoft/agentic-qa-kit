@@ -9,6 +9,25 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Methodology publication fence completed locally
+
+- Added `publishMethodologyArtifact` to the store contract and both adapters.
+  Publication now re-reads the approved proposal under the artifact retention
+  lock before writing the artifact and lifecycle, closing the stale-read race
+  where purge could win between API validation and persistence.
+- Retention purge now scrubs staged copies from pending proposals as well as
+  decided proposals. Scrubbed proposals disappear from operational lists and
+  cannot be approved afterward; direct lookup remains available for audit-safe
+  diagnosis without the artifact copy.
+- Approval now uses the same artifact lock/re-read fence in MemoryStore and
+  PostgreSQL. API conflict responses classify purged/changed proposals as 409.
+- Added deterministic MemoryStore and hosted-PostgreSQL contract assertions for
+  pending-copy scrubbing and post-purge approval rejection. Local evidence:
+  store/server builds pass, 136 tests pass, and `git diff --check` is clean.
+  Hosted PostgreSQL evidence is still required in CI before merging. Next:
+  commit/push this slice, run the technical CI gate, then continue with the
+  next roadmap block (durable audit projections).
+
 ## 2026-09-20 — Retention lifecycle PR: atomic terminal-copy purge repair
 
 - Hosted PostgreSQL proved artifact deletion but caught a remaining read-back

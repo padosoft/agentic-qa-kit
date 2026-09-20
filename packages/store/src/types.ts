@@ -184,6 +184,13 @@ export interface StoreProvider {
     lifecycle: MethodologyArtifactLifecycle,
     scope?: StoreScope,
   ): Promise<void>;
+  /** Atomically revalidates an approved proposal and publishes its artifact+lifecycle. */
+  publishMethodologyArtifact(
+    proposalId: string,
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void>;
   loadMethodologyArtifactLifecycle(
     artifact_id: string,
     revision: number,

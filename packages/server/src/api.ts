@@ -1468,7 +1468,7 @@ export function makeApi(): ApiHandler[] {
           const result = await ctx.store.approveMethodologyProposal(proposalId, approval, s);
           return result ? asResponse(result) : notFound('methodology proposal');
         } catch (error) {
-          if (error instanceof Error && /conflict|not pending/i.test(error.message))
+          if (error instanceof Error && /conflict|not pending|purged|changed/i.test(error.message))
             return { status: 409, body: { error: 'methodology proposal is no longer pending' } };
           return {
             status: 400,
@@ -1499,7 +1499,7 @@ export function makeApi(): ApiHandler[] {
           const result = await ctx.store.rejectMethodologyProposal(proposalId, rejection, s);
           return result ? asResponse(result) : notFound('methodology proposal');
         } catch (error) {
-          if (error instanceof Error && /conflict|not pending/i.test(error.message))
+          if (error instanceof Error && /conflict|not pending|purged|changed/i.test(error.message))
             return { status: 409, body: { error: 'methodology proposal is no longer pending' } };
           return {
             status: 400,
@@ -1578,7 +1578,12 @@ export function makeApi(): ApiHandler[] {
               retention_days: retentionDays,
               archive_after_days: archiveAfterDays,
             });
-          await ctx.store.saveMethodologyArtifactWithLifecycle(artifact, lifecycle, s);
+          await ctx.store.publishMethodologyArtifact(
+            body.proposal_id as string,
+            artifact,
+            lifecycle,
+            s,
+          );
         } catch (error) {
           if (error instanceof Error && /conflict|already exists/i.test(error.message))
             return { status: 409, body: { error: 'methodology artifact revision conflict' } };
