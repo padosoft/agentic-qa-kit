@@ -39,18 +39,46 @@ export async function verifyCommerceFailureJourneys(
     if (JSON.stringify(retried) !== JSON.stringify(winner.value))
       throw new Error('idempotent retry returned a different checkout result');
     if (race.committed !== 1) throw new Error('inventory committed more than once');
-    // Exercise the real reference idempotency boundary as well as the async
+    // Exercise the real reference boundary with two carts as well as the async
     // barrier model used to expose the check/commit overlap.
     const product = {
-      sku: 'failure-idempotency-sku',
+      sku: 'failure-race-sku',
       price: { currency: 'EUR', amount_minor: '1000' },
       on_hand: 1,
     } as const;
     merchant.seedProduct(product);
-    const identity: CommerceIdentity = { tenant: 'failure-shop', customer_id: 'customer-a' };
-    const cart = merchant.addLine(identity, merchant.createCart(identity).id, product.sku, 1);
-    const first = merchant.checkout(identity, cart.id, 'reference-idempotency');
-    const referenceRetry = merchant.checkout(identity, cart.id, 'reference-idempotency');
+    const firstIdentity: CommerceIdentity = {
+      tenant: 'failure-shop',
+      customer_id: 'reference-customer-a',
+    };
+    const secondIdentity: CommerceIdentity = {
+      tenant: 'failure-shop',
+      customer_id: 'reference-customer-b',
+    };
+    const firstCart = merchant.addLine(
+      firstIdentity,
+      merchant.createCart(firstIdentity).id,
+      product.sku,
+      1,
+    );
+    const secondCart = merchant.addLine(
+      secondIdentity,
+      merchant.createCart(secondIdentity).id,
+      product.sku,
+      1,
+    );
+    const referenceOutcomes = await Promise.allSettled([
+      Promise.resolve().then(() =>
+        merchant.checkout(firstIdentity, firstCart.id, 'reference-race-a'),
+      ),
+      Promise.resolve().then(() =>
+        merchant.checkout(secondIdentity, secondCart.id, 'reference-race-b'),
+      ),
+    ]);
+    if (referenceOutcomes.filter((item) => item.status === 'fulfilled').length !== 1)
+      throw new Error('reference inventory race did not produce exactly one winner');
+    const first = merchant.checkout(firstIdentity, firstCart.id, 'reference-race-a');
+    const referenceRetry = merchant.checkout(firstIdentity, firstCart.id, 'reference-race-a');
     if (JSON.stringify(first) !== JSON.stringify(referenceRetry))
       throw new Error('reference idempotent retry returned a different result');
     return 'async barrier produced one winner; loser rejected; reference retry was exactly once';

@@ -69,6 +69,15 @@
   state and `unknown` outcome. Commerce suite remains **66 passed, 2 provider
   skips, 0 failed**.
 
+## 2026-09-20 — Review hardening for replay and reference contention
+
+- Minimized replay artifacts now use key-aware `redactJson()` before
+  serialization and include the finding ID in the filename, preventing secret
+  leakage and cross-finding overwrites.
+- The ecommerce journey now exercises two real reference carts in addition to
+  the async overlap model, and still verifies exactly-once retry. Reporter and
+  commerce suites remain green after the correction.
+
 ## 2026-09-20 — Holdout digest bound to regression evidence
 
 - Extended mutation regression evidence with an optional `plan_digest` and

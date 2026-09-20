@@ -81,7 +81,7 @@ describe('minimized counterexample replay', () => {
       scenario: HTTP_SCENARIO,
       counterexample: {
         irrelevant: 'remove-me',
-        nested: { keep: 'failure', token: 'secret=do-not-leak' },
+        nested: { keep: 'failure', token: 'plain-sensitive-value' },
       },
       stillFails: (candidate) =>
         typeof candidate === 'object' &&
@@ -90,10 +90,10 @@ describe('minimized counterexample replay', () => {
         'nested' in candidate,
       options: { max_attempts: 100, max_reductions: 10 },
     });
-    assert.equal(result.artifact.path, 'replay/counterexample.min.json');
+    assert.equal(result.artifact.path, 'replay/counterexample.AQA-2026-0001.min.json');
     assert.equal(result.finding_evidence, result.artifact.path);
     assert.match(result.artifact.contents, /AQA-2026-0001/);
-    assert.doesNotMatch(result.artifact.contents, /do-not-leak/);
+    assert.doesNotMatch(result.artifact.contents, /plain-sensitive-value/);
     assert.ok(result.reductions > 0);
   });
 });

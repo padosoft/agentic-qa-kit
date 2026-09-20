@@ -3,7 +3,7 @@ import {
   type ShrinkableJson,
   shrinkJsonCounterexample,
 } from '@aqa/methodology';
-import { redactText } from '@aqa/observability';
+import { redactJson } from '@aqa/observability';
 import type { Finding, Scenario } from '@aqa/schemas';
 import type { ReplayArtifact } from './replay.js';
 
@@ -47,8 +47,8 @@ export async function buildMinimizedCounterexampleReplay<T extends ShrinkableJso
     complete: result.complete,
     counterexample: result.value,
   };
-  const contents = `${redactText(JSON.stringify(payload, null, 2))}\n`;
-  const artifactPath = 'replay/counterexample.min.json';
+  const contents = `${JSON.stringify(redactJson(payload), null, 2)}\n`;
+  const artifactPath = `replay/counterexample.${input.finding.id}.min.json`;
   return {
     artifact: { path: artifactPath, kind: 'json', contents },
     finding_evidence: artifactPath,

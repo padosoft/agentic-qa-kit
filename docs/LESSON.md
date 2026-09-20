@@ -40,6 +40,13 @@ finding or can leak the original payload. Return the artifact path alongside
 the bounded statistics, bind it to finding/run/scenario identity, and redact
 before writing the replay artifact.
 
+# 2026-09-20 — Replay artifacts need both key-aware DLP and unique paths
+
+Text redaction over serialized JSON can miss sensitive keys whose values do not
+match a pattern, and one constant artifact path causes findings to overwrite
+each other. Redact the structured object before serialization and include a
+stable finding identity in the path.
+
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
 An in-memory load probe is useful only when it runs the production queue,
