@@ -3185,3 +3185,8 @@ caller can see different authorization surfaces depending on deployment mode.
   current repository roadmap. Keep the README's quickstart executable against
   the actual CLI help, and label provider-backed/independent assurance as
   deferred instead of marketing repository contracts as production evidence.
+
+- Junior onboarding must name both servers explicitly: the product under test
+  and AQA's local admin/API viewer. A risk YAML example also needs a real
+  scenario linkage; otherwise a beginner can validate configuration successfully
+  but run no executable test.

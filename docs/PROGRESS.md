@@ -9,6 +9,14 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — README zero-to-first-test hardening
+
+- Added an explicit beginner distinction between the application's backend/SUT
+  and the AQA admin/backend, with two-terminal commands and a bundled Bun API
+  path that starts the target, runs AQA and opens the admin UI.
+- Added a complete executable API scenario example showing risk/invariant
+  references, HTTP probes, oracle comparison and replay-oriented evidence.
+
 ## 2026-09-20 — README product and junior onboarding refresh
 
 - Reworked the README around the shipped product truth: complete feature

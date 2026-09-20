@@ -38,6 +38,7 @@
 - [AQA vs conventional testing tools](#aqa-vs-conventional-testing-tools)
 - [Quick start (junior-friendly)](#quick-start-junior-friendly)
 - [First project walkthrough](#first-project-walkthrough)
+- [The two processes you must start](#the-two-processes-you-must-start)
 - [Examples cookbook](#examples-cookbook)
 - [The mental model in 7 words](#the-mental-model-in-7-words)
 - [How you use it](#how-you-use-it)
@@ -380,6 +381,77 @@ Each finding ships with a deterministic replay artifact so you can reproduce it,
 This is the copy/paste path for a junior engineer starting with an existing
 application. The commands are intentionally small; run them in order.
 
+## The two processes you must start
+
+There are two different things called “backend” in a first setup. This table
+prevents the most common beginner mistake:
+
+| Process | What it does | How you start it |
+|---|---|---|
+| **Your application/SUT backend** | The API or web server that AQA will test | Use your project's command, for example `bun run dev`, `npm run dev`, `docker compose up` or `php artisan serve` |
+| **AQA admin/backend** | Local AQA API + React admin UI for browsing runs and findings | `bunx aqa admin`, then open `http://127.0.0.1:5173` |
+
+Start the application first, in **Terminal 1**:
+
+```bash
+cd my-project
+bun run dev                 # replace with your project's real dev command
+```
+
+Confirm its URL responds before starting AQA:
+
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+If your project has no `/health`, use one real read-only endpoint, such as
+`curl http://127.0.0.1:3000/`.
+
+Then use **Terminal 2** for AQA:
+
+```bash
+cd my-project
+bunx aqa run --profile smoke
+bunx aqa report --format both
+bunx aqa admin
+```
+
+Keep Terminal 2 open while browsing the admin panel. Stop each process with
+`Ctrl-C` in its own terminal. `aqa admin` is a local viewer and is not a
+replacement for your application's authentication or production backend.
+
+### Absolute beginner path using the bundled example
+
+If you do not have an application ready, run the known-good example from the
+AQA repository:
+
+```bash
+git clone https://github.com/padosoft/agentic-qa-kit.git
+cd agentic-qa-kit
+bun install
+bun run e2e:install
+bun install --cwd examples/bun-api
+```
+
+Terminal 1 — application backend:
+
+```bash
+bun run --cwd examples/bun-api dev
+```
+
+Terminal 2 — AQA run and admin backend:
+
+```bash
+bun run --filter @aqa/kit build
+node packages/kit/dist/cli.cjs run --profile api-core
+node packages/kit/dist/cli.cjs report --format both
+node packages/kit/dist/cli.cjs admin
+```
+
+Open `http://127.0.0.1:5173`. For the complete automated journey, stop the
+manual server and run `bun run e2e:ecosystem`; it starts the example target,
+executes AQA and exercises the admin UI through Playwright.
+
 ### 1. Initialize and inspect what AQA discovered
 
 ```bash
@@ -537,6 +609,51 @@ bunx aqa risk coverage --profile release-gate
 
 Review generated risks before approving them. Risk generation is an
 assistant, not an authorization to mutate your project configuration blindly.
+
+### Write a real API test scenario
+
+Scenarios are executable contracts, not only prose. Put this file inside a
+pack (for example `packs/my-api/scenarios/idempotency.yaml`) and list the pack
+in the selected profile:
+
+```yaml
+schema_version: "1"
+id: scn-idempotency
+title: Repeating a POST must not create a duplicate
+risk_refs: [r-idempotency]
+invariant_refs: [inv-idempotent-post]
+preconditions:
+  - "user authenticated"
+steps:
+  - id: probe-post-1
+    kind: http
+    with:
+      method: POST
+      url: "/items"
+      body: { name: "x" }
+      headers: { "Idempotency-Key": "junior-example-123" }
+  - id: probe-post-2
+    kind: http
+    with:
+      method: POST
+      url: "/items"
+      body: { name: "x" }
+      headers: { "Idempotency-Key": "junior-example-123" }
+oracles:
+  - id: o-same-id
+    kind: response_contains
+    probe_id: probe-post-2
+    with:
+      jsonpath: "$.id"
+      equals: "@probe-post-1.body.id"
+tags: [api, idempotency]
+```
+
+The scenario connects the complete chain:
+`risk_refs → invariant_refs → steps/probes → oracle → finding → replay`.
+After adding it, run `bunx aqa validate` and then
+`bunx aqa run --profile smoke`. A risk map entry without a referenced scenario
+is documentation, not a test.
 
 ### Use deterministic runs during debugging
 
