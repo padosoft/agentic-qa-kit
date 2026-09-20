@@ -105,6 +105,19 @@ describe('@aqa/observability', () => {
     assert.equal(spans[1]?.attributes['aqa.journey.transition_id'], undefined);
   });
 
+  it('does not truncate or alias overlong runner identities', () => {
+    const spans: Array<{ attributes: Record<string, unknown> }> = [];
+    const observer = makeEventSpanObserver(new Tracer((span) => spans.push(span)));
+    observer({
+      kind: 'scenario_finished',
+      run_id: 'run-1',
+      seq: 1,
+      actor: { type: 'runner' },
+      payload: { runner_id: `runner-${'x'.repeat(128)}` },
+    });
+    assert.equal(spans[0]?.attributes['aqa.runner_id'], undefined);
+  });
+
   it('renders bounded counters, gauges and cumulative histogram buckets', () => {
     const metrics = new MetricsRegistry(4);
     metrics.counter('aqa_runs_total', { project: 'shop' });

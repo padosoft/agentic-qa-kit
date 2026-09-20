@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-20 — Remote provenance needs subject binding, not just propagation
+
+An event can carry a valid-looking runner ID while the queue lease belongs to
+another JWT subject. Remote workers must require an explicit configured ID and
+reject a dequeue response whose `leased_by` does not match it; telemetry must
+validate the complete bounded identifier and emit it unchanged, never truncate
+potentially colliding identities. Blank IDs must fail closed rather than fall
+back to a local default.
+
 # 2026-09-20 — Queue identity must reach the evidence boundary
 
 Lease fencing alone proves who may mutate a queue job, but not which worker

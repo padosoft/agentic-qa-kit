@@ -49,6 +49,19 @@ describe('runner worker deployment configuration', () => {
     );
   });
 
+  it('requires an explicit runner identity for the remote control plane', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_SERVER_URL: 'http://aqa-server:8080',
+          AQA_RUNNER_TOKEN: 'redacted-token',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+        }),
+      /AQA_RUNNER_ID is required with AQA_SERVER_URL/,
+    );
+  });
+
   it('requires a credential for a remote control-plane worker and resolves token files', () => {
     assert.throws(
       () =>
@@ -61,6 +74,7 @@ describe('runner worker deployment configuration', () => {
     );
     const config = runnerConfigFromEnv({
       AQA_SERVER_URL: 'http://aqa-server:8080',
+      AQA_RUNNER_ID: 'runner-a',
       AQA_RUNNER_ROOT: 'C:/aqa',
       AQA_RUNNER_SCOPES: 'padosoft/shop',
       AQA_RUNNER_TOKEN_FILE: 'secrets/runner-token',

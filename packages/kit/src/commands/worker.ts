@@ -55,6 +55,8 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
   if (!root) throw new Error('[worker] AQA_RUNNER_ROOT is required');
   if (!scopes) throw new Error('[worker] AQA_RUNNER_SCOPES is required');
   const normalizedRunnerId = normalizeRunnerId(runnerId);
+  if (serverUrl && !normalizedRunnerId)
+    throw new Error('[worker] AQA_RUNNER_ID is required with AQA_SERVER_URL');
   const rawPoll = env.AQA_RUNNER_POLL_MS?.trim();
   const pollMs = rawPoll ? Number(rawPoll) : 250;
   if (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 60_000)
@@ -83,10 +85,14 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
 /** Run the production-shaped PostgreSQL worker until SIGTERM/SIGINT. */
 export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
   const queue = config.server_url
-    ? new HttpRunnerQueue(config.server_url, async () => {
-        if (config.runner_token_file) return readFile(config.runner_token_file, 'utf8');
-        return config.runner_token ?? '';
-      })
+    ? new HttpRunnerQueue(
+        config.server_url,
+        async () => {
+          if (config.runner_token_file) return readFile(config.runner_token_file, 'utf8');
+          return config.runner_token ?? '';
+        },
+        config.runner_id,
+      )
     : new PostgresRunnerQueue(config.queue_dsn ?? '');
   const worker = makeKitWorker({
     queue,

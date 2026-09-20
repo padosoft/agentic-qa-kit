@@ -514,7 +514,7 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   if (opts.seed !== undefined && opts.seed.trim() === '') {
     return makeError('--seed requires a non-empty value');
   }
-  const runnerId = opts.runner_id?.trim() || 'aqa-cli';
+  const runnerId = opts.runner_id === undefined ? 'aqa-cli' : opts.runner_id.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(runnerId)) {
     return makeError('runner_id must contain only bounded identifier characters');
   }

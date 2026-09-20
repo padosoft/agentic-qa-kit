@@ -980,6 +980,18 @@ describe('aqa run', () => {
     assert.match(result.error ?? '', /--profile/);
   });
 
+  it('rejects an explicitly blank runner identity instead of silently relabeling it', async () => {
+    const { root, packDir } = fixtureProject();
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      runner_id: '   ',
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /runner_id/);
+  });
+
   it('produces a deterministic run_id when seed is provided', async () => {
     const { root: rootA, packDir: packA } = fixtureProject();
     const { root: rootB, packDir: packB } = fixtureProject();

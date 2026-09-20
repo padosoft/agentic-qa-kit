@@ -16,13 +16,15 @@ export type RunnerTokenSource = () => string | Promise<string>;
 export class HttpRunnerQueue implements RunnerQueueLike {
   private readonly baseUrl: string;
   private readonly token: RunnerTokenSource;
+  private readonly expectedRunnerId: string | undefined;
 
-  constructor(baseUrl: string, token: RunnerTokenSource) {
+  constructor(baseUrl: string, token: RunnerTokenSource, expectedRunnerId?: string) {
     const normalized = baseUrl.trim().replace(/\/+$/, '');
     if (!/^https?:\/\//i.test(normalized))
       throw new Error('[runner/http] server URL must use http or https');
     this.baseUrl = normalized;
     this.token = token;
+    this.expectedRunnerId = expectedRunnerId?.trim() || undefined;
   }
 
   async dequeue(_now?: Date, _scopes?: readonly RunnerScope[]): Promise<EnqueuedJob | null> {
@@ -31,6 +33,8 @@ export class HttpRunnerQueue implements RunnerQueueLike {
     if (response.status !== 200) throw await httpError(response, 'dequeue');
     const body = (await response.json()) as { job?: EnqueuedJob };
     if (!body.job) throw new Error('[runner/http] dequeue response omitted job');
+    if (this.expectedRunnerId && body.job.leased_by !== this.expectedRunnerId)
+      throw new Error('[runner/http] lease identity does not match configured runner_id');
     return body.job;
   }
 
