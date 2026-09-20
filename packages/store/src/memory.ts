@@ -539,7 +539,6 @@ export class MemoryStore implements StoreProvider {
           )
             continue;
           if (
-            (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
             record.artifact?.artifact_id === current.artifact_id &&
             record.artifact.revision === current.revision
           ) {
@@ -560,9 +559,7 @@ export class MemoryStore implements StoreProvider {
     let out = this.visible(this.methodologyProposals, opts).map((record) =>
       parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))),
     );
-    out = out.filter(
-      (record) => record.proposal.status === 'pending' || record.artifact !== undefined,
-    );
+    out = out.filter((record) => record.artifact !== undefined);
     if (opts.status) out = out.filter((record) => record.proposal.status === opts.status);
     return out.sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }
@@ -612,18 +609,29 @@ export class MemoryStore implements StoreProvider {
     scope?: StoreScope,
   ): Promise<MethodologyApprovalResult | null> {
     const key = this.key(proposalId, scope);
-    const existing = this.methodologyProposals.get(key);
-    if (!existing) return null;
-    const result = approveMethodologyProposal(
-      existing.proposal,
-      parseMethodologyApproval(approval),
-    );
-    this.methodologyProposals.set(key, {
-      ...(existing?.artifact ? { artifact: JSON.parse(JSON.stringify(existing.artifact)) } : {}),
-      proposal: result.proposal,
-      approval: JSON.parse(JSON.stringify(result.approval)),
+    return this.withMethodologyLifecycleLock(key, async () => {
+      const existing = this.methodologyProposals.get(key);
+      if (!existing) return null;
+      const artifactKey = this.key(
+        `${existing.proposal.artifact_id}@${existing.proposal.revision}`,
+        scope,
+      );
+      return this.withMethodologyLifecycleLock(artifactKey, async () => {
+        const current = this.methodologyProposals.get(key);
+        if (!current?.artifact)
+          throw new Error('methodology proposal artifact has been purged or changed');
+        const result = approveMethodologyProposal(
+          current.proposal,
+          parseMethodologyApproval(approval),
+        );
+        this.methodologyProposals.set(key, {
+          ...(current.artifact ? { artifact: JSON.parse(JSON.stringify(current.artifact)) } : {}),
+          proposal: result.proposal,
+          approval: JSON.parse(JSON.stringify(result.approval)),
+        });
+        return JSON.parse(JSON.stringify(result)) as MethodologyApprovalResult;
+      });
     });
-    return JSON.parse(JSON.stringify(result)) as MethodologyApprovalResult;
   }
   async rejectMethodologyProposal(
     proposalId: string,

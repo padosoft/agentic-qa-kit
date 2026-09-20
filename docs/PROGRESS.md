@@ -37,6 +37,15 @@
   Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
   PostgreSQL and confirm the full CI gate.
 
+## 2026-09-20 — Pending-proposal retention race closed
+
+- Approval now serializes against the proposal/artifact retention key and
+  re-reads the staged proposal after the lock. Purge scrubs pending proposals
+  as well as terminal copies; an approval arriving afterward fails closed
+  instead of resurrecting a purged revision. Publication still requires the
+  staged copy and persists artifact+lifecycle atomically. Local store/server
+  contract: **136 passed / 0 failed**; hosted PostgreSQL CI is required next.
+
 ## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
 
 - The latest hosted PostgreSQL contract run found one remaining JSONB shape

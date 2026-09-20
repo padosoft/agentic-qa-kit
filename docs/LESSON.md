@@ -3000,3 +3000,8 @@ caller can see different authorization surfaces depending on deployment mode.
   publication, legacy backfill, and purge, with lifecycle-row locking after
   the advisory lock; the in-memory adapter uses the equivalent per-key lock.
   This prevents an expired artifact from being recreated with a lifecycle gap.
+
+- Pending proposals are also sensitive staged copies. Purging only approved or
+  rejected records leaves a path where a reviewer can approve and republish a
+  deleted revision. Scrub pending copies too, and re-read the proposal after
+  acquiring the artifact lock before approving it.

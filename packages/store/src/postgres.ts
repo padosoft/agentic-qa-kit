@@ -806,13 +806,10 @@ export class PostgresStore implements StoreProvider {
           const proposalRecord = parseMethodologyProposalRecord(
             typeof decodedProposal === 'string' ? this.decode(decodedProposal) : decodedProposal,
           );
-          const terminal =
-            proposalRecord.proposal.status === 'approved' ||
-            proposalRecord.proposal.status === 'rejected';
           const matchesArtifact =
             proposalRecord.artifact?.artifact_id === current.artifact_id &&
             proposalRecord.artifact.revision === current.revision;
-          if (!terminal || !matchesArtifact) continue;
+          if (!matchesArtifact) continue;
           await query(
             "UPDATE aqa_store_records SET payload = CASE jsonb_typeof(payload) WHEN 'object' THEN payload - 'artifact' WHEN 'string' THEN ((payload #>> '{}')::jsonb) - 'artifact' ELSE payload END, updated_at = now() WHERE kind = $1 AND record_key = $2",
             ['methodology_proposal', proposalRow.record_key],
@@ -833,7 +830,7 @@ export class PostgresStore implements StoreProvider {
       parseMethodologyProposalRecord,
     );
     return records
-      .filter((record) => record.proposal.status === 'pending' || record.artifact !== undefined)
+      .filter((record) => record.artifact !== undefined)
       .filter((record) => !opts.status || record.proposal.status === opts.status)
       .sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }
@@ -893,25 +890,56 @@ export class PostgresStore implements StoreProvider {
     approval: MethodologyApproval,
     scope?: StoreScope,
   ): Promise<MethodologyApprovalResult | null> {
-    const current = await this.loadMethodologyProposal(proposalId, scope);
-    if (!current) return null;
-    const result = approveMethodologyProposal(current.proposal, parseMethodologyApproval(approval));
     await this.wait();
-    const rows = await this.q<{ payload: unknown }>(
-      'UPDATE aqa_store_records SET payload = $4::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2 AND payload = $3::jsonb RETURNING payload',
-      [
-        'methodology_proposal',
-        scopedRecordKey(proposalId, scope),
-        JSON.stringify(current),
-        JSON.stringify({
-          proposal: result.proposal,
-          ...(current.artifact ? { artifact: current.artifact } : {}),
-          approval: result.approval,
-        }),
-      ],
-    );
-    if (rows.length === 0) throw new Error('methodology proposal approval conflict');
-    return result;
+    return this.sql.begin(async (tx) => {
+      const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
+      const recordKey = scopedRecordKey(proposalId, scope);
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [recordKey]);
+      const proposalRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2',
+        ['methodology_proposal', recordKey],
+      )) as Array<{ payload: unknown }>;
+      const proposalRow = proposalRows[0];
+      if (!proposalRow) return null;
+      const decoded = this.decode<unknown>(proposalRow.payload);
+      const initial = parseMethodologyProposalRecord(
+        typeof decoded === 'string' ? this.decode(decoded) : decoded,
+      );
+      const artifactKey = scopedRecordKey(
+        `${initial.proposal.artifact_id}@${initial.proposal.revision}`,
+        scope,
+      );
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [artifactKey]);
+      const currentRows = (await query(
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_proposal', recordKey],
+      )) as Array<{ payload: unknown }>;
+      const currentRow = currentRows[0];
+      if (!currentRow) return null;
+      const currentDecoded = this.decode<unknown>(currentRow.payload);
+      const current = parseMethodologyProposalRecord(
+        typeof currentDecoded === 'string' ? this.decode(currentDecoded) : currentDecoded,
+      );
+      if (!current.artifact)
+        throw new Error('methodology proposal artifact has been purged or changed');
+      const result = approveMethodologyProposal(
+        current.proposal,
+        parseMethodologyApproval(approval),
+      );
+      await query(
+        'UPDATE aqa_store_records SET payload = $3::jsonb, updated_at = now() WHERE kind = $1 AND record_key = $2',
+        [
+          'methodology_proposal',
+          recordKey,
+          JSON.stringify({
+            proposal: result.proposal,
+            ...(current.artifact ? { artifact: current.artifact } : {}),
+            approval: result.approval,
+          }),
+        ],
+      );
+      return result;
+    });
   }
   async rejectMethodologyProposal(
     proposalId: string,
