@@ -25,6 +25,7 @@ export {
   type RunnerJob,
   type RunnerQueueLike,
   type QueueReapResult,
+  normalizeRunnerId,
 } from './runner-queue.js';
 export { PostgresRunnerQueue } from './postgres-queue.js';
 export { HttpRunnerQueue, type RunnerTokenSource } from './http-runner-queue.js';

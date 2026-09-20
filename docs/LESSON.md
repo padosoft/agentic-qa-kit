@@ -9,6 +9,13 @@ validate the complete bounded identifier and emit it unchanged, never truncate
 potentially colliding identities. Blank IDs must fail closed rather than fall
 back to a local default.
 
+# 2026-09-20 — Static credentials cannot prove remote worker provenance
+
+A static bearer token authorizer can authenticate a request but cannot bind a
+lease to a unique worker subject. Remote execution must use a subject-bearing
+short-lived credential (JWT/mTLS identity) or fail closed before dequeue; a
+configured runner ID alone is not evidence of who authenticated the request.
+
 # 2026-09-20 — Queue identity must reach the evidence boundary
 
 Lease fencing alone proves who may mutate a queue job, but not which worker

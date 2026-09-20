@@ -15,6 +15,17 @@ export interface RunnerScope {
   project?: string;
 }
 
+const RUNNER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+
+/** Canonical host-owned identity validation shared by queue and Kit layers. */
+export function normalizeRunnerId(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!RUNNER_ID_PATTERN.test(normalized))
+    throw new Error('[worker] runner_id must contain only bounded identifier characters');
+  return normalized;
+}
+
 /** Result of runner authentication; scopes are enforced by the queue routes. */
 export interface RunnerAuthorization {
   runner_id: string;

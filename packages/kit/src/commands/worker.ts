@@ -87,6 +87,10 @@ export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
   const serverUrl = config.server_url;
   const runnerId = config.runner_id;
   if (serverUrl && !runnerId) throw new Error('[worker] runner_id is required with server_url');
+  if (serverUrl && config.runner_token)
+    throw new Error(
+      '[worker] static runner tokens cannot bind a remote lease subject; use AQA_RUNNER_TOKEN_FILE with a JWT',
+    );
   const queue = serverUrl
     ? new HttpRunnerQueue(
         serverUrl,

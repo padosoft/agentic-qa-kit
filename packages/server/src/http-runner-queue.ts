@@ -5,6 +5,7 @@ import type {
   RunnerQueueLike,
   RunnerScope,
 } from './runner-queue.js';
+import { normalizeRunnerId } from './runner-queue.js';
 
 export type RunnerTokenSource = () => string | Promise<string>;
 
@@ -24,7 +25,7 @@ export class HttpRunnerQueue implements RunnerQueueLike {
       throw new Error('[runner/http] server URL must use http or https');
     this.baseUrl = normalized;
     this.token = token;
-    this.expectedRunnerId = expectedRunnerId.trim();
+    this.expectedRunnerId = normalizeRunnerId(expectedRunnerId);
     if (!this.expectedRunnerId)
       throw new Error('[runner/http] expected runner identity is required');
   }

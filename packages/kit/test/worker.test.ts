@@ -62,6 +62,22 @@ describe('runner worker deployment configuration', () => {
     );
   });
 
+  it('rejects the static remote token path before creating an unbound lease', async () => {
+    const { runWorker } = await import('../dist/commands/worker.js');
+    await assert.rejects(
+      () =>
+        runWorker({
+          server_url: 'http://aqa-server:8080',
+          runner_token: 'redacted-token',
+          runner_id: 'runner-a',
+          root: 'C:/aqa',
+          poll_ms: 250,
+          scopes: [{ org: 'padosoft', project: 'shop' }],
+        }),
+      /static runner tokens cannot bind/,
+    );
+  });
+
   it('requires a credential for a remote control-plane worker and resolves token files', () => {
     assert.throws(
       () =>
