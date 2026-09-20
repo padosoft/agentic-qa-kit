@@ -8,6 +8,7 @@ import {
   type MethodologyRejectionResult,
   approveMethodologyProposal,
   archiveMethodologyArtifactLifecycle,
+  assertMethodologyApproval,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
   createMethodologyArtifactLifecycle,
@@ -623,6 +624,7 @@ export class PostgresStore implements StoreProvider {
       )
         throw new Error('methodology proposal artifact has been purged or changed');
       assertMethodologyDecisionBinding(record.proposal, record.approval, record.rejection);
+      assertMethodologyApproval(record.proposal, record.approval);
       const artifactRows = (await query(
         'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
         ['methodology_artifact', artifactKey],
@@ -642,7 +644,7 @@ export class PostgresStore implements StoreProvider {
           throw new Error('methodology artifact revision conflict');
       } else {
         await query(
-          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb)',
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
           [
             'methodology_artifact',
             artifactKey,
@@ -653,12 +655,24 @@ export class PostgresStore implements StoreProvider {
         );
       }
       const lifecycleRows = (await query(
-        'SELECT 1 FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        'SELECT payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
         ['methodology_artifact_lifecycle', artifactKey],
-      )) as unknown[];
-      if (lifecycleRows.length === 0)
+      )) as Array<{ payload: unknown }>;
+      const existingLifecycleRow = lifecycleRows[0];
+      if (existingLifecycleRow) {
+        const decodedLifecycle = this.decode<unknown>(existingLifecycleRow.payload);
+        const existingLifecycle = parseMethodologyArtifactLifecycle(
+          JSON.stringify(
+            typeof decodedLifecycle === 'string'
+              ? this.decode<unknown>(decodedLifecycle)
+              : decodedLifecycle,
+          ),
+        );
+        if (JSON.stringify(existingLifecycle) !== JSON.stringify(lifecycleValue))
+          throw new Error('methodology artifact lifecycle conflict');
+      } else
         await query(
-          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb)',
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
           [
             'methodology_artifact_lifecycle',
             artifactKey,

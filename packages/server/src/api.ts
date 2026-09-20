@@ -1437,7 +1437,10 @@ export function makeApi(): ApiHandler[] {
           await ctx.store.saveMethodologyProposal(proposal, s, artifact);
           return asResponse({ proposal }, 201);
         } catch (error) {
-          if (error instanceof Error && /conflict|already exists/i.test(error.message))
+          if (
+            error instanceof Error &&
+            /conflict|already exists|purged|changed/i.test(error.message)
+          )
             return { status: 409, body: { error: 'methodology proposal conflict' } };
           return {
             status: 400,

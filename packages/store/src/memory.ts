@@ -8,6 +8,7 @@ import {
   type MethodologyRejectionResult,
   approveMethodologyProposal,
   archiveMethodologyArtifactLifecycle,
+  assertMethodologyApproval,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
   createMethodologyArtifactLifecycle,
@@ -458,12 +459,23 @@ export class MemoryStore implements StoreProvider {
       )
         throw new Error('methodology proposal artifact has been purged or changed');
       assertMethodologyDecisionBinding(record.proposal, record.approval, record.rejection);
+      assertMethodologyApproval(record.proposal, record.approval);
       const existing = this.methodologyArtifacts.get(artifactKey);
-      if (existing && existing.artifact_sha256 !== validatedArtifact.artifact_sha256)
+      if (
+        existing &&
+        (existing.artifact_sha256 !== validatedArtifact.artifact_sha256 ||
+          existing.artifact_kind !== validatedArtifact.artifact_kind)
+      )
         throw new Error('methodology artifact revision conflict');
+      const existingLifecycle = this.methodologyArtifactLifecycles.get(artifactKey);
+      if (
+        existingLifecycle &&
+        JSON.stringify(existingLifecycle) !== JSON.stringify(validatedLifecycle)
+      )
+        throw new Error('methodology artifact lifecycle conflict');
       if (!existing)
         this.methodologyArtifacts.set(artifactKey, JSON.parse(JSON.stringify(validatedArtifact)));
-      if (!this.methodologyArtifactLifecycles.has(artifactKey))
+      if (!existingLifecycle)
         this.methodologyArtifactLifecycles.set(
           artifactKey,
           JSON.parse(JSON.stringify(validatedLifecycle)),
