@@ -84,14 +84,17 @@ export function runnerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Runne
 
 /** Run the production-shaped PostgreSQL worker until SIGTERM/SIGINT. */
 export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
-  const queue = config.server_url
+  const serverUrl = config.server_url;
+  const runnerId = config.runner_id;
+  if (serverUrl && !runnerId) throw new Error('[worker] runner_id is required with server_url');
+  const queue = serverUrl
     ? new HttpRunnerQueue(
-        config.server_url,
+        serverUrl,
         async () => {
           if (config.runner_token_file) return readFile(config.runner_token_file, 'utf8');
           return config.runner_token ?? '';
         },
-        config.runner_id,
+        runnerId as string,
       )
     : new PostgresRunnerQueue(config.queue_dsn ?? '');
   const worker = makeKitWorker({
@@ -99,7 +102,7 @@ export async function runWorker(config: RunnerWorkerConfig): Promise<void> {
     root: config.root,
     poll_ms: config.poll_ms,
     scopes: config.scopes,
-    ...(config.runner_id ? { runner_id: config.runner_id } : {}),
+    ...(runnerId ? { runner_id: runnerId } : {}),
     ...(config.probe_drivers ? { probeDrivers: config.probe_drivers } : {}),
   });
   const stop = () => worker.stop();

@@ -17,7 +17,7 @@
   validated `aqa.runner_id` on intermediate trace evidence.
 - Added the complete remote-worker assertion that dequeue/lease identity,
   persisted audit actor and trace-safe provenance remain correlated. Local
-  evidence: observability 20/20 and Kit 192 passed / 0 failed / 2 platform
+  evidence: observability 21/21 and Kit 195 passed / 0 failed / 2 platform
   skips.
 - Next: add bounded local load/chaos evidence and methodology governance
   closure; protected provider and independent assurance gates remain deferred.

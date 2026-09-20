@@ -18,13 +18,15 @@ export class HttpRunnerQueue implements RunnerQueueLike {
   private readonly token: RunnerTokenSource;
   private readonly expectedRunnerId: string | undefined;
 
-  constructor(baseUrl: string, token: RunnerTokenSource, expectedRunnerId?: string) {
+  constructor(baseUrl: string, token: RunnerTokenSource, expectedRunnerId: string) {
     const normalized = baseUrl.trim().replace(/\/+$/, '');
     if (!/^https?:\/\//i.test(normalized))
       throw new Error('[runner/http] server URL must use http or https');
     this.baseUrl = normalized;
     this.token = token;
-    this.expectedRunnerId = expectedRunnerId?.trim() || undefined;
+    this.expectedRunnerId = expectedRunnerId.trim();
+    if (!this.expectedRunnerId)
+      throw new Error('[runner/http] expected runner identity is required');
   }
 
   async dequeue(_now?: Date, _scopes?: readonly RunnerScope[]): Promise<EnqueuedJob | null> {
