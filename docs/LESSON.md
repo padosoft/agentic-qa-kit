@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-20 — SQL projections must account for legacy JSONB shapes
+
+Moving an audit filter from application code into SQL can expose historical
+double-encoded JSONB rows that the application decoder already tolerated. Keep
+the predicate before `LIMIT`, but normalize both object and serialized-string
+shapes at the provider boundary; otherwise a hosted database can return zero
+rows while the same in-memory projection passes.
+
 # 2026-09-20 — A benchmark needs an explicit evidence boundary
 
 A fast in-memory queue loop is useful as a regression baseline but cannot be

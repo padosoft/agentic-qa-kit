@@ -25,6 +25,17 @@
   Next: connect shrinking to replay/finding evidence, then implement the
   ecommerce failure-injection journey and mutation holdout governance.
 
+## 2026-09-20 — Hosted PostgreSQL projection regression identified
+
+- PR #243 CI exposed that the new SQL-side audit `kind` predicate handled only
+  object-shaped JSONB, while legacy double-encoded event rows are decoded by
+  the application layer as valid events. The query now keeps filtering before
+  `LIMIT` and supports both JSONB object and serialized-string shapes.
+- The failure was isolated to the hosted PostgreSQL contract (`0 !== 1` for a
+  filtered `oracle_evaluated` event); all other PR #243 technical jobs passed.
+  A fresh local typecheck/lint and hosted PostgreSQL rerun are required before
+  merge.
+
 ## 2026-09-20 — Methodology publication fence completed locally
 
 - Added `publishMethodologyArtifact` to the store contract and both adapters.

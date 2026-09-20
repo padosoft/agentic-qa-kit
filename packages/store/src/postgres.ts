@@ -275,7 +275,14 @@ export class PostgresStore implements StoreProvider {
       'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org IS NULL OR org = $1) AND ($2::text IS NULL OR project IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)';
     if (opts.kind !== undefined) {
       values.push(opts.kind);
-      text += ` AND payload->>'kind' = $${values.length}`;
+      // Older migrations can contain a JSONB string holding the serialized
+      // event. Keep the selective predicate in SQL for pagination correctness,
+      // while accepting that legacy shape at the provider boundary.
+      text += ` AND CASE jsonb_typeof(payload)
+        WHEN 'object' THEN payload->>'kind'
+        WHEN 'string' THEN (payload #>> '{}')::jsonb->>'kind'
+        ELSE NULL
+      END = $${values.length}`;
     }
     text += ' ORDER BY ts DESC, seq DESC';
     if (opts.limit !== undefined) {
