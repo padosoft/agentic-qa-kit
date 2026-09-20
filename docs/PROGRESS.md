@@ -34,6 +34,18 @@
   split keys. Next: expose the split in the mutation evidence contract and
   complete the ecommerce timeout/webhook/idempotency failure journey.
 
+## 2026-09-20 — Ecommerce failure-injection journey
+
+- Added `verifyCommerceFailureJourneys()` and contract coverage for the local
+  reference merchant. It executes one-stock/two-cart contention, verifies
+  exactly-once idempotent retry, replays a signed webhook and rejects a
+  conflicting event, then proves an approved financial mutation remains
+  `unknown` after injected transport ambiguity.
+- Evidence is structured and explicitly bounded to
+  `in_memory_reference_only`; real provider, network and settlement execution
+  remain final-gate evidence. Next: run the full hosted matrix and connect
+  minimized failure artifacts to finding/replay records.
+
 ## 2026-09-20 — Chaos review hardening
 
 - Fixed the chaos CLI to exit nonzero when thresholds fail, rebuild the server

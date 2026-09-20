@@ -14,6 +14,13 @@ the producer must also return a nonzero exit code. When evidence loads ignored
 build artifacts, the supported command must rebuild or verify the artifact
 before attributing it to a source revision.
 
+# 2026-09-20 — Failure journeys must assert duplicate and conflict paths
+
+A webhook replay test that only proves duplicate suppression can still accept a
+different provider event for the same business effect. Complete journeys need
+one identical replay and one conflicting logical event, plus an explicit
+unknown outcome for transport ambiguity instead of guessing success.
+
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
 An in-memory load probe is useful only when it runs the production queue,

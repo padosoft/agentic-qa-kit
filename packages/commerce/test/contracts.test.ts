@@ -28,6 +28,7 @@ import {
   assertSubscriptionIntegrity,
   assertTenderAllocation,
   verifyCheckoutJourney,
+  verifyCommerceFailureJourneys,
   verifyCommerceJourneySuite,
   verifyDisputeJourney,
   verifyDunningJourney,
@@ -40,6 +41,21 @@ import {
 } from '../dist/index.js';
 
 describe('@aqa/commerce contracts', () => {
+  it('completes the local failure-injection journey for ecommerce races, replays and ambiguity', async () => {
+    const merchant = new InMemoryCommerceReference();
+    const result = await verifyCommerceFailureJourneys(merchant);
+    assert.equal(result.status, 'pass');
+    assert.equal(result.boundary, 'in_memory_reference_only');
+    assert.deepEqual(
+      result.evidence.map((item) => [item.scenario, item.status]),
+      [
+        ['inventory_idempotency_race', 'pass'],
+        ['webhook_replay', 'pass'],
+        ['unknown_outcome', 'pass'],
+      ],
+    );
+  });
+
   it('allows only same-customer reads and requires a bound human approval for spending', () => {
     let now = new Date('2026-09-17T10:00:00Z');
     const policy = new CommerceToolPolicy({
