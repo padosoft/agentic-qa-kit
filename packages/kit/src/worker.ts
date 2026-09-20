@@ -1,8 +1,8 @@
 import {
-  normalizeRunnerId as normalizeServerRunnerId,
   type RunnerQueueLike,
   RunnerWorker,
   type RunnerWorkerOptions,
+  normalizeRunnerId as normalizeServerRunnerId,
 } from '@aqa/server';
 import type { RunProbeDrivers, StatefulJourneyBinding } from './commands/run.js';
 import { makeRunJobHandler } from './worker-handler.js';
