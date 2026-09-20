@@ -245,8 +245,8 @@ To use the locally built CLI from your own project while evaluating source:
 bun run --filter @aqa/kit build
 
 # The source build emits cli.cjs (the `aqa` bin shim is created by a package
-# manager). Invoke the bundle directly:
-node <path-to-agentic-qa-kit>/packages/kit/dist/cli.cjs --help
+# manager). From the repository root, invoke the bundle directly:
+node packages/kit/dist/cli.cjs --help
 ```
 
 For normal project usage, prefer Path B below so your project is decoupled from
@@ -288,9 +288,11 @@ bun add -d @padosoft/agentic-qa-kit
 Confirm the installation before changing configuration:
 
 ```bash
-bunx aqa --version
 bunx aqa --help
 ```
+
+The current CLI help is the reliable installation check. The package and
+historical CLI version strings can differ while a release is being prepared.
 
 ### 4. Initialize the AQA workspace + verify
 
@@ -434,7 +436,10 @@ risks:
 ```
 
 The risk is more valuable than a generic “test invoices” instruction: it gives
-the agent an invariant, a severity and an oracle target.
+the agent an invariant, a severity and an oracle target. It is not executable
+by itself: a scenario or pack must reference this risk (for example through
+`risk_refs`) before `aqa run` can exercise it. Review or author that scenario
+before expecting a finding.
 
 ### 4. Run a safe first pass
 
@@ -466,7 +471,7 @@ bunx aqa report                         # selects the latest run
 bunx aqa verify <finding-id-from-report> --attempts 3 --base-url http://127.0.0.1:3000
 ```
 
-The finding directory contains redacted evidence and replay artifacts. A
+The run directory contains redacted evidence and replay artifacts. A
 verified finding is not “the agent said it failed”: it has a reproducible
 boundary, an oracle result and preserved evidence. After fixing the application,
 run `verify` again and attach the result to the pull request.
@@ -594,6 +599,24 @@ that merely claims a successful restore is not sufficient.
 bunx aqa pack new payments --sut-type api \
   --description "Payment and checkout assurance scenarios" \
   --author "Your Team"
+```
+
+Add the new discovery key to the profile you want to run:
+
+```yaml
+# .aqa/profiles.yaml — under the selected profile, for example smoke
+profiles:
+  smoke:
+    packs:
+      - pack-core
+      - payments
+```
+
+Then validate and run:
+
+```bash
+bunx aqa validate
+bunx aqa run --profile smoke
 ```
 
 Then edit the generated manifest and scenarios. See
