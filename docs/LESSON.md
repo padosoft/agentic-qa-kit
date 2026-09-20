@@ -3165,3 +3165,8 @@ caller can see different authorization surfaces depending on deployment mode.
   digest must cover the complete canonical split (including reviewed links),
   not only the projected mutant IDs; otherwise metadata tampering can pass
   while the report still looks internally consistent.
+
+- Failure journeys must also isolate their idempotency identities. A fixed
+  key can collide with a previous invocation's seeded cart and fail before
+  the injected ambiguity boundary; derive the local key from the fresh cart
+  identity while retaining the retry/reconciliation assertions.

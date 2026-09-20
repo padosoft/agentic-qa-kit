@@ -173,7 +173,7 @@ export async function verifyCommerceFailureJourneys(
       const checkout = merchant.checkout(
         mutationIdentity,
         mutationCart.id,
-        'unknown-outcome-idempotency',
+        `unknown-outcome-idempotency-${mutationCart.id}`,
       );
       committedOrderId = checkout.order.id;
       throw new Error('injected transport timeout after provider write boundary');
