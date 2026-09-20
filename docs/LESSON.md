@@ -2978,3 +2978,8 @@ caller can see different authorization surfaces depending on deployment mode.
   even though its parsed record was valid. For retention scrubbing, lock the
   tenant-scoped candidates, parse them through the canonical schema boundary,
   and match terminal status plus artifact identity/revision before mutation.
+
+- Provider JSONB adapters can expose a serialized JSON string more than once
+  at a cast/read boundary. The canonical decode helper must normalize the
+  provider shape before schema parsing, including destructive reconciliation
+  queries; otherwise a valid persisted proposal is rejected as non-object.

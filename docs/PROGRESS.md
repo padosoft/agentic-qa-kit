@@ -18,9 +18,11 @@
   and artifact deletion. The hosted rerun then showed that the JSONB path
   predicate did not match the approved record reliably; scrubbing now locks
   tenant-scoped proposal rows, parses them canonically, and matches terminal
-  status plus artifact identity/revision before removing the copy. Local store
-  build and contract: 20 passed / 0 failed. Next: rerun hosted PostgreSQL and
-  confirm the full CI gate.
+  status plus artifact identity/revision before removing the copy. The first
+  hosted attempt also exposed a provider JSONB double-encoding shape at this
+  read boundary; normalize one additional serialized layer before parsing.
+  Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
+  PostgreSQL and confirm the full CI gate.
 
 ## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
 

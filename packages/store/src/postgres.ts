@@ -767,7 +767,10 @@ export class PostgresStore implements StoreProvider {
           ['methodology_proposal', tenantOrg, tenantProject],
         )) as Array<{ record_key: string; payload: unknown }>;
         for (const proposalRow of proposalRows) {
-          const proposalRecord = parseMethodologyProposalRecord(this.decode(proposalRow.payload));
+          const decodedProposal = this.decode<unknown>(proposalRow.payload);
+          const proposalRecord = parseMethodologyProposalRecord(
+            typeof decodedProposal === 'string' ? this.decode(decodedProposal) : decodedProposal,
+          );
           const terminal =
             proposalRecord.proposal.status === 'approved' ||
             proposalRecord.proposal.status === 'rejected';
