@@ -38,7 +38,7 @@ export function createMethodologyArtifactLifecycle(input: {
 }): MethodologyArtifactLifecycle {
   assertTimestamp(input.now, 'now');
   assertIdentity(input.artifact_id, 'artifact_id');
-  assertIdentity(input.updated_by, 'updated_by');
+  assertActor(input.updated_by, 'updated_by');
   assertRevision(input.revision);
   assertDays(input.retention_days, 'retention_days');
   const archiveAfterDays = input.archive_after_days ?? input.retention_days;
@@ -90,7 +90,7 @@ export function parseMethodologyArtifactLifecycle(input: unknown): MethodologyAr
   if (!KINDS.has(value.artifact_kind as MethodologyArtifactKind))
     throw new Error('methodology lifecycle artifact kind is invalid');
   assertIdentity(value.artifact_id, 'artifact_id');
-  assertIdentity(value.updated_by, 'updated_by');
+  assertActor(value.updated_by, 'updated_by');
   assertRevision(value.revision);
   if (typeof value.legal_hold !== 'boolean')
     throw new Error('methodology lifecycle legal_hold is invalid');
@@ -115,7 +115,7 @@ export function archiveMethodologyArtifactLifecycle(
 ): MethodologyArtifactLifecycle {
   const current = parseMethodologyArtifactLifecycle(lifecycle);
   assertTimestamp(input.now, 'now');
-  assertIdentity(input.updated_by, 'updated_by');
+  assertActor(input.updated_by, 'updated_by');
   if (!input.reason.trim() || input.reason.length > 2000)
     throw new Error('archive reason is invalid');
   assertDlpClean(input.reason);
@@ -135,7 +135,7 @@ export function setMethodologyArtifactLegalHold(
 ): MethodologyArtifactLifecycle {
   const current = parseMethodologyArtifactLifecycle(lifecycle);
   assertTimestamp(input.now, 'now');
-  assertIdentity(input.updated_by, 'updated_by');
+  assertActor(input.updated_by, 'updated_by');
   if (!input.reason.trim() || input.reason.length > 2000)
     throw new Error('legal hold reason is invalid');
   assertDlpClean(input.reason);
@@ -159,6 +159,10 @@ export function isMethodologyArtifactExpired(
 
 function assertIdentity(value: string, name: string): void {
   if (!ID.test(value)) throw new Error(`methodology lifecycle ${name} is invalid`);
+}
+function assertActor(value: string, name: string): void {
+  if (!value.trim() || value.length > 256)
+    throw new Error(`methodology lifecycle ${name} is invalid`);
 }
 function assertRevision(value: unknown): void {
   if (!Number.isSafeInteger(value) || (value as number) < 1)

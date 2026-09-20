@@ -1534,7 +1534,12 @@ export function makeApi(): ApiHandler[] {
         try {
           artifact = parseMethodologyArtifactEnvelope(JSON.stringify(body.artifact));
           const record = await ctx.store.loadMethodologyProposal(body.proposal_id, s);
-          if (!record || record.proposal.status !== 'approved' || !record.approval)
+          if (
+            !record ||
+            record.proposal.status !== 'approved' ||
+            !record.approval ||
+            !record.artifact
+          )
             throw new Error('methodology proposal is not approved');
           const { proposal, approval } = record;
           if (
@@ -1573,12 +1578,14 @@ export function makeApi(): ApiHandler[] {
               retention_days: retentionDays,
               archive_after_days: archiveAfterDays,
             });
-          if (existingLifecycle) await ctx.store.saveMethodologyArtifact(artifact, s);
-          else await ctx.store.saveMethodologyArtifactWithLifecycle(artifact, lifecycle, s);
+          await ctx.store.saveMethodologyArtifactWithLifecycle(artifact, lifecycle, s);
         } catch (error) {
           if (error instanceof Error && /conflict|already exists/i.test(error.message))
             return { status: 409, body: { error: 'methodology artifact revision conflict' } };
-          throw error;
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology publication rejected') },
+          };
         }
         return asResponse(
           {

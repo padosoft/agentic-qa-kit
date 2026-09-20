@@ -27,6 +27,13 @@
   The resulting catalog contract is now explicit in both adapters: terminal
   proposals whose retained artifact was purged are omitted from operational
   lists, while direct lookup remains available without the sensitive copy.
+  Additional concurrency hardening closes the remaining retention risks:
+  publication rejects scrubbed proposals and always uses atomic artifact+
+  lifecycle persistence; MemoryStore serializes lifecycle/purge decisions;
+  artifact-kind conflicts, tenant-scoped assertions, and PostgreSQL advisory
+  lock ordering are enforced. Local store/server/methodology builds pass and
+  the store contract remains 20/20. Next: rerun hosted CI, resolve only the
+  now-obsolete review threads, and merge.
   Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
   PostgreSQL and confirm the full CI gate.
 

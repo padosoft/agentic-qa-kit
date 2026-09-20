@@ -513,7 +513,11 @@ export class PostgresStore implements StoreProvider {
         validated.revision,
         scope,
       );
-      if (!existing || existing.artifact_sha256 !== validated.artifact_sha256)
+      if (
+        !existing ||
+        existing.artifact_sha256 !== validated.artifact_sha256 ||
+        existing.artifact_kind !== validated.artifact_kind
+      )
         throw new Error('methodology artifact revision conflict');
     }
   }
@@ -535,6 +539,11 @@ export class PostgresStore implements StoreProvider {
     await this.sql.begin(async (tx) => {
       const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
       const recordKey = scopedRecordKey(`${validated.artifact_id}@${validated.revision}`, scope);
+      await query('SELECT pg_advisory_xact_lock(hashtext($1))', [recordKey]);
+      const existingLifecycle = (await query(
+        'SELECT 1 FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+        ['methodology_artifact_lifecycle', recordKey],
+      )) as unknown[];
       await query(
         'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
         [
@@ -555,18 +564,22 @@ export class PostgresStore implements StoreProvider {
       const existingArtifact = parseMethodologyArtifactEnvelope(
         typeof decodedPayload === 'string' ? decodedPayload : JSON.stringify(decodedPayload),
       );
-      if (existingArtifact.artifact_sha256 !== validated.artifact_sha256)
+      if (
+        existingArtifact.artifact_sha256 !== validated.artifact_sha256 ||
+        existingArtifact.artifact_kind !== validated.artifact_kind
+      )
         throw new Error('methodology artifact revision conflict');
-      await query(
-        'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
-        [
-          'methodology_artifact_lifecycle',
-          recordKey,
-          scope?.org ?? null,
-          scope?.project ?? null,
-          JSON.stringify(lifecycleValue),
-        ],
-      );
+      if (existingLifecycle.length === 0)
+        await query(
+          'INSERT INTO aqa_store_records (kind, record_key, org, project, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (kind, record_key) DO NOTHING',
+          [
+            'methodology_artifact_lifecycle',
+            recordKey,
+            scope?.org ?? null,
+            scope?.project ?? null,
+            JSON.stringify(lifecycleValue),
+          ],
+        );
     });
   }
 
@@ -678,11 +691,21 @@ export class PostgresStore implements StoreProvider {
               ? { sql: ' AND project = $2', values: [scope.project] }
               : { sql: '', values: [] };
       const legacyRows = (await query(
-        `SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1${filters.sql} AND NOT EXISTS (SELECT 1 FROM aqa_store_records l WHERE l.kind = 'methodology_artifact_lifecycle' AND l.record_key = aqa_store_records.record_key) FOR UPDATE`,
+        `SELECT record_key FROM aqa_store_records WHERE kind = $1${filters.sql} AND NOT EXISTS (SELECT 1 FROM aqa_store_records l WHERE l.kind = 'methodology_artifact_lifecycle' AND l.record_key = aqa_store_records.record_key)`,
         ['methodology_artifact', ...filters.values],
       )) as Row[];
       for (const row of legacyRows) {
-        const artifact = parseMethodologyArtifactEnvelope(JSON.stringify(this.decode(row.payload)));
+        await query('SELECT pg_advisory_xact_lock(hashtext($1))', [row.record_key]);
+        const artifactRows = (await query(
+          "SELECT record_key, org, project, payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 AND NOT EXISTS (SELECT 1 FROM aqa_store_records l WHERE l.kind = 'methodology_artifact_lifecycle' AND l.record_key = aqa_store_records.record_key) FOR UPDATE",
+          ['methodology_artifact', row.record_key],
+        )) as Row[];
+        const artifactRow = artifactRows[0];
+        if (!artifactRow) continue;
+        const decoded = this.decode<unknown>(artifactRow.payload);
+        const artifact = parseMethodologyArtifactEnvelope(
+          typeof decoded === 'string' ? decoded : JSON.stringify(decoded),
+        );
         const lifecycle = createMethodologyArtifactLifecycle({
           artifact_kind: artifact.artifact_kind,
           artifact_id: artifact.artifact_id,
@@ -697,22 +720,34 @@ export class PostgresStore implements StoreProvider {
           [
             'methodology_artifact_lifecycle',
             row.record_key,
-            row.org ?? null,
-            row.project ?? null,
+            artifactRow.org ?? null,
+            artifactRow.project ?? null,
             JSON.stringify(lifecycle),
           ],
         );
       }
       const rows = (await query(
-        `SELECT record_key, org, project, payload FROM aqa_store_records WHERE kind = $1${filters.sql} ORDER BY record_key FOR UPDATE`,
+        `SELECT record_key FROM aqa_store_records WHERE kind = $1${filters.sql} ORDER BY record_key`,
         ['methodology_artifact_lifecycle', ...filters.values],
       )) as Row[];
       let purged = 0;
       for (const row of rows) {
-        let current = parseMethodologyArtifactLifecycle(this.decode(row.payload));
         const lifecycleKey = row.record_key;
-        const tenantOrg = scope?.org ?? row.org ?? null;
-        const tenantProject = scope?.project ?? row.project ?? null;
+        await query('SELECT pg_advisory_xact_lock(hashtext($1))', [lifecycleKey]);
+        const lockedRows = (await query(
+          'SELECT record_key, org, project, payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 FOR UPDATE',
+          ['methodology_artifact_lifecycle', lifecycleKey],
+        )) as Row[];
+        const lockedRow = lockedRows[0];
+        if (!lockedRow) continue;
+        let current = parseMethodologyArtifactLifecycle(
+          (() => {
+            const decoded = this.decode<unknown>(lockedRow.payload);
+            return typeof decoded === 'string' ? this.decode(decoded) : decoded;
+          })(),
+        );
+        const tenantOrg = scope?.org ?? lockedRow.org ?? null;
+        const tenantProject = scope?.project ?? lockedRow.project ?? null;
         const artifactKey = scopedRecordKey(`${current.artifact_id}@${current.revision}`, {
           ...(tenantOrg ? { org: tenantOrg } : {}),
           ...(tenantProject ? { project: tenantProject } : {}),
@@ -755,8 +790,8 @@ export class PostgresStore implements StoreProvider {
             `methodology retention purge could not delete artifact ${current.artifact_id}@${current.revision}`,
           );
         const remainingArtifacts = (await query(
-          `SELECT record_key, org, project FROM aqa_store_records WHERE kind = 'methodology_artifact' AND payload->>'artifact_id' = $1 AND (payload->>'revision')::integer = $2`,
-          [current.artifact_id, current.revision],
+          `SELECT record_key, org, project FROM aqa_store_records WHERE kind = 'methodology_artifact' AND org IS NOT DISTINCT FROM $3 AND project IS NOT DISTINCT FROM $4 AND payload->>'artifact_id' = $1 AND (payload->>'revision')::integer = $2`,
+          [current.artifact_id, current.revision, tenantOrg, tenantProject],
         )) as Array<{ record_key: string; org: string | null; project: string | null }>;
         if (remainingArtifacts.length > 0)
           throw new Error(

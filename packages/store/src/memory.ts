@@ -390,7 +390,11 @@ export class MemoryStore implements StoreProvider {
     const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
     const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
     const existing = this.methodologyArtifacts.get(key);
-    if (existing && existing.artifact_sha256 !== validated.artifact_sha256)
+    if (
+      existing &&
+      (existing.artifact_sha256 !== validated.artifact_sha256 ||
+        existing.artifact_kind !== validated.artifact_kind)
+    )
       throw new Error('methodology artifact revision conflict');
     this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validated)));
   }
@@ -410,7 +414,11 @@ export class MemoryStore implements StoreProvider {
     const key = this.key(`${validatedArtifact.artifact_id}@${validatedArtifact.revision}`, scope);
     await this.withMethodologyLifecycleLock(key, async () => {
       const existing = this.methodologyArtifacts.get(key);
-      if (existing && existing.artifact_sha256 !== validatedArtifact.artifact_sha256)
+      if (
+        existing &&
+        (existing.artifact_sha256 !== validatedArtifact.artifact_sha256 ||
+          existing.artifact_kind !== validatedArtifact.artifact_kind)
+      )
         throw new Error('methodology artifact revision conflict');
       if (this.methodologyArtifactLifecycles.has(key)) return;
       this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validatedArtifact)));
@@ -435,17 +443,12 @@ export class MemoryStore implements StoreProvider {
     scope?: StoreScope,
   ): Promise<void> {
     const validated = parseMethodologyArtifactLifecycle(lifecycle);
-    if (!(await this.loadMethodologyArtifact(validated.artifact_id, validated.revision, scope)))
-      throw new Error('methodology artifact does not exist');
     const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
-    const artifact = await this.loadMethodologyArtifact(
-      validated.artifact_id,
-      validated.revision,
-      scope,
-    );
-    if (!artifact || artifact.artifact_kind !== validated.artifact_kind)
-      throw new Error('methodology lifecycle does not bind to artifact');
     await this.withMethodologyLifecycleLock(key, async () => {
+      const artifact = this.methodologyArtifacts.get(key);
+      if (!artifact) throw new Error('methodology artifact does not exist');
+      if (artifact.artifact_kind !== validated.artifact_kind)
+        throw new Error('methodology lifecycle does not bind to artifact');
       this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validated)));
     });
   }
@@ -495,41 +498,57 @@ export class MemoryStore implements StoreProvider {
         retention_days: 365,
         archive_after_days: 365,
       });
-      this.methodologyArtifactLifecycles.set(key, lifecycle);
+      await this.withMethodologyLifecycleLock(key, async () => {
+        if (this.methodologyArtifacts.has(key) && !this.methodologyArtifactLifecycles.has(key))
+          this.methodologyArtifactLifecycles.set(key, lifecycle);
+      });
     }
     let purged = 0;
     for (const [key, lifecycle] of this.methodologyArtifactLifecycles.entries()) {
       if (!this.visible(new Map([[key, lifecycle]]), scope).length) continue;
-      let current = lifecycle;
-      if (
-        !current.legal_hold &&
-        current.state === 'active' &&
-        Date.parse(now) >= Date.parse(current.archive_after)
-      ) {
-        current = {
-          ...current,
-          state: 'archived',
-          updated_at: now,
-          updated_by: 'retention-reconciler',
-          reason: 'Retention archive threshold reached',
-        };
-        this.methodologyArtifactLifecycles.set(key, current);
-      }
-      if (!isMethodologyArtifactExpired(current, now)) continue;
-      this.methodologyArtifactLifecycles.delete(key);
-      this.methodologyArtifacts.delete(key);
-      for (const [proposalKey, record] of this.methodologyProposals.entries()) {
-        if (!this.visible(new Map([[proposalKey, record]]), scope).length) continue;
+      await this.withMethodologyLifecycleLock(key, async () => {
+        const currentArtifact = this.methodologyArtifacts.get(key);
+        const currentLifecycle = this.methodologyArtifactLifecycles.get(key);
+        if (!currentArtifact || !currentLifecycle) return;
+        let current = currentLifecycle;
         if (
-          (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
-          record.artifact?.artifact_id === current.artifact_id &&
-          record.artifact.revision === current.revision
+          !current.legal_hold &&
+          current.state === 'active' &&
+          Date.parse(now) >= Date.parse(current.archive_after)
         ) {
-          const { artifact: _artifact, ...scrubbed } = record;
-          this.methodologyProposals.set(proposalKey, scrubbed);
+          current = {
+            ...current,
+            state: 'archived',
+            updated_at: now,
+            updated_by: 'retention-reconciler',
+            reason: 'Retention archive threshold reached',
+          };
+          this.methodologyArtifactLifecycles.set(key, current);
         }
-      }
-      purged += 1;
+        if (!isMethodologyArtifactExpired(current, now)) return;
+        this.methodologyArtifactLifecycles.delete(key);
+        this.methodologyArtifacts.delete(key);
+        const namespacePrefix = isScopedRecordKey(key)
+          ? key.slice(0, key.lastIndexOf('/') + 1)
+          : '';
+        for (const [proposalKey, record] of this.methodologyProposals.entries()) {
+          if (
+            namespacePrefix
+              ? !proposalKey.startsWith(namespacePrefix)
+              : isScopedRecordKey(proposalKey)
+          )
+            continue;
+          if (
+            (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
+            record.artifact?.artifact_id === current.artifact_id &&
+            record.artifact.revision === current.revision
+          ) {
+            const { artifact: _artifact, ...scrubbed } = record;
+            this.methodologyProposals.set(proposalKey, scrubbed);
+          }
+        }
+        purged += 1;
+      });
     }
     return purged;
   }

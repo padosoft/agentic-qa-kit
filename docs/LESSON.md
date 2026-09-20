@@ -2994,3 +2994,9 @@ caller can see different authorization surfaces depending on deployment mode.
   orphaned admin record. Preserve direct ID lookup for audit semantics, but
   exclude artifact-less terminal proposals from operational listings in every
   store adapter.
+
+- Retention and publication must share one per-record critical section. The
+  durable adapter now uses the same PostgreSQL advisory lock for atomic
+  publication, legacy backfill, and purge, with lifecycle-row locking after
+  the advisory lock; the in-memory adapter uses the equivalent per-key lock.
+  This prevents an expired artifact from being recreated with a lifecycle gap.
