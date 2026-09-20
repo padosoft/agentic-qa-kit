@@ -226,6 +226,7 @@ This is the easiest path for a first evaluation:
 git clone https://github.com/padosoft/agentic-qa-kit.git
 cd agentic-qa-kit
 bun install
+bun run e2e:install
 bun run build:workspace
 
 # Run the real example ecosystem journey.
@@ -243,12 +244,9 @@ To use the locally built CLI from your own project while evaluating source:
 # from the AQA repository
 bun run --filter @aqa/kit build
 
-# from your project, point PATH at the built binary for this shell
-# PowerShell:
-$env:PATH = "<path-to-agentic-qa-kit>\packages\kit\dist;$env:PATH"
-# macOS/Linux:
-export PATH="<path-to-agentic-qa-kit>/packages/kit/dist:$PATH"
-aqa --help
+# The source build emits cli.cjs (the `aqa` bin shim is created by a package
+# manager). Invoke the bundle directly:
+node <path-to-agentic-qa-kit>/packages/kit/dist/cli.cjs --help
 ```
 
 For normal project usage, prefer Path B below so your project is decoupled from
@@ -419,17 +417,20 @@ passing.
 Example: a SaaS API must never return another tenant's invoice.
 
 ```yaml
-# .aqa/risk-map.yaml
-- id: tenant-invoice-isolation
-  category: authorization
-  title: An invoice is visible only to its owning tenant
-  severity: critical
-  likelihood: likely
-  invariants:
-    - id: invoice-tenant-bound
-      statement: GET /api/invoices/:id rejects a principal from another tenant.
-    - id: invoice-no-side-channel
-      statement: Missing and cross-tenant invoices have equivalent safe responses.
+# .aqa/risk-map.yaml — keep the required root object
+schema_version: '1'
+project: my-project
+risks:
+  - id: tenant-invoice-isolation
+    category: auth
+    title: An invoice is visible only to its owning tenant
+    severity: critical
+    likelihood: likely
+    invariants:
+      - id: invoice-tenant-bound
+        statement: GET /api/invoices/:id rejects a principal from another tenant.
+      - id: invoice-no-side-channel
+        statement: Missing and cross-tenant invoices have equivalent safe responses.
 ```
 
 The risk is more valuable than a generic “test invoices” instruction: it gives
@@ -446,24 +447,32 @@ If your app needs a local server, start it first in another terminal. If your
 project has no executable driver for a selected scenario, AQA records an
 execution gap instead of fabricating a pass.
 
-Inspect the result:
+Inspect the result in PowerShell:
+
+```powershell
+Get-ChildItem .aqa/runs
+```
+
+Inspect it on macOS/Linux:
 
 ```bash
-Get-ChildItem .aqa/runs                         # PowerShell
-find .aqa/runs -maxdepth 2 -type f | sort      # macOS/Linux
+find .aqa/runs -maxdepth 2 -type f | sort
 ```
 
 ### 5. Read, reproduce and verify a finding
 
 ```bash
-bunx aqa report --run-id <run-id>
-bunx aqa verify AQA-2026-0001 --attempts 3 --base-url http://127.0.0.1:3000
+bunx aqa report                         # selects the latest run
+bunx aqa verify <finding-id-from-report> --attempts 3 --base-url http://127.0.0.1:3000
 ```
 
 The finding directory contains redacted evidence and replay artifacts. A
 verified finding is not “the agent said it failed”: it has a reproducible
 boundary, an oracle result and preserved evidence. After fixing the application,
 run `verify` again and attach the result to the pull request.
+
+If the report has no finding, there is nothing to verify. Always copy the real
+finding ID printed by `aqa report`; do not invent one.
 
 ### 6. Open the local operations view
 
@@ -484,12 +493,22 @@ name: Agentic QA
 on: [pull_request]
 jobs:
   aqa:
+    permissions:
+      contents: read
+      packages: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.3.11'
+      - name: Configure GitHub Packages
+        shell: bash
+        run: |
+          echo "@padosoft:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: bun install --frozen-lockfile
       - run: bunx aqa validate
       - run: bunx aqa run --profile smoke --seed ${{ github.event.pull_request.head.sha }}
@@ -504,9 +523,10 @@ provider credentials in `.aqa/`, generated replay files or the pull request.
 ### Discover risks before writing scenarios
 
 ```bash
-bunx aqa risk discover --method stride > .aqa/risk-baseline-stride.json
-bunx aqa risk discover --method owasp > .aqa/risk-baseline-owasp.json
-bunx aqa risk discover --method fmea > .aqa/risk-baseline-fmea.json
+# Select one method. AQA writes the valid YAML map to .aqa/risk-map.yaml.
+# --force intentionally replaces the starter map; review it before committing.
+bunx aqa risk discover --method stride --force
+# Alternatives: --method owasp, --method fmea or --method source
 bunx aqa risk coverage --profile release-gate
 ```
 
@@ -517,8 +537,8 @@ assistant, not an authorization to mutate your project configuration blindly.
 
 ```bash
 bunx aqa run --profile smoke --seed checkout-cart-2026-09-20
-bunx aqa report --run-id checkout-cart-2026-09-20
-bunx aqa verify AQA-2026-0001 --attempts 5
+bunx aqa report                         # latest run; copy the emitted run ID if needed
+bunx aqa verify <finding-id-from-report> --attempts 5 --base-url http://127.0.0.1:3000
 ```
 
 The seed gives the run a stable identity. It does not make an inherently
