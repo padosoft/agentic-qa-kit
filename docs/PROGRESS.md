@@ -28,6 +28,16 @@
   commit/push this slice, run the technical CI gate, then continue with the
   next roadmap block (durable audit projections).
 
+## 2026-09-20 — Durable audit projection query fence
+
+- Corrected the PostgreSQL audit projection so `kind` filtering happens in SQL
+  before `LIMIT`; previously a newer non-matching event could consume the limit
+  and make a valid matching event disappear from the projection.
+- Added a durable contract assertion with a newer `info` event and a bounded
+  `oracle_evaluated` query. Next: explicit tenant metadata for all producer
+  paths, retention/aggregation policy, and complete API/admin evidence without
+  relying on lenient legacy rows.
+
 ## 2026-09-20 — Retention lifecycle PR: atomic terminal-copy purge repair
 
 - Hosted PostgreSQL proved artifact deletion but caught a remaining read-back
