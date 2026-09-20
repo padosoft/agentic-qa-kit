@@ -7,6 +7,13 @@ between runs and contaminate release decisions. Rank reviewed pairs by a
 domain-separated hash, enforce minimum train/holdout sizes, and persist a
 digest of the exact split alongside evidence.
 
+# 2026-09-20 — Evidence producers must fail at the process boundary
+
+Structured output containing `result: fail` is not enough for CI or operators:
+the producer must also return a nonzero exit code. When evidence loads ignored
+build artifacts, the supported command must rebuild or verify the artifact
+before attributing it to a source revision.
+
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
 An in-memory load probe is useful only when it runs the production queue,

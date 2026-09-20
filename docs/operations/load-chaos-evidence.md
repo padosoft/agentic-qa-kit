@@ -8,8 +8,11 @@ the real `RunnerQueue` implementation rather than a fake benchmark fixture.
 
 ```bash
 bun run benchmark:chaos
-node scripts/chaos-benchmark.mjs --jobs 1000 --runs 5 --max-attempts 3
+bun run build:workspace && node scripts/chaos-benchmark.mjs --jobs 1000 --runs 5 --max-attempts 3
 ```
+
+The script also rebuilds `@aqa/server` immediately before loading the queue,
+so source attribution cannot silently use a stale ignored `dist/` tree.
 
 The command emits one JSON document containing the source revision, thresholds,
 per-run terminal accounting and an explicit evidence boundary. It refuses a

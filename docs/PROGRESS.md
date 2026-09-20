@@ -34,6 +34,13 @@
   split keys. Next: expose the split in the mutation evidence contract and
   complete the ecommerce timeout/webhook/idempotency failure journey.
 
+## 2026-09-20 — Chaos review hardening
+
+- Fixed the chaos CLI to exit nonzero when thresholds fail, rebuild the server
+  artifact before loading it, and cover both passing and failing subprocess
+  behavior. The runbook now makes the build requirement and artifact freshness
+  explicit.
+
 ## 2026-09-20 — Roadmap close-out status after PR #241
 
 - PR #241 (`audit-retention-runbook`) is merged on `main` after the complete

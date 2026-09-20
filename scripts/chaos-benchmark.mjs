@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { RunnerQueue } from '../packages/server/dist/index.js';
+
+execFileSync('bun', ['run', '--filter', '@aqa/server', 'build'], { stdio: 'ignore' });
+const { RunnerQueue } = await import('../packages/server/dist/index.js');
 
 const args = parseArgs(process.argv.slice(2));
 const jobs = boundedInteger(args.jobs ?? '200', 'jobs', 1, 10_000);
@@ -52,6 +54,7 @@ console.log(
     2,
   ),
 );
+if (!pass) process.exitCode = 1;
 
 function executeRun(run) {
   const queue = new RunnerQueue({ lease_ms: 10, max_attempts: maxAttempts });
