@@ -44,6 +44,11 @@ export interface StoreScope {
   project?: string;
 }
 
+export interface AuditSummary {
+  total: number;
+  by_kind: Partial<Record<Event.Event['kind'], number>>;
+}
+
 export interface LegacyMigrationResult {
   migrated: number;
   skipped: number;
@@ -97,7 +102,8 @@ export interface StoreProvider {
   }): Promise<Run.Run[]>;
 
   // ----- Events -----
-  appendEvent(event: Event.Event): Promise<void>;
+  /** Persist an event with optional authoritative tenant metadata. */
+  appendEvent(event: Event.Event, scope?: StoreScope): Promise<void>;
   listEvents(run_id: string): Promise<Event.Event[]>;
   /** Audit-log scoped listing — newest first. */
   listAuditEvents(opts: {
@@ -108,6 +114,14 @@ export interface StoreProvider {
     to?: string;
     limit?: number;
   }): Promise<Event.Event[]>;
+  /** Tenant-scoped audit aggregation without transferring the event payloads. */
+  summarizeAuditEvents(opts: {
+    org?: string;
+    project?: string;
+    kind?: Event.Event['kind'];
+    from?: string;
+    to?: string;
+  }): Promise<AuditSummary>;
 
   // ----- Findings -----
   appendFinding(finding: Finding.Finding): Promise<void>;

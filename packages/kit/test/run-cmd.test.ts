@@ -931,13 +931,34 @@ describe('aqa run', () => {
         root,
         profile: 'smoke',
         packsRoot: [packDir],
+        runner_id: 'runner-trace',
         otlpEndpoint: `http://127.0.0.1:${address.port}/v1/traces`,
       });
       assert.equal(result.ok, true);
       assert.ok(payloads.length >= 1, 'run must deliver at least one OTLP batch before return');
       const spans =
-        (payloads[0]?.resourceSpans as Array<{ scopeSpans: Array<{ spans: unknown[] }> }>) ?? [];
+        (payloads[0]?.resourceSpans as Array<{
+          scopeSpans: Array<{
+            spans: Array<{
+              attributes?: Array<{ key: string; value?: { stringValue?: string } }>;
+            }>;
+          }>;
+        }>) ?? [];
       assert.ok((spans[0]?.scopeSpans[0]?.spans.length ?? 0) >= 1);
+      assert.ok(
+        spans.some((resource) =>
+          resource.scopeSpans.some((scope) =>
+            scope.spans.some((span) =>
+              span.attributes?.some(
+                (attribute) =>
+                  attribute.key === 'aqa.runner_id' &&
+                  attribute.value?.stringValue === 'runner-trace',
+              ),
+            ),
+          ),
+        ),
+        'intermediate OTLP evidence must carry the runner identity',
+      );
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -957,6 +978,18 @@ describe('aqa run', () => {
     const result = await runFixture({ root, profile: '', packsRoot: [packDir] });
     assert.equal(result.ok, false);
     assert.match(result.error ?? '', /--profile/);
+  });
+
+  it('rejects an explicitly blank runner identity instead of silently relabeling it', async () => {
+    const { root, packDir } = fixtureProject();
+    const result = await runFixture({
+      root,
+      profile: 'smoke',
+      packsRoot: [packDir],
+      runner_id: '   ',
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /runner_id/);
   });
 
   it('produces a deterministic run_id when seed is provided', async () => {

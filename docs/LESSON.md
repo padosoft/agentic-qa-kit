@@ -16,20 +16,71 @@ the predicate before `LIMIT`, but normalize both object and serialized-string
 shapes at the provider boundary; otherwise a hosted database can return zero
 rows while the same in-memory projection passes.
 
-# 2026-09-20 — A benchmark needs an explicit evidence boundary
+# 2026-09-20 — Validate custom authorizer results at the API boundary
 
-A fast in-memory queue loop is useful as a regression baseline but cannot be
-renamed into control-plane capacity. Emit the runtime/source revision and
-scope, keep the workload deterministic and secret-free, and require the real
-queue, artifact backend, sandbox and probe mix for deployment sizing claims.
+Validating only the built-in JWT authorizer is insufficient: `runnerAuthorize`
+is an extension point and can return a malformed subject. Normalize the
+authorization result immediately before dequeue/renew/ack/fail so malformed
+identities receive 401 and can never be persisted as lease ownership.
 
-# 2026-09-20 — Shrinking must own only candidate generation
+# 2026-09-20 — Remote provenance needs subject binding, not just propagation
 
-Bug minimization belongs behind a caller-owned failure predicate. The
-methodology package may generate bounded JSON candidates and choose a smaller
-failing value, but it must not execute probes, log payloads or imply global
-minimality; execution, redaction and provider isolation remain host/runner
-responsibilities.
+An event can carry a valid-looking runner ID while the queue lease belongs to
+another JWT subject. Remote workers must require an explicit configured ID and
+reject a dequeue response whose `leased_by` does not match it; telemetry must
+validate the complete bounded identifier and emit it unchanged, never truncate
+potentially colliding identities. Blank IDs must fail closed rather than fall
+back to a local default.
+
+# 2026-09-20 — Static credentials cannot prove remote worker provenance
+
+A static bearer token authorizer can authenticate a request but cannot bind a
+lease to a unique worker subject. Remote execution must use a subject-bearing
+short-lived credential (JWT/mTLS identity) or fail closed before dequeue; a
+configured runner ID alone is not evidence of who authenticated the request.
+
+# 2026-09-20 — Queue identity must reach the evidence boundary
+
+Lease fencing alone proves who may mutate a queue job, but not which worker
+produced the resulting run evidence. Propagate the host-owned identity into
+the canonical start/finish events and expose only a bounded, validated value
+to traces; never accept a runner identity from the queued payload.
+
+# 2026-09-20 — Audit retention must preserve completeness evidence
+
+Deleting old hash-chain rows is not a neutral storage optimization: a
+shortened prefix can still verify locally while hiding omitted history. Treat
+retention as a checkpointed projection operation, keep legal holds ahead of
+age, and require archive read-back plus an independently governed checkpoint
+before purge. The application can provide the contract; provider WORM/KMS
+execution remains a separate production evidence gate.
+
+# 2026-09-20 — Admin projections must share scope and source state
+
+An aggregate displayed next to an audit chain is only meaningful when both
+requests use the identical tenant scope and the aggregate is rendered only
+after the event list has loaded successfully. Independent endpoint success can
+otherwise produce a plausible but internally contradictory UI. The complete
+journey now asserts organization and project headers plus the failure
+combination explicitly.
+
+# 2026-09-20 — Aggregation must share the audit projection boundary
+
+Audit summaries are tenant data too. They must not be computed by fetching a
+global event list and grouping it in the API layer: the store contract now
+accepts the same scope/time/kind filters as event listing, and PostgreSQL does
+the grouping in SQL. This keeps payload transfer bounded and prevents a future
+admin dashboard from accidentally turning an aggregate into a cross-tenant
+side channel.
+
+# 2026-09-20 — Tenant provenance belongs in the persistence projection
+
+Putting org/project only in an event payload is not enough: producers can omit
+it, payloads can be legacy or redacted, and a scoped query may accidentally
+interpret an untagged record as global. Persist the authoritative tenant
+columns at the store boundary by deriving them from the owning run, allow an
+explicit trusted scope override, and make scoped reads exclude rows with no
+provenance. Memory and PostgreSQL must enforce the same fail-closed rule.
 
 # 2026-09-20 — Filter durable projections before applying pagination
 

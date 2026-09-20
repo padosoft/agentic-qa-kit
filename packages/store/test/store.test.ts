@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   createMethodologyArtifactEnvelope,
@@ -7,6 +8,20 @@ import {
   methodologyArtifactSha256,
 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+    .join(',')}}`;
+}
+
+function hashEvent(event: Record<string, unknown>, prevHash = '0'.repeat(64)): string {
+  const { prev_hash: _prevHash, hash: _hash, ...rest } = event;
+  return createHash('sha256').update(prevHash).update(canonical(rest)).digest('hex');
+}
 
 const RUN = {
   schema_version: '1' as const,
@@ -77,6 +92,47 @@ describe('MemoryStore', () => {
     await s.saveRun(RUN);
     const r = await s.loadRun('run-a');
     assert.deepEqual(r, RUN);
+  });
+
+  it('fails closed for scoped audit reads without authoritative tenant metadata', async () => {
+    const s = new MemoryStore();
+    await s.saveRun({ ...RUN, id: 'run-tenant-a', org: 'org-a', project: 'shop' });
+    const event = {
+      schema_version: '1' as const,
+      seq: 0,
+      prev_hash: null,
+      hash: '',
+      ts: '2026-05-17T10:00:00Z',
+      run_id: 'run-tenant-a',
+      kind: 'info' as const,
+      actor: { type: 'system' as const, id: 'tenant-test' },
+      payload: { message: 'tenant event' },
+    };
+    event.hash = hashEvent(event);
+    await s.appendEvent(event);
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+    assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
+    const preRunEvent = { ...event, run_id: 'run-late', seq: 1, hash: '' };
+    preRunEvent.hash = hashEvent(preRunEvent);
+    await s.appendEvent(preRunEvent);
+    await s.saveRun({ ...RUN, id: 'run-late', org: 'org-a', project: 'shop' });
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+    const explicitlyScopedEvent = {
+      ...event,
+      hash: '',
+      run_id: 'run-without-provenance',
+      seq: 2,
+    };
+    explicitlyScopedEvent.hash = hashEvent(explicitlyScopedEvent);
+    await s.appendEvent(explicitlyScopedEvent, { org: 'org-a', project: 'shop' });
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
+    const legacy = {
+      ...event,
+      hash: hashEvent({ ...event, hash: '' }, event.hash),
+      run_id: 'run-a',
+    };
+    await s.appendEvent(legacy);
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
   });
 
   it('lists runs newest-first and filters by project', async () => {
@@ -569,31 +625,76 @@ describe('PostgresStore', () => {
     try {
       await s.saveRun(RUN);
       assert.deepEqual(await s.loadRun(RUN.id), RUN);
-      await s.appendEvent({
+      const firstAuditEvent = {
         schema_version: '1',
-        seq: 9000,
+        seq: 0,
         prev_hash: null,
-        hash: 'a'.repeat(64),
+        hash: '',
         ts: '2026-09-18T10:00:00Z',
         run_id: RUN.id,
         kind: 'oracle_evaluated',
         actor: { type: 'system', id: 'audit-contract' },
         payload: { oracle_id: 'contract', passed: true },
-      });
-      await s.appendEvent({
+      };
+      firstAuditEvent.hash = hashEvent(firstAuditEvent);
+      await s.appendEvent(firstAuditEvent);
+      const secondAuditEvent = {
         schema_version: '1',
-        seq: 9001,
-        prev_hash: null,
-        hash: 'b'.repeat(64),
+        seq: 1,
+        prev_hash: firstAuditEvent.hash,
+        hash: '',
         ts: '2026-09-18T11:00:00Z',
         run_id: RUN.id,
         kind: 'info',
         actor: { type: 'system', id: 'audit-contract' },
         payload: { message: 'newer event' },
-      });
+      };
+      secondAuditEvent.hash = hashEvent(secondAuditEvent, firstAuditEvent.hash);
+      await s.appendEvent(secondAuditEvent);
       const filteredAudit = await s.listAuditEvents({ kind: 'oracle_evaluated', limit: 1 });
       assert.equal(filteredAudit.length, 1);
       assert.equal(filteredAudit[0]?.kind, 'oracle_evaluated');
+      const tenantRun = { ...RUN, id: 'run-a-tenant', org: 'org-a', project: 'shop' };
+      await s.saveRun(tenantRun);
+      const tenantEvent = {
+        schema_version: '1' as const,
+        seq: 2,
+        prev_hash: secondAuditEvent.hash,
+        hash: '',
+        ts: '2026-09-18T12:00:00Z',
+        run_id: tenantRun.id,
+        kind: 'info' as const,
+        actor: { type: 'system' as const, id: 'audit-tenant-contract' },
+        payload: { message: 'tenant event' },
+      };
+      tenantEvent.hash = hashEvent(tenantEvent, secondAuditEvent.hash);
+      await s.appendEvent(tenantEvent);
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+      assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
+      const preRunTenantEvent = {
+        ...tenantEvent,
+        seq: 3,
+        run_id: 'run-a-tenant-late',
+        prev_hash: tenantEvent.hash,
+        hash: '',
+      };
+      preRunTenantEvent.hash = hashEvent(preRunTenantEvent, tenantEvent.hash);
+      await s.appendEvent(preRunTenantEvent);
+      await s.saveRun({ ...tenantRun, id: preRunTenantEvent.run_id });
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+      const explicitlyScopedTenantEvent = {
+        ...tenantEvent,
+        seq: 4,
+        run_id: 'run-a-tenant-explicit',
+        prev_hash: preRunTenantEvent.hash,
+        hash: '',
+      };
+      explicitlyScopedTenantEvent.hash = hashEvent(
+        explicitlyScopedTenantEvent,
+        preRunTenantEvent.hash,
+      );
+      await s.appendEvent(explicitlyScopedTenantEvent, { org: 'org-a', project: 'shop' });
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
       assert.equal(
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,

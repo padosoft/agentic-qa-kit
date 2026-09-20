@@ -9,6 +9,29 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Roadmap close-out status after PR #241
+
+- PR #241 (`audit-retention-runbook`) is merged on `main` after the complete
+  hosted technical matrix passed: build, lint/typecheck, Bun/Node tests,
+  PostgreSQL/S3/OCI integrations, live Prometheus/OTLP, CLI E2E and both
+  Playwright admin journeys. It closes the retention runbook and multi-runner
+  identity/provenance slice.
+- Remaining active repository work is now deliberately narrow: (1) bounded
+  local load/chaos execution evidence and SLO/threshold aggregation, (2)
+  methodology mutation-to-regression scale/holdout governance, and (3)
+  complete ecommerce failure-injection journeys for timeout/unknown outcome,
+  webhook replay, inventory/payment/idempotency races and reconciliation, plus
+  the blueprint-required bug shrinking/minimization workflow and a versioned
+  sizing/capacity-planning runbook.
+- The following are explicitly deferred final gates, not silently marked done:
+  real provider credentials and settlement/tax/shipping/WMS execution,
+  KMS/Vault/WORM/PITR/RTO-RPO/IdP/mTLS deployment evidence, production-scale
+  mutation producer evidence, penetration testing, SOC2/ISO, legal SLA,
+  reference customers and independent assurance.
+- Next slice: implement the bounded local load/chaos evidence contract with a
+  real complete journey and explicit no-provider evidence boundary, then run
+  the hosted matrix before moving to methodology scale closure.
+
 ## 2026-09-20 — Sizing baseline and bug shrinking slice
 
 - Added `docs/operations/sizing.md` with reference Small/Medium/Large profiles,
@@ -19,36 +42,80 @@
 - Added `shrinkJsonCounterexample()` to `@aqa/methodology`. It performs
   deterministic bounded delta-style shrinking over JSON values through a
   caller-owned failure predicate, with depth/size/attempt/reduction limits and
-  no command execution or candidate logging. Methodology suite: **36 passed**.
-- The benchmark is intentionally only a memory-queue baseline; PostgreSQL,
-  S3, sandbox, browser, network and HA capacity remain deployment evidence.
+  no command execution or candidate logging. Methodology suite: **37 passed**.
+- Hosted CI exposed and then verified a legacy double-encoded JSONB audit
+  projection path; the SQL kind filter now handles object and serialized-string
+  shapes before pagination. The final PR rerun passed PostgreSQL, build, unit,
+  CLI, Playwright, telemetry, OCI and S3 gates.
+- Shrinking and benchmark generation are lazy/bounded, and the benchmark
+  rejects dirty source attribution (apart from the environment lock file).
   Next: connect shrinking to replay/finding evidence, then implement the
   ecommerce failure-injection journey and mutation holdout governance.
 
-## 2026-09-20 — Hosted PostgreSQL projection regression identified
+## 2026-09-20 — Multi-runner audit/trace provenance
 
-- PR #243 CI exposed that the new SQL-side audit `kind` predicate handled only
-  object-shaped JSONB, while legacy double-encoded event rows are decoded by
-  the application layer as valid events. The query now keeps filtering before
-  `LIMIT` and supports both JSONB object and serialized-string shapes.
-- The failure was isolated to the hosted PostgreSQL contract (`0 !== 1` for a
-  filtered `oracle_evaluated` event); all other PR #243 technical jobs passed.
-  A fresh local typecheck/lint and hosted PostgreSQL rerun are required before
-  merge.
+- Propagated the host-owned worker identity through the real remote queue and
+  Kit lifecycle. Remote leases now bind the configured identity to the verified
+  control-plane subject, while the separate real-run OTLP journey verifies the
+  validated `aqa.runner_id` on intermediate trace evidence.
+- Added the complete remote-worker assertion that dequeue/lease identity,
+  persisted audit actor and trace-safe provenance remain correlated. Local
+  evidence: observability 21/21 and Kit 196 passed / 0 failed / 2 platform
+  skips.
+- Next: add bounded local load/chaos evidence and methodology governance
+  closure; protected provider and independent assurance gates remain deferred.
 
-## 2026-09-20 — Shrinker and benchmark hardening after review
+## 2026-09-20 — Audit retention operational contract
 
-- Made shrink candidate generation lazy and depth traversal iterative, so the
-  configured attempt/size/depth limits protect wide inputs before candidate
-  materialization. Added a 20,000-element regression; methodology suite is now
-  **37 passed / 0 failed**.
-- Capacity benchmark now refuses a dirty working tree (ignoring only the
-  environment-owned scheduled-task lock) before attributing measurements to a
-  commit SHA. This prevents reproducibility reports from labeling local edits
-  as clean source evidence.
-- PR #243 remains open until the new commit receives complete hosted CI again;
-  the prior PostgreSQL failure was fixed and its rerun had passed before this
-  hardening increment.
+- Added `docs/operations/audit-retention-runbook.md` with fail-closed
+  procedures for scoped projections, checkpoint verification, legal holds,
+  archive/purge reconciliation and incident handling.
+- Added ADR-284 to make the chain/checkpoint boundary explicit: local query
+  retention is not WORM evidence, and destructive purge is not allowed without
+  independent checkpoint coverage and provider read-back.
+- Next repository slice: complete local multi-runner/trace provenance and
+  load/chaos evidence; provider immutability, PITR and independent assurance
+  remain deferred final gates.
+
+## 2026-09-20 — Tenant-scoped audit aggregation
+
+- Merged PR #238 (`e68467f`) after the full hosted matrix passed, including
+  Playwright, CLI, PostgreSQL, S3, OCI and live Prometheus/OTLP journeys. A
+  transient `onnxruntime-node` network timeout was rerun successfully.
+- Added `summarizeAuditEvents` to the store contract and both adapters. The
+  PostgreSQL implementation aggregates in SQL, while MemoryStore preserves
+  semantic parity; both apply the same tenant, time-window and kind filters.
+- Added `GET /api/audit/summary` and a server contract proving that a tenant
+  cannot observe another tenant's audit counts. Local evidence: store/server
+  builds, **117/117 server tests**, and Biome pass.
+- Admin wiring is implemented in PR #240; after merge, add bounded
+  retention/aggregation operational controls. External WORM/KMS/PITR/IdP,
+  provider credentials and independent assurance remain explicitly parked at
+  the final production gate.
+
+## 2026-09-20 — Admin audit summary journey
+
+- Wired the admin Audit page to `/api/audit/summary`, showing tenant-scoped
+  event-kind counts while retaining fixture mode when the endpoint is absent.
+- Extended the Playwright operations journey to intercept both live requests
+  and assert the rendered summary. Local evidence: admin build and **5/5
+  operations Playwright tests** pass.
+- PR #240 is awaiting hosted technical CI. Next after merge: implement bounded
+  retention controls and the operational retention runbook.
+
+## 2026-09-20 — Tenant-safe durable audit provenance
+
+- Audit events now derive authoritative `org`/`project` metadata from the
+  persisted run at the store boundary, with an explicit scope override for
+  future producers. MemoryStore records the same provenance for parity.
+- Scoped audit projections now fail closed for legacy events without tenant
+  metadata instead of treating them as globally visible. PostgreSQL applies
+  the same exact-match predicate and finding status/verification audit writes
+  inherit the owning run scope.
+- Added MemoryStore and hosted-PostgreSQL contract coverage for same-tenant
+  visibility, cross-tenant exclusion and legacy-row exclusion. Local evidence:
+  store build and **21/21 store tests** pass. Next: complete audit retention
+  and aggregation projections, then wire the scoped admin journey.
 
 ## 2026-09-20 — Methodology publication fence completed locally
 
@@ -3216,3 +3283,19 @@ evidence.
 - Tightened the local methodology proposal/approval contract with runtime enum and schema validation, canonical UTC timestamps, bounded artifact hashing, independent reviewer enforcement, and expiry checks at both issuance and use time.
 - Added regression tests for malformed untrusted JSON-shaped inputs and already-expired approvals; methodology package now passes 24 tests.
 - The next local roadmap slice is durable storage/replay integration for approved methodology artifacts; external provider evidence and independent assurance remain deferred final gates.
+
+## 2026-09-20 — Remote identity validation closed
+
+- Added the final fail-closed boundary for remote runner provenance: the HTTP
+  API validates the authenticated subject before queue mutation, and the
+  exported `RunnerWorker` validates identities even when instantiated directly
+  outside Kit.
+- Updated ADR-227 to make token-file/JWT credentials the only supported remote
+  worker contract; static bearer tokens cannot prove a lease subject and are
+  rejected before dequeue.
+- Local evidence: server build and Kit suite remain green (196 passed, 0
+  failed, 2 platform skips); lint is rerunning after import normalization.
+- Next: push the correction, wait for the complete CI/E2E journey, merge PR
+  #241, then implement bounded local load/chaos evidence and methodology
+  regression-scale closure. Provider credentials, trust-root/mTLS, WORM/KMS,
+  DR/PITR, penetration and independent assurance remain final deferred gates.

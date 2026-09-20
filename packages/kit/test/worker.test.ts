@@ -36,6 +36,48 @@ describe('runner worker deployment configuration', () => {
     );
   });
 
+  it('rejects an unsafe runner identity before the worker can start', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_QUEUE_DSN: 'postgres://redacted',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+          AQA_RUNNER_ID: 'runner/with-path',
+        }),
+      /runner_id must contain only bounded identifier characters/,
+    );
+  });
+
+  it('requires an explicit runner identity for the remote control plane', () => {
+    assert.throws(
+      () =>
+        runnerConfigFromEnv({
+          AQA_SERVER_URL: 'http://aqa-server:8080',
+          AQA_RUNNER_TOKEN: 'redacted-token',
+          AQA_RUNNER_ROOT: 'C:/aqa',
+          AQA_RUNNER_SCOPES: 'padosoft/shop',
+        }),
+      /AQA_RUNNER_ID is required with AQA_SERVER_URL/,
+    );
+  });
+
+  it('rejects the static remote token path before creating an unbound lease', async () => {
+    const { runWorker } = await import('../dist/commands/worker.js');
+    await assert.rejects(
+      () =>
+        runWorker({
+          server_url: 'http://aqa-server:8080',
+          runner_token: 'redacted-token',
+          runner_id: 'runner-a',
+          root: 'C:/aqa',
+          poll_ms: 250,
+          scopes: [{ org: 'padosoft', project: 'shop' }],
+        }),
+      /static runner tokens cannot bind/,
+    );
+  });
+
   it('requires a credential for a remote control-plane worker and resolves token files', () => {
     assert.throws(
       () =>
@@ -48,6 +90,7 @@ describe('runner worker deployment configuration', () => {
     );
     const config = runnerConfigFromEnv({
       AQA_SERVER_URL: 'http://aqa-server:8080',
+      AQA_RUNNER_ID: 'runner-a',
       AQA_RUNNER_ROOT: 'C:/aqa',
       AQA_RUNNER_SCOPES: 'padosoft/shop',
       AQA_RUNNER_TOKEN_FILE: 'secrets/runner-token',
