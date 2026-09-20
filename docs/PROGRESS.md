@@ -50,7 +50,7 @@
 
 - Added `buildMinimizedCounterexampleReplay()` to `@aqa/reporter`. It invokes
   the bounded methodology shrinker through a caller-owned failure predicate,
-  emits a redacted `replay/counterexample.min.json` artifact and returns the
+  emits a redacted `replay/counterexample.<finding-id>.min.json` artifact and returns the
   exact evidence path to attach to the finding. No command, network call or
   candidate logging is performed by the helper.
 - Reporter coverage now verifies reduction, finding/scenario/run binding and
@@ -3385,3 +3385,17 @@ evidence.
   #241, then implement bounded local load/chaos evidence and methodology
   regression-scale closure. Provider credentials, trust-root/mTLS, WORM/KMS,
   DR/PITR, penetration and independent assurance remain final deferred gates.
+
+# 2026-09-20 — Ecommerce failure evidence hardened
+
+- Closed the final local review findings for PR #245: the unknown-outcome
+  journey now performs a real reference checkout and rereads the committed
+  order, while mutation holdout evaluation recomputes the full canonical
+  split digest including link data.
+- Normalized minimized replay paths to the finding-qualified form
+  `replay/counterexample.<finding-id>.min.json` in code and documentation.
+- Local evidence: commerce **66 passed / 2 provider skips**, ingest **25/25**,
+  reporter **10/10**, and the repository typecheck passed. Provider-backed
+  credentials and independent assurance remain deferred final gates.
+- Next: push the review fixes, wait for the complete hosted journey, merge PR
+  #245, then update the roadmap completion audit from `origin/main`.

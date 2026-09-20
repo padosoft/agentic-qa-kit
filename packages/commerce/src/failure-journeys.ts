@@ -126,17 +126,33 @@ export async function verifyCommerceFailureJourneys(
 
   await runScenario(evidence, 'unknown_outcome', async () => {
     const now = new Date('2026-09-20T10:00:00.000Z');
+    const mutationIdentity: CommerceIdentity = {
+      tenant: 'failure-shop',
+      customer_id: 'unknown-customer',
+    };
+    const mutationProduct = {
+      sku: 'unknown-outcome-sku',
+      price: { currency: 'EUR', amount_minor: '1000' },
+      on_hand: 1,
+    } as const;
+    merchant.seedProduct(mutationProduct);
+    const mutationCart = merchant.addLine(
+      mutationIdentity,
+      merchant.createCart(mutationIdentity).id,
+      mutationProduct.sku,
+      1,
+    );
     const policy = new CommerceToolPolicy({ read_tools: ['commerce.checkout'], now: () => now });
     const gate = new CommerceMutationGate(policy);
     const call = {
       schema_version: '1' as const,
       id: 'call-failure-1',
-      tenant: 'failure-shop',
-      customer_id: 'customer-a',
+      tenant: mutationIdentity.tenant,
+      customer_id: mutationIdentity.customer_id,
       tool: 'commerce.checkout',
       operation: 'financial' as const,
-      target: { tenant: 'failure-shop', customer_id: 'customer-a' },
-      cart_revision: 0,
+      target: { tenant: mutationIdentity.tenant, customer_id: mutationIdentity.customer_id },
+      cart_revision: mutationCart.revision,
       total: { currency: 'EUR', amount_minor: '1000' },
       requested_at: now.toISOString(),
     };
@@ -146,20 +162,27 @@ export async function verifyCommerceFailureJourneys(
       call_id: call.id,
       tenant: call.tenant,
       customer_id: call.customer_id,
-      cart_revision: 0,
+      cart_revision: mutationCart.revision,
       total: call.total,
       approved_by: 'local-operator',
       source: 'human',
       expires_at: new Date(now.getTime() + 60_000).toISOString(),
     };
-    let committed = false;
+    let committedOrderId: string | undefined;
     const result = await gate.execute(call, approval, async () => {
-      committed = true;
+      const checkout = merchant.checkout(
+        mutationIdentity,
+        mutationCart.id,
+        'unknown-outcome-idempotency',
+      );
+      committedOrderId = checkout.order.id;
       throw new Error('injected transport timeout after provider write boundary');
     });
     if (result.status !== 'unknown') throw new Error('ambiguous mutation did not remain unknown');
-    if (!committed) throw new Error('observable mutation did not occur before timeout');
-    return 'observable mutation occurred; transport ambiguity remained unknown for reconciliation';
+    if (!committedOrderId) throw new Error('observable mutation did not occur before timeout');
+    if (merchant.getOrder(mutationIdentity, committedOrderId).status !== 'paid')
+      throw new Error('committed order was not observable during reconciliation');
+    return 'reference checkout committed; transport ambiguity remained unknown for reconciliation';
   });
 
   return {

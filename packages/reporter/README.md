@@ -20,5 +20,6 @@ for (const a of buildReplayArtifacts({ finding, scenario })) {
   explicitly as requiring the original spec; they are never presented as
   deterministic replay.
 - `buildMinimizedCounterexampleReplay(input)` → bounded JSON shrinking through
-  a caller-owned failure predicate, a redacted `counterexample.min.json`, and
+  a caller-owned failure predicate, a redacted
+  `replay/counterexample.<finding-id>.min.json`, and
   the evidence path to attach to the finding. It never executes the SUT.

@@ -3157,3 +3157,11 @@ caller can see different authorization surfaces depending on deployment mode.
   publication, legacy backfill, and purge, with lifecycle-row locking after
   the advisory lock; the in-memory adapter uses the equivalent per-key lock.
   This prevents an expired artifact from being recreated with a lifecycle gap.
+
+- An unknown-outcome test is not strong evidence if it only flips a local
+  boolean and throws. The failure journey must execute the real reference
+  mutation, inject the timeout after the commit boundary, and reread the
+  resulting order through the reference API. Likewise, a mutation holdout
+  digest must cover the complete canonical split (including reviewed links),
+  not only the projected mutant IDs; otherwise metadata tampering can pass
+  while the report still looks internally consistent.

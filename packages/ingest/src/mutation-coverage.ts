@@ -138,16 +138,7 @@ export function splitMutationCoverageHoldout(
   const holdoutIds = new Set(ranked.slice(0, holdoutCount).map((item) => item.link.mutation_id));
   const train = links.filter((link) => !holdoutIds.has(link.mutation_id));
   const holdout = links.filter((link) => holdoutIds.has(link.mutation_id));
-  const planDigest = createHash('sha256')
-    .update(
-      JSON.stringify({
-        schema_version: '1',
-        split_key: options.split_key,
-        train: train.map((link) => link.mutation_id),
-        holdout: holdout.map((link) => link.mutation_id),
-      }),
-    )
-    .digest('hex');
+  const planDigest = mutationHoldoutPlanDigest(options.split_key, train, holdout);
   return {
     schema_version: '1',
     split_key: options.split_key,
@@ -308,6 +299,11 @@ export function evaluateMutationHoldoutRegressionEvidence(
 ): MutationRegressionCoverageResult {
   if (evidence.plan_digest !== split.plan_digest)
     throw new Error('mutation holdout evidence plan_digest does not match the split');
+  if (
+    mutationHoldoutPlanDigest(split.split_key, split.train.links, split.holdout.links) !==
+    split.plan_digest
+  )
+    throw new Error('mutation holdout split plan_digest is invalid');
   const holdoutIds = new Set(split.holdout.links.map((link) => link.mutation_id));
   const records = report.records.filter((record) => holdoutIds.has(record.id));
   const totals = { ...report.totals };
@@ -324,6 +320,16 @@ export function evaluateMutationHoldoutRegressionEvidence(
     ),
   };
   return evaluateMutationRegressionEvidence(holdoutReport, split.holdout, evidence, minKillRate);
+}
+
+function mutationHoldoutPlanDigest(
+  splitKey: string,
+  train: ReadonlyArray<MutationCoverageLink>,
+  holdout: ReadonlyArray<MutationCoverageLink>,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({ schema_version: '1', split_key: splitKey, train, holdout }))
+    .digest('hex');
 }
 
 /** Require every reviewed mutant/scenario pair to have an execution result. */
