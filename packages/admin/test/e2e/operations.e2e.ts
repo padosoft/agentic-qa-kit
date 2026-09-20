@@ -29,9 +29,24 @@ test.describe('Operations pages wire-up', () => {
     // flow-analysis narrows a `let` mutated inside a callback to its
     // initial value at outer access sites, but object-property writes
     // are opaque to it.
-    const seen: { url: string | null; org: string | null } = { url: null, org: null };
+    const seen: { url: string | null; org: string | null; summaryUrl: string | null } = {
+      url: null,
+      org: null,
+      summaryUrl: null,
+    };
     await page.route('**/api/audit**', async (route) => {
       const req = route.request();
+      if (new URL(req.url()).pathname.endsWith('/summary')) {
+        seen.summaryUrl = req.url();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            summary: { total: 2, by_kind: { run_started: 1, run_finished: 1 } },
+          }),
+        });
+        return;
+      }
       seen.url = req.url();
       seen.org = req.headers()['x-aqa-org'] ?? null;
       await route.fulfill({
@@ -73,8 +88,10 @@ test.describe('Operations pages wire-up', () => {
     await gotoNav(page, 'Audit log');
     await expect(page.locator('h1, .page-title').first()).toContainText(/Audit log/i);
     await expect(page.locator('text=2 events · live from /api/audit')).toBeVisible();
+    await expect(page.getByTestId('audit-summary')).toContainText('run_started: 1');
     expect(seen.url).toMatch(/\/api\/audit(\?|$)/);
     expect(seen.org).toBe('padosoft');
+    expect(seen.summaryUrl).toMatch(/\/api\/audit\/summary/);
   });
 
   test('Audit falls back to the fixture when the endpoint fails', async ({ page }) => {
