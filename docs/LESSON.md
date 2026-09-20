@@ -1,5 +1,20 @@
 # Lessons
 
+# 2026-09-20 — Junior documentation must follow the actual CLI boundary
+
+The CLI resolves `.aqa` files from `process.cwd()`, and the bundled workspace
+depends on topologically built package outputs. A quickstart that starts from
+the repository root, builds only `@aqa/kit`, or uses a pack name as a profile
+can look plausible while failing before the first probe. Document the exact
+working directory, build order, generated profile and SUT `base_url`.
+
+# 2026-09-20 — A scenario reference is not an exactly-once proof
+
+Matching a replayed resource ID or a response substring does not prove that
+storage contains one record. Documentation must distinguish observable HTTP
+contracts from domain-specific duplicate-count evidence, and must use a
+structured authenticated precondition when the scenario mutates state.
+
 # 2026-09-20 — Holdout governance must bind the plan, not just the percentage
 
 A mutation holdout selected with an unseeded random call can silently change
@@ -3185,3 +3200,8 @@ caller can see different authorization surfaces depending on deployment mode.
   current repository roadmap. Keep the README's quickstart executable against
   the actual CLI help, and label provider-backed/independent assurance as
   deferred instead of marketing repository contracts as production evidence.
+
+- Junior onboarding must name both servers explicitly: the product under test
+  and AQA's local admin/API viewer. A risk YAML example also needs a real
+  scenario linkage; otherwise a beginner can validate configuration successfully
+  but run no executable test.
