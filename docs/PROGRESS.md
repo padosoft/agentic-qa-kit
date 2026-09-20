@@ -3418,3 +3418,13 @@ evidence.
   space-separated `--holdout-split split.json` syntax.
 - Added process-bound success coverage and mismatch protection. Local evidence:
   ingest **25/25**, kit **198 passed / 2 platform skips**, full typecheck green.
+
+# 2026-09-20 — Roadmap completion audit refreshed
+
+- Reclassified v0.6 methodology and v2.2 stateful agentic QA as verified for
+  repository/local scope after merging the chaos, holdout, shrink/replay and
+  ecommerce failure-journey evidence. The audit now lists only provider/
+  deployment and independent-assurance work as final gates.
+- The project is intentionally not labeled production-ready enterprise until
+  those operator-owned gates are executed; this preserves the side-project
+  decision and avoids treating repository CI as deployment evidence.

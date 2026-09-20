@@ -1,4 +1,4 @@
-# Roadmap completion audit — 2026-09-18
+# Roadmap completion audit — 2026-09-20
 
 This is the authoritative close-out audit for the enterprise blueprint in
 `docs/internal/implementation-plan.md`. It distinguishes repository evidence
@@ -25,10 +25,10 @@ has actually run with an operator-owned environment.
 | v0.3 Enterprise table-stakes | `verified` for repository scope; `deferred-final-gate` for deployment | PostgreSQL, S3, OIDC/RBAC, pack trust, on-prem LLM boundaries, Helm, air-gap and redaction are implemented. Actual KMS/IAM/Vault, WORM and external IdP execution are intentionally deferred to final promotion. |
 | v0.4 Admin UI | `verified` | API/UI journeys are exercised by Playwright and the technical CI matrix. |
 | v0.5 Multi-team/cloud-ready | `verified` for control-plane contracts | Tenant scope, runner fleet, queue priority/DLQ/fencing, findings lifecycle, webhooks, DR tooling and observability are implemented and tested. HA, ingress, load and SLO measurements remain deployment evidence. |
-| v0.6 Methodology rigor | `partial` | STRIDE/FMEA/OWASP, risk coverage, oracle safety/calibration, bounded mutation evidence, reviewed mutation-to-regression execution evidence, explainable same-risk semantic clustering, reviewed-pair threshold calibration and deterministic holdout evaluation exist. Protected mutation execution at scale, independent methodology validation and external governance remain open. |
+| v0.6 Methodology rigor | `verified` for repository scope; `deferred-final-gate` for producer/independent validation | STRIDE/FMEA/OWASP, risk coverage, oracle safety/calibration, bounded mutation evidence, reviewed mutation-to-regression execution evidence, explainable same-risk semantic clustering, reviewed-pair threshold calibration, digest-bound train/holdout evaluation and the supported CLI holdout gate are covered by tests and CI. Protected producer-scale execution, independent methodology validation and external governance remain final gates. |
 | v1.0 Production-ready enterprise | `deferred-final-gate` | Penetration test, SOC2/ISO attestation, legal SLA, reference customers and independent security/compliance validation are intentionally parked until product promotion; they remain mandatory before enterprise/customer production claims. |
 | v2.1 Commerce Assurance | `verified` for contracts; `deferred-final-gate` for providers | Checkout, money, inventory, refunds, promotions, stored value, subscriptions, dunning, disputes, loyalty, fulfillment/RMA, Stripe and gift-card boundaries exist. Live provider settlement, payout, tax, shipping, WMS/carrier and issuer execution are intentionally deferred to the final promotion gate. |
-| v2.2 Stateful agentic QA | `partial` with deferred production gate | Capability preflight, bounded state graph validation, actor-bound runtime journey compilation/execution, CLI/worker lifecycle integration, temporal observers, safe journey-to-trace correlation, evidence boundaries, bounded OTLP trace federation and repository-side mutation-to-regression evidence exist. Protected producer execution and production-grade trace/provenance execution are deferred until real deployment promotion; local contracts remain in scope now. |
+| v2.2 Stateful agentic QA | `verified` for repository/local complete journeys; `deferred-final-gate` for producer deployment | Capability preflight, bounded state graph validation, actor-bound runtime journey compilation/execution, CLI/worker lifecycle integration, temporal observers, safe journey-to-trace correlation, evidence boundaries, bounded OTLP trace federation, mutation holdout gates, shrinking/replay evidence, chaos recovery and ecommerce failure journeys are covered by local tests and the hosted technical matrix. Protected producer execution and production-grade trace/provenance execution remain final gates. |
 
 ## Explicit project-stage decision — 2026-09-19
 
@@ -92,22 +92,20 @@ restore-drill records and trust roots without accepting secrets in Git.
 
 ## Remaining work, ordered by dependency
 
-1. Close the remaining repository-side gaps still testable locally. Durable
-   audit projections, retention/runbook controls and local multi-runner/trace
-   provenance are now verified; the active gaps are bounded load/chaos
-   execution evidence, methodology mutation-to-regression scale/holdout
-   governance, complete ecommerce failure-injection/idempotency journeys,
-   automated bug shrinking/minimization, and the blueprint sizing/capacity
-   planning runbook.
-2. Validate the complete side-project journey against local/example targets and
-   keep all limitations explicit in evidence and reports.
-3. **Deferred final gate:** configure and execute protected provider workflows
+1. Validate the complete side-project journey against local/example targets and
+   keep all limitations explicit in evidence and reports. Repository-side
+   closure now includes bounded chaos evidence (600 jobs, 594 completed, 84
+   recovered lease expiries, 0 stranded), mutation holdout/CLI enforcement,
+   finding-bound JSON shrinking/replay, sizing baseline, and ecommerce
+   inventory/webhook/unknown-outcome journeys. These are repository evidence,
+   not proof of a production deployment.
+2. **Deferred final gate:** configure and execute protected provider workflows
    with disposable or approved test resources; record run URLs, timestamps,
    provider references and redacted observations outside Git.
-4. **Deferred final gate:** execute KMS/Vault rotation and IAM-denial drills,
+3. **Deferred final gate:** execute KMS/Vault rotation and IAM-denial drills,
    PostgreSQL PITR/RTO/RPO, IdP rollover, commerce provider settlement/tax/
    shipping/fulfillment and protected mutation-scale evidence.
-5. **Deferred final gate:** complete external penetration testing, compliance
+4. **Deferred final gate:** complete external penetration testing, compliance
    attestations, legal SLA, reference customers and independent sign-off.
 
 ## Release decision
