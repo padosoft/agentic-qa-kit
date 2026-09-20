@@ -96,7 +96,9 @@ restore-drill records and trust roots without accepting secrets in Git.
    audit projections, retention/runbook controls and local multi-runner/trace
    provenance are now verified; the active gaps are bounded load/chaos
    execution evidence, methodology mutation-to-regression scale/holdout
-   governance, and complete ecommerce failure-injection/idempotency journeys.
+   governance, complete ecommerce failure-injection/idempotency journeys,
+   automated bug shrinking/minimization, and the blueprint sizing/capacity
+   planning runbook.
 2. Validate the complete side-project journey against local/example targets and
    keep all limitations explicit in evidence and reports.
 3. **Deferred final gate:** configure and execute protected provider workflows

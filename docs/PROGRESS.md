@@ -20,7 +20,9 @@
   local load/chaos execution evidence and SLO/threshold aggregation, (2)
   methodology mutation-to-regression scale/holdout governance, and (3)
   complete ecommerce failure-injection journeys for timeout/unknown outcome,
-  webhook replay, inventory/payment/idempotency races and reconciliation.
+  webhook replay, inventory/payment/idempotency races and reconciliation, plus
+  the blueprint-required bug shrinking/minimization workflow and a versioned
+  sizing/capacity-planning runbook.
 - The following are explicitly deferred final gates, not silently marked done:
   real provider credentials and settlement/tax/shipping/WMS execution,
   KMS/Vault/WORM/PITR/RTO-RPO/IdP/mTLS deployment evidence, production-scale
