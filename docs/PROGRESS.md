@@ -15,7 +15,13 @@
   and the AQA admin/backend, with two-terminal commands and a bundled Bun API
   path that starts the target, runs AQA and opens the admin UI.
 - Added a complete executable API scenario example showing risk/invariant
-  references, HTTP probes, oracle comparison and replay-oriented evidence.
+  references, an authenticated structured precondition, HTTP status/body
+  oracles and replay-oriented evidence; the README now states the exact-once
+  limitation of generic response assertions instead of overstating proof.
+- Corrected the bundled Bun walkthrough: topological workspace build, example
+  directory initialization, generated `smoke` profile, explicit SUT base URL,
+  and separate AQA admin startup. Pack authoring now explains manifest
+  registration rather than suggesting loose scenario files are executable.
 
 ## 2026-09-20 — README product and junior onboarding refresh
 

@@ -442,15 +442,33 @@ bun run --cwd examples/bun-api dev
 Terminal 2 — AQA run and admin backend:
 
 ```bash
-bun run --filter @aqa/kit build
-node packages/kit/dist/cli.cjs run --profile api-core
-node packages/kit/dist/cli.cjs report --format both
-node packages/kit/dist/cli.cjs admin
+# Build the workspace first: the Kit bundle imports the other workspace packages.
+bun run build:workspace
+
+# Work from the application directory: AQA resolves .aqa/ from process.cwd().
+cd examples/bun-api
+node ../../packages/kit/dist/cli.cjs init --overwrite
+
+# Edit .aqa/project.yaml and set:
+#   sut:
+#     type: api
+#     base_url: http://127.0.0.1:3000
+# Then run the generated smoke profile.
+node ../../packages/kit/dist/cli.cjs validate
+node ../../packages/kit/dist/cli.cjs run --profile smoke
+node ../../packages/kit/dist/cli.cjs report --format both
+node ../../packages/kit/dist/cli.cjs admin
 ```
 
 Open `http://127.0.0.1:5173`. For the complete automated journey, stop the
 manual server and run `bun run e2e:ecosystem`; it starts the example target,
 executes AQA and exercises the admin UI through Playwright.
+
+The `init` command is deliberately run inside `examples/bun-api`: AQA reads
+`.aqa/project.yaml`, `.aqa/profiles.yaml` and `.aqa/risk-map.yaml` from the
+current directory. The generated profile is `smoke`; `api-core` is a pack
+name, not a profile name. If you use PowerShell, run the same commands one at
+a time in the two terminals; do not use `&` to background the server.
 
 ### 1. Initialize and inspect what AQA discovered
 
@@ -623,7 +641,19 @@ title: Repeating a POST must not create a duplicate
 risk_refs: [r-idempotency]
 invariant_refs: [inv-idempotent-post]
 preconditions:
-  - "user authenticated"
+  - id: user-ready
+    probe:
+      id: check-user
+      kind: http
+      with:
+        method: GET
+        url: "/me"
+        auth: "${QA_TOKEN}"
+    oracle:
+      id: user-authenticated
+      kind: http_status
+      probe_id: check-user
+      with: { expected: 200 }
 steps:
   - id: probe-post-1
     kind: http
@@ -639,21 +669,47 @@ steps:
       url: "/items"
       body: { name: "x" }
       headers: { "Idempotency-Key": "junior-example-123" }
-oracles:
-  - id: o-same-id
-    kind: response_contains
-    probe_id: probe-post-2
+  - id: probe-list
+    kind: http
     with:
-      jsonpath: "$.id"
-      equals: "@probe-post-1.body.id"
+      method: GET
+      url: "/items?name=x"
+oracles:
+  - id: o-first-created
+    kind: http_status
+    probe_id: probe-post-1
+    with: { expected: 201 }
+  - id: o-retry-replayed
+    kind: http_status
+    probe_id: probe-post-2
+    with: { expected: 200 }
+  - id: o-list-is-observable
+    kind: response_contains
+    probe_id: probe-list
+    with: { value: '"name":"x"' }
 tags: [api, idempotency]
 ```
 
+Before running it, add matching `r-idempotency` and `inv-idempotent-post`
+entries to the project's risk map (or replace the references with IDs already
+present there), add the scenario to a pack manifest, and put that pack in the
+selected profile. Set `QA_TOKEN` in the trusted process environment; never
+write its value in YAML, evidence or Markdown. The structured precondition is
+an actual gate: if `/me` is not authenticated, the mutating steps do not run.
+
+This example checks the observable HTTP contract (201 on first creation, 200
+on replay, and a list endpoint that exposes the item). It cannot infer a
+database count from a generic response. For a production exactly-once claim,
+add a domain-specific count/read oracle or a host-owned SQL probe and assert
+that the list contains one item, not merely one matching response. A static
+response or a repeated resource ID alone is not proof of duplicate prevention.
+
 The scenario connects the complete chain:
 `risk_refs → invariant_refs → steps/probes → oracle → finding → replay`.
-After adding it, run `bunx aqa validate` and then
-`bunx aqa run --profile smoke`. A risk map entry without a referenced scenario
-is documentation, not a test.
+After adding it, configure the base URL and run `bunx aqa validate`, then
+`QA_TOKEN=... bunx aqa run --profile smoke` (PowerShell:
+`$env:QA_TOKEN='...'; bunx aqa run --profile smoke`). A risk map entry without
+a referenced scenario is documentation, not a test.
 
 ### Use deterministic runs during debugging
 
@@ -717,6 +773,24 @@ bunx aqa pack new payments --sut-type api \
   --description "Payment and checkout assurance scenarios" \
   --author "Your Team"
 ```
+
+This creates a real pack directory with `pack.yaml`, a starter risk file and
+a starter scenario already registered by the manifest. Do not create only a
+loose YAML file under `packs/payments/scenarios`: the loader executes scenario
+paths declared by `pack.yaml`. Inspect the generated files and edit the
+declared scenario rather than adding an unregistered file:
+
+```bash
+find packs/payments -maxdepth 3 -type f -print
+cat packs/payments/pack.yaml
+```
+
+On PowerShell use `Get-ChildItem -Recurse packs/payments` and
+`Get-Content packs/payments/pack.yaml`. Then add the generated pack key to the
+profile as shown below, run `bunx aqa validate`, and execute the selected
+profile from the project root. `aqa validate` validates the project contract;
+the pack manifest and scenarios are validated when the pack is discovered by
+`aqa run`.
 
 Add the new discovery key to the profile you want to run:
 
