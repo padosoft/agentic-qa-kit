@@ -216,4 +216,18 @@ test('mutation regression gate evaluates a valid holdout plan and rejects a diff
   });
   assert.equal(result.ok, true);
   assert.equal(result.gate_ok, true);
+  writeFileSync(
+    join(root, 'manifest.json'),
+    JSON.stringify({ ...manifest, links: manifest.links.slice(0, 1) }),
+  );
+  const mismatch = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    holdoutSplitFile: 'split.json',
+    minKillRate: 1,
+  });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.error ?? '', /exact partition/);
 });
