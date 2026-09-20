@@ -14,7 +14,9 @@ rotation require a restart.
 ## Decision
 
 `aqa worker` selects `HttpRunnerQueue` when `AQA_SERVER_URL` is configured and
-requires `AQA_RUNNER_TOKEN` or `AQA_RUNNER_TOKEN_FILE`. The file source is read
+requires `AQA_RUNNER_TOKEN_FILE` for remote workers. A static
+`AQA_RUNNER_TOKEN` is intentionally rejected by the executable because it
+cannot bind a lease to a verified runner subject. The file source is read
 for every queue request. The Helm StatefulSet requires a Secret reference,
 mounts its selected key at `AQA_RUNNER_TOKEN_FILE`, and fails chart rendering
 when the reference is absent. Direct PostgreSQL queue mode remains available

@@ -145,7 +145,7 @@ describe('remote runner identity journey', () => {
     if (!boot.ok) return;
 
     let token = jwt(privateKey, 'runner-a', ['shop/checkout']);
-    const remote = new HttpRunnerQueue(boot.url, () => token);
+    const remote = new HttpRunnerQueue(boot.url, () => token, 'runner-a');
     try {
       const lease = await remote.dequeue();
       assert.equal(lease?.id, 'remote-allowed');
@@ -156,11 +156,19 @@ describe('remote runner identity journey', () => {
       // but rotating credentials must preserve the authenticated runner id.
       token = jwt(privateKey, 'runner-b', ['shop/checkout']);
       assert.equal(await remote.ack(lease?.id ?? '', lease?.lease_token), false);
+      controlQueue.enqueue({
+        id: 'remote-rotated-subject',
+        enqueued_at: new Date().toISOString(),
+        payload: { org: 'shop', project: 'checkout' },
+      });
+      await assert.rejects(() => remote.dequeue(), /lease identity does not match/);
       token = jwt(privateKey, 'runner-a', ['shop/checkout']);
       assert.equal(await remote.ack(lease?.id ?? '', lease?.lease_token), true);
 
-      const wrongScope = new HttpRunnerQueue(boot.url, () =>
-        jwt(privateKey, 'runner-other', ['other/checkout']),
+      const wrongScope = new HttpRunnerQueue(
+        boot.url,
+        () => jwt(privateKey, 'runner-other', ['other/checkout']),
+        'runner-other',
       );
       assert.equal((await wrongScope.dequeue())?.id, 'remote-forbidden');
       assert.equal(controlQueue.get('remote-allowed')?.status, 'done');
@@ -210,14 +218,19 @@ describe('remote runner identity journey', () => {
     assert.equal(boot.ok, true);
     if (!boot.ok) return;
     let tokenCalls = 0;
-    const remoteQueue = new HttpRunnerQueue(boot.url, () => {
-      tokenCalls += 1;
-      return jwt(privateKey, 'runner-a', ['shop/checkout']);
-    });
+    const remoteQueue = new HttpRunnerQueue(
+      boot.url,
+      () => {
+        tokenCalls += 1;
+        return jwt(privateKey, 'runner-a', ['shop/checkout']);
+      },
+      'runner-a',
+    );
     const worker = makeKitWorker({
       queue: remoteQueue,
       root,
       packsRoot: [packDir],
+      runner_id: 'runner-a',
       poll_ms: 10,
     });
     try {
@@ -234,7 +247,27 @@ describe('remote runner identity journey', () => {
       const runDir = join(root, '.aqa', 'runs', runDirs[0] as string);
       assert.ok(existsSync(join(runDir, 'events.jsonl')));
       assert.ok(existsSync(join(runDir, 'findings.jsonl')));
-      assert.ok(readFileSync(join(runDir, 'events.jsonl'), 'utf8').trim().length > 0);
+      const events = readFileSync(join(runDir, 'events.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              kind: string;
+              actor: { id: string };
+              payload?: Record<string, unknown>;
+            },
+        );
+      const started = events.find((event) => event.kind === 'run_started');
+      const finished = events.find((event) => event.kind === 'run_finished');
+      const intermediate = events.find(
+        (event) => event.kind !== 'run_started' && event.kind !== 'run_finished',
+      );
+      assert.equal(started?.actor.id, 'runner-a');
+      assert.equal(started?.payload?.runner_id, 'runner-a');
+      assert.equal(finished?.actor.id, 'runner-a');
+      assert.equal(finished?.payload?.runner_id, 'runner-a');
+      assert.equal(intermediate?.payload?.runner_id, 'runner-a');
     } finally {
       await boot.close();
       await new Promise<void>((resolve, reject) =>

@@ -76,6 +76,7 @@ describe('@aqa/observability', () => {
         from: 'cart',
         to: 'paid',
         ok: true,
+        runner_id: 'runner-a',
         authorization: 'Bearer secret-must-not-escape',
       },
     });
@@ -86,6 +87,7 @@ describe('@aqa/observability', () => {
     assert.equal(spans[0]?.attributes['aqa.journey.digest'], 'a'.repeat(64));
     assert.equal(spans[0]?.attributes['aqa.journey.transition_id'], 'pay');
     assert.equal(spans[0]?.attributes['aqa.journey.ok'], true);
+    assert.equal(spans[0]?.attributes['aqa.runner_id'], 'runner-a');
     assert.equal('payload' in (spans[0]?.attributes ?? {}), false);
     assert.equal(JSON.stringify(spans).includes('secret-must-not-escape'), false);
     observer({
@@ -101,6 +103,19 @@ describe('@aqa/observability', () => {
     });
     assert.equal(spans[1]?.attributes['aqa.journey.id'], undefined);
     assert.equal(spans[1]?.attributes['aqa.journey.transition_id'], undefined);
+  });
+
+  it('does not truncate or alias overlong runner identities', () => {
+    const spans: Array<{ attributes: Record<string, unknown> }> = [];
+    const observer = makeEventSpanObserver(new Tracer((span) => spans.push(span)));
+    observer({
+      kind: 'scenario_finished',
+      run_id: 'run-1',
+      seq: 1,
+      actor: { type: 'runner' },
+      payload: { runner_id: `runner-${'x'.repeat(128)}` },
+    });
+    assert.equal(spans[0]?.attributes['aqa.runner_id'], undefined);
   });
 
   it('renders bounded counters, gauges and cumulative histogram buckets', () => {

@@ -64,6 +64,7 @@ import {
   type RunnerAuthorizationResult,
   type RunnerQueueLike,
   matchesRunnerScopes,
+  normalizeRunnerId,
 } from './runner-queue.js';
 
 export interface ApiContext {
@@ -2056,7 +2057,14 @@ export function makeApi(): ApiHandler[] {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
         const scopes = authorization === true ? undefined : authorization.scopes;
-        const runnerId = authorization === true ? undefined : authorization.runner_id;
+        let runnerId: string | undefined;
+        if (authorization !== true) {
+          try {
+            runnerId = normalizeRunnerId(authorization.runner_id);
+          } catch {
+            return { status: 401, body: { error: 'runner identity is invalid' } };
+          }
+        }
         const next = await ctx.queue.dequeue(undefined, scopes, runnerId);
         return { status: next ? 200 : 204, body: next ? { job: next } : null };
       },
@@ -2088,7 +2096,14 @@ export function makeApi(): ApiHandler[] {
       async handle(req, ctx) {
         const authorization = ctx.runnerAuthorize ? await ctx.runnerAuthorize(req.headers) : true;
         if (authorization === false) return { status: 401, body: { error: 'runner unauthorized' } };
-        const runnerId = authorization === true ? undefined : authorization.runner_id;
+        let runnerId: string | undefined;
+        if (authorization !== true) {
+          try {
+            runnerId = normalizeRunnerId(authorization.runner_id);
+          } catch {
+            return { status: 401, body: { error: 'runner identity is invalid' } };
+          }
+        }
         const body = (req.body ?? {}) as { lease_token?: unknown };
         const id = req.params.id;
         if (!id || typeof body.lease_token !== 'string' || !body.lease_token)
@@ -2112,7 +2127,14 @@ export function makeApi(): ApiHandler[] {
         if (authorization === false) {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
-        const runnerId = authorization === true ? undefined : authorization.runner_id;
+        let runnerId: string | undefined;
+        if (authorization !== true) {
+          try {
+            runnerId = normalizeRunnerId(authorization.runner_id);
+          } catch {
+            return { status: 401, body: { error: 'runner identity is invalid' } };
+          }
+        }
         const id = req.params.id;
         const body = (req.body ?? {}) as { lease_token?: unknown };
         if (!id || typeof body.lease_token !== 'string' || !body.lease_token) {
@@ -2137,7 +2159,14 @@ export function makeApi(): ApiHandler[] {
         if (authorization === false) {
           return { status: 401, body: { error: 'runner unauthorized' } };
         }
-        const runnerId = authorization === true ? undefined : authorization.runner_id;
+        let runnerId: string | undefined;
+        if (authorization !== true) {
+          try {
+            runnerId = normalizeRunnerId(authorization.runner_id);
+          } catch {
+            return { status: 401, body: { error: 'runner identity is invalid' } };
+          }
+        }
         const id = req.params.id;
         const body = (req.body ?? {}) as { lease_token?: unknown; reason?: unknown };
         if (

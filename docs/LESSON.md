@@ -1,5 +1,44 @@
 # Lessons
 
+# 2026-09-20 — Validate custom authorizer results at the API boundary
+
+Validating only the built-in JWT authorizer is insufficient: `runnerAuthorize`
+is an extension point and can return a malformed subject. Normalize the
+authorization result immediately before dequeue/renew/ack/fail so malformed
+identities receive 401 and can never be persisted as lease ownership.
+
+# 2026-09-20 — Remote provenance needs subject binding, not just propagation
+
+An event can carry a valid-looking runner ID while the queue lease belongs to
+another JWT subject. Remote workers must require an explicit configured ID and
+reject a dequeue response whose `leased_by` does not match it; telemetry must
+validate the complete bounded identifier and emit it unchanged, never truncate
+potentially colliding identities. Blank IDs must fail closed rather than fall
+back to a local default.
+
+# 2026-09-20 — Static credentials cannot prove remote worker provenance
+
+A static bearer token authorizer can authenticate a request but cannot bind a
+lease to a unique worker subject. Remote execution must use a subject-bearing
+short-lived credential (JWT/mTLS identity) or fail closed before dequeue; a
+configured runner ID alone is not evidence of who authenticated the request.
+
+# 2026-09-20 — Queue identity must reach the evidence boundary
+
+Lease fencing alone proves who may mutate a queue job, but not which worker
+produced the resulting run evidence. Propagate the host-owned identity into
+the canonical start/finish events and expose only a bounded, validated value
+to traces; never accept a runner identity from the queued payload.
+
+# 2026-09-20 — Audit retention must preserve completeness evidence
+
+Deleting old hash-chain rows is not a neutral storage optimization: a
+shortened prefix can still verify locally while hiding omitted history. Treat
+retention as a checkpointed projection operation, keep legal holds ahead of
+age, and require archive read-back plus an independently governed checkpoint
+before purge. The application can provide the contract; provider WORM/KMS
+execution remains a separate production evidence gate.
+
 # 2026-09-20 — Admin projections must share scope and source state
 
 An aggregate displayed next to an audit chain is only meaningful when both

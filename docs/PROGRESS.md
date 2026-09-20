@@ -9,6 +9,31 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Multi-runner audit/trace provenance
+
+- Propagated the host-owned worker identity through the real remote queue and
+  Kit lifecycle. Remote leases now bind the configured identity to the verified
+  control-plane subject, while the separate real-run OTLP journey verifies the
+  validated `aqa.runner_id` on intermediate trace evidence.
+- Added the complete remote-worker assertion that dequeue/lease identity,
+  persisted audit actor and trace-safe provenance remain correlated. Local
+  evidence: observability 21/21 and Kit 196 passed / 0 failed / 2 platform
+  skips.
+- Next: add bounded local load/chaos evidence and methodology governance
+  closure; protected provider and independent assurance gates remain deferred.
+
+## 2026-09-20 — Audit retention operational contract
+
+- Added `docs/operations/audit-retention-runbook.md` with fail-closed
+  procedures for scoped projections, checkpoint verification, legal holds,
+  archive/purge reconciliation and incident handling.
+- Added ADR-284 to make the chain/checkpoint boundary explicit: local query
+  retention is not WORM evidence, and destructive purge is not allowed without
+  independent checkpoint coverage and provider read-back.
+- Next repository slice: complete local multi-runner/trace provenance and
+  load/chaos evidence; provider immutability, PITR and independent assurance
+  remain deferred final gates.
+
 ## 2026-09-20 — Tenant-scoped audit aggregation
 
 - Merged PR #238 (`e68467f`) after the full hosted matrix passed, including
@@ -3215,3 +3240,19 @@ evidence.
 - Tightened the local methodology proposal/approval contract with runtime enum and schema validation, canonical UTC timestamps, bounded artifact hashing, independent reviewer enforcement, and expiry checks at both issuance and use time.
 - Added regression tests for malformed untrusted JSON-shaped inputs and already-expired approvals; methodology package now passes 24 tests.
 - The next local roadmap slice is durable storage/replay integration for approved methodology artifacts; external provider evidence and independent assurance remain deferred final gates.
+
+## 2026-09-20 — Remote identity validation closed
+
+- Added the final fail-closed boundary for remote runner provenance: the HTTP
+  API validates the authenticated subject before queue mutation, and the
+  exported `RunnerWorker` validates identities even when instantiated directly
+  outside Kit.
+- Updated ADR-227 to make token-file/JWT credentials the only supported remote
+  worker contract; static bearer tokens cannot prove a lease subject and are
+  rejected before dequeue.
+- Local evidence: server build and Kit suite remain green (196 passed, 0
+  failed, 2 platform skips); lint is rerunning after import normalization.
+- Next: push the correction, wait for the complete CI/E2E journey, merge PR
+  #241, then implement bounded local load/chaos evidence and methodology
+  regression-scale closure. Provider credentials, trust-root/mTLS, WORM/KMS,
+  DR/PITR, penetration and independent assurance remain final deferred gates.

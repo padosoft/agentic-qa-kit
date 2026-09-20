@@ -164,6 +164,8 @@ export function probeDriversFromEnvironment(
 
 export interface RunOptions {
   root: string;
+  /** Stable host-owned worker identity recorded in audit and trace provenance. */
+  runner_id?: string;
   /** Cooperative cancellation owned by a queue worker or embedding host. */
   signal?: AbortSignal;
   /**
@@ -512,6 +514,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
   if (opts.seed !== undefined && opts.seed.trim() === '') {
     return makeError('--seed requires a non-empty value');
   }
+  const runnerId = opts.runner_id === undefined ? 'aqa-cli' : opts.runner_id.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(runnerId)) {
+    return makeError('runner_id must contain only bounded identifier characters');
+  }
 
   const projectPath = join(opts.root, '.aqa', 'project.yaml');
   const profilesPath = join(opts.root, '.aqa', 'profiles.yaml');
@@ -633,7 +639,10 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
     onEvent = (event) => {
       for (const observer of observers) observer(event);
     };
-  const events = new EventChainWriter(eventsPath, onEvent ? { onEvent } : {});
+  const events = new EventChainWriter(eventsPath, {
+    ...(onEvent ? { onEvent } : {}),
+    runner_id: runnerId,
+  });
   const findings = new FindingsWriter(findingsPath);
   // Touch findings.jsonl so downstream consumers can rely on its presence,
   // even when a clean run produces zero findings. Wrap in try/catch so a
@@ -659,8 +668,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       ts: new Date().toISOString(),
       run_id: runId,
       kind: 'run_started',
-      actor: { type: 'orchestrator', id: 'aqa-cli' },
-      payload: { profile: profileKey, project: project.name },
+      actor: { type: 'orchestrator', id: runnerId },
+      payload: { profile: profileKey, project: project.name, runner_id: runnerId },
     });
   } catch (e) {
     return makeError(`cannot write events.jsonl: ${e instanceof Error ? e.message : String(e)}`, {
@@ -1214,8 +1223,8 @@ export async function runRun(opts: RunOptions): Promise<RunResult> {
       ts: new Date().toISOString(),
       run_id: runId,
       kind: 'run_finished',
-      actor: { type: 'orchestrator', id: 'aqa-cli' },
-      payload: { ...completionPayload, run_state: completionState },
+      actor: { type: 'orchestrator', id: runnerId },
+      payload: { ...completionPayload, run_state: completionState, runner_id: runnerId },
     });
   } catch (e) {
     finalizationError = `cannot finalize run audit: ${e instanceof Error ? e.message : String(e)}`;
