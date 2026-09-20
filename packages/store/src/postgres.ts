@@ -74,6 +74,8 @@ type Kind =
   | 'sso';
 type Row = { record_key: string; payload: unknown; org?: string | null; project?: string | null };
 
+const MAX_CACHED_RUN_SCOPES = 4096;
+
 /** Durable PostgreSQL StoreProvider backed by schema-owned JSONB envelopes. */
 export class PostgresStore implements StoreProvider {
   isDurable(): boolean {
@@ -82,6 +84,16 @@ export class PostgresStore implements StoreProvider {
   private readonly dsn: string;
   private sql: Sql;
   private ready: Promise<void>;
+  private runScopes = new Map<string, StoreScope | null>();
+
+  private cacheRunScope(runId: string, scope: StoreScope | null): void {
+    this.runScopes.delete(runId);
+    this.runScopes.set(runId, scope);
+    if (this.runScopes.size > MAX_CACHED_RUN_SCOPES) {
+      const oldest = this.runScopes.keys().next().value;
+      if (oldest) this.runScopes.delete(oldest);
+    }
+  }
 
   constructor(dsn: string) {
     if (!dsn || !dsn.trim())
@@ -210,6 +222,15 @@ export class PostgresStore implements StoreProvider {
 
   async saveRun(run: Run.Run): Promise<void> {
     await this.put('run', run.id, run, undefined, run.project);
+    this.cacheRunScope(
+      run.id,
+      run.org || run.project
+        ? {
+            ...(run.org ? { org: run.org } : {}),
+            ...(run.project ? { project: run.project } : {}),
+          }
+        : null,
+    );
   }
   async loadRun(id: string): Promise<Run.Run | null> {
     return this.payload(await this.one('run', id));
@@ -231,21 +252,34 @@ export class PostgresStore implements StoreProvider {
     out.sort((a, b) => (a.started_at < b.started_at ? 1 : -1));
     return opts.limit === undefined ? out : out.slice(0, opts.limit);
   }
-  async appendEvent(event: Event.Event): Promise<void> {
+  async appendEvent(event: Event.Event, scope?: StoreScope): Promise<void> {
     await this.wait();
     const runId = 'run_id' in event && typeof event.run_id === 'string' ? event.run_id : null;
-    const payload = event.payload as Record<string, unknown>;
+    let org = scope?.org ?? null;
+    let project = scope?.project ?? null;
+    if (runId && (!org || !project)) {
+      let runScope = this.runScopes.get(runId);
+      if (!this.runScopes.has(runId)) {
+        const runRows = (await this.q<{ payload: unknown }>(
+          'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+          ['run', runId],
+        )) as Array<{ payload: unknown }>;
+        const run = runRows[0] ? this.decode<Run.Run>(runRows[0].payload) : undefined;
+        runScope =
+          run && (run.org || run.project)
+            ? {
+                ...(run.org ? { org: run.org } : {}),
+                ...(run.project ? { project: run.project } : {}),
+              }
+            : null;
+        this.cacheRunScope(runId, runScope);
+      }
+      org ??= runScope?.org ?? null;
+      project ??= runScope?.project ?? null;
+    }
     await this.q(
       'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) ON CONFLICT (event_hash) DO NOTHING',
-      [
-        event.hash,
-        event.seq,
-        runId,
-        typeof payload.org === 'string' ? payload.org : null,
-        typeof payload.project === 'string' ? payload.project : null,
-        event.ts,
-        JSON.stringify(event),
-      ],
+      [event.hash, event.seq, runId, org, project, event.ts, JSON.stringify(event)],
     );
   }
   async listEvents(runId: string): Promise<Event.Event[]> {
@@ -272,7 +306,7 @@ export class PostgresStore implements StoreProvider {
       opts.to ?? null,
     ];
     let text =
-      'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org IS NULL OR org = $1) AND ($2::text IS NULL OR project IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)';
+      'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org = $1) AND ($2::text IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)';
     if (opts.kind !== undefined) {
       values.push(opts.kind);
       text += ` AND (CASE jsonb_typeof(payload) WHEN 'object' THEN payload->>'kind' WHEN 'string' THEN ((payload #>> '{}')::jsonb)->>'kind' ELSE NULL END) = $${values.length}`;
@@ -324,6 +358,11 @@ export class PostgresStore implements StoreProvider {
       )) as Array<{ payload: unknown }>;
       const current = this.decode<Finding.Finding>(findingRows[0]?.payload);
       if (!current) return null;
+      const runRows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+        ['run', current.run_id],
+      )) as Array<{ payload: unknown }>;
+      const run = runRows[0] ? this.decode<Run.Run>(runRows[0].payload) : undefined;
       const transition = Finding.validateStatusTransition(current.status, status);
       if (!transition.ok) throw new InvalidFindingTransitionError(transition.reason);
       const auditRows = (await query(
@@ -346,7 +385,15 @@ export class PostgresStore implements StoreProvider {
       );
       await query(
         'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
-        [event.hash, event.seq, event.run_id, null, null, event.ts, JSON.stringify(event)],
+        [
+          event.hash,
+          event.seq,
+          event.run_id,
+          run?.org ?? null,
+          run?.project ?? null,
+          event.ts,
+          JSON.stringify(event),
+        ],
       );
       return { finding: updated, event };
     });
@@ -366,6 +413,11 @@ export class PostgresStore implements StoreProvider {
       )) as Array<{ payload: unknown }>;
       const current = this.decode<Finding.Finding>(findingRows[0]?.payload);
       if (!current) return null;
+      const runRows = (await query(
+        'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',
+        ['run', current.run_id],
+      )) as Array<{ payload: unknown }>;
+      const run = runRows[0] ? this.decode<Run.Run>(runRows[0].payload) : undefined;
       if (
         verification.outcome === 'reproduced' &&
         current.failure_fingerprint !== verification.expected_fingerprint
@@ -403,7 +455,15 @@ export class PostgresStore implements StoreProvider {
       );
       await query(
         'INSERT INTO aqa_store_events (event_hash, seq, run_id, org, project, ts, payload) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
-        [event.hash, event.seq, event.run_id, null, null, event.ts, JSON.stringify(event)],
+        [
+          event.hash,
+          event.seq,
+          event.run_id,
+          run?.org ?? null,
+          run?.project ?? null,
+          event.ts,
+          JSON.stringify(event),
+        ],
       );
       return { finding: updated, event };
     });
@@ -1310,6 +1370,7 @@ export class PostgresStore implements StoreProvider {
     return result;
   }
   async close(): Promise<void> {
+    this.runScopes.clear();
     await this.wait();
     await this.sql.end({ timeout: 5 });
   }

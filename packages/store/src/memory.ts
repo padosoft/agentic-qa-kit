@@ -72,6 +72,7 @@ export class MemoryStore implements StoreProvider {
   private methodologyArtifactLifecycles = new Map<string, MethodologyArtifactLifecycle>();
   private methodologyLifecycleLocks = new Map<string, Promise<void>>();
   private methodologyProposals = new Map<string, MethodologyProposalRecord>();
+  private auditScopes = new Map<string, StoreScope>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
   private notifications: Notification.Notification[] = [];
@@ -108,6 +109,31 @@ export class MemoryStore implements StoreProvider {
 
   private key(key: string, scope?: StoreScope): string {
     return scopedRecordKey(key, scope);
+  }
+
+  private scopeForRun(runId: string): StoreScope | undefined {
+    const run = this.runs.get(runId);
+    if (!run || (!run.org && !run.project)) return undefined;
+    return {
+      ...(run.org ? { org: run.org } : {}),
+      ...(run.project ? { project: run.project } : {}),
+    };
+  }
+
+  private recordAuditEvent(event: Event.Event, scope?: StoreScope): void {
+    this.audit.push(event);
+    const runScope = this.scopeForRun(event.run_id);
+    const inferred = {
+      ...(runScope?.org || scope?.org ? { org: scope?.org ?? runScope?.org } : {}),
+      ...(runScope?.project || scope?.project
+        ? { project: scope?.project ?? runScope?.project }
+        : {}),
+    };
+    if (inferred?.org || inferred?.project)
+      this.auditScopes.set(event.hash, {
+        ...(inferred.org ? { org: inferred.org } : {}),
+        ...(inferred.project ? { project: inferred.project } : {}),
+      });
   }
 
   private async withMethodologyLifecycleLock<T>(key: string, work: () => Promise<T>): Promise<T> {
@@ -153,14 +179,14 @@ export class MemoryStore implements StoreProvider {
   }
 
   // ----- Events -----
-  async appendEvent(event: Event.Event): Promise<void> {
+  async appendEvent(event: Event.Event, scope?: StoreScope): Promise<void> {
     if ('run_id' in event && typeof (event as { run_id?: unknown }).run_id === 'string') {
       const run_id = (event as { run_id: string }).run_id;
       const bucket = this.events.get(run_id) ?? [];
       bucket.push(event);
       this.events.set(run_id, bucket);
     }
-    this.audit.push(event);
+    this.recordAuditEvent(event, scope);
   }
   async listEvents(run_id: string): Promise<Event.Event[]> {
     return [...(this.events.get(run_id) ?? [])];
@@ -179,25 +205,16 @@ export class MemoryStore implements StoreProvider {
     const to = opts.to;
     if (from) out = out.filter((e) => e.ts >= from);
     if (to) out = out.filter((e) => e.ts <= to);
-    // Tenant filtering: Event has no top-level tenant fields. The runner
-    // event writer does not yet inject org/project into the payload, so
-    // most events are "global" (no tenant tag). Be lenient: drop only
-    // events that carry an EXPLICITLY DIFFERENT tenant tag. Events
-    // without payload.org / payload.project pass through.
-    const org = opts.org;
-    const project = opts.project;
-    if (org) {
-      out = out.filter((e) => {
-        const tag = (e.payload as { org?: string }).org;
-        return tag === undefined || tag === org;
+    // Scoped audit reads fail closed: legacy events without authoritative
+    // metadata are not allowed to appear in another tenant's projection.
+    if (opts.org || opts.project)
+      out = out.filter((event) => {
+        const eventScope = this.auditScopes.get(event.hash);
+        return (
+          (!opts.org || eventScope?.org === opts.org) &&
+          (!opts.project || eventScope?.project === opts.project)
+        );
       });
-    }
-    if (project) {
-      out = out.filter((e) => {
-        const tag = (e.payload as { project?: string }).project;
-        return tag === undefined || tag === project;
-      });
-    }
     out.sort((a, b) => (a.ts < b.ts ? 1 : -1));
     return typeof opts.limit === 'number' ? out.slice(0, opts.limit) : out;
   }
@@ -240,7 +257,7 @@ export class MemoryStore implements StoreProvider {
       previous,
     );
     this.findings.set(id, updated);
-    this.audit.push(event);
+    this.recordAuditEvent(event);
     const bucket = this.events.get(current.run_id) ?? [];
     bucket.push(event);
     this.events.set(current.run_id, bucket);
@@ -280,7 +297,7 @@ export class MemoryStore implements StoreProvider {
       previous,
     );
     this.findings.set(id, updated);
-    this.audit.push(event);
+    this.recordAuditEvent(event);
     const bucket = this.events.get(current.run_id) ?? [];
     bucket.push(event);
     this.events.set(current.run_id, bucket);
@@ -956,6 +973,7 @@ export class MemoryStore implements StoreProvider {
     this.runs.clear();
     this.events.clear();
     this.audit = [];
+    this.auditScopes.clear();
     this.findings.clear();
     this.packs.clear();
     this.profiles.clear();
