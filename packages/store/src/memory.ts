@@ -2,17 +2,23 @@ import {
   type MethodologyApproval,
   type MethodologyApprovalResult,
   type MethodologyArtifactEnvelope,
+  type MethodologyArtifactLifecycle,
   type MethodologyProposal,
   type MethodologyRejection,
   type MethodologyRejectionResult,
   approveMethodologyProposal,
+  archiveMethodologyArtifactLifecycle,
   assertMethodologyDecisionBinding,
   assertMethodologyProposal,
+  createMethodologyArtifactLifecycle,
+  isMethodologyArtifactExpired,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
+  parseMethodologyArtifactLifecycle,
   parseMethodologyProposal,
   parseMethodologyRejection,
   rejectMethodologyProposal,
+  setMethodologyArtifactLegalHold,
 } from '@aqa/methodology';
 import { Finding } from '@aqa/schemas';
 import type {
@@ -62,6 +68,8 @@ export class MemoryStore implements StoreProvider {
   private profiles = new Map<string, Profile.Profile>();
   private risks = new Map<string, RiskMap.Risk>();
   private methodologyArtifacts = new Map<string, MethodologyArtifactEnvelope>();
+  private methodologyArtifactLifecycles = new Map<string, MethodologyArtifactLifecycle>();
+  private methodologyLifecycleLocks = new Map<string, Promise<void>>();
   private methodologyProposals = new Map<string, MethodologyProposalRecord>();
   private scenarios = new Map<string, Scenario.Scenario>();
   private agents = new Map<string, Agent.Agent>();
@@ -99,6 +107,23 @@ export class MemoryStore implements StoreProvider {
 
   private key(key: string, scope?: StoreScope): string {
     return scopedRecordKey(key, scope);
+  }
+
+  private async withMethodologyLifecycleLock<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.methodologyLifecycleLocks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.methodologyLifecycleLocks.set(key, current);
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.methodologyLifecycleLocks.get(key) === current)
+        this.methodologyLifecycleLocks.delete(key);
+    }
   }
 
   // ----- Runs -----
@@ -365,9 +390,167 @@ export class MemoryStore implements StoreProvider {
     const validated = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
     const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
     const existing = this.methodologyArtifacts.get(key);
-    if (existing && existing.artifact_sha256 !== validated.artifact_sha256)
+    if (
+      existing &&
+      (existing.artifact_sha256 !== validated.artifact_sha256 ||
+        existing.artifact_kind !== validated.artifact_kind)
+    )
       throw new Error('methodology artifact revision conflict');
-    this.methodologyArtifacts.set(key, validated);
+    this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validated)));
+  }
+  async saveMethodologyArtifactWithLifecycle(
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validatedArtifact = parseMethodologyArtifactEnvelope(JSON.stringify(artifact));
+    const validatedLifecycle = parseMethodologyArtifactLifecycle(lifecycle);
+    if (
+      validatedArtifact.artifact_kind !== validatedLifecycle.artifact_kind ||
+      validatedArtifact.artifact_id !== validatedLifecycle.artifact_id ||
+      validatedArtifact.revision !== validatedLifecycle.revision
+    )
+      throw new Error('methodology artifact lifecycle binding mismatch');
+    const key = this.key(`${validatedArtifact.artifact_id}@${validatedArtifact.revision}`, scope);
+    await this.withMethodologyLifecycleLock(key, async () => {
+      const existing = this.methodologyArtifacts.get(key);
+      if (
+        existing &&
+        (existing.artifact_sha256 !== validatedArtifact.artifact_sha256 ||
+          existing.artifact_kind !== validatedArtifact.artifact_kind)
+      )
+        throw new Error('methodology artifact revision conflict');
+      if (this.methodologyArtifactLifecycles.has(key)) return;
+      this.methodologyArtifacts.set(key, JSON.parse(JSON.stringify(validatedArtifact)));
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validatedLifecycle)));
+    });
+  }
+
+  async loadMethodologyArtifactLifecycle(
+    artifactId: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const lifecycle = this.methodologyArtifactLifecycles.get(
+      this.key(`${artifactId}@${revision}`, scope),
+    );
+    return lifecycle
+      ? parseMethodologyArtifactLifecycle(JSON.parse(JSON.stringify(lifecycle)))
+      : null;
+  }
+  async saveMethodologyArtifactLifecycle(
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void> {
+    const validated = parseMethodologyArtifactLifecycle(lifecycle);
+    const key = this.key(`${validated.artifact_id}@${validated.revision}`, scope);
+    await this.withMethodologyLifecycleLock(key, async () => {
+      const artifact = this.methodologyArtifacts.get(key);
+      if (!artifact) throw new Error('methodology artifact does not exist');
+      if (artifact.artifact_kind !== validated.artifact_kind)
+        throw new Error('methodology lifecycle does not bind to artifact');
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(validated)));
+    });
+  }
+  async archiveMethodologyArtifact(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const key = this.key(`${artifactId}@${revision}`, scope);
+    return this.withMethodologyLifecycleLock(key, async () => {
+      const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+      if (!current) return null;
+      const updated = archiveMethodologyArtifactLifecycle(current, input);
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(updated)));
+      return updated;
+    });
+  }
+  async setMethodologyArtifactLegalHold(
+    artifactId: string,
+    revision: number,
+    input: { now: string; updated_by: string; enabled: boolean; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null> {
+    const key = this.key(`${artifactId}@${revision}`, scope);
+    return this.withMethodologyLifecycleLock(key, async () => {
+      const current = await this.loadMethodologyArtifactLifecycle(artifactId, revision, scope);
+      if (!current) return null;
+      const updated = setMethodologyArtifactLegalHold(current, input);
+      this.methodologyArtifactLifecycles.set(key, JSON.parse(JSON.stringify(updated)));
+      return updated;
+    });
+  }
+  async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
+    for (const [key, artifact] of this.methodologyArtifacts.entries()) {
+      if (
+        !this.visible(new Map([[key, artifact]]), scope).length ||
+        this.methodologyArtifactLifecycles.has(key)
+      )
+        continue;
+      const lifecycle = createMethodologyArtifactLifecycle({
+        artifact_kind: artifact.artifact_kind,
+        artifact_id: artifact.artifact_id,
+        revision: artifact.revision,
+        now: artifact.created_at,
+        updated_by: 'retention-migration',
+        retention_days: 365,
+        archive_after_days: 365,
+      });
+      await this.withMethodologyLifecycleLock(key, async () => {
+        if (this.methodologyArtifacts.has(key) && !this.methodologyArtifactLifecycles.has(key))
+          this.methodologyArtifactLifecycles.set(key, lifecycle);
+      });
+    }
+    let purged = 0;
+    for (const [key, lifecycle] of this.methodologyArtifactLifecycles.entries()) {
+      if (!this.visible(new Map([[key, lifecycle]]), scope).length) continue;
+      await this.withMethodologyLifecycleLock(key, async () => {
+        const currentArtifact = this.methodologyArtifacts.get(key);
+        const currentLifecycle = this.methodologyArtifactLifecycles.get(key);
+        if (!currentArtifact || !currentLifecycle) return;
+        let current = currentLifecycle;
+        if (
+          !current.legal_hold &&
+          current.state === 'active' &&
+          Date.parse(now) >= Date.parse(current.archive_after)
+        ) {
+          current = {
+            ...current,
+            state: 'archived',
+            updated_at: now,
+            updated_by: 'retention-reconciler',
+            reason: 'Retention archive threshold reached',
+          };
+          this.methodologyArtifactLifecycles.set(key, current);
+        }
+        if (!isMethodologyArtifactExpired(current, now)) return;
+        this.methodologyArtifactLifecycles.delete(key);
+        this.methodologyArtifacts.delete(key);
+        const namespacePrefix = isScopedRecordKey(key)
+          ? key.slice(0, key.lastIndexOf('/') + 1)
+          : '';
+        for (const [proposalKey, record] of this.methodologyProposals.entries()) {
+          if (
+            namespacePrefix
+              ? !proposalKey.startsWith(namespacePrefix)
+              : isScopedRecordKey(proposalKey)
+          )
+            continue;
+          if (
+            (record.proposal.status === 'approved' || record.proposal.status === 'rejected') &&
+            record.artifact?.artifact_id === current.artifact_id &&
+            record.artifact.revision === current.revision
+          ) {
+            const { artifact: _artifact, ...scrubbed } = record;
+            this.methodologyProposals.set(proposalKey, scrubbed);
+          }
+        }
+        purged += 1;
+      });
+    }
+    return purged;
   }
 
   // ----- Methodology proposals -----
@@ -376,6 +559,9 @@ export class MemoryStore implements StoreProvider {
   ): Promise<MethodologyProposalRecord[]> {
     let out = this.visible(this.methodologyProposals, opts).map((record) =>
       parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))),
+    );
+    out = out.filter(
+      (record) => record.proposal.status === 'pending' || record.artifact !== undefined,
     );
     if (opts.status) out = out.filter((record) => record.proposal.status === opts.status);
     return out.sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
@@ -710,6 +896,8 @@ export class MemoryStore implements StoreProvider {
     this.risks.clear();
     this.scenarios.clear();
     this.methodologyArtifacts.clear();
+    this.methodologyArtifactLifecycles.clear();
+    this.methodologyLifecycleLocks.clear();
     this.methodologyProposals.clear();
     this.agents.clear();
     this.users.clear();

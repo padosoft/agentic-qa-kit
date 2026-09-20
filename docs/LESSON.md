@@ -2905,3 +2905,98 @@ caller can see different authorization surfaces depending on deployment mode.
   configured. A successful write there is process-local, not restart-durable;
   API responses and UI notices must expose that distinction instead of making
   an unconditional enterprise evidence claim.
+
+# 2026-09-19 — Retention controls need a lifecycle, not only a delete job
+
+- Published methodology evidence now carries an explicit tenant-scoped
+  lifecycle with bounded retention, archive deadline, operator reason and
+  legal hold. Reconciliation archives first and purges only expired records
+  without a hold; this keeps an auditable state transition instead of making
+  deletion the only observable outcome.
+- Memory and PostgreSQL adapters share the same contract, but local tests do
+  not prove hosted backup/WORM semantics. Provider retention read-back,
+  restore/PITR and external assurance remain final deployment evidence gaps.
+
+# 2026-09-20 — Retention must cover every persisted copy and race boundary
+
+- A lifecycle row alone was insufficient: approved/rejected proposals retained
+  the full staged envelope after artifact purge, and PostgreSQL load/transform/
+  save could race a legal hold. Retention now scrubs terminal proposal copies,
+  backfills lifecycle records for legacy artifacts, serializes memory updates,
+  and performs hosted purge decisions and deletes inside one transaction.
+- Package-local tests must execute through the package's declared runner and
+  built boundary; a standalone Bun test can pass while the official Node test
+  script silently omits it.
+
+- Locking only the purge path is not enough: a transition that loaded a row
+  before purge can later recreate it. Every lifecycle mutation must lock the
+  lifecycle row and re-check the artifact in the same transaction; the durable
+  contract must exercise this path against the actual adapter when a DSN is
+  available.
+
+# 2026-09-20 — PostgreSQL JSONB driver shape needs an explicit boundary
+
+- A real hosted run caught that a transaction-local JSONB read-back could be
+  shaped differently from the regular adapter helper, causing strict envelope
+  parsing to receive `undefined`. Select `payload::text` at transaction
+  boundaries, pass it through the same decoder, and guard an absent row
+  explicitly; MemoryStore and TypeScript cannot reveal this provider detail.
+
+- The follow-up hosted run exposed the same shape difference in the legacy
+  retention backfill query: PostgreSQL returned a JSONB object while the
+  methodology artifact parser intentionally accepts only canonical serialized
+  JSON. Normalize every provider read at the parser boundary, including
+  migration/backfill paths; fixing only the publication transaction is
+  insufficient.
+
+- The next hosted retention run showed that a purge count is not enough:
+  scoped artifact read-back must be asserted after deletion. A lifecycle key
+  is not a sufficient semantic join for legacy/backfilled rows, so purge must
+  delete the artifact by its tenant columns plus validated envelope identity
+  and revision. Keep lifecycle and artifact cleanup in the same transaction.
+
+- The hosted scoped contract also requires the caller's scope to remain the
+  authoritative tenant filter during purge; persisted scope columns are a
+  fallback for legacy rows, not a substitute for the operation scope. Apply
+  that rule consistently to artifact deletion and proposal-copy scrubbing.
+
+- The hosted retention contract isolated a provider-specific read-after-write
+  discrepancy: a fresh PostgreSQL store saw the purge, while the reused store
+  instance could read stale session state. After destructive reconciliation,
+  the adapter now closes and recreates its pool, reruns migrations, and only
+  then returns; the same provider instance therefore has a verified fresh
+  read boundary.
+
+- Hosted verification then showed that the stale read was specifically visible
+  on terminal proposal copies scrubbed after the purge transaction. Retention
+  cleanup must keep lifecycle deletion, artifact deletion, and terminal-copy
+  scrubbing in one transaction; post-commit cleanup is not an atomic data
+  contract and can create a race or a misleading read-after-write result.
+
+- A provider-side JSONB path predicate is not sufficient for a destructive
+  semantic join: hosted PostgreSQL did not match the approved proposal copy
+  even though its parsed record was valid. For retention scrubbing, lock the
+  tenant-scoped candidates, parse them through the canonical schema boundary,
+  and match terminal status plus artifact identity/revision before mutation.
+
+- Provider JSONB adapters can expose a serialized JSON string more than once
+  at a cast/read boundary. The canonical decode helper must normalize the
+  provider shape before schema parsing, including destructive reconciliation
+  queries; otherwise a valid persisted proposal is rejected as non-object.
+
+- The same legacy shape must be handled on writes: PostgreSQL's JSONB delete
+  operator rejects scalar roots. A destructive scrub must branch on
+  `jsonb_typeof`, convert only a valid serialized-object string, and leave
+  unexpected types unchanged rather than guessing or corrupting data.
+
+- Retention changes the operational visibility of terminal proposals: once
+  their artifact is purged, keeping them in normal list endpoints creates an
+  orphaned admin record. Preserve direct ID lookup for audit semantics, but
+  exclude artifact-less terminal proposals from operational listings in every
+  store adapter.
+
+- Retention and publication must share one per-record critical section. The
+  durable adapter now uses the same PostgreSQL advisory lock for atomic
+  publication, legacy backfill, and purge, with lifecycle-row locking after
+  the advisory lock; the in-memory adapter uses the equivalent per-key lock.
+  This prevents an expired artifact from being recreated with a lifecycle gap.

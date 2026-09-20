@@ -9,6 +9,56 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Retention lifecycle PR: atomic terminal-copy purge repair
+
+- Hosted PostgreSQL proved artifact deletion but caught a remaining read-back
+  failure for approved/rejected proposal copies: the scrub ran after the
+  lifecycle/artifact transaction and could expose stale or concurrent state.
+  Proposal-copy scrubbing now executes inside the same transaction as lifecycle
+  and artifact deletion. The hosted rerun then showed that the JSONB path
+  predicate did not match the approved record reliably; scrubbing now locks
+  tenant-scoped proposal rows, parses them canonically, and matches terminal
+  status plus artifact identity/revision before removing the copy. The first
+  hosted attempt also exposed a provider JSONB double-encoding shape at this
+  read boundary; normalize one additional serialized layer before parsing.
+  The next hosted attempt exposed the symmetric write issue (`payload - key`
+  cannot operate on a JSONB scalar); the scrub now normalizes object/string
+  payloads in SQL before removing the copy and preserves unexpected types.
+  The resulting catalog contract is now explicit in both adapters: terminal
+  proposals whose retained artifact was purged are omitted from operational
+  lists, while direct lookup remains available without the sensitive copy.
+  Additional concurrency hardening closes the remaining retention risks:
+  publication rejects scrubbed proposals and always uses atomic artifact+
+  lifecycle persistence; MemoryStore serializes lifecycle/purge decisions;
+  artifact-kind conflicts, tenant-scoped assertions, and PostgreSQL advisory
+  lock ordering are enforced. Local store/server/methodology builds pass and
+  the store contract remains 20/20. Next: rerun hosted CI, resolve only the
+  now-obsolete review threads, and merge.
+  Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
+  PostgreSQL and confirm the full CI gate.
+
+## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
+
+- The latest hosted PostgreSQL contract run found one remaining JSONB shape
+  regression in legacy retention backfill: the artifact parser received the
+  provider's object-shaped JSONB value instead of canonical serialized JSON.
+  Normalized that read boundary and recorded the lesson; rerunning local gates
+  and hosted CI is the next action.
+- The rerun then exposed a second hosted-only retention defect: purge returned
+  one expired lifecycle but scoped artifact read-back still found the artifact.
+  The deletion path now removes artifacts by tenant columns plus validated
+  envelope identity/revision inside the same transaction; local gates and a
+  fresh hosted contract run are required next.
+
+- The latest hosted attempt showed the operation must prefer its caller scope
+  over nullable legacy row scope columns. Purge and proposal-copy scrubbing
+  now use that authoritative scope with persisted columns as fallback.
+- Restart verification isolated the remaining issue to the reused PostgreSQL
+  store instance: a fresh instance saw the purge while the original could
+  read stale session state. The adapter now rotates its pool and reruns
+  migrations after destructive reconciliation; hosted CI must revalidate this
+  boundary.
+
 ## 2026-09-19 — Methodology diff and publication UI implemented
 
 - Added a live, tenant-scoped previous-revision comparison in the admin review
@@ -18,9 +68,9 @@
   and proposal ID to the existing approval-bound publication API; mock mode
   remains unable to publish. Browser evidence: methodology review **3/3
   passed**, including previous-revision comparison and publication request.
-- Next: define and implement durable retention/archive/expiry controls for
-  methodology artifacts and decisions. The real provider/authenticated
-  proposal-creation journey and external assurance remain deferred final gates.
+- Retention/archive/expiry controls are now implemented; the real
+  provider/authenticated proposal-creation journey and external assurance
+  remain deferred final gates.
 - Technical hardening after automated review: publication now reports the
   store durability boundary (`durable` vs `ephemeral`), revision 1 renders an
   explicit no-history state, the diff uses a real responsive two-column style,
@@ -29,6 +79,43 @@
 - Added hosted-journey coverage for revision-one no-history behavior and a
   post-publication refresh/read-back assertion; focused methodology browser
   evidence is now **5/5 passed**.
+
+## 2026-09-19 — Methodology retention lifecycle implemented
+
+- Added validated tenant-scoped lifecycle records for published methodology
+  revisions: active/archived state, bounded retention and archive deadlines,
+  operator reason, and legal hold.
+- Added Memory/Postgres persistence, authenticated lifecycle inspection,
+  archive, legal-hold and retention-reconcile routes. Expiry purge deletes the
+  lifecycle and artifact only when the record is not under legal hold.
+- Evidence: methodology/store/server focused suite **139 passed / 0 failed**;
+  full adapter-hosted PostgreSQL retention evidence and external WORM/backup
+  proof remain to be run or supplied.
+- Operator retention controls are now exposed in the admin review workspace;
+  next is the real authenticated provider journey. External assurance remains
+  a final promotion gate.
+
+- Automated technical review then exposed retention edge cases; hardened the
+  slice with DLP-checked reasons, lifecycle binding/cloning, serialized
+  in-memory transitions, transactional PostgreSQL publication and purge,
+  terminal-proposal payload scrubbing, legacy-artifact backfill, explicit UI
+  lifecycle errors and official package-test registration. Follow-up evidence:
+  methodology **33 passed**, store/server **136 passed**, browser **5/5**.
+  Provider credentials, hosted WORM/restore evidence and external assurance
+  remain deferred final gates by owner decision.
+
+- Follow-up review hardening: lifecycle transitions in PostgreSQL now lock and
+  re-check the governing artifact inside the transaction, MemoryStore publish
+  replay does not reset an existing lifecycle, and the DSN-backed store
+  contract covers atomic publication, lifecycle read-back, expiry purge and
+  terminal proposal scrubbing. Workspace typecheck and store tests pass;
+  this follow-up is queued on PR #234 before merge.
+
+- Hosted PostgreSQL caught one real regression in the new transaction path:
+  JSONB read-back from the `postgres` driver was not normalized before strict
+  envelope parsing. The boundary now selects `payload::text`, decodes it via
+  the shared adapter helper and fails explicitly if the row disappears;
+  local typecheck/build/store/server tests pass and CI must re-prove the fix.
 
 ## 2026-09-19 — Reasoned methodology rejection implemented
 

@@ -7,6 +7,7 @@ import { verifyEventChain } from '@aqa/compliance';
 import type { BudgetHaltController } from '@aqa/cost';
 import {
   assertMethodologyApproval,
+  createMethodologyArtifactLifecycle,
   measureRiskCoverage,
   parseMethodologyApproval,
   parseMethodologyArtifactEnvelope,
@@ -1354,7 +1355,9 @@ export function makeApi(): ApiHandler[] {
         const s = requireScope(req);
         if ('status' in s) return s;
         const artifact = await ctx.store.loadMethodologyArtifact(id, revision, s);
-        return artifact ? asResponse({ artifact }) : notFound('methodology artifact');
+        if (!artifact) return notFound('methodology artifact');
+        const lifecycle = await ctx.store.loadMethodologyArtifactLifecycle(id, revision, s);
+        return asResponse({ artifact, ...(lifecycle ? { lifecycle } : {}) });
       },
     },
     {
@@ -1519,6 +1522,8 @@ export function makeApi(): ApiHandler[] {
         const body = req.body as {
           artifact?: unknown;
           proposal_id?: unknown;
+          retention_days?: unknown;
+          archive_after_days?: unknown;
         };
         if (!body.artifact || typeof body.proposal_id !== 'string' || !body.proposal_id)
           return {
@@ -1529,7 +1534,12 @@ export function makeApi(): ApiHandler[] {
         try {
           artifact = parseMethodologyArtifactEnvelope(JSON.stringify(body.artifact));
           const record = await ctx.store.loadMethodologyProposal(body.proposal_id, s);
-          if (!record || record.proposal.status !== 'approved' || !record.approval)
+          if (
+            !record ||
+            record.proposal.status !== 'approved' ||
+            !record.approval ||
+            !record.artifact
+          )
             throw new Error('methodology proposal is not approved');
           const { proposal, approval } = record;
           if (
@@ -1547,16 +1557,160 @@ export function makeApi(): ApiHandler[] {
           };
         }
         try {
-          await ctx.store.saveMethodologyArtifact(artifact, s);
+          const retentionDays = body.retention_days === undefined ? 365 : body.retention_days;
+          const archiveAfterDays =
+            body.archive_after_days === undefined ? retentionDays : body.archive_after_days;
+          if (typeof retentionDays !== 'number' || typeof archiveAfterDays !== 'number')
+            throw new Error('retention_days and archive_after_days must be numbers');
+          const existingLifecycle = await ctx.store.loadMethodologyArtifactLifecycle(
+            artifact.artifact_id,
+            artifact.revision,
+            s,
+          );
+          const lifecycle =
+            existingLifecycle ??
+            createMethodologyArtifactLifecycle({
+              artifact_kind: artifact.artifact_kind,
+              artifact_id: artifact.artifact_id,
+              revision: artifact.revision,
+              now: new Date().toISOString(),
+              updated_by: user.id,
+              retention_days: retentionDays,
+              archive_after_days: archiveAfterDays,
+            });
+          await ctx.store.saveMethodologyArtifactWithLifecycle(artifact, lifecycle, s);
         } catch (error) {
           if (error instanceof Error && /conflict|already exists/i.test(error.message))
             return { status: 409, body: { error: 'methodology artifact revision conflict' } };
-          throw error;
+          return {
+            status: 400,
+            body: { error: safeErrorMessage(error, 'methodology publication rejected') },
+          };
         }
         return asResponse(
-          { artifact, durability: ctx.store.isDurable?.() ? 'durable' : 'ephemeral' },
+          {
+            artifact,
+            lifecycle: await ctx.store.loadMethodologyArtifactLifecycle(
+              artifact.artifact_id,
+              artifact.revision,
+              s,
+            ),
+            durability: ctx.store.isDurable?.() ? 'durable' : 'ephemeral',
+          },
           201,
         );
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/methodology/artifacts/:id/:revision/lifecycle',
+      requires: 'risk-map:read',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const revision = Number(req.params.revision);
+        if (!req.params.id || !Number.isSafeInteger(revision) || revision < 1)
+          return notFound('methodology artifact lifecycle');
+        const lifecycle = await ctx.store.loadMethodologyArtifactLifecycle(
+          req.params.id,
+          revision,
+          s,
+        );
+        return lifecycle ? asResponse({ lifecycle }) : notFound('methodology artifact lifecycle');
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/artifacts/:id/:revision/archive',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const revision = Number(req.params.revision);
+        const body = req.body as { reason?: unknown } | undefined;
+        if (
+          !req.params.id ||
+          !Number.isSafeInteger(revision) ||
+          revision < 1 ||
+          typeof body?.reason !== 'string'
+        )
+          return { status: 400, body: { error: 'archive reason is required' } };
+        try {
+          const lifecycle = await ctx.store.archiveMethodologyArtifact(
+            req.params.id,
+            revision,
+            {
+              now: new Date().toISOString(),
+              updated_by: user.id,
+              reason: body.reason,
+            },
+            s,
+          );
+          return lifecycle ? asResponse({ lifecycle }) : notFound('methodology artifact lifecycle');
+        } catch (error) {
+          return {
+            status: 409,
+            body: { error: safeErrorMessage(error, 'methodology archive rejected') },
+          };
+        }
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/artifacts/:id/:revision/legal-hold',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        const user = await ctx.authenticate(req.headers);
+        if (!user) return { status: 401, body: { error: 'unauthorized' } };
+        const revision = Number(req.params.revision);
+        const body = req.body as { enabled?: unknown; reason?: unknown } | undefined;
+        if (
+          !req.params.id ||
+          !Number.isSafeInteger(revision) ||
+          revision < 1 ||
+          typeof body?.enabled !== 'boolean' ||
+          typeof body.reason !== 'string'
+        )
+          return { status: 400, body: { error: 'legal hold enabled and reason are required' } };
+        try {
+          const lifecycle = await ctx.store.setMethodologyArtifactLegalHold(
+            req.params.id,
+            revision,
+            {
+              now: new Date().toISOString(),
+              updated_by: user.id,
+              enabled: body.enabled,
+              reason: body.reason,
+            },
+            s,
+          );
+          return lifecycle ? asResponse({ lifecycle }) : notFound('methodology artifact lifecycle');
+        } catch (error) {
+          return {
+            status: 409,
+            body: { error: safeErrorMessage(error, 'methodology legal hold rejected') },
+          };
+        }
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/methodology/retention/reconcile',
+      requires: 'risk-map:edit',
+      async handle(req, ctx) {
+        const s = requireScope(req);
+        if ('status' in s) return s;
+        if (!(await ctx.authenticate(req.headers)))
+          return { status: 401, body: { error: 'unauthorized' } };
+        const purged = await ctx.store.purgeExpiredMethodologyArtifacts(
+          new Date().toISOString(),
+          s,
+        );
+        return asResponse({ purged });
       },
     },
 

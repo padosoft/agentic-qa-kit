@@ -2,6 +2,7 @@ import type {
   MethodologyApproval,
   MethodologyApprovalResult,
   MethodologyArtifactEnvelope,
+  MethodologyArtifactLifecycle,
   MethodologyProposal,
   MethodologyRejection,
   MethodologyRejectionResult,
@@ -177,6 +178,34 @@ export interface StoreProvider {
   ): Promise<MethodologyArtifactEnvelope | null>;
   /** Persist one revision; same revision + different digest is a hard conflict. */
   saveMethodologyArtifact(artifact: MethodologyArtifactEnvelope, scope?: StoreScope): Promise<void>;
+  /** Atomically persist a revision and its initial retention lifecycle. */
+  saveMethodologyArtifactWithLifecycle(
+    artifact: MethodologyArtifactEnvelope,
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void>;
+  loadMethodologyArtifactLifecycle(
+    artifact_id: string,
+    revision: number,
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null>;
+  saveMethodologyArtifactLifecycle(
+    lifecycle: MethodologyArtifactLifecycle,
+    scope?: StoreScope,
+  ): Promise<void>;
+  archiveMethodologyArtifact(
+    artifact_id: string,
+    revision: number,
+    input: { now: string; updated_by: string; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null>;
+  setMethodologyArtifactLegalHold(
+    artifact_id: string,
+    revision: number,
+    input: { now: string; updated_by: string; enabled: boolean; reason: string },
+    scope?: StoreScope,
+  ): Promise<MethodologyArtifactLifecycle | null>;
+  purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number>;
   /** List pending/decided proposal records in a tenant scope. */
   listMethodologyProposals(opts?: {
     org?: string;

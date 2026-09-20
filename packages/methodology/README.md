@@ -28,6 +28,9 @@ auditors and architects expect (Task 21).
   `parseMethodologyArtifactEnvelope()` — provide a versioned, digest-bound
   serialization boundary that validates attack trees before a durable adapter
   persists them.
+- `createMethodologyArtifactLifecycle()` — applies bounded retention and archive
+  deadlines; lifecycle helpers support operator archive, legal hold and expiry
+  checks without changing the content-addressed artifact envelope.
 
 State graphs reject unknown endpoints, duplicate IDs, unreachable states,
 non-terminal dead ends and transitions out of terminal states. Path evaluation
