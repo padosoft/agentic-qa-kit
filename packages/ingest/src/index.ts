@@ -89,6 +89,7 @@ export {
   evaluateMutationCoverage,
   evaluateMutationHoldoutRegressionEvidence,
   evaluateMutationRegressionEvidence,
+  parseMutationHoldoutSplit,
   parseMutationCoverageManifest,
   parseMutationRegressionEvidence,
   splitMutationCoverageHoldout,

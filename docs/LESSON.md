@@ -3170,3 +3170,8 @@ caller can see different authorization surfaces depending on deployment mode.
   key can collide with a previous invocation's seeded cart and fail before
   the injected ambiguity boundary; derive the local key from the fresh cart
   identity while retaining the retry/reconciliation assertions.
+
+- A library-level holdout evaluator is not enough when the supported CLI still
+  calls the legacy evaluator. Plan-bound evidence must either be routed through
+  the holdout evaluator at the command boundary or be rejected there; otherwise
+  a valid-looking CLI gate can bypass the digest contract entirely.

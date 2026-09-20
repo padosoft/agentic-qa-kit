@@ -179,6 +179,35 @@ export function parseMutationCoverageManifest(value: unknown): MutationCoverageM
   return { schema_version: '1', links };
 }
 
+/** Parse a persisted digest-bound holdout plan before it reaches an evaluator. */
+export function parseMutationHoldoutSplit(value: unknown): MutationHoldoutSplit {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('mutation holdout split must be an object');
+  const root = value as Record<string, unknown>;
+  if (root.schema_version !== '1')
+    throw new Error('mutation holdout split schema_version must be "1"');
+  if (
+    typeof root.split_key !== 'string' ||
+    root.split_key.length === 0 ||
+    root.split_key.length > 256
+  )
+    throw new Error('mutation holdout split split_key must be bounded');
+  if (typeof root.plan_digest !== 'string' || !/^[a-f0-9]{64}$/u.test(root.plan_digest))
+    throw new Error('mutation holdout split plan_digest must be sha256');
+  const train = parseMutationCoverageManifest(root.train);
+  const holdout = parseMutationCoverageManifest(root.holdout);
+  const split = {
+    schema_version: '1' as const,
+    split_key: root.split_key,
+    plan_digest: root.plan_digest,
+    train,
+    holdout,
+  };
+  if (mutationHoldoutPlanDigest(split.split_key, train.links, holdout.links) !== split.plan_digest)
+    throw new Error('mutation holdout split plan_digest is invalid');
+  return split;
+}
+
 /** Apply explicit mapping and kill-rate policy to an external mutation report. */
 export function evaluateMutationCoverage(
   report: MutationReport,

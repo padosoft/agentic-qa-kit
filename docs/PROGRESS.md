@@ -3399,3 +3399,14 @@ evidence.
   credentials and independent assurance remain deferred final gates.
 - Next: push the review fixes, wait for the complete hosted journey, merge PR
   #245, then update the roadmap completion audit from `origin/main`.
+
+# 2026-09-20 — Mutation holdout CLI gate completed
+
+- Wired plan-bound mutation evidence through the supported `aqa mutation
+  regression` command. Evidence carrying `plan_digest` now requires
+  `--holdout-split`, parses and revalidates the canonical digest, and evaluates
+  only the immutable holdout links; the generic path remains available for
+  legacy non-plan-bound evidence.
+- Evidence: ingest **25/25**, kit **197 passed / 2 platform skips**, and full
+  repository typecheck passed locally. The final hosted CI rerun for PR #245
+  is still required before merge.

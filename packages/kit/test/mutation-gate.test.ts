@@ -141,3 +141,36 @@ test('mutation regression gate rejects evidence from another source revision', (
   assert.equal(result.ok, false);
   assert.match(result.error ?? '', /source revision/);
 });
+
+test('mutation regression gate requires and validates a holdout plan for plan-bound evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Survived']));
+  const manifest = {
+    schema_version: '1',
+    links: [
+      { mutation_id: 'm-0', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+    ],
+  };
+  writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest));
+  writeFileSync(
+    join(root, 'evidence.json'),
+    JSON.stringify({
+      schema_version: '1',
+      source_revision: 'abc123',
+      plan_digest: 'a'.repeat(64),
+      observations: [
+        { mutation_id: 'm-0', scenario_id: 'scenario-cart', run_id: 'run-0', outcome: 'killed' },
+      ],
+    }),
+  );
+  const missing = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    minKillRate: 0.5,
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.error ?? '', /holdout-split/);
+});
