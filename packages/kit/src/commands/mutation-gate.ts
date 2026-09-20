@@ -171,6 +171,11 @@ export function runMutationRegressionGate(
           );
       }
     }
+    const requiredHoldoutSplit = () => {
+      if (holdoutSplit === undefined)
+        throw new Error('plan-bound mutation evidence requires --holdout-split');
+      return holdoutSplit;
+    };
     const regression =
       evidence.plan_digest !== undefined
         ? holdoutSplitPath === undefined
@@ -179,7 +184,7 @@ export function runMutationRegressionGate(
             })()
           : evaluateMutationHoldoutRegressionEvidence(
               report,
-              holdoutSplit!,
+              requiredHoldoutSplit(),
               evidence,
               options.minKillRate,
             )
