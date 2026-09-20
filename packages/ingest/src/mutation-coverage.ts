@@ -61,6 +61,7 @@ export interface MutationRegressionObservation {
 export interface MutationRegressionEvidence {
   schema_version: '1';
   source_revision: string;
+  plan_digest?: string;
   observations: ReadonlyArray<MutationRegressionObservation>;
 }
 
@@ -293,8 +294,36 @@ export function parseMutationRegressionEvidence(value: unknown): MutationRegress
   return {
     schema_version: '1',
     source_revision: boundedRevision(root.source_revision),
+    ...(root.plan_digest === undefined ? {} : { plan_digest: boundedRevision(root.plan_digest) }),
     observations,
   };
+}
+
+/** Evaluate a regression run specifically against the immutable holdout plan. */
+export function evaluateMutationHoldoutRegressionEvidence(
+  report: MutationReport,
+  split: MutationHoldoutSplit,
+  evidence: MutationRegressionEvidence,
+  minKillRate: number,
+): MutationRegressionCoverageResult {
+  if (evidence.plan_digest !== split.plan_digest)
+    throw new Error('mutation holdout evidence plan_digest does not match the split');
+  const holdoutIds = new Set(split.holdout.links.map((link) => link.mutation_id));
+  const records = report.records.filter((record) => holdoutIds.has(record.id));
+  const totals = { ...report.totals };
+  for (const status of Object.keys(totals) as Array<keyof typeof totals>) totals[status] = 0;
+  for (const record of records) totals[record.status] += 1;
+  const evaluated = records.filter((record) => record.status !== 'ignored');
+  const holdoutReport: MutationReport = {
+    ...report,
+    records,
+    totals,
+    mutation_score: ratio(
+      evaluated.filter((record) => record.status === 'killed').length,
+      evaluated.length,
+    ),
+  };
+  return evaluateMutationRegressionEvidence(holdoutReport, split.holdout, evidence, minKillRate);
 }
 
 /** Require every reviewed mutant/scenario pair to have an execution result. */

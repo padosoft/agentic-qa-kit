@@ -58,6 +58,16 @@
   complete hosted matrix for the ecommerce/replay slice and then close the
   remaining repository-side evidence gaps.
 
+## 2026-09-20 — Holdout digest bound to regression evidence
+
+- Extended mutation regression evidence with an optional `plan_digest` and
+  added `evaluateMutationHoldoutRegressionEvidence()`. The evaluator projects
+  the report onto the immutable holdout set, requires an exact digest match,
+  and fails closed on plan mismatch or contamination.
+- Ingest suite: **25/25 passed**. This closes the repository-side holdout
+  contract; actual producer-scale mutation execution remains an explicitly
+  deferred final gate.
+
 ## 2026-09-20 — Chaos review hardening
 
 - Fixed the chaos CLI to exit nonzero when thresholds fail, rebuild the server

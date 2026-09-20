@@ -30,6 +30,9 @@ copied into the normalized report.
 - `splitMutationCoverageHoldout(...)` creates a deterministic, digest-bound
   train/holdout plan with minimum-size guardrails; it never executes a mutator
   and keeps evaluation pairs separate from training pairs.
+- `evaluateMutationHoldoutRegressionEvidence(...)` requires regression evidence
+  to carry the exact holdout `plan_digest` and evaluates only mutants in that
+  immutable holdout set; mismatched or contaminated plans fail closed.
 - `parseOtlpTrace(json)` accepts bounded OTLP/HTTP JSON traces and retains only
   trace/span identity, timing, service, status and primitive attributes. Known
   credential-bearing attributes and URLs are redacted before normalization.

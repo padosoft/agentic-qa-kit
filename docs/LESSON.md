@@ -7,6 +7,12 @@ between runs and contaminate release decisions. Rank reviewed pairs by a
 domain-separated hash, enforce minimum train/holdout sizes, and persist a
 digest of the exact split alongside evidence.
 
+# 2026-09-20 — A holdout digest must be verified at evaluation time
+
+Persisting a split digest without requiring it in the regression evidence is
+only metadata. The evaluator must reject missing or different digests and
+compute rates over the holdout projection, not over the full mutation report.
+
 # 2026-09-20 — Evidence producers must fail at the process boundary
 
 Structured output containing `result: fail` is not enough for CI or operators:

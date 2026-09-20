@@ -87,6 +87,7 @@ export interface MutationThresholdResult {
 
 export {
   evaluateMutationCoverage,
+  evaluateMutationHoldoutRegressionEvidence,
   evaluateMutationRegressionEvidence,
   parseMutationCoverageManifest,
   parseMutationRegressionEvidence,
