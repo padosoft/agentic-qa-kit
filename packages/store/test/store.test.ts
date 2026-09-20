@@ -689,7 +689,10 @@ describe('PostgresStore', () => {
         prev_hash: preRunTenantEvent.hash,
         hash: '',
       };
-      explicitlyScopedTenantEvent.hash = hashEvent(explicitlyScopedTenantEvent, preRunTenantEvent.hash);
+      explicitlyScopedTenantEvent.hash = hashEvent(
+        explicitlyScopedTenantEvent,
+        preRunTenantEvent.hash,
+      );
       await s.appendEvent(explicitlyScopedTenantEvent, { org: 'org-a', project: 'shop' });
       assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
       assert.equal(
