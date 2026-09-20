@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-20 — Bounded algorithms must be lazy before the budget check
+
+An attempt limit does not protect a shrinker if candidate generation eagerly
+materializes the whole search frontier first. Use generators and incremental
+depth traversal so wide valid inputs are bounded before the first predicate
+call; source-attributed benchmarks likewise need a clean-tree check before
+recording a revision.
+
 # 2026-09-20 — SQL projections must account for legacy JSONB shapes
 
 Moving an audit filter from application code into SQL can expose historical

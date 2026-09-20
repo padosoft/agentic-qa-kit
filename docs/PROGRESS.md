@@ -36,6 +36,20 @@
   A fresh local typecheck/lint and hosted PostgreSQL rerun are required before
   merge.
 
+## 2026-09-20 — Shrinker and benchmark hardening after review
+
+- Made shrink candidate generation lazy and depth traversal iterative, so the
+  configured attempt/size/depth limits protect wide inputs before candidate
+  materialization. Added a 20,000-element regression; methodology suite is now
+  **37 passed / 0 failed**.
+- Capacity benchmark now refuses a dirty working tree (ignoring only the
+  environment-owned scheduled-task lock) before attributing measurements to a
+  commit SHA. This prevents reproducibility reports from labeling local edits
+  as clean source evidence.
+- PR #243 remains open until the new commit receives complete hosted CI again;
+  the prior PostgreSQL failure was fixed and its rerun had passed before this
+  hardening increment.
+
 ## 2026-09-20 — Methodology publication fence completed locally
 
 - Added `publishMethodologyArtifact` to the store contract and both adapters.

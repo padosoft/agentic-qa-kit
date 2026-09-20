@@ -102,53 +102,64 @@ function assertJsonBoundary(value: ShrinkableJson, maxDepth: number, maxBytes: n
 
 function depth(value: ShrinkableJson): number {
   if (!Array.isArray(value) && !isObject(value)) return 0;
-  const children = Array.isArray(value) ? value : Object.values(value);
-  return children.length === 0 ? 1 : 1 + Math.max(...children.map(depth));
+  const pending: Array<{ value: ShrinkableJson; depth: number }> = [{ value, depth: 1 }];
+  let maximum = 0;
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (!entry) continue;
+    maximum = Math.max(maximum, entry.depth);
+    if (Array.isArray(entry.value)) {
+      for (const child of entry.value)
+        if (Array.isArray(child) || isObject(child))
+          pending.push({ value: child, depth: entry.depth + 1 });
+    } else if (isObject(entry.value)) {
+      for (const child of Object.values(entry.value))
+        if (Array.isArray(child) || isObject(child))
+          pending.push({ value: child, depth: entry.depth + 1 });
+    }
+  }
+  return maximum;
 }
 
-function candidates(value: ShrinkableJson, maxDepth: number): ShrinkableJson[] {
-  const result: ShrinkableJson[] = [];
+function* candidates(value: ShrinkableJson, maxDepth: number): Generator<ShrinkableJson> {
   if (typeof value === 'string') {
-    if (value.length > 0) result.push('');
-    if (value.length > 1) result.push(value.slice(0, Math.ceil(value.length / 2)));
+    if (value.length > 0) yield '';
+    if (value.length > 1) yield value.slice(0, Math.ceil(value.length / 2));
   } else if (typeof value === 'number' && Number.isFinite(value) && value !== 0) {
-    result.push(0);
-    result.push(Math.trunc(value / 2));
+    yield 0;
+    yield Math.trunc(value / 2);
   } else if (typeof value === 'boolean' && value) {
-    result.push(false);
+    yield false;
   } else if (Array.isArray(value)) {
     for (const chunk of removalChunks(value.length))
-      result.push(value.filter((_item, index) => !chunk.has(index)));
+      yield value.filter((_item, index) => !chunk.has(index));
     if (value.length > 0 && maxDepth > 0)
       for (let index = 0; index < value.length; index += 1)
         for (const child of candidates(value[index] ?? null, maxDepth - 1)) {
           const copy = value.slice();
           copy[index] = child;
-          result.push(copy);
+          yield copy;
         }
   } else if (isObject(value)) {
     const keys = Object.keys(value).sort();
     for (const key of keys) {
       const copy = { ...value };
       delete copy[key];
-      result.push(copy);
+      yield copy;
     }
     if (maxDepth > 0)
       for (const key of keys)
         for (const child of candidates(value[key] ?? null, maxDepth - 1))
-          result.push({ ...value, [key]: child });
+          yield { ...value, [key]: child };
   }
-  return result;
 }
 
-function removalChunks(length: number): Set<number>[] {
-  const result: Set<number>[] = [];
+function* removalChunks(length: number): Generator<Set<number>> {
   for (let size = length; size >= 1; size = Math.floor(size / 2)) {
     for (let start = 0; start + size <= length; start += size)
-      result.push(new Set(Array.from({ length: size }, (_item, index) => start + index)));
+      yield new Set(Array.from({ length: size }, (_item, index) => start + index));
     if (size === 1) break;
   }
-  return result;
 }
 
 function isObject(value: ShrinkableJson): value is { [key: string]: ShrinkableJson } {

@@ -48,4 +48,14 @@ describe('JSON counterexample shrinking', () => {
     assert.equal(result.attempts, 1);
     assert.deepEqual(result.value, { a: 'long value' });
   });
+
+  it('handles wide JSON values without spreading child arrays', async () => {
+    const wide = Array.from({ length: 20_000 }, () => false);
+    const result = await shrinkJsonCounterexample(wide, () => false, {
+      max_attempts: 1,
+      max_depth: 1,
+    });
+    assert.equal(result.attempts, 1);
+    assert.equal(result.complete, false);
+  });
 });

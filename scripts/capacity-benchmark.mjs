@@ -15,6 +15,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 
 const jobs = positiveInteger(args.get('jobs') ?? '10000', 'jobs');
 const runs = positiveInteger(args.get('runs') ?? '1', 'runs');
+assertCleanWorkingTree();
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const measurements = [];
 
@@ -68,4 +69,15 @@ function positiveInteger(value, name) {
   if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 1_000_000)
     throw new Error(`${name} must be an integer from 1 to 1000000`);
   return parsed;
+}
+
+function assertCleanWorkingTree() {
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+    encoding: 'utf8',
+  })
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.endsWith('.claude/scheduled_tasks.lock'));
+  if (status.length > 0)
+    throw new Error('capacity benchmark requires a clean working tree for source attribution');
 }
