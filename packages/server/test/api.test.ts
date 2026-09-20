@@ -162,6 +162,30 @@ describe('makeApi', () => {
     assert.deepEqual((scoped?.body as { runs: unknown[] }).runs, []);
   });
 
+  it('GET /api/audit/summary returns a tenant-scoped kind aggregation', async () => {
+    const c = ctx();
+    const first = {
+      schema_version: '1' as const,
+      seq: 0,
+      prev_hash: null,
+      hash: '',
+      ts: '2026-05-17T10:00:00Z',
+      run_id: 'summary-run',
+      kind: 'info' as const,
+      actor: { type: 'system' as const, id: 'summary-test' },
+      payload: { message: 'tenant-visible' },
+    };
+    first.hash = eventHash(first);
+    await c.store.appendEvent(first, { org: 'padosoft', project: 'demo' });
+    const second = { ...first, seq: 1, hash: '', kind: 'finding_emitted' as const };
+    second.hash = eventHash(second, first.hash);
+    await c.store.appendEvent(second, { org: 'other-org', project: 'demo' });
+    const route = makeApi().find((r) => r.method === 'GET' && r.path === '/api/audit/summary');
+    const response = await route?.handle({ headers: TENANT_HEADERS, params: {} }, c);
+    assert.equal(response?.status, 200);
+    assert.deepEqual(response?.body, { summary: { total: 1, by_kind: { info: 1 } } });
+  });
+
   it('GET /api/risk-coverage aggregates tenant-scoped scenario events', async () => {
     const c = ctx();
     await c.store.saveRisk(

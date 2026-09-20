@@ -9,6 +9,22 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Tenant-scoped audit aggregation
+
+- Merged PR #238 (`e68467f`) after the full hosted matrix passed, including
+  Playwright, CLI, PostgreSQL, S3, OCI and live Prometheus/OTLP journeys. A
+  transient `onnxruntime-node` network timeout was rerun successfully.
+- Added `summarizeAuditEvents` to the store contract and both adapters. The
+  PostgreSQL implementation aggregates in SQL, while MemoryStore preserves
+  semantic parity; both apply the same tenant, time-window and kind filters.
+- Added `GET /api/audit/summary` and a server contract proving that a tenant
+  cannot observe another tenant's audit counts. Local evidence: store/server
+  builds, **117/117 server tests**, and Biome pass.
+- Next: wire the summary into the admin audit journey, then add bounded
+  retention/aggregation operational controls. External WORM/KMS/PITR/IdP,
+  provider credentials and independent assurance remain explicitly parked at
+  the final production gate.
+
 ## 2026-09-20 — Tenant-safe durable audit provenance
 
 - Audit events now derive authoritative `org`/`project` metadata from the
