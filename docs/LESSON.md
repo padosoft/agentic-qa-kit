@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-20 — Tenant provenance belongs in the persistence projection
+
+Putting org/project only in an event payload is not enough: producers can omit
+it, payloads can be legacy or redacted, and a scoped query may accidentally
+interpret an untagged record as global. Persist the authoritative tenant
+columns at the store boundary by deriving them from the owning run, allow an
+explicit trusted scope override, and make scoped reads exclude rows with no
+provenance. Memory and PostgreSQL must enforce the same fail-closed rule.
+
 # 2026-09-20 — Filter durable projections before applying pagination
 
 Applying an audit `LIMIT` before a server-side kind filter is a correctness

@@ -9,6 +9,20 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Tenant-safe durable audit provenance
+
+- Audit events now derive authoritative `org`/`project` metadata from the
+  persisted run at the store boundary, with an explicit scope override for
+  future producers. MemoryStore records the same provenance for parity.
+- Scoped audit projections now fail closed for legacy events without tenant
+  metadata instead of treating them as globally visible. PostgreSQL applies
+  the same exact-match predicate and finding status/verification audit writes
+  inherit the owning run scope.
+- Added MemoryStore and hosted-PostgreSQL contract coverage for same-tenant
+  visibility, cross-tenant exclusion and legacy-row exclusion. Local evidence:
+  store build and **21/21 store tests** pass. Next: complete audit retention
+  and aggregation projections, then wire the scoped admin journey.
+
 ## 2026-09-20 — Methodology publication fence completed locally
 
 - Added `publishMethodologyArtifact` to the store contract and both adapters.

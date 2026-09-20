@@ -97,7 +97,8 @@ export interface StoreProvider {
   }): Promise<Run.Run[]>;
 
   // ----- Events -----
-  appendEvent(event: Event.Event): Promise<void>;
+  /** Persist an event with optional authoritative tenant metadata. */
+  appendEvent(event: Event.Event, scope?: StoreScope): Promise<void>;
   listEvents(run_id: string): Promise<Event.Event[]>;
   /** Audit-log scoped listing — newest first. */
   listAuditEvents(opts: {

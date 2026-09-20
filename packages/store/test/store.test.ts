@@ -94,6 +94,33 @@ describe('MemoryStore', () => {
     assert.deepEqual(r, RUN);
   });
 
+  it('fails closed for scoped audit reads without authoritative tenant metadata', async () => {
+    const s = new MemoryStore();
+    await s.saveRun({ ...RUN, id: 'run-tenant-a', org: 'org-a', project: 'shop' });
+    const event = {
+      schema_version: '1' as const,
+      seq: 0,
+      prev_hash: null,
+      hash: '',
+      ts: '2026-05-17T10:00:00Z',
+      run_id: 'run-tenant-a',
+      kind: 'info' as const,
+      actor: { type: 'system' as const, id: 'tenant-test' },
+      payload: { message: 'tenant event' },
+    };
+    event.hash = hashEvent(event);
+    await s.appendEvent(event);
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+    assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
+    const legacy = {
+      ...event,
+      hash: hashEvent({ ...event, hash: '' }, event.hash),
+      run_id: 'run-a',
+    };
+    await s.appendEvent(legacy);
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+  });
+
   it('lists runs newest-first and filters by project', async () => {
     const s = new MemoryStore();
     await s.saveRun(RUN);
@@ -613,6 +640,23 @@ describe('PostgresStore', () => {
       const filteredAudit = await s.listAuditEvents({ kind: 'oracle_evaluated', limit: 1 });
       assert.equal(filteredAudit.length, 1);
       assert.equal(filteredAudit[0]?.kind, 'oracle_evaluated');
+      const tenantRun = { ...RUN, id: 'run-a-tenant', org: 'org-a', project: 'shop' };
+      await s.saveRun(tenantRun);
+      const tenantEvent = {
+        schema_version: '1' as const,
+        seq: 2,
+        prev_hash: secondAuditEvent.hash,
+        hash: '',
+        ts: '2026-09-18T12:00:00Z',
+        run_id: tenantRun.id,
+        kind: 'info' as const,
+        actor: { type: 'system' as const, id: 'audit-tenant-contract' },
+        payload: { message: 'tenant event' },
+      };
+      tenantEvent.hash = hashEvent(tenantEvent, secondAuditEvent.hash);
+      await s.appendEvent(tenantEvent);
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+      assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
       assert.equal(
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
