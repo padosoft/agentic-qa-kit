@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   createMethodologyArtifactEnvelope,
@@ -7,6 +8,20 @@ import {
   methodologyArtifactSha256,
 } from '@aqa/methodology';
 import { MemoryStore, PostgresStore } from '../dist/index.js';
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+    .join(',')}}`;
+}
+
+function hashEvent(event: Record<string, unknown>, prevHash = '0'.repeat(64)): string {
+  const { prev_hash: _prevHash, hash: _hash, ...rest } = event;
+  return createHash('sha256').update(prevHash).update(canonical(rest)).digest('hex');
+}
 
 const RUN = {
   schema_version: '1' as const,
@@ -569,28 +584,32 @@ describe('PostgresStore', () => {
     try {
       await s.saveRun(RUN);
       assert.deepEqual(await s.loadRun(RUN.id), RUN);
-      await s.appendEvent({
+      const firstAuditEvent = {
         schema_version: '1',
-        seq: 9000,
+        seq: 0,
         prev_hash: null,
-        hash: 'a'.repeat(64),
+        hash: '',
         ts: '2026-09-18T10:00:00Z',
         run_id: RUN.id,
         kind: 'oracle_evaluated',
         actor: { type: 'system', id: 'audit-contract' },
         payload: { oracle_id: 'contract', passed: true },
-      });
-      await s.appendEvent({
+      };
+      firstAuditEvent.hash = hashEvent(firstAuditEvent);
+      await s.appendEvent(firstAuditEvent);
+      const secondAuditEvent = {
         schema_version: '1',
-        seq: 9001,
-        prev_hash: null,
-        hash: 'b'.repeat(64),
+        seq: 1,
+        prev_hash: firstAuditEvent.hash,
+        hash: '',
         ts: '2026-09-18T11:00:00Z',
         run_id: RUN.id,
         kind: 'info',
         actor: { type: 'system', id: 'audit-contract' },
         payload: { message: 'newer event' },
-      });
+      };
+      secondAuditEvent.hash = hashEvent(secondAuditEvent, firstAuditEvent.hash);
+      await s.appendEvent(secondAuditEvent);
       const filteredAudit = await s.listAuditEvents({ kind: 'oracle_evaluated', limit: 1 });
       assert.equal(filteredAudit.length, 1);
       assert.equal(filteredAudit[0]?.kind, 'oracle_evaluated');
