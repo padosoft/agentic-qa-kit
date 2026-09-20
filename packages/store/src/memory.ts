@@ -122,7 +122,13 @@ export class MemoryStore implements StoreProvider {
 
   private recordAuditEvent(event: Event.Event, scope?: StoreScope): void {
     this.audit.push(event);
-    const inferred = scope ?? this.scopeForRun(event.run_id);
+    const runScope = this.scopeForRun(event.run_id);
+    const inferred = {
+      ...(runScope?.org || scope?.org ? { org: scope?.org ?? runScope?.org } : {}),
+      ...(runScope?.project || scope?.project
+        ? { project: scope?.project ?? runScope?.project }
+        : {}),
+    };
     if (inferred?.org || inferred?.project)
       this.auditScopes.set(event.hash, {
         ...(inferred.org ? { org: inferred.org } : {}),
