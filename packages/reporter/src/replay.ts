@@ -10,7 +10,7 @@ export interface ReplayArtifact {
   /** Path relative to the run's artifact_dir (e.g. `replay/repro.sh`). */
   path: string;
   contents: string;
-  kind: 'sh' | 'curl' | 'playwright' | 'sql';
+  kind: 'sh' | 'curl' | 'playwright' | 'sql' | 'json';
 }
 
 interface HttpProbeWith {

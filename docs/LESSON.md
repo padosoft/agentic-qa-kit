@@ -21,6 +21,13 @@ different provider event for the same business effect. Complete journeys need
 one identical replay and one conflicting logical event, plus an explicit
 unknown outcome for transport ambiguity instead of guessing success.
 
+# 2026-09-20 — Minimized evidence must be replay-addressable and redacted
+
+Shrinking a counterexample is not enough if the result is detached from the
+finding or can leak the original payload. Return the artifact path alongside
+the bounded statistics, bind it to finding/run/scenario identity, and redact
+before writing the replay artifact.
+
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
 An in-memory load probe is useful only when it runs the production queue,

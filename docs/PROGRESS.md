@@ -46,6 +46,18 @@
   remain final-gate evidence. Next: run the full hosted matrix and connect
   minimized failure artifacts to finding/replay records.
 
+## 2026-09-20 — Shrinking connected to replay evidence
+
+- Added `buildMinimizedCounterexampleReplay()` to `@aqa/reporter`. It invokes
+  the bounded methodology shrinker through a caller-owned failure predicate,
+  emits a redacted `replay/counterexample.min.json` artifact and returns the
+  exact evidence path to attach to the finding. No command, network call or
+  candidate logging is performed by the helper.
+- Reporter coverage now verifies reduction, finding/scenario/run binding and
+  secret redaction. Local reporter suite: **10/10 passed**. Next: run the
+  complete hosted matrix for the ecommerce/replay slice and then close the
+  remaining repository-side evidence gaps.
+
 ## 2026-09-20 — Chaos review hardening
 
 - Fixed the chaos CLI to exit nonzero when thresholds fail, rebuild the server
