@@ -20,7 +20,7 @@
 - Added `GET /api/audit/summary` and a server contract proving that a tenant
   cannot observe another tenant's audit counts. Local evidence: store/server
   builds, **117/117 server tests**, and Biome pass.
-- Next: wire the summary into the admin audit journey, then add bounded
+- Admin wiring is implemented in PR #240; after merge, add bounded
   retention/aggregation operational controls. External WORM/KMS/PITR/IdP,
   provider credentials and independent assurance remain explicitly parked at
   the final production gate.

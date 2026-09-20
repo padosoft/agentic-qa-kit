@@ -11750,7 +11750,7 @@ function PageAudit({ onNavigate }) {
     (async () => {
       try {
         const res = await fetch(apiUrl('/api/audit'), {
-          headers: { 'x-aqa-org': 'padosoft' },
+          headers: { 'x-aqa-org': 'padosoft', 'x-aqa-project': 'gescat' },
         });
         if (cancelled || !res.ok) return;
         const body = await res.json();
@@ -11813,7 +11813,7 @@ function PageAudit({ onNavigate }) {
           </>
         }
       />
-      {liveSummary && (
+      {liveEvents !== null && liveSummary && (
         <div className="text-muted" data-testid="audit-summary">
           {Object.entries(liveSummary.by_kind ?? {})
             .map(([kind, count]) => `${kind}: ${count}`)

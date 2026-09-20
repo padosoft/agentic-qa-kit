@@ -29,9 +29,15 @@ test.describe('Operations pages wire-up', () => {
     // flow-analysis narrows a `let` mutated inside a callback to its
     // initial value at outer access sites, but object-property writes
     // are opaque to it.
-    const seen: { url: string | null; org: string | null; summaryUrl: string | null } = {
+    const seen: {
+      url: string | null;
+      org: string | null;
+      project: string | null;
+      summaryUrl: string | null;
+    } = {
       url: null,
       org: null,
+      project: null,
       summaryUrl: null,
     };
     await page.route('**/api/audit**', async (route) => {
@@ -49,6 +55,7 @@ test.describe('Operations pages wire-up', () => {
       }
       seen.url = req.url();
       seen.org = req.headers()['x-aqa-org'] ?? null;
+      seen.project = req.headers()['x-aqa-project'] ?? null;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -91,6 +98,7 @@ test.describe('Operations pages wire-up', () => {
     await expect(page.getByTestId('audit-summary')).toContainText('run_started: 1');
     expect(seen.url).toMatch(/\/api\/audit(\?|$)/);
     expect(seen.org).toBe('padosoft');
+    expect(seen.project).toBe('gescat');
     expect(seen.summaryUrl).toMatch(/\/api\/audit\/summary/);
   });
 
@@ -99,6 +107,23 @@ test.describe('Operations pages wire-up', () => {
     await gotoNav(page, 'Audit log');
     // Fixture-mode sub-header (no "live from" claim).
     await expect(page.locator('text=Hash-chained, tamper-evident')).toBeVisible();
+  });
+
+  test('Audit does not mix a live summary with fixture events', async ({ page }) => {
+    await page.route('**/api/audit**', async (route) => {
+      if (new URL(route.request().url()).pathname.endsWith('/summary')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ summary: { total: 99, by_kind: { info: 99 } } }),
+        });
+        return;
+      }
+      await route.abort('failed');
+    });
+    await gotoNav(page, 'Audit log');
+    await expect(page.locator('text=Hash-chained, tamper-evident')).toBeVisible();
+    await expect(page.getByTestId('audit-summary')).toHaveCount(0);
   });
 
   test('Queue page fetches /api/queue and renders the live jobs', async ({ page }) => {

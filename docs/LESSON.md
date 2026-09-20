@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-20 — Admin projections must share scope and source state
+
+An aggregate displayed next to an audit chain is only meaningful when both
+requests use the identical tenant scope and the aggregate is rendered only
+after the event list has loaded successfully. Independent endpoint success can
+otherwise produce a plausible but internally contradictory UI. The complete
+journey now asserts organization and project headers plus the failure
+combination explicitly.
+
 # 2026-09-20 — Aggregation must share the audit projection boundary
 
 Audit summaries are tenant data too. They must not be computed by fetching a
