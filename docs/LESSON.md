@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-20 — Audit retention must preserve completeness evidence
+
+Deleting old hash-chain rows is not a neutral storage optimization: a
+shortened prefix can still verify locally while hiding omitted history. Treat
+retention as a checkpointed projection operation, keep legal holds ahead of
+age, and require archive read-back plus an independently governed checkpoint
+before purge. The application can provide the contract; provider WORM/KMS
+execution remains a separate production evidence gate.
+
 # 2026-09-20 — Admin projections must share scope and source state
 
 An aggregate displayed next to an audit chain is only meaningful when both

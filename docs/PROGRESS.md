@@ -11,6 +11,18 @@
 
 ## 2026-09-20 — Tenant-scoped audit aggregation
 
+## 2026-09-20 — Audit retention operational contract
+
+- Added `docs/operations/audit-retention-runbook.md` with fail-closed
+  procedures for scoped projections, checkpoint verification, legal holds,
+  archive/purge reconciliation and incident handling.
+- Added ADR-284 to make the chain/checkpoint boundary explicit: local query
+  retention is not WORM evidence, and destructive purge is not allowed without
+  independent checkpoint coverage and provider read-back.
+- Next repository slice: complete local multi-runner/trace provenance and
+  load/chaos evidence; provider immutability, PITR and independent assurance
+  remain deferred final gates.
+
 - Merged PR #238 (`e68467f`) after the full hosted matrix passed, including
   Playwright, CLI, PostgreSQL, S3, OCI and live Prometheus/OTLP journeys. A
   transient `onnxruntime-node` network timeout was rerun successfully.
