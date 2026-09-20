@@ -9,6 +9,16 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — README product and junior onboarding refresh
+
+- Reworked the README around the shipped product truth: complete feature
+  inventory, differentiator matrix versus conventional testing tools, explicit
+  repository/provider evidence boundaries, three installation paths, junior
+  first-project walkthrough, CI recipe and examples cookbook.
+- Added examples for risk discovery, deterministic replay, external-result
+  ingestion, mutation/holdout gates, disaster recovery and custom packs. No
+  credentials or provider claims were added.
+
 ## 2026-09-20 — Bounded local load/chaos evidence
 
 - Added `scripts/chaos-benchmark.mjs` and `benchmark:chaos`. It exercises the
@@ -3364,6 +3374,7 @@ evidence.
 - Evidence: chart source review and `git diff --check` are clean. Helm is not
   installed in the local Windows environment, so `helm lint`/render remain a
   CI gate and must pass before merge.
+
 ## 2026-09-19 — Methodology governance hardened
 
 - Tightened the local methodology proposal/approval contract with runtime enum and schema validation, canonical UTC timestamps, bounded artifact hashing, independent reviewer enforcement, and expiry checks at both issuance and use time.
