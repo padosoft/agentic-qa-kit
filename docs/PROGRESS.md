@@ -25,6 +25,16 @@
   provider credentials and independent assurance remain explicitly parked at
   the final production gate.
 
+## 2026-09-20 — Admin audit summary journey
+
+- Wired the admin Audit page to `/api/audit/summary`, showing tenant-scoped
+  event-kind counts while retaining fixture mode when the endpoint is absent.
+- Extended the Playwright operations journey to intercept both live requests
+  and assert the rendered summary. Local evidence: admin build and **5/5
+  operations Playwright tests** pass.
+- PR #240 is awaiting hosted technical CI. Next after merge: implement bounded
+  retention controls and the operational retention runbook.
+
 ## 2026-09-20 — Tenant-safe durable audit provenance
 
 - Audit events now derive authoritative `org`/`project` metadata from the
