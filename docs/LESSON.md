@@ -3175,3 +3175,9 @@ caller can see different authorization surfaces depending on deployment mode.
   calls the legacy evaluator. Plan-bound evidence must either be routed through
   the holdout evaluator at the command boundary or be rejected there; otherwise
   a valid-looking CLI gate can bypass the digest contract entirely.
+
+- Digest validity alone does not prove a split is safe: a digest can faithfully
+  describe overlapping train/holdout partitions or a different source
+  manifest. Validate disjointness in the library and exact partition equality
+  at the CLI boundary, then test the actual command path with the documented
+  flag syntax.

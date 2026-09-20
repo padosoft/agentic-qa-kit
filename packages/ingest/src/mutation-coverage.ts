@@ -337,12 +337,16 @@ export function evaluateMutationHoldoutRegressionEvidence(
 ): MutationRegressionCoverageResult {
   if (evidence.plan_digest !== split.plan_digest)
     throw new Error('mutation holdout evidence plan_digest does not match the split');
+  const holdoutIds = new Set(split.holdout.links.map((link) => link.mutation_id));
+  if (holdoutIds.size !== split.holdout.links.length)
+    throw new Error('mutation holdout split contains duplicate holdout mutation IDs');
+  if (split.train.links.some((link) => holdoutIds.has(link.mutation_id)))
+    throw new Error('mutation holdout split train and holdout partitions overlap');
   if (
     mutationHoldoutPlanDigest(split.split_key, split.train.links, split.holdout.links) !==
     split.plan_digest
   )
     throw new Error('mutation holdout split plan_digest is invalid');
-  const holdoutIds = new Set(split.holdout.links.map((link) => link.mutation_id));
   const records = report.records.filter((record) => holdoutIds.has(record.id));
   const totals = { ...report.totals };
   for (const status of Object.keys(totals) as Array<keyof typeof totals>) totals[status] = 0;

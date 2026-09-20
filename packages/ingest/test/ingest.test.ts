@@ -418,6 +418,14 @@ describe('mutation to regression coverage', () => {
         ),
       /plan_digest/,
     );
+    const overlapping = {
+      ...split,
+      train: { ...split.train, links: [...split.train.links, ...split.holdout.links] },
+    };
+    assert.throws(
+      () => evaluateMutationHoldoutRegressionEvidence(report, overlapping, evidence, 1),
+      /overlap/,
+    );
   });
 
   it('requires reviewed mutant-to-risk/scenario links and reports per-risk kill rates', () => {

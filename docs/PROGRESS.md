@@ -3410,3 +3410,11 @@ evidence.
 - Evidence: ingest **25/25**, kit **197 passed / 2 platform skips**, and full
   repository typecheck passed locally. The final hosted CI rerun for PR #245
   is still required before merge.
+
+# 2026-09-20 — Mutation holdout boundary final review closed
+
+- Hardened direct and CLI holdout evaluation against overlapping train/holdout
+  IDs, zero-rate serializable plans, manifest/split mismatch, and the documented
+  space-separated `--holdout-split split.json` syntax.
+- Added process-bound success coverage and mismatch protection. Local evidence:
+  ingest **25/25**, kit **198 passed / 2 platform skips**, full typecheck green.
