@@ -3240,3 +3240,19 @@ evidence.
 - Tightened the local methodology proposal/approval contract with runtime enum and schema validation, canonical UTC timestamps, bounded artifact hashing, independent reviewer enforcement, and expiry checks at both issuance and use time.
 - Added regression tests for malformed untrusted JSON-shaped inputs and already-expired approvals; methodology package now passes 24 tests.
 - The next local roadmap slice is durable storage/replay integration for approved methodology artifacts; external provider evidence and independent assurance remain deferred final gates.
+
+## 2026-09-20 — Remote identity validation closed
+
+- Added the final fail-closed boundary for remote runner provenance: the HTTP
+  API validates the authenticated subject before queue mutation, and the
+  exported `RunnerWorker` validates identities even when instantiated directly
+  outside Kit.
+- Updated ADR-227 to make token-file/JWT credentials the only supported remote
+  worker contract; static bearer tokens cannot prove a lease subject and are
+  rejected before dequeue.
+- Local evidence: server build and Kit suite remain green (196 passed, 0
+  failed, 2 platform skips); lint is rerunning after import normalization.
+- Next: push the correction, wait for the complete CI/E2E journey, merge PR
+  #241, then implement bounded local load/chaos evidence and methodology
+  regression-scale closure. Provider credentials, trust-root/mTLS, WORM/KMS,
+  DR/PITR, penetration and independent assurance remain final deferred gates.

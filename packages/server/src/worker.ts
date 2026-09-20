@@ -1,4 +1,5 @@
 import type { EnqueuedJob, RunnerQueueLike, RunnerScope } from './runner-queue.js';
+import { normalizeRunnerId } from './runner-queue.js';
 
 export type RunnerJobHandler = (job: EnqueuedJob, signal: AbortSignal) => Promise<void>;
 
@@ -36,7 +37,7 @@ export class RunnerWorker {
     this.pollMs = Math.max(10, opts.poll_ms ?? 250);
     this.onError = opts.on_error;
     this.scopes = opts.scopes;
-    this.runnerId = opts.runner_id?.trim() || undefined;
+    this.runnerId = normalizeRunnerId(opts.runner_id);
   }
 
   private readonly onError: RunnerWorkerOptions['on_error'];

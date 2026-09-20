@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-20 — Validate custom authorizer results at the API boundary
+
+Validating only the built-in JWT authorizer is insufficient: `runnerAuthorize`
+is an extension point and can return a malformed subject. Normalize the
+authorization result immediately before dequeue/renew/ack/fail so malformed
+identities receive 401 and can never be persisted as lease ownership.
+
 # 2026-09-20 — Remote provenance needs subject binding, not just propagation
 
 An event can carry a valid-looking runner ID while the queue lease belongs to
