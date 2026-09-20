@@ -1,5 +1,27 @@
 # Lessons
 
+# 2026-09-20 — Holdout governance must bind the plan, not just the percentage
+
+A mutation holdout selected with an unseeded random call can silently change
+between runs and contaminate release decisions. Rank reviewed pairs by a
+domain-separated hash, enforce minimum train/holdout sizes, and persist a
+digest of the exact split alongside evidence.
+
+# 2026-09-20 — Evidence producers must fail at the process boundary
+
+Structured output containing `result: fail` is not enough for CI or operators:
+the producer must also return a nonzero exit code. When evidence loads ignored
+build artifacts, the supported command must rebuild or verify the artifact
+before attributing it to a source revision.
+
+# 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
+
+An in-memory load probe is useful only when it runs the production queue,
+injects bounded faults, reconciles every job to a terminal state, and records
+the exact revision plus thresholds. It must also state that it does not prove
+database, network, provider or production-scale behavior; otherwise a green
+benchmark becomes misleading release evidence.
+
 # 2026-09-20 — Bounded algorithms must be lazy before the budget check
 
 An attempt limit does not protect a shrinker if candidate generation eagerly

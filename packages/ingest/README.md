@@ -27,6 +27,9 @@ copied into the normalized report.
   for every reviewed mutant/scenario pair. Missing pairs, contradictory
   outcomes and unreviewed pairs fail closed; `source_revision` and `run_id`
   make the producer binding explicit without copying secrets or test payloads.
+- `splitMutationCoverageHoldout(...)` creates a deterministic, digest-bound
+  train/holdout plan with minimum-size guardrails; it never executes a mutator
+  and keeps evaluation pairs separate from training pairs.
 - `parseOtlpTrace(json)` accepts bounded OTLP/HTTP JSON traces and retains only
   trace/span identity, timing, service, status and primitive attributes. Known
   credential-bearing attributes and URLs are redacted before normalization.
