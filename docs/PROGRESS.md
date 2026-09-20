@@ -34,6 +34,60 @@
   split keys. Next: expose the split in the mutation evidence contract and
   complete the ecommerce timeout/webhook/idempotency failure journey.
 
+## 2026-09-20 — Ecommerce failure-injection journey
+
+- Added `verifyCommerceFailureJourneys()` and contract coverage for the local
+  reference merchant. It executes one-stock/two-cart contention, verifies
+  exactly-once idempotent retry, replays a signed webhook and rejects a
+  conflicting event, then proves an approved financial mutation remains
+  `unknown` after injected transport ambiguity.
+- Evidence is structured and explicitly bounded to
+  `in_memory_reference_only`; real provider, network and settlement execution
+  remain final-gate evidence. Next: run the full hosted matrix and connect
+  minimized failure artifacts to finding/replay records.
+
+## 2026-09-20 — Shrinking connected to replay evidence
+
+- Added `buildMinimizedCounterexampleReplay()` to `@aqa/reporter`. It invokes
+  the bounded methodology shrinker through a caller-owned failure predicate,
+  emits a redacted `replay/counterexample.<finding-id>.min.json` artifact and returns the
+  exact evidence path to attach to the finding. No command, network call or
+  candidate logging is performed by the helper.
+- Reporter coverage now verifies reduction, finding/scenario/run binding and
+  secret redaction. Local reporter suite: **10/10 passed**. Next: run the
+  complete hosted matrix for the ecommerce/replay slice and then close the
+  remaining repository-side evidence gaps.
+
+## 2026-09-20 — Ecommerce journey concurrency hardening
+
+- Reworked the inventory contention journey after review exposed that promise
+  scheduling around a synchronous reference was only sequential. It now uses a
+  deterministic async check/commit barrier with a post-barrier stock re-check,
+  while separately asserting the real reference merchant's idempotent retry.
+- The ambiguous mutation path now performs an observable local commit before
+  throwing the injected transport timeout; the journey asserts both committed
+  state and `unknown` outcome. Commerce suite remains **66 passed, 2 provider
+  skips, 0 failed**.
+
+## 2026-09-20 — Review hardening for replay and reference contention
+
+- Minimized replay artifacts now use key-aware `redactJson()` before
+  serialization and include the finding ID in the filename, preventing secret
+  leakage and cross-finding overwrites.
+- The ecommerce journey now exercises two real reference carts in addition to
+  the async overlap model, and still verifies exactly-once retry. Reporter and
+  commerce suites remain green after the correction.
+
+## 2026-09-20 — Holdout digest bound to regression evidence
+
+- Extended mutation regression evidence with an optional `plan_digest` and
+  added `evaluateMutationHoldoutRegressionEvidence()`. The evaluator projects
+  the report onto the immutable holdout set, requires an exact digest match,
+  and fails closed on plan mismatch or contamination.
+- Ingest suite: **25/25 passed**. This closes the repository-side holdout
+  contract; actual producer-scale mutation execution remains an explicitly
+  deferred final gate.
+
 ## 2026-09-20 — Chaos review hardening
 
 - Fixed the chaos CLI to exit nonzero when thresholds fail, rebuild the server
@@ -3331,3 +3385,36 @@ evidence.
   #241, then implement bounded local load/chaos evidence and methodology
   regression-scale closure. Provider credentials, trust-root/mTLS, WORM/KMS,
   DR/PITR, penetration and independent assurance remain final deferred gates.
+
+# 2026-09-20 — Ecommerce failure evidence hardened
+
+- Closed the final local review findings for PR #245: the unknown-outcome
+  journey now performs a real reference checkout and rereads the committed
+  order, while mutation holdout evaluation recomputes the full canonical
+  split digest including link data.
+- Normalized minimized replay paths to the finding-qualified form
+  `replay/counterexample.<finding-id>.min.json` in code and documentation.
+- Local evidence: commerce **66 passed / 2 provider skips**, ingest **25/25**,
+  reporter **10/10**, and the repository typecheck passed. Provider-backed
+  credentials and independent assurance remain deferred final gates.
+- Next: push the review fixes, wait for the complete hosted journey, merge PR
+  #245, then update the roadmap completion audit from `origin/main`.
+
+# 2026-09-20 — Mutation holdout CLI gate completed
+
+- Wired plan-bound mutation evidence through the supported `aqa mutation
+  regression` command. Evidence carrying `plan_digest` now requires
+  `--holdout-split`, parses and revalidates the canonical digest, and evaluates
+  only the immutable holdout links; the generic path remains available for
+  legacy non-plan-bound evidence.
+- Evidence: ingest **25/25**, kit **197 passed / 2 platform skips**, and full
+  repository typecheck passed locally. The final hosted CI rerun for PR #245
+  is still required before merge.
+
+# 2026-09-20 — Mutation holdout boundary final review closed
+
+- Hardened direct and CLI holdout evaluation against overlapping train/holdout
+  IDs, zero-rate serializable plans, manifest/split mismatch, and the documented
+  space-separated `--holdout-split split.json` syntax.
+- Added process-bound success coverage and mismatch protection. Local evidence:
+  ingest **25/25**, kit **198 passed / 2 platform skips**, full typecheck green.

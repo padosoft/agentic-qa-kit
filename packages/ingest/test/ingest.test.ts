@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import {
   evaluateMutationCoverage,
+  evaluateMutationHoldoutRegressionEvidence,
   evaluateMutationRegressionEvidence,
   evaluateMutationThreshold,
   evaluatePerformanceThresholds,
@@ -372,6 +373,58 @@ describe('mutation to regression coverage', () => {
     assert.throws(
       () => splitMutationCoverageHoldout(input, { holdout_rate: 0.5, split_key: '' }),
       /options/,
+    );
+  });
+
+  it('requires regression evidence to carry the exact holdout plan digest', () => {
+    const report = parseMutationSummary({
+      mutants: [
+        { id: 'm-1', file: 'cart.ts', operator: 'A', status: 'Killed' },
+        { id: 'm-2', file: 'cart.ts', operator: 'B', status: 'Killed' },
+      ],
+    });
+    const split = splitMutationCoverageHoldout(
+      parseMutationCoverageManifest({
+        schema_version: '1',
+        links: [
+          { mutation_id: 'm-1', risk_ids: ['cart'], scenario_ids: ['checkout'] },
+          { mutation_id: 'm-2', risk_ids: ['cart'], scenario_ids: ['checkout'] },
+        ],
+      }),
+      { holdout_rate: 0.5, split_key: 'project-a:revision-2' },
+    );
+    const evidence = parseMutationRegressionEvidence({
+      schema_version: '1',
+      source_revision: 'revision-2',
+      plan_digest: split.plan_digest,
+      observations: split.holdout.links.map((link, index) => ({
+        mutation_id: link.mutation_id,
+        scenario_id: 'checkout',
+        run_id: `holdout-run-${index}`,
+        outcome: 'killed',
+      })),
+    });
+    assert.equal(
+      evaluateMutationHoldoutRegressionEvidence(report, split, evidence, 1).passed,
+      true,
+    );
+    assert.throws(
+      () =>
+        evaluateMutationHoldoutRegressionEvidence(
+          report,
+          split,
+          { ...evidence, plan_digest: 'different-plan' },
+          1,
+        ),
+      /plan_digest/,
+    );
+    const overlapping = {
+      ...split,
+      train: { ...split.train, links: [...split.train.links, ...split.holdout.links] },
+    };
+    assert.throws(
+      () => evaluateMutationHoldoutRegressionEvidence(report, overlapping, evidence, 1),
+      /overlap/,
     );
   });
 

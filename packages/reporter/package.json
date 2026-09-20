@@ -15,6 +15,10 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test test/reporters.test.ts test/replay.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','.tsbuildinfo']) { try { rmSync(p, { recursive: true, force: true }); } catch {} }\""
   },
-  "dependencies": { "@aqa/schemas": "workspace:*" },
+  "dependencies": {
+    "@aqa/methodology": "workspace:*",
+    "@aqa/observability": "workspace:*",
+    "@aqa/schemas": "workspace:*"
+  },
   "publishConfig": { "access": "public" }
 }

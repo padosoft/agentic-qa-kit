@@ -112,6 +112,10 @@ Typed commerce-assurance contracts used by Agentic QA Kit merchant adapters and 
   it distinguishes `committed`, `not_committed` and `unknown` outcomes. A
   transport ambiguity never becomes a success and the claimed approval must be
   reconciled before retrying.
+- `verifyCommerceFailureJourneys()` runs the deterministic local failure suite:
+  inventory/idempotency race, signed webhook duplicate/conflict replay and
+  ambiguous financial mutation. It returns structured evidence and explicitly
+  labels the result as `in_memory_reference_only`; it is not provider proof.
 - `InMemoryGiftCardLedger` and `PostgresGiftCardLedger` provide an atomic,
   tenant-scoped stored-value boundary for gift-card credit and redemption:
   operation IDs are idempotent, conflicting reuse fails closed, currencies

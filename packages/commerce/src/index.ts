@@ -62,6 +62,11 @@ export {
   type CommerceMutationExecutor,
   type CommerceMutationGateResult,
 } from './mutation-gate.js';
+export {
+  verifyCommerceFailureJourneys,
+  type CommerceFailureJourneyEvidence,
+  type CommerceFailureJourneyResult,
+} from './failure-journeys.js';
 
 /** Decimal minor units are strings so no binary floating point enters money math. */
 export const Money = z.object({

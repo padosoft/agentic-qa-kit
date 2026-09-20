@@ -6,9 +6,11 @@ import {
   type MutationReport,
   type MutationThresholdResult,
   evaluateMutationCoverage,
+  evaluateMutationHoldoutRegressionEvidence,
   evaluateMutationRegressionEvidence,
   evaluateMutationThreshold,
   parseMutationCoverageManifest,
+  parseMutationHoldoutSplit,
   parseMutationRegressionEvidence,
   parseMutationSummary,
 } from '@aqa/ingest';
@@ -52,6 +54,7 @@ export interface MutationRegressionGateOptions {
   evidenceFile: string;
   minKillRate: number;
   expectedSourceRevision?: string;
+  holdoutSplitFile?: string;
 }
 
 export interface MutationRegressionGateResult {
@@ -127,6 +130,9 @@ export function runMutationRegressionGate(
   const inputPath = resolve(options.root, options.inputFile);
   const manifestPath = resolve(options.root, options.manifestFile);
   const evidencePath = resolve(options.root, options.evidenceFile);
+  const holdoutSplitPath = options.holdoutSplitFile
+    ? resolve(options.root, options.holdoutSplitFile)
+    : undefined;
   try {
     const report = parseMutationSummary(
       JSON.parse(readFileSync(inputPath, 'utf8')) as unknown,
@@ -144,12 +150,45 @@ export function runMutationRegressionGate(
     ) {
       throw new Error('mutation regression source revision does not match the expected revision');
     }
-    const regression = evaluateMutationRegressionEvidence(
-      report,
-      manifest,
-      evidence,
-      options.minKillRate,
-    );
+    const holdoutSplit =
+      evidence.plan_digest !== undefined && holdoutSplitPath !== undefined
+        ? parseMutationHoldoutSplit(JSON.parse(readFileSync(holdoutSplitPath, 'utf8')) as unknown)
+        : undefined;
+    if (holdoutSplit !== undefined) {
+      const supplied = new Map(
+        manifest.links.map((link) => [link.mutation_id, JSON.stringify(link)]),
+      );
+      const planned = [...holdoutSplit.train.links, ...holdoutSplit.holdout.links];
+      const plannedIds = new Set(planned.map((link) => link.mutation_id));
+      if (plannedIds.size !== planned.length || planned.length !== supplied.size)
+        throw new Error(
+          'mutation holdout split is not an exact partition of the supplied manifest',
+        );
+      for (const link of planned) {
+        if (supplied.get(link.mutation_id) !== JSON.stringify(link))
+          throw new Error(
+            'mutation holdout split is not an exact partition of the supplied manifest',
+          );
+      }
+    }
+    const requiredHoldoutSplit = () => {
+      if (holdoutSplit === undefined)
+        throw new Error('plan-bound mutation evidence requires --holdout-split');
+      return holdoutSplit;
+    };
+    const regression =
+      evidence.plan_digest !== undefined
+        ? holdoutSplitPath === undefined
+          ? (() => {
+              throw new Error('plan-bound mutation evidence requires --holdout-split');
+            })()
+          : evaluateMutationHoldoutRegressionEvidence(
+              report,
+              requiredHoldoutSplit(),
+              evidence,
+              options.minKillRate,
+            )
+        : evaluateMutationRegressionEvidence(report, manifest, evidence, options.minKillRate);
     return {
       ok: true,
       gate_ok: regression.passed,

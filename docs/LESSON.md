@@ -7,12 +7,45 @@ between runs and contaminate release decisions. Rank reviewed pairs by a
 domain-separated hash, enforce minimum train/holdout sizes, and persist a
 digest of the exact split alongside evidence.
 
+# 2026-09-20 — A holdout digest must be verified at evaluation time
+
+Persisting a split digest without requiring it in the regression evidence is
+only metadata. The evaluator must reject missing or different digests and
+compute rates over the holdout projection, not over the full mutation report.
+
 # 2026-09-20 — Evidence producers must fail at the process boundary
 
 Structured output containing `result: fail` is not enough for CI or operators:
 the producer must also return a nonzero exit code. When evidence loads ignored
 build artifacts, the supported command must rebuild or verify the artifact
 before attributing it to a source revision.
+
+# 2026-09-20 — Failure journeys must assert duplicate and conflict paths
+
+A webhook replay test that only proves duplicate suppression can still accept a
+different provider event for the same business effect. Complete journeys need
+one identical replay and one conflicting logical event, plus an explicit
+unknown outcome for transport ambiguity instead of guessing success.
+
+# 2026-09-20 — Promise concurrency needs an explicit barrier
+
+`Promise.all` around synchronous functions does not create overlap. A race
+journey must pause contenders between check and commit, then re-check the
+invariant after the barrier; otherwise it proves only sequential rejection.
+
+# 2026-09-20 — Minimized evidence must be replay-addressable and redacted
+
+Shrinking a counterexample is not enough if the result is detached from the
+finding or can leak the original payload. Return the artifact path alongside
+the bounded statistics, bind it to finding/run/scenario identity, and redact
+before writing the replay artifact.
+
+# 2026-09-20 — Replay artifacts need both key-aware DLP and unique paths
+
+Text redaction over serialized JSON can miss sensitive keys whose values do not
+match a pattern, and one constant artifact path causes findings to overwrite
+each other. Redact the structured object before serialization and include a
+stable finding identity in the path.
 
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
@@ -3124,3 +3157,27 @@ caller can see different authorization surfaces depending on deployment mode.
   publication, legacy backfill, and purge, with lifecycle-row locking after
   the advisory lock; the in-memory adapter uses the equivalent per-key lock.
   This prevents an expired artifact from being recreated with a lifecycle gap.
+
+- An unknown-outcome test is not strong evidence if it only flips a local
+  boolean and throws. The failure journey must execute the real reference
+  mutation, inject the timeout after the commit boundary, and reread the
+  resulting order through the reference API. Likewise, a mutation holdout
+  digest must cover the complete canonical split (including reviewed links),
+  not only the projected mutant IDs; otherwise metadata tampering can pass
+  while the report still looks internally consistent.
+
+- Failure journeys must also isolate their idempotency identities. A fixed
+  key can collide with a previous invocation's seeded cart and fail before
+  the injected ambiguity boundary; derive the local key from the fresh cart
+  identity while retaining the retry/reconciliation assertions.
+
+- A library-level holdout evaluator is not enough when the supported CLI still
+  calls the legacy evaluator. Plan-bound evidence must either be routed through
+  the holdout evaluator at the command boundary or be rejected there; otherwise
+  a valid-looking CLI gate can bypass the digest contract entirely.
+
+- Digest validity alone does not prove a split is safe: a digest can faithfully
+  describe overlapping train/holdout partitions or a different source
+  manifest. Validate disjointness in the library and exact partition equality
+  at the CLI boundary, then test the actual command path with the documented
+  flag syntax.

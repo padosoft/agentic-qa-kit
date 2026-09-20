@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { buildMinimizedCounterexampleReplay } from '../dist/counterexample.js';
 import { buildReplayArtifacts } from '../dist/replay.js';
 
 const FINDING = {
@@ -72,6 +73,30 @@ const STRUCTURED_PW_SCENARIO = {
     },
   ],
 };
+
+describe('minimized counterexample replay', () => {
+  it('binds a bounded, redacted shrink result to finding evidence', async () => {
+    const result = await buildMinimizedCounterexampleReplay({
+      finding: FINDING,
+      scenario: HTTP_SCENARIO,
+      counterexample: {
+        irrelevant: 'remove-me',
+        nested: { keep: 'failure', token: 'plain-sensitive-value' },
+      },
+      stillFails: (candidate) =>
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        !Array.isArray(candidate) &&
+        'nested' in candidate,
+      options: { max_attempts: 100, max_reductions: 10 },
+    });
+    assert.equal(result.artifact.path, 'replay/counterexample.AQA-2026-0001.min.json');
+    assert.equal(result.finding_evidence, result.artifact.path);
+    assert.match(result.artifact.contents, /AQA-2026-0001/);
+    assert.doesNotMatch(result.artifact.contents, /plain-sensitive-value/);
+    assert.ok(result.reductions > 0);
+  });
+});
 
 const SQL_SCENARIO = {
   ...HTTP_SCENARIO,

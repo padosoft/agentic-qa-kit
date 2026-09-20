@@ -69,6 +69,7 @@ const VALUE_FLAGS = new Set([
   'min-score',
   'min-mapped-rate',
   'min-killed-rate',
+  'holdout-split',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -147,7 +148,7 @@ ${bold('Commands')}
                                     Gate an externally-produced mutation report
   mutation coverage <report.json> <manifest.json> --min-mapped-rate X --min-killed-rate X
                                     Gate mutant mapping to risk-linked regression scenarios
-  mutation regression <report.json> <manifest.json> <evidence.json> --min-kill-rate X
+  mutation regression <report.json> <manifest.json> <evidence.json> --min-kill-rate X [--holdout-split split.json]
                                     Gate observed regression executions and mutation outcomes
   admin [--port N]                  Boot the admin SPA + API on http://127.0.0.1:5173, seeded from .aqa/runs/
   worker                            Run the scoped PostgreSQL runner worker (deployment use)
@@ -767,6 +768,8 @@ async function main(): Promise<number> {
         };
         const sourceRevision = args.values.get('source-revision');
         if (sourceRevision !== undefined) regressionOptions.expectedSourceRevision = sourceRevision;
+        const holdoutSplit = args.values.get('holdout-split');
+        if (holdoutSplit !== undefined) regressionOptions.holdoutSplitFile = holdoutSplit;
         const result = runMutationRegressionGate(regressionOptions);
         if (!result.ok || !result.regression) {
           console.error(

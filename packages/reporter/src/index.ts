@@ -5,3 +5,8 @@ export {
   type ReplayArtifact,
   type ReplayInput,
 } from './replay.js';
+export {
+  buildMinimizedCounterexampleReplay,
+  type MinimizedCounterexampleInput,
+  type MinimizedCounterexampleResult,
+} from './counterexample.js';

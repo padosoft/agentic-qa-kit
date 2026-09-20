@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { parseMutationCoverageManifest, splitMutationCoverageHoldout } from '@aqa/ingest';
 import {
   runMutationCoverageGate,
   runMutationGate,
@@ -140,4 +141,93 @@ test('mutation regression gate rejects evidence from another source revision', (
   });
   assert.equal(result.ok, false);
   assert.match(result.error ?? '', /source revision/);
+});
+
+test('mutation regression gate requires and validates a holdout plan for plan-bound evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Survived']));
+  const manifest = {
+    schema_version: '1',
+    links: [
+      { mutation_id: 'm-0', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+    ],
+  };
+  writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest));
+  writeFileSync(
+    join(root, 'evidence.json'),
+    JSON.stringify({
+      schema_version: '1',
+      source_revision: 'abc123',
+      plan_digest: 'a'.repeat(64),
+      observations: [
+        { mutation_id: 'm-0', scenario_id: 'scenario-cart', run_id: 'run-0', outcome: 'killed' },
+      ],
+    }),
+  );
+  const missing = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    minKillRate: 0.5,
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.error ?? '', /holdout-split/);
+});
+
+test('mutation regression gate evaluates a valid holdout plan and rejects a different manifest', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aqa-mutation-'));
+  const manifest = parseMutationCoverageManifest({
+    schema_version: '1',
+    links: [
+      { mutation_id: 'm-0', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+      { mutation_id: 'm-1', risk_ids: ['risk-cart'], scenario_ids: ['scenario-cart'] },
+    ],
+  });
+  const split = splitMutationCoverageHoldout(manifest, {
+    holdout_rate: 0.5,
+    split_key: 'cli-test',
+  });
+  writeFileSync(join(root, 'mutation.json'), report(['Killed', 'Killed']));
+  writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest));
+  writeFileSync(join(root, 'split.json'), JSON.stringify(split));
+  writeFileSync(
+    join(root, 'evidence.json'),
+    JSON.stringify({
+      schema_version: '1',
+      source_revision: 'abc123',
+      plan_digest: split.plan_digest,
+      observations: split.holdout.links.map((link, index) => ({
+        mutation_id: link.mutation_id,
+        scenario_id: 'scenario-cart',
+        run_id: `run-${index}`,
+        outcome: 'killed',
+      })),
+    }),
+  );
+  const result = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    holdoutSplitFile: 'split.json',
+    minKillRate: 1,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.gate_ok, true);
+  writeFileSync(
+    join(root, 'manifest.json'),
+    JSON.stringify({ ...manifest, links: manifest.links.slice(0, 1) }),
+  );
+  const mismatch = runMutationRegressionGate({
+    root,
+    inputFile: 'mutation.json',
+    manifestFile: 'manifest.json',
+    evidenceFile: 'evidence.json',
+    holdoutSplitFile: 'split.json',
+    minKillRate: 1,
+  });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.error ?? '', /exact partition/);
 });

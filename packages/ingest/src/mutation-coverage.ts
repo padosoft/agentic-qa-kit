@@ -61,6 +61,7 @@ export interface MutationRegressionObservation {
 export interface MutationRegressionEvidence {
   schema_version: '1';
   source_revision: string;
+  plan_digest?: string;
   observations: ReadonlyArray<MutationRegressionObservation>;
 }
 
@@ -137,16 +138,7 @@ export function splitMutationCoverageHoldout(
   const holdoutIds = new Set(ranked.slice(0, holdoutCount).map((item) => item.link.mutation_id));
   const train = links.filter((link) => !holdoutIds.has(link.mutation_id));
   const holdout = links.filter((link) => holdoutIds.has(link.mutation_id));
-  const planDigest = createHash('sha256')
-    .update(
-      JSON.stringify({
-        schema_version: '1',
-        split_key: options.split_key,
-        train: train.map((link) => link.mutation_id),
-        holdout: holdout.map((link) => link.mutation_id),
-      }),
-    )
-    .digest('hex');
+  const planDigest = mutationHoldoutPlanDigest(options.split_key, train, holdout);
   return {
     schema_version: '1',
     split_key: options.split_key,
@@ -163,13 +155,22 @@ function boundedCount(value: number, field: string): number {
 }
 
 /** Validate a reviewed mapping from mutations to the regressions that kill them. */
-export function parseMutationCoverageManifest(value: unknown): MutationCoverageManifest {
+export function parseMutationCoverageManifest(
+  value: unknown,
+  allowEmpty = false,
+): MutationCoverageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('mutation coverage manifest must be an object');
   const root = value as Record<string, unknown>;
   if (root.schema_version !== '1') throw new Error('mutation coverage schema_version must be "1"');
-  if (!Array.isArray(root.links) || root.links.length === 0 || root.links.length > MAX_LINKS)
-    throw new Error(`mutation coverage links must contain 1..${MAX_LINKS} links`);
+  if (
+    !Array.isArray(root.links) ||
+    (!allowEmpty && root.links.length === 0) ||
+    root.links.length > MAX_LINKS
+  )
+    throw new Error(
+      `mutation coverage links must contain ${allowEmpty ? '0' : '1'}..${MAX_LINKS} links`,
+    );
   const seen = new Set<string>();
   const links = root.links.map((raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -185,6 +186,35 @@ export function parseMutationCoverageManifest(value: unknown): MutationCoverageM
     };
   });
   return { schema_version: '1', links };
+}
+
+/** Parse a persisted digest-bound holdout plan before it reaches an evaluator. */
+export function parseMutationHoldoutSplit(value: unknown): MutationHoldoutSplit {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('mutation holdout split must be an object');
+  const root = value as Record<string, unknown>;
+  if (root.schema_version !== '1')
+    throw new Error('mutation holdout split schema_version must be "1"');
+  if (
+    typeof root.split_key !== 'string' ||
+    root.split_key.length === 0 ||
+    root.split_key.length > 256
+  )
+    throw new Error('mutation holdout split split_key must be bounded');
+  if (typeof root.plan_digest !== 'string' || !/^[a-f0-9]{64}$/u.test(root.plan_digest))
+    throw new Error('mutation holdout split plan_digest must be sha256');
+  const train = parseMutationCoverageManifest(root.train);
+  const holdout = parseMutationCoverageManifest(root.holdout, true);
+  const split = {
+    schema_version: '1' as const,
+    split_key: root.split_key,
+    plan_digest: root.plan_digest,
+    train,
+    holdout,
+  };
+  if (mutationHoldoutPlanDigest(split.split_key, train.links, holdout.links) !== split.plan_digest)
+    throw new Error('mutation holdout split plan_digest is invalid');
+  return split;
 }
 
 /** Apply explicit mapping and kill-rate policy to an external mutation report. */
@@ -293,8 +323,55 @@ export function parseMutationRegressionEvidence(value: unknown): MutationRegress
   return {
     schema_version: '1',
     source_revision: boundedRevision(root.source_revision),
+    ...(root.plan_digest === undefined ? {} : { plan_digest: boundedRevision(root.plan_digest) }),
     observations,
   };
+}
+
+/** Evaluate a regression run specifically against the immutable holdout plan. */
+export function evaluateMutationHoldoutRegressionEvidence(
+  report: MutationReport,
+  split: MutationHoldoutSplit,
+  evidence: MutationRegressionEvidence,
+  minKillRate: number,
+): MutationRegressionCoverageResult {
+  if (evidence.plan_digest !== split.plan_digest)
+    throw new Error('mutation holdout evidence plan_digest does not match the split');
+  const holdoutIds = new Set(split.holdout.links.map((link) => link.mutation_id));
+  if (holdoutIds.size !== split.holdout.links.length)
+    throw new Error('mutation holdout split contains duplicate holdout mutation IDs');
+  if (split.train.links.some((link) => holdoutIds.has(link.mutation_id)))
+    throw new Error('mutation holdout split train and holdout partitions overlap');
+  if (
+    mutationHoldoutPlanDigest(split.split_key, split.train.links, split.holdout.links) !==
+    split.plan_digest
+  )
+    throw new Error('mutation holdout split plan_digest is invalid');
+  const records = report.records.filter((record) => holdoutIds.has(record.id));
+  const totals = { ...report.totals };
+  for (const status of Object.keys(totals) as Array<keyof typeof totals>) totals[status] = 0;
+  for (const record of records) totals[record.status] += 1;
+  const evaluated = records.filter((record) => record.status !== 'ignored');
+  const holdoutReport: MutationReport = {
+    ...report,
+    records,
+    totals,
+    mutation_score: ratio(
+      evaluated.filter((record) => record.status === 'killed').length,
+      evaluated.length,
+    ),
+  };
+  return evaluateMutationRegressionEvidence(holdoutReport, split.holdout, evidence, minKillRate);
+}
+
+function mutationHoldoutPlanDigest(
+  splitKey: string,
+  train: ReadonlyArray<MutationCoverageLink>,
+  holdout: ReadonlyArray<MutationCoverageLink>,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({ schema_version: '1', split_key: splitKey, train, holdout }))
+    .digest('hex');
 }
 
 /** Require every reviewed mutant/scenario pair to have an execution result. */
