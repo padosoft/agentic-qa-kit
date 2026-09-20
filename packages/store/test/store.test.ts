@@ -112,6 +112,11 @@ describe('MemoryStore', () => {
     await s.appendEvent(event);
     assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
     assert.equal((await s.listAuditEvents({ org: 'org-b', project: 'shop' })).length, 0);
+    const preRunEvent = { ...event, run_id: 'run-late', seq: 1, hash: '' };
+    preRunEvent.hash = hashEvent(preRunEvent);
+    await s.appendEvent(preRunEvent);
+    await s.saveRun({ ...RUN, id: 'run-late', org: 'org-a', project: 'shop' });
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
     const legacy = {
       ...event,
       hash: hashEvent({ ...event, hash: '' }, event.hash),

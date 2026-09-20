@@ -234,9 +234,8 @@ export class PostgresStore implements StoreProvider {
   async appendEvent(event: Event.Event, scope?: StoreScope): Promise<void> {
     await this.wait();
     const runId = 'run_id' in event && typeof event.run_id === 'string' ? event.run_id : null;
-    const payload = event.payload as Record<string, unknown>;
-    let org = scope?.org ?? (typeof payload.org === 'string' ? payload.org : null);
-    let project = scope?.project ?? (typeof payload.project === 'string' ? payload.project : null);
+    let org = scope?.org ?? null;
+    let project = scope?.project ?? null;
     if (runId && (!org || !project)) {
       const runRows = (await this.q<{ payload: unknown }>(
         'SELECT payload FROM aqa_store_records WHERE kind = $1 AND record_key = $2 LIMIT 1',

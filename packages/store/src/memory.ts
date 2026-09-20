@@ -209,7 +209,7 @@ export class MemoryStore implements StoreProvider {
     // metadata are not allowed to appear in another tenant's projection.
     if (opts.org || opts.project)
       out = out.filter((event) => {
-        const eventScope = this.auditScopes.get(event.hash) ?? this.scopeForRun(event.run_id);
+        const eventScope = this.auditScopes.get(event.hash);
         return (
           (!opts.org || eventScope?.org === opts.org) &&
           (!opts.project || eventScope?.project === opts.project)
