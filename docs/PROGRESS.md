@@ -21,6 +21,9 @@
   status plus artifact identity/revision before removing the copy. The first
   hosted attempt also exposed a provider JSONB double-encoding shape at this
   read boundary; normalize one additional serialized layer before parsing.
+  The next hosted attempt exposed the symmetric write issue (`payload - key`
+  cannot operate on a JSONB scalar); the scrub now normalizes object/string
+  payloads in SQL before removing the copy and preserves unexpected types.
   Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
   PostgreSQL and confirm the full CI gate.
 

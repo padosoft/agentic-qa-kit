@@ -2983,3 +2983,8 @@ caller can see different authorization surfaces depending on deployment mode.
   at a cast/read boundary. The canonical decode helper must normalize the
   provider shape before schema parsing, including destructive reconciliation
   queries; otherwise a valid persisted proposal is rejected as non-object.
+
+- The same legacy shape must be handled on writes: PostgreSQL's JSONB delete
+  operator rejects scalar roots. A destructive scrub must branch on
+  `jsonb_typeof`, convert only a valid serialized-object string, and leave
+  unexpected types unchanged rather than guessing or corrupting data.

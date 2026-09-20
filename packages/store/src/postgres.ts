@@ -779,7 +779,7 @@ export class PostgresStore implements StoreProvider {
             proposalRecord.artifact.revision === current.revision;
           if (!terminal || !matchesArtifact) continue;
           await query(
-            "UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = $1 AND record_key = $2",
+            "UPDATE aqa_store_records SET payload = CASE jsonb_typeof(payload) WHEN 'object' THEN payload - 'artifact' WHEN 'string' THEN ((payload #>> '{}')::jsonb) - 'artifact' ELSE payload END, updated_at = now() WHERE kind = $1 AND record_key = $2",
             ['methodology_proposal', proposalRow.record_key],
           );
         }
