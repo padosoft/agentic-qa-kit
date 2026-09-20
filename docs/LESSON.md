@@ -2988,3 +2988,9 @@ caller can see different authorization surfaces depending on deployment mode.
   operator rejects scalar roots. A destructive scrub must branch on
   `jsonb_typeof`, convert only a valid serialized-object string, and leave
   unexpected types unchanged rather than guessing or corrupting data.
+
+- Retention changes the operational visibility of terminal proposals: once
+  their artifact is purged, keeping them in normal list endpoints creates an
+  orphaned admin record. Preserve direct ID lookup for audit semantics, but
+  exclude artifact-less terminal proposals from operational listings in every
+  store adapter.

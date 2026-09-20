@@ -541,6 +541,9 @@ export class MemoryStore implements StoreProvider {
     let out = this.visible(this.methodologyProposals, opts).map((record) =>
       parseMethodologyProposalRecord(JSON.parse(JSON.stringify(record))),
     );
+    out = out.filter(
+      (record) => record.proposal.status === 'pending' || record.artifact !== undefined,
+    );
     if (opts.status) out = out.filter((record) => record.proposal.status === opts.status);
     return out.sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }

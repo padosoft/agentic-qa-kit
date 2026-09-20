@@ -798,6 +798,7 @@ export class PostgresStore implements StoreProvider {
       parseMethodologyProposalRecord,
     );
     return records
+      .filter((record) => record.proposal.status === 'pending' || record.artifact !== undefined)
       .filter((record) => !opts.status || record.proposal.status === opts.status)
       .sort((a, b) => (a.proposal.proposed_at < b.proposal.proposed_at ? 1 : -1));
   }

@@ -24,6 +24,9 @@
   The next hosted attempt exposed the symmetric write issue (`payload - key`
   cannot operate on a JSONB scalar); the scrub now normalizes object/string
   payloads in SQL before removing the copy and preserves unexpected types.
+  The resulting catalog contract is now explicit in both adapters: terminal
+  proposals whose retained artifact was purged are omitted from operational
+  lists, while direct lookup remains available without the sensitive copy.
   Local store build and contract: 20 passed / 0 failed. Next: rerun hosted
   PostgreSQL and confirm the full CI gate.
 
