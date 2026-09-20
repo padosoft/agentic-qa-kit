@@ -569,6 +569,31 @@ describe('PostgresStore', () => {
     try {
       await s.saveRun(RUN);
       assert.deepEqual(await s.loadRun(RUN.id), RUN);
+      await s.appendEvent({
+        schema_version: '1',
+        seq: 9000,
+        prev_hash: null,
+        hash: 'a'.repeat(64),
+        ts: '2026-09-18T10:00:00Z',
+        run_id: RUN.id,
+        kind: 'oracle_evaluated',
+        actor: { type: 'system', id: 'audit-contract' },
+        payload: { oracle_id: 'contract', passed: true },
+      });
+      await s.appendEvent({
+        schema_version: '1',
+        seq: 9001,
+        prev_hash: null,
+        hash: 'b'.repeat(64),
+        ts: '2026-09-18T11:00:00Z',
+        run_id: RUN.id,
+        kind: 'info',
+        actor: { type: 'system', id: 'audit-contract' },
+        payload: { message: 'newer event' },
+      });
+      const filteredAudit = await s.listAuditEvents({ kind: 'oracle_evaluated', limit: 1 });
+      assert.equal(filteredAudit.length, 1);
+      assert.equal(filteredAudit[0]?.kind, 'oracle_evaluated');
       assert.equal(
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,

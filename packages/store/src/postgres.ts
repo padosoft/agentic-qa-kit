@@ -272,15 +272,18 @@ export class PostgresStore implements StoreProvider {
       opts.to ?? null,
     ];
     let text =
-      'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org IS NULL OR org = $1) AND ($2::text IS NULL OR project IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4) ORDER BY ts DESC, seq DESC';
+      'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org IS NULL OR org = $1) AND ($2::text IS NULL OR project IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)';
+    if (opts.kind !== undefined) {
+      values.push(opts.kind);
+      text += ` AND payload->>'kind' = $${values.length}`;
+    }
+    text += ' ORDER BY ts DESC, seq DESC';
     if (opts.limit !== undefined) {
       values.push(opts.limit);
       text += ` LIMIT $${values.length}`;
     }
     const rows = await this.q<{ payload: Event.Event }>(text, values);
-    return rows
-      .map((row) => this.decode<Event.Event>(row.payload))
-      .filter((event) => !opts.kind || event.kind === opts.kind);
+    return rows.map((row) => this.decode<Event.Event>(row.payload));
   }
 
   async appendFinding(finding: Finding.Finding): Promise<void> {

@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-20 — Filter durable projections before applying pagination
+
+Applying an audit `LIMIT` before a server-side kind filter is a correctness
+bug, not merely a performance issue: a newer event of another kind can consume
+the page and hide matching records. Durable projections must push every
+selective predicate into the provider query before ordering and pagination;
+in-memory filtering is only a compatibility fallback for already-bounded data.
+
 # 2026-09-20 — Retention must fence both staged proposals and publication
 
 An artifact can be present only as a staged copy inside a pending methodology
