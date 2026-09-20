@@ -218,6 +218,18 @@ export class MemoryStore implements StoreProvider {
     out.sort((a, b) => (a.ts < b.ts ? 1 : -1));
     return typeof opts.limit === 'number' ? out.slice(0, opts.limit) : out;
   }
+  async summarizeAuditEvents(opts: {
+    org?: string;
+    project?: string;
+    kind?: Event.Event['kind'];
+    from?: string;
+    to?: string;
+  }): Promise<{ total: number; by_kind: Partial<Record<Event.Event['kind'], number>> }> {
+    const events = await this.listAuditEvents(opts);
+    const by_kind: Partial<Record<Event.Event['kind'], number>> = {};
+    for (const event of events) by_kind[event.kind] = (by_kind[event.kind] ?? 0) + 1;
+    return { total: events.length, by_kind };
+  }
 
   // ----- Findings -----
   async appendFinding(finding: Finding.Finding): Promise<void> {

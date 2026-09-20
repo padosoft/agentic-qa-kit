@@ -1950,6 +1950,27 @@ export function makeApi(): ApiHandler[] {
     // ============ Audit ============
     {
       method: 'GET',
+      path: '/api/audit/summary',
+      requires: 'audit:read',
+      async handle(req, ctx) {
+        const s = scope(req);
+        const opts: {
+          org?: string;
+          project?: string;
+          kind?: Event.Event['kind'];
+          from?: string;
+          to?: string;
+        } = {};
+        if (s.org) opts.org = s.org;
+        if (s.project) opts.project = s.project;
+        if (req.params.kind) opts.kind = req.params.kind as Event.Event['kind'];
+        if (req.params.from) opts.from = req.params.from;
+        if (req.params.to) opts.to = req.params.to;
+        return asResponse({ summary: await ctx.store.summarizeAuditEvents(opts) });
+      },
+    },
+    {
+      method: 'GET',
       path: '/api/audit',
       requires: 'audit:read',
       async handle(req, ctx) {

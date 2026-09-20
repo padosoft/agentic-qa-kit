@@ -1,5 +1,14 @@
 # Lessons
 
+# 2026-09-20 — Aggregation must share the audit projection boundary
+
+Audit summaries are tenant data too. They must not be computed by fetching a
+global event list and grouping it in the API layer: the store contract now
+accepts the same scope/time/kind filters as event listing, and PostgreSQL does
+the grouping in SQL. This keeps payload transfer bounded and prevents a future
+admin dashboard from accidentally turning an aggregate into a cross-tenant
+side channel.
+
 # 2026-09-20 — Tenant provenance belongs in the persistence projection
 
 Putting org/project only in an event payload is not enough: producers can omit

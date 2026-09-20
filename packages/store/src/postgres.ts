@@ -324,6 +324,34 @@ export class PostgresStore implements StoreProvider {
         : (decoded as Event.Event);
     });
   }
+  async summarizeAuditEvents(opts: {
+    org?: string;
+    project?: string;
+    kind?: Event.Event['kind'];
+    from?: string;
+    to?: string;
+  }): Promise<{ total: number; by_kind: Partial<Record<Event.Event['kind'], number>> }> {
+    await this.wait();
+    const values: unknown[] = [
+      opts.org ?? null,
+      opts.project ?? null,
+      opts.from ?? null,
+      opts.to ?? null,
+    ];
+    let text = `SELECT CASE jsonb_typeof(payload) WHEN 'object' THEN payload->>'kind' WHEN 'string' THEN ((payload #>> '{}')::jsonb)->>'kind' ELSE NULL END AS kind, COUNT(*)::int AS count
+      FROM aqa_store_events
+      WHERE ($1::text IS NULL OR org = $1) AND ($2::text IS NULL OR project = $2)
+        AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)`;
+    if (opts.kind !== undefined) {
+      values.push(opts.kind);
+      text += ` AND (CASE jsonb_typeof(payload) WHEN 'object' THEN payload->>'kind' WHEN 'string' THEN ((payload #>> '{}')::jsonb)->>'kind' ELSE NULL END) = $${values.length}`;
+    }
+    text += ' GROUP BY 1';
+    const rows = await this.q<{ kind: Event.Event['kind'] | null; count: number }>(text, values);
+    const by_kind: Partial<Record<Event.Event['kind'], number>> = {};
+    for (const row of rows) if (row.kind) by_kind[row.kind] = row.count;
+    return { total: rows.reduce((total, row) => total + row.count, 0), by_kind };
+  }
 
   async appendFinding(finding: Finding.Finding): Promise<void> {
     await this.put('finding', finding.id, finding);
