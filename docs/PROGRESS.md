@@ -9,6 +9,22 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Sizing baseline and bug shrinking slice
+
+- Added `docs/operations/sizing.md` with reference Small/Medium/Large profiles,
+  storage estimation, capacity dimensions, scaling rules and explicit limits
+  of local evidence. Added `scripts/capacity-benchmark.mjs` plus
+  `benchmark:capacity`, a reproducible provider-neutral queue lifecycle
+  baseline that emits revision-bound JSON without secrets or customer data.
+- Added `shrinkJsonCounterexample()` to `@aqa/methodology`. It performs
+  deterministic bounded delta-style shrinking over JSON values through a
+  caller-owned failure predicate, with depth/size/attempt/reduction limits and
+  no command execution or candidate logging. Methodology suite: **36 passed**.
+- The benchmark is intentionally only a memory-queue baseline; PostgreSQL,
+  S3, sandbox, browser, network and HA capacity remain deployment evidence.
+  Next: connect shrinking to replay/finding evidence, then implement the
+  ecommerce failure-injection journey and mutation holdout governance.
+
 ## 2026-09-20 — Methodology publication fence completed locally
 
 - Added `publishMethodologyArtifact` to the store contract and both adapters.

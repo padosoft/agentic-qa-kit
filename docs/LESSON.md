@@ -1,5 +1,20 @@
 # Lessons
 
+# 2026-09-20 — A benchmark needs an explicit evidence boundary
+
+A fast in-memory queue loop is useful as a regression baseline but cannot be
+renamed into control-plane capacity. Emit the runtime/source revision and
+scope, keep the workload deterministic and secret-free, and require the real
+queue, artifact backend, sandbox and probe mix for deployment sizing claims.
+
+# 2026-09-20 — Shrinking must own only candidate generation
+
+Bug minimization belongs behind a caller-owned failure predicate. The
+methodology package may generate bounded JSON candidates and choose a smaller
+failing value, but it must not execute probes, log payloads or imply global
+minimality; execution, redaction and provider isolation remain host/runner
+responsibilities.
+
 # 2026-09-20 — Filter durable projections before applying pagination
 
 Applying an audit `LIMIT` before a server-side kind filter is a correctness
