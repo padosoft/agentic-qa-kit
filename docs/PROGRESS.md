@@ -9,6 +9,16 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Retention lifecycle PR: atomic terminal-copy purge repair
+
+- Hosted PostgreSQL proved artifact deletion but caught a remaining read-back
+  failure for approved/rejected proposal copies: the scrub ran after the
+  lifecycle/artifact transaction and could expose stale or concurrent state.
+  Proposal-copy scrubbing now executes inside the same transaction as lifecycle
+  and artifact deletion; the post-commit delete/pool-rotation workaround was
+  removed. Local store build and contract: 20 passed / 0 failed. Next: rerun
+  hosted PostgreSQL and confirm the full CI gate.
+
 ## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
 
 - The latest hosted PostgreSQL contract run found one remaining JSONB shape

@@ -97,12 +97,6 @@ export class PostgresStore implements StoreProvider {
       prepare: false,
     });
   }
-  private async rotateConnection(): Promise<void> {
-    await this.sql.end({ timeout: 5 });
-    this.sql = this.createClient();
-    this.ready = this.migrate();
-    await this.ready;
-  }
   private async q<T>(text: string, values: unknown[] = []): Promise<T[]> {
     const unsafe = this.sql.unsafe as unknown as (
       query: string,
@@ -673,7 +667,6 @@ export class PostgresStore implements StoreProvider {
   }
   async purgeExpiredMethodologyArtifacts(now: string, scope?: StoreScope): Promise<number> {
     await this.wait();
-    const purgedArtifactKeys: string[] = [];
     const purged = await this.sql.begin(async (tx) => {
       const query = tx.unsafe as unknown as (text: string, values?: unknown[]) => Promise<unknown>;
       const filters =
@@ -769,7 +762,6 @@ export class PostgresStore implements StoreProvider {
           throw new Error(
             `methodology retention purge left artifact rows: ${JSON.stringify(remainingArtifacts)}`,
           );
-        purgedArtifactKeys.push(artifactKey);
         await query(
           `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
           [tenantOrg, tenantProject, current.artifact_id, current.revision],
@@ -778,12 +770,6 @@ export class PostgresStore implements StoreProvider {
       }
       return purged;
     });
-    for (const artifactKey of purgedArtifactKeys)
-      await this.q('DELETE FROM aqa_store_records WHERE kind = $1 AND record_key = $2', [
-        'methodology_artifact',
-        artifactKey,
-      ]);
-    if (purgedArtifactKeys.length > 0) await this.rotateConnection();
     return purged;
   }
 

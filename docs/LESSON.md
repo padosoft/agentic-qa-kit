@@ -2966,3 +2966,9 @@ caller can see different authorization surfaces depending on deployment mode.
   the adapter now closes and recreates its pool, reruns migrations, and only
   then returns; the same provider instance therefore has a verified fresh
   read boundary.
+
+- Hosted verification then showed that the stale read was specifically visible
+  on terminal proposal copies scrubbed after the purge transaction. Retention
+  cleanup must keep lifecycle deletion, artifact deletion, and terminal-copy
+  scrubbing in one transaction; post-commit cleanup is not an atomic data
+  contract and can create a race or a misleading read-after-write result.
