@@ -19,6 +19,7 @@ export function makeKitWorker(opts: KitWorkerOptions): RunnerWorker {
       ...(opts.packsRoot ? { packsRoot: opts.packsRoot } : {}),
       ...(opts.probeDrivers ? { probeDrivers: opts.probeDrivers } : {}),
       ...(opts.statefulJourneys ? { statefulJourneys: opts.statefulJourneys } : {}),
+      ...(opts.runner_id ? { runner_id: opts.runner_id } : {}),
     }),
     opts,
   );

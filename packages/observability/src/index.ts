@@ -271,6 +271,10 @@ export function makeEventSpanObserver(tracer: Tracer): (event: {
     const journeyPayload =
       event.payload?.stateful_journey === 'transition' ? event.payload : undefined;
     const journeyAttributes: Record<string, string | number | boolean> = {};
+    const runnerId = event.payload?.runner_id;
+    if (typeof runnerId === 'string' && /^[a-z0-9][a-z0-9_.:-]*$/iu.test(runnerId)) {
+      journeyAttributes['aqa.runner_id'] = runnerId.slice(0, 128);
+    }
     const boundedJourneyText = (key: string, max: number): string | undefined => {
       const value = journeyPayload?.[key];
       return typeof value === 'string' &&

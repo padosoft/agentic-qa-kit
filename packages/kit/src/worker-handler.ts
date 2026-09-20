@@ -16,6 +16,8 @@ export interface RunJobHandlerOptions {
   /** Host-owned drivers shared by every queued run; never supplied by payloads. */
   probeDrivers?: RunProbeDrivers;
   statefulJourneys?: Readonly<Record<string, StatefulJourneyBinding>>;
+  /** Stable host-owned identity propagated into run audit/trace provenance. */
+  runner_id?: string;
 }
 
 /** Adapt the durable server job contract to the canonical kit orchestrator. */
@@ -34,6 +36,7 @@ export function makeRunJobHandler(opts: RunJobHandlerOptions) {
       ...(opts.packsRoot ? { packsRoot: opts.packsRoot } : {}),
       ...(opts.probeDrivers ? { probeDrivers: opts.probeDrivers } : {}),
       ...(opts.statefulJourneys ? { statefulJourneys: opts.statefulJourneys } : {}),
+      ...(opts.runner_id ? { runner_id: opts.runner_id } : {}),
       signal,
     };
     const result = await runRun(runOptions);

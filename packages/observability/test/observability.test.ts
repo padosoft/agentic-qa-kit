@@ -76,6 +76,7 @@ describe('@aqa/observability', () => {
         from: 'cart',
         to: 'paid',
         ok: true,
+        runner_id: 'runner-a',
         authorization: 'Bearer secret-must-not-escape',
       },
     });
@@ -86,6 +87,7 @@ describe('@aqa/observability', () => {
     assert.equal(spans[0]?.attributes['aqa.journey.digest'], 'a'.repeat(64));
     assert.equal(spans[0]?.attributes['aqa.journey.transition_id'], 'pay');
     assert.equal(spans[0]?.attributes['aqa.journey.ok'], true);
+    assert.equal(spans[0]?.attributes['aqa.runner_id'], 'runner-a');
     assert.equal('payload' in (spans[0]?.attributes ?? {}), false);
     assert.equal(JSON.stringify(spans).includes('secret-must-not-escape'), false);
     observer({

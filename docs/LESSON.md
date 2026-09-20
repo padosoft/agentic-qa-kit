@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-20 — Queue identity must reach the evidence boundary
+
+Lease fencing alone proves who may mutate a queue job, but not which worker
+produced the resulting run evidence. Propagate the host-owned identity into
+the canonical start/finish events and expose only a bounded, validated value
+to traces; never accept a runner identity from the queued payload.
+
 # 2026-09-20 — Audit retention must preserve completeness evidence
 
 Deleting old hash-chain rows is not a neutral storage optimization: a

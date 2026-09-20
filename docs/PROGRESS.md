@@ -13,6 +13,19 @@
 
 ## 2026-09-20 — Audit retention operational contract
 
+## 2026-09-20 — Multi-runner audit/trace provenance
+
+- Propagated the host-owned worker identity through the real remote queue and
+  Kit lifecycle. `run_started`/`run_finished` now carry the bounded runner
+  identity, and OTLP event spans expose only the validated `aqa.runner_id`
+  attribute.
+- Added the complete remote-worker assertion that dequeue/lease identity,
+  persisted audit actor and trace-safe provenance remain correlated. Local
+  evidence: observability 20/20 and Kit 192 passed / 0 failed / 2 platform
+  skips.
+- Next: add bounded local load/chaos evidence and methodology governance
+  closure; protected provider and independent assurance gates remain deferred.
+
 - Added `docs/operations/audit-retention-runbook.md` with fail-closed
   procedures for scoped projections, checkpoint verification, legal holds,
   archive/purge reconciliation and incident handling.

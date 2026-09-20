@@ -218,6 +218,7 @@ describe('remote runner identity journey', () => {
       queue: remoteQueue,
       root,
       packsRoot: [packDir],
+      runner_id: 'runner-a',
       poll_ms: 10,
     });
     try {
@@ -234,7 +235,20 @@ describe('remote runner identity journey', () => {
       const runDir = join(root, '.aqa', 'runs', runDirs[0] as string);
       assert.ok(existsSync(join(runDir, 'events.jsonl')));
       assert.ok(existsSync(join(runDir, 'findings.jsonl')));
-      assert.ok(readFileSync(join(runDir, 'events.jsonl'), 'utf8').trim().length > 0);
+      const events = readFileSync(join(runDir, 'events.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              kind: string;
+              actor: { id: string };
+              payload?: Record<string, unknown>;
+            },
+        );
+      const started = events.find((event) => event.kind === 'run_started');
+      assert.equal(started?.actor.id, 'runner-a');
+      assert.equal(started?.payload?.runner_id, 'runner-a');
     } finally {
       await boot.close();
       await new Promise<void>((resolve, reject) =>
