@@ -2972,3 +2972,9 @@ caller can see different authorization surfaces depending on deployment mode.
   cleanup must keep lifecycle deletion, artifact deletion, and terminal-copy
   scrubbing in one transaction; post-commit cleanup is not an atomic data
   contract and can create a race or a misleading read-after-write result.
+
+- A provider-side JSONB path predicate is not sufficient for a destructive
+  semantic join: hosted PostgreSQL did not match the approved proposal copy
+  even though its parsed record was valid. For retention scrubbing, lock the
+  tenant-scoped candidates, parse them through the canonical schema boundary,
+  and match terminal status plus artifact identity/revision before mutation.

@@ -15,9 +15,12 @@
   failure for approved/rejected proposal copies: the scrub ran after the
   lifecycle/artifact transaction and could expose stale or concurrent state.
   Proposal-copy scrubbing now executes inside the same transaction as lifecycle
-  and artifact deletion; the post-commit delete/pool-rotation workaround was
-  removed. Local store build and contract: 20 passed / 0 failed. Next: rerun
-  hosted PostgreSQL and confirm the full CI gate.
+  and artifact deletion. The hosted rerun then showed that the JSONB path
+  predicate did not match the approved record reliably; scrubbing now locks
+  tenant-scoped proposal rows, parses them canonically, and matches terminal
+  status plus artifact identity/revision before removing the copy. Local store
+  build and contract: 20 passed / 0 failed. Next: rerun hosted PostgreSQL and
+  confirm the full CI gate.
 
 ## 2026-09-20 — Retention lifecycle PR: hosted PostgreSQL regression under repair
 

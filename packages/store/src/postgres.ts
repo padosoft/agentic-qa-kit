@@ -762,10 +762,24 @@ export class PostgresStore implements StoreProvider {
           throw new Error(
             `methodology retention purge left artifact rows: ${JSON.stringify(remainingArtifacts)}`,
           );
-        await query(
-          `UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = 'methodology_proposal' AND org IS NOT DISTINCT FROM $1 AND project IS NOT DISTINCT FROM $2 AND payload->'proposal'->>'status' IN ('approved', 'rejected') AND payload->'artifact'->>'artifact_id' = $3 AND (payload->'artifact'->>'revision')::integer = $4`,
-          [tenantOrg, tenantProject, current.artifact_id, current.revision],
-        );
+        const proposalRows = (await query(
+          'SELECT record_key, payload::text AS payload FROM aqa_store_records WHERE kind = $1 AND org IS NOT DISTINCT FROM $2 AND project IS NOT DISTINCT FROM $3 FOR UPDATE',
+          ['methodology_proposal', tenantOrg, tenantProject],
+        )) as Array<{ record_key: string; payload: unknown }>;
+        for (const proposalRow of proposalRows) {
+          const proposalRecord = parseMethodologyProposalRecord(this.decode(proposalRow.payload));
+          const terminal =
+            proposalRecord.proposal.status === 'approved' ||
+            proposalRecord.proposal.status === 'rejected';
+          const matchesArtifact =
+            proposalRecord.artifact?.artifact_id === current.artifact_id &&
+            proposalRecord.artifact.revision === current.revision;
+          if (!terminal || !matchesArtifact) continue;
+          await query(
+            "UPDATE aqa_store_records SET payload = payload - 'artifact', updated_at = now() WHERE kind = $1 AND record_key = $2",
+            ['methodology_proposal', proposalRow.record_key],
+          );
+        }
         purged += 1;
       }
       return purged;
