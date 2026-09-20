@@ -23,6 +23,17 @@
   audit before implementing mutation holdout governance and ecommerce failure
   journeys.
 
+## 2026-09-20 — Mutation holdout governance primitive
+
+- Added `splitMutationCoverageHoldout()` to `@aqa/ingest`. It produces a
+  deterministic hash-ranked train/holdout split bound to a project/revision key,
+  enforces minimum set sizes, and emits a plan digest. The primitive is
+  provider-neutral and deliberately does not claim that a mutation producer or
+  protected regression execution has run.
+- Added regression coverage for determinism, disjointness, sizing and invalid
+  split keys. Next: expose the split in the mutation evidence contract and
+  complete the ecommerce timeout/webhook/idempotency failure journey.
+
 ## 2026-09-20 — Roadmap close-out status after PR #241
 
 - PR #241 (`audit-retention-runbook`) is merged on `main` after the complete

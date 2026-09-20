@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { MutationReport } from './index.js';
 
 export interface MutationCoverageLink {
@@ -14,6 +15,21 @@ export interface MutationCoverageManifest {
 export interface MutationCoveragePolicy {
   min_mapped_rate: number;
   min_killed_rate: number;
+}
+
+export interface MutationHoldoutSplitOptions {
+  holdout_rate: number;
+  split_key: string;
+  min_train_links?: number;
+  min_holdout_links?: number;
+}
+
+export interface MutationHoldoutSplit {
+  schema_version: '1';
+  split_key: string;
+  plan_digest: string;
+  train: MutationCoverageManifest;
+  holdout: MutationCoverageManifest;
 }
 
 export interface MutationRiskCoverage {
@@ -85,6 +101,65 @@ function boundedRevision(value: unknown): string {
 
 function ratio(numerator: number, denominator: number): number {
   return denominator === 0 ? 0 : Number((numerator / denominator).toFixed(6));
+}
+
+/** Create a reproducible, digest-bound split without executing mutations. */
+export function splitMutationCoverageHoldout(
+  manifest: MutationCoverageManifest,
+  options: MutationHoldoutSplitOptions,
+): MutationHoldoutSplit {
+  if (
+    !Number.isFinite(options.holdout_rate) ||
+    options.holdout_rate < 0 ||
+    options.holdout_rate > 1 ||
+    !options.split_key.trim()
+  )
+    throw new Error('mutation holdout options are invalid');
+  const minTrain = boundedCount(options.min_train_links ?? 1, 'min_train_links');
+  const minHoldout = boundedCount(options.min_holdout_links ?? 1, 'min_holdout_links');
+  const links = [...manifest.links];
+  if (links.length < minTrain + (options.holdout_rate > 0 ? minHoldout : 0))
+    throw new Error('mutation holdout manifest is too small for requested minimums');
+  const ranked = links
+    .map((link) => ({
+      link,
+      hash: createHash('sha256').update(`${options.split_key}\0${link.mutation_id}`).digest('hex'),
+    }))
+    .sort(
+      (a, b) =>
+        a.hash.localeCompare(b.hash) || a.link.mutation_id.localeCompare(b.link.mutation_id),
+    );
+  const requested = Math.round(links.length * options.holdout_rate);
+  const holdoutCount = Math.min(
+    links.length - minTrain,
+    options.holdout_rate > 0 ? Math.max(minHoldout, requested) : 0,
+  );
+  const holdoutIds = new Set(ranked.slice(0, holdoutCount).map((item) => item.link.mutation_id));
+  const train = links.filter((link) => !holdoutIds.has(link.mutation_id));
+  const holdout = links.filter((link) => holdoutIds.has(link.mutation_id));
+  const planDigest = createHash('sha256')
+    .update(
+      JSON.stringify({
+        schema_version: '1',
+        split_key: options.split_key,
+        train: train.map((link) => link.mutation_id),
+        holdout: holdout.map((link) => link.mutation_id),
+      }),
+    )
+    .digest('hex');
+  return {
+    schema_version: '1',
+    split_key: options.split_key,
+    plan_digest: planDigest,
+    train: { schema_version: '1', links: train },
+    holdout: { schema_version: '1', links: holdout },
+  };
+}
+
+function boundedCount(value: number, field: string): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_LINKS)
+    throw new Error(`${field} must be a bounded non-negative integer`);
+  return value;
 }
 
 /** Validate a reviewed mapping from mutations to the regressions that kill them. */

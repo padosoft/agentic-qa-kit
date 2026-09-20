@@ -14,6 +14,7 @@ import {
   parseMutationSummary,
   parsePlaywrightTrace,
   parseSast,
+  splitMutationCoverageHoldout,
 } from '../dist/index.js';
 
 describe('mutation regression evidence', () => {
@@ -342,6 +343,38 @@ describe('mutation evidence', () => {
 });
 
 describe('mutation to regression coverage', () => {
+  it('creates a deterministic digest-bound train/holdout split with minimums', () => {
+    const input = parseMutationCoverageManifest({
+      schema_version: '1',
+      links: Array.from({ length: 10 }, (_, index) => ({
+        mutation_id: `m-${index}`,
+        risk_ids: ['risk-cart'],
+        scenario_ids: ['scenario-cart'],
+      })),
+    });
+    const first = splitMutationCoverageHoldout(input, {
+      holdout_rate: 0.3,
+      split_key: 'project-a:revision-1',
+      min_train_links: 2,
+      min_holdout_links: 2,
+    });
+    const second = splitMutationCoverageHoldout(input, {
+      holdout_rate: 0.3,
+      split_key: 'project-a:revision-1',
+      min_train_links: 2,
+      min_holdout_links: 2,
+    });
+    assert.deepEqual(second, first);
+    assert.equal(first.train.links.length, 7);
+    assert.equal(first.holdout.links.length, 3);
+    assert.equal(new Set(first.holdout.links.map((link) => link.mutation_id)).size, 3);
+    assert.notEqual(first.plan_digest, '');
+    assert.throws(
+      () => splitMutationCoverageHoldout(input, { holdout_rate: 0.5, split_key: '' }),
+      /options/,
+    );
+  });
+
   it('requires reviewed mutant-to-risk/scenario links and reports per-risk kill rates', () => {
     const report = parseMutationSummary({
       mutants: [

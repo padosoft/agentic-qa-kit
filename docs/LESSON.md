@@ -1,5 +1,12 @@
 # Lessons
 
+# 2026-09-20 — Holdout governance must bind the plan, not just the percentage
+
+A mutation holdout selected with an unseeded random call can silently change
+between runs and contaminate release decisions. Rank reviewed pairs by a
+domain-separated hash, enforce minimum train/holdout sizes, and persist a
+digest of the exact split alongside evidence.
+
 # 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
 
 An in-memory load probe is useful only when it runs the production queue,
