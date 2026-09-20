@@ -682,6 +682,16 @@ describe('PostgresStore', () => {
       await s.appendEvent(preRunTenantEvent);
       await s.saveRun({ ...tenantRun, id: preRunTenantEvent.run_id });
       assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+      const explicitlyScopedTenantEvent = {
+        ...tenantEvent,
+        seq: 4,
+        run_id: 'run-a-tenant-explicit',
+        prev_hash: preRunTenantEvent.hash,
+        hash: '',
+      };
+      explicitlyScopedTenantEvent.hash = hashEvent(explicitlyScopedTenantEvent, preRunTenantEvent.hash);
+      await s.appendEvent(explicitlyScopedTenantEvent, { org: 'org-a', project: 'shop' });
+      assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
       assert.equal(
         (await s.listRuns({ project: RUN.project })).some((run) => run.id === RUN.id),
         true,
