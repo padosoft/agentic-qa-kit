@@ -74,6 +74,8 @@ type Kind =
   | 'sso';
 type Row = { record_key: string; payload: unknown; org?: string | null; project?: string | null };
 
+const MAX_CACHED_RUN_SCOPES = 4096;
+
 /** Durable PostgreSQL StoreProvider backed by schema-owned JSONB envelopes. */
 export class PostgresStore implements StoreProvider {
   isDurable(): boolean {
@@ -83,6 +85,15 @@ export class PostgresStore implements StoreProvider {
   private sql: Sql;
   private ready: Promise<void>;
   private runScopes = new Map<string, StoreScope | null>();
+
+  private cacheRunScope(runId: string, scope: StoreScope | null): void {
+    this.runScopes.delete(runId);
+    this.runScopes.set(runId, scope);
+    if (this.runScopes.size > MAX_CACHED_RUN_SCOPES) {
+      const oldest = this.runScopes.keys().next().value;
+      if (oldest) this.runScopes.delete(oldest);
+    }
+  }
 
   constructor(dsn: string) {
     if (!dsn || !dsn.trim())
@@ -211,7 +222,7 @@ export class PostgresStore implements StoreProvider {
 
   async saveRun(run: Run.Run): Promise<void> {
     await this.put('run', run.id, run, undefined, run.project);
-    this.runScopes.set(
+    this.cacheRunScope(
       run.id,
       run.org || run.project
         ? {
@@ -261,7 +272,7 @@ export class PostgresStore implements StoreProvider {
                 ...(run.project ? { project: run.project } : {}),
               }
             : null;
-        this.runScopes.set(runId, runScope);
+        this.cacheRunScope(runId, runScope);
       }
       org ??= runScope?.org ?? null;
       project ??= runScope?.project ?? null;

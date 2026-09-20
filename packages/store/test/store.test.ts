@@ -117,13 +117,22 @@ describe('MemoryStore', () => {
     await s.appendEvent(preRunEvent);
     await s.saveRun({ ...RUN, id: 'run-late', org: 'org-a', project: 'shop' });
     assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+    const explicitlyScopedEvent = {
+      ...event,
+      hash: '',
+      run_id: 'run-without-provenance',
+      seq: 2,
+    };
+    explicitlyScopedEvent.hash = hashEvent(explicitlyScopedEvent);
+    await s.appendEvent(explicitlyScopedEvent, { org: 'org-a', project: 'shop' });
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
     const legacy = {
       ...event,
       hash: hashEvent({ ...event, hash: '' }, event.hash),
       run_id: 'run-a',
     };
     await s.appendEvent(legacy);
-    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 1);
+    assert.equal((await s.listAuditEvents({ org: 'org-a', project: 'shop' })).length, 2);
   });
 
   it('lists runs newest-first and filters by project', async () => {
