@@ -1,5 +1,13 @@
 # Lessons
 
+# 2026-09-20 — Chaos evidence must be source-attributed and terminally reconciled
+
+An in-memory load probe is useful only when it runs the production queue,
+injects bounded faults, reconciles every job to a terminal state, and records
+the exact revision plus thresholds. It must also state that it does not prove
+database, network, provider or production-scale behavior; otherwise a green
+benchmark becomes misleading release evidence.
+
 # 2026-09-20 — Bounded algorithms must be lazy before the budget check
 
 An attempt limit does not protect a shrinker if candidate generation eagerly

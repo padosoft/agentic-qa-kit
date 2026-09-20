@@ -9,6 +9,20 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Bounded local load/chaos evidence
+
+- Added `scripts/chaos-benchmark.mjs` and `benchmark:chaos`. It exercises the
+  real `RunnerQueue` with deterministic lease-expiry and worker-failure
+  injection, terminal accounting, completion thresholds and zero-stranded-job
+  assertions. Source attribution refuses a dirty worktree and the JSON output
+  carries an explicit provider-scale evidence boundary.
+- Added `docs/operations/load-chaos-evidence.md` with the fault model, local SLO
+  thresholds, execution commands and the exact evidence that remains deferred
+  to PostgreSQL/provider/production environments.
+- Next: commit and execute the probe, then connect the result to the roadmap
+  audit before implementing mutation holdout governance and ecommerce failure
+  journeys.
+
 ## 2026-09-20 — Roadmap close-out status after PR #241
 
 - PR #241 (`audit-retention-runbook`) is merged on `main` after the complete
