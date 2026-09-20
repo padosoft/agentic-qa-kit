@@ -275,7 +275,7 @@ export class PostgresStore implements StoreProvider {
       'SELECT payload FROM aqa_store_events WHERE ($1::text IS NULL OR org IS NULL OR org = $1) AND ($2::text IS NULL OR project IS NULL OR project = $2) AND ($3::timestamptz IS NULL OR ts >= $3) AND ($4::timestamptz IS NULL OR ts <= $4)';
     if (opts.kind !== undefined) {
       values.push(opts.kind);
-      text += ` AND payload->>'kind' = $${values.length}`;
+      text += ` AND (CASE jsonb_typeof(payload) WHEN 'object' THEN payload->>'kind' WHEN 'string' THEN ((payload #>> '{}')::jsonb)->>'kind' ELSE NULL END) = $${values.length}`;
     }
     text += ' ORDER BY ts DESC, seq DESC';
     if (opts.limit !== undefined) {
@@ -283,7 +283,12 @@ export class PostgresStore implements StoreProvider {
       text += ` LIMIT $${values.length}`;
     }
     const rows = await this.q<{ payload: Event.Event }>(text, values);
-    return rows.map((row) => this.decode<Event.Event>(row.payload));
+    return rows.map((row) => {
+      const decoded = this.decode<unknown>(row.payload);
+      return typeof decoded === 'string'
+        ? this.decode<Event.Event>(decoded)
+        : (decoded as Event.Event);
+    });
   }
 
   async appendFinding(finding: Finding.Finding): Promise<void> {
