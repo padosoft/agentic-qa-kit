@@ -92,10 +92,11 @@ restore-drill records and trust roots without accepting secrets in Git.
 
 ## Remaining work, ordered by dependency
 
-1. Close repository-side gaps still testable locally: durable audit projections,
-   complete ecommerce failure/idempotency contracts, local multi-runner and
-   trace provenance journeys, methodology governance, load/chaos fixtures and
-   operational runbooks.
+1. Close the remaining repository-side gaps still testable locally. Durable
+   audit projections, retention/runbook controls and local multi-runner/trace
+   provenance are now verified; the active gaps are bounded load/chaos
+   execution evidence, methodology mutation-to-regression scale/holdout
+   governance, and complete ecommerce failure-injection/idempotency journeys.
 2. Validate the complete side-project journey against local/example targets and
    keep all limitations explicit in evidence and reports.
 3. **Deferred final gate:** configure and execute protected provider workflows

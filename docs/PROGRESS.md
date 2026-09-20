@@ -9,6 +9,27 @@
 - Each bullet states **what changed**, **why**, and **what's next** where relevant.
 - After a session interruption, the last bullet of the latest day is the resume point.
 
+## 2026-09-20 — Roadmap close-out status after PR #241
+
+- PR #241 (`audit-retention-runbook`) is merged on `main` after the complete
+  hosted technical matrix passed: build, lint/typecheck, Bun/Node tests,
+  PostgreSQL/S3/OCI integrations, live Prometheus/OTLP, CLI E2E and both
+  Playwright admin journeys. It closes the retention runbook and multi-runner
+  identity/provenance slice.
+- Remaining active repository work is now deliberately narrow: (1) bounded
+  local load/chaos execution evidence and SLO/threshold aggregation, (2)
+  methodology mutation-to-regression scale/holdout governance, and (3)
+  complete ecommerce failure-injection journeys for timeout/unknown outcome,
+  webhook replay, inventory/payment/idempotency races and reconciliation.
+- The following are explicitly deferred final gates, not silently marked done:
+  real provider credentials and settlement/tax/shipping/WMS execution,
+  KMS/Vault/WORM/PITR/RTO-RPO/IdP/mTLS deployment evidence, production-scale
+  mutation producer evidence, penetration testing, SOC2/ISO, legal SLA,
+  reference customers and independent assurance.
+- Next slice: implement the bounded local load/chaos evidence contract with a
+  real complete journey and explicit no-provider evidence boundary, then run
+  the hosted matrix before moving to methodology scale closure.
+
 ## 2026-09-20 — Multi-runner audit/trace provenance
 
 - Propagated the host-owned worker identity through the real remote queue and
