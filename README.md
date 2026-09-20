@@ -4,7 +4,7 @@
 
 ### The agentic QA operating system for software projects
 
-**Turn any repository into an agentic QA lab. Works with Claude · Codex · Gemini · Copilot. Bun-first. Enterprise path in progress.**
+**Turn any repository into a risk-driven, replayable agentic QA lab. Works with Claude · Codex · Gemini · Copilot. Bun-first. Self-hostable.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-bun%20%E2%89%A5%201.3-black)](https://bun.sh)
@@ -34,7 +34,11 @@
 
 - [Why this exists](#why-this-exists)
 - [What makes it different](#what-makes-it-different)
+- [What you get](#what-you-get)
+- [AQA vs conventional testing tools](#aqa-vs-conventional-testing-tools)
 - [Quick start (junior-friendly)](#quick-start-junior-friendly)
+- [First project walkthrough](#first-project-walkthrough)
+- [Examples cookbook](#examples-cookbook)
 - [The mental model in 7 words](#the-mental-model-in-7-words)
 - [How you use it](#how-you-use-it)
 - [Screenshots](#screenshots)
@@ -74,9 +78,127 @@ Coding agents (Claude Code, Codex CLI, Gemini CLI, GitHub Copilot CLI) are great
 - 🧾 **Hash-chained audit log** + WORM export. SOC2 / ISO 27001 controls shipped, with private-deploy governance.
 - 🔁 **Process-first governance** — every PR follows a documented loop with Copilot Code Review. Lessons captured in `docs/LESSON.md` for permanent improvement.
 
+The short version: most QA tools answer **“did this test pass?”**. AQA answers
+**“what must never break, which real boundary was exercised, what evidence
+proves it, can another engineer reproduce it, and did the fix really remove the
+bug?”**.
+
+## What you get
+
+### A complete agentic QA operating model
+
+- **Risk discovery and coverage** — deterministic STRIDE, OWASP, FMEA and
+  source-aware risk baselines; risk-to-invariant-to-scenario coverage reports.
+- **Scenario packs** — reusable packs for core behavior, APIs, web UI, LLM
+  agents, security, performance, migrations, mobile, desktop, realtime,
+  Kubernetes, infrastructure, accessibility, compliance and commerce.
+- **Capability-aware agent integration** — generated instructions, skills,
+  agents, hooks, commands and MCP guidance for Claude Code, Codex, Gemini CLI
+  and GitHub Copilot. Targets negotiate capabilities and degrade safely.
+- **Profiles and runner** — smoke, exploratory, security and release-gate
+  execution with bounded parallelism, isolation groups, wall-clock limits,
+  tool budgets, resource limits and fail-closed driver capabilities.
+- **Probes and oracles** — HTTP, SQL/PostgreSQL, Playwright and controlled shell
+  drivers through explicit host-owned policy; temporal observers, invariants,
+  oracle calibration and external-result ingestion for JUnit, SAST, k6, Locust,
+  Playwright traces and OTLP.
+- **Three-level replay** — deterministic bug replay, scenario replay and
+  agent-level reproducibility. Findings carry redacted `repro.sh`, `repro.curl`,
+  Playwright and structured JSON counterexample artifacts where applicable.
+- **Evidence integrity** — canonical outcomes, hash-chained audit events,
+  signed checkpoints, content-addressed artifacts, provenance, redaction and
+  independent-store reconciliation.
+- **Mutation-to-regression assurance** — reviewed mutant/risk/scenario links,
+  digest-bound train/holdout plans, CLI enforcement and fail-closed observed
+  regression gates.
+- **Agent safety and spend control** — approval-bound commerce mutations,
+  tenant/customer scope checks, idempotency, budget ledgers, cost attribution,
+  signed pricing catalogs and hard kill switches.
+- **Commerce Assurance contracts** — money arithmetic, checkout, inventory
+  contention, payments/refunds, promotions, gift cards/store credit,
+  subscriptions, dunning, disputes, payouts, loyalty, fulfillment/RMA and
+  webhook replay/reconciliation boundaries.
+- **Enterprise control plane** — multi-tenant API, RBAC/OIDC boundaries,
+  PostgreSQL store and queue, S3-compatible artifacts, runner fencing,
+  priority/DLQ/retry handling, OpenAPI/AsyncAPI/MCP surfaces, Prometheus/OTLP,
+  Helm and air-gap-oriented deployment pieces.
+- **Admin operations UI** — runs, events, logs, findings, replay, cost, audit
+  chain, risk maps, scenarios, packs, profiles, agents, runners, tokens,
+  notifications, organization, roles and SSO-oriented views.
+
+### What AQA deliberately does not pretend
+
+A passing fixture is not production evidence. A local in-memory journey is
+labelled provider-neutral; a configured GitHub workflow is not proof until it
+has executed against the protected provider. The current repository is ready
+for side-project validation and self-hosted technical evaluation. Stripe/
+issuer/warehouse/carrier execution, KMS/Vault/WORM/PITR drills and independent
+security/compliance assurance remain explicit final promotion gates.
+
+## AQA vs conventional testing tools
+
+| Capability | Unit/integration suites | E2E tools (Playwright/Cypress) | API/load tools | Agent observability tools | **Agentic QA Kit** |
+|---|---|---|---|---|---|
+| Starts from business risk and invariants | Usually manual | Usually manual | Usually manual | Usually indirect | **First-class risk map and invariant model** |
+| Uses coding agents as QA workers | No | Limited scripting | No | Sometimes | **Claude, Codex, Gemini and Copilot adapters** |
+| Cross-layer journey | Per suite, fragmented | UI-centric | HTTP-centric | Trace-centric | **One scenario can bind API/UI/DB/agent/tool evidence** |
+| LLM nondeterminism handling | Not applicable | Not applicable | Not applicable | Often statistical | **Three replay levels; never falsely labels an LLM run deterministic** |
+| Bug reproduction | Test logs | Trace/video | Request logs | Span links | **Finding-bound replay plus minimized redacted counterexample** |
+| Security boundaries | Separate tools | Limited | Limited | Usually outside scope | **Sandbox, egress, tool budgets, secret redaction and fail-closed oracles** |
+| Mutation quality | Mutation score only | Rare | Rare | No | **Reviewed risk/scenario links and digest-bound holdout regression gate** |
+| Financial side effects | Usually mocked | Often mocked | Provider-specific | Rare | **Approval, tenant, idempotency, reconciliation and ambiguity contracts** |
+| Auditability | CI logs | Test artifacts | Metrics | Traces | **Canonical evidence, hash chain, signatures and retention lifecycle** |
+| Multi-agent portability | None | None | None | Vendor-specific | **Generated native files for four agent ecosystems** |
+| Cost governance | CI minutes | CI minutes | Requests | Token dashboards | **Per-org/project/profile/scenario token and USD budgets with kill switches** |
+| Deployment posture | Test runner | Test runner | Test runner | SaaS/collector | **Local-first, self-hosted control plane, runners, Postgres/S3/Helm path** |
+
+### The differentiator in one concrete example
+
+An ordinary checkout test may assert `POST /checkout` returns `200`. An AQA
+commerce journey additionally asks:
+
+1. Was the cart owned by the correct tenant and customer?
+2. Was the amount represented in integer minor units and reconciled?
+3. Was human approval bound to this exact cart revision and total?
+4. What happens when two carts race for the last item?
+5. What happens when the provider commits but the response times out?
+6. Does a webhook retry apply the effect exactly once?
+7. Can the finding be replayed with a fresh read and without leaking secrets?
+
+That is the difference between a green request test and an auditable assurance
+journey.
+
 ## Quick start (junior-friendly)
 
-> **Status note:** the repository is at **v1.9**, with an enterprise hardening review in progress. The local workspace CLI and ecosystem smoke are available, but the published bundle, shared multi-tenant service and several enterprise controls still require remediation and independent verification. See [`docs/internal/enterprise-review-2026-09-17.md`](docs/internal/enterprise-review-2026-09-17.md) before using it as a release gate. Detailed walk-through: [`docs/getting-started.md`](docs/getting-started.md).
+> **Status note:** historical package milestone `v1.9` is superseded by the
+> repository-side v2.0–v2.2 implementation work. Use the current roadmap audit
+> below for the exact production-evidence boundary. Detailed walk-through:
+> [`docs/getting-started.md`](docs/getting-started.md).
+
+> **Current truth:** repository milestones through v2.2 are implemented and
+> covered by the hosted technical matrix. AQA is excellent for side-project
+> validation and self-hosted evaluation; provider-backed production evidence
+> and independent assurance are still final promotion gates. Read the
+> [roadmap audit](docs/internal/roadmap-completion-audit-2026-09-20.md) for the
+> exact boundary.
+
+### Choose your installation path
+
+| You are... | Use this path |
+|---|---|
+| Trying AQA from the source repository | **Path A — clone and run locally**; no package registry token required |
+| Adding AQA to an existing project | **Path B — install the published CLI** from GitHub Packages |
+| Evaluating the complete product UI | **Path C — run the ecosystem example** from this repository |
+
+### Before you start
+
+- A project you can run locally (Bun, Node, Python, PHP, Go or another stack).
+- A terminal and Git.
+- Bun 1.3+ recommended; Node 22 LTS is supported as fallback.
+- A safe local/test environment. Start with read-only or synthetic targets.
+- Never put API keys, cookies, JWTs, payment data or customer PII in `.aqa/`,
+  screenshots, findings or Markdown. AQA redacts evidence, but prevention is
+  still your responsibility.
 
 ### 1. Install Bun
 
@@ -87,6 +209,50 @@ curl -fsSL https://bun.sh/install | bash
 # Windows (PowerShell)
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
+
+Verify it:
+
+```bash
+bun --version       # should be 1.3 or newer
+node --version      # Node 22 is the supported fallback
+git --version
+```
+
+### Path A — clone the repository and try AQA without a registry token
+
+This is the easiest path for a first evaluation:
+
+```bash
+git clone https://github.com/padosoft/agentic-qa-kit.git
+cd agentic-qa-kit
+bun install
+bun run build:workspace
+
+# Run the real example ecosystem journey.
+bun run e2e:ecosystem
+```
+
+The ecosystem journey creates/uses an example target, executes AQA through a
+real CLI boundary, persists run evidence and exercises the admin UI against
+live data. It is the fastest way to see the product before connecting your own
+application.
+
+To use the locally built CLI from your own project while evaluating source:
+
+```bash
+# from the AQA repository
+bun run --filter @aqa/kit build
+
+# from your project, point PATH at the built binary for this shell
+# PowerShell:
+$env:PATH = "<path-to-agentic-qa-kit>\packages\kit\dist;$env:PATH"
+# macOS/Linux:
+export PATH="<path-to-agentic-qa-kit>/packages/kit/dist:$PATH"
+aqa --help
+```
+
+For normal project usage, prefer Path B below so your project is decoupled from
+the AQA checkout.
 
 ### 2. Tell your project where to find the kit (GitHub Packages auth)
 
@@ -104,6 +270,14 @@ Export the token in your shell (or your CI secrets):
 export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
 ```
 
+PowerShell:
+
+```powershell
+$env:GITHUB_TOKEN = "ghp_XXXXXXXXXXXXXXXXXXXX"
+```
+
+Do not paste a real token into `.npmrc`, the README, CI logs or a commit.
+
 ### 3. Install the kit in your project
 
 ```bash
@@ -112,6 +286,13 @@ bun add -d @padosoft/agentic-qa-kit
 ```
 
 > _If you don't have a project yet, clone `examples/bun-api` from this repo as a starting point._
+
+Confirm the installation before changing configuration:
+
+```bash
+bunx aqa --version
+bunx aqa --help
+```
 
 ### 4. Initialize the AQA workspace + verify
 
@@ -193,6 +374,220 @@ ls .aqa/runs/<run-id>/
 Each finding ships with a deterministic replay artifact so you can reproduce it, hand it to a teammate, or attach it to a PR.
 
 > **Want the whole ecosystem in one go?** From a clone of `padosoft/agentic-qa-kit`, run `bun run e2e:ecosystem`. It boots `examples/bun-api`, runs a real `aqa run --profile smoke` against it, and opens the admin against the live data. Single command, end-to-end smoke.
+
+## First project walkthrough
+
+This is the copy/paste path for a junior engineer starting with an existing
+application. The commands are intentionally small; run them in order.
+
+### 1. Initialize and inspect what AQA discovered
+
+```bash
+cd my-project
+bunx aqa init
+bunx aqa doctor
+bunx aqa validate
+```
+
+You should now have:
+
+```text
+.aqa/
+├── project.yaml       # stack, SUT type and project identity
+├── risk-map.yaml      # risks and invariants
+├── profiles.yaml      # smoke/security/release-gate selection
+└── testing.md         # generated guidance for your project
+```
+
+If `doctor` reports a warning, read it before running a release gate. Warnings
+about optional drivers are honest capability gaps, not failures to hide.
+
+### 2. Install the agent context
+
+```bash
+bunx aqa install-agent-files --targets claude,codex,gemini,copilot --dry-run
+bunx aqa install-agent-files --targets claude,codex,gemini,copilot
+```
+
+Commit these generated files if your team wants every coding agent to follow
+the same QA contract. They teach the agent to inspect risks first, preserve
+evidence, respect tool/sandbox boundaries and distinguish unsupported from
+passing.
+
+### 3. Replace the placeholder risk with a real one
+
+Example: a SaaS API must never return another tenant's invoice.
+
+```yaml
+# .aqa/risk-map.yaml
+- id: tenant-invoice-isolation
+  category: authorization
+  title: An invoice is visible only to its owning tenant
+  severity: critical
+  likelihood: likely
+  invariants:
+    - id: invoice-tenant-bound
+      statement: GET /api/invoices/:id rejects a principal from another tenant.
+    - id: invoice-no-side-channel
+      statement: Missing and cross-tenant invoices have equivalent safe responses.
+```
+
+The risk is more valuable than a generic “test invoices” instruction: it gives
+the agent an invariant, a severity and an oracle target.
+
+### 4. Run a safe first pass
+
+```bash
+bunx aqa run --profile smoke --seed first-local-run
+bunx aqa report --format both
+```
+
+If your app needs a local server, start it first in another terminal. If your
+project has no executable driver for a selected scenario, AQA records an
+execution gap instead of fabricating a pass.
+
+Inspect the result:
+
+```bash
+Get-ChildItem .aqa/runs                         # PowerShell
+find .aqa/runs -maxdepth 2 -type f | sort      # macOS/Linux
+```
+
+### 5. Read, reproduce and verify a finding
+
+```bash
+bunx aqa report --run-id <run-id>
+bunx aqa verify AQA-2026-0001 --attempts 3 --base-url http://127.0.0.1:3000
+```
+
+The finding directory contains redacted evidence and replay artifacts. A
+verified finding is not “the agent said it failed”: it has a reproducible
+boundary, an oracle result and preserved evidence. After fixing the application,
+run `verify` again and attach the result to the pull request.
+
+### 6. Open the local operations view
+
+```bash
+bunx aqa admin
+# Open http://127.0.0.1:5173
+```
+
+Keep the default loopback bind. `aqa admin` is a local development viewer and
+does not provide production authentication; do not expose it with
+`--host 0.0.0.0` on an untrusted network.
+
+### 7. Put the safe profile in CI
+
+```yaml
+# .github/workflows/aqa.yml
+name: Agentic QA
+on: [pull_request]
+jobs:
+  aqa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.11'
+      - run: bun install --frozen-lockfile
+      - run: bunx aqa validate
+      - run: bunx aqa run --profile smoke --seed ${{ github.event.pull_request.head.sha }}
+      - run: bunx aqa report --format both
+```
+
+Use a separate protected environment for provider-backed evidence. Never put
+provider credentials in `.aqa/`, generated replay files or the pull request.
+
+## Examples cookbook
+
+### Discover risks before writing scenarios
+
+```bash
+bunx aqa risk discover --method stride > .aqa/risk-baseline-stride.json
+bunx aqa risk discover --method owasp > .aqa/risk-baseline-owasp.json
+bunx aqa risk discover --method fmea > .aqa/risk-baseline-fmea.json
+bunx aqa risk coverage --profile release-gate
+```
+
+Review generated risks before approving them. Risk generation is an
+assistant, not an authorization to mutate your project configuration blindly.
+
+### Use deterministic runs during debugging
+
+```bash
+bunx aqa run --profile smoke --seed checkout-cart-2026-09-20
+bunx aqa report --run-id checkout-cart-2026-09-20
+bunx aqa verify AQA-2026-0001 --attempts 5
+```
+
+The seed gives the run a stable identity. It does not make an inherently
+nondeterministic LLM decision deterministic; AQA reports that boundary.
+
+### Ingest existing test and security tools
+
+```bash
+bunx aqa ingest junit ./artifacts/junit.xml
+bunx aqa ingest sast ./artifacts/semgrep.json
+bunx aqa ingest k6 ./artifacts/k6-summary.json --threshold-file .aqa/k6-policy.json
+bunx aqa ingest locust ./artifacts/locust.json
+bunx aqa ingest playwright ./artifacts/trace.zip
+```
+
+This lets AQA correlate external evidence with risks without forcing a team to
+throw away its existing test stack.
+
+### Gate mutation quality and holdout regressions
+
+```bash
+bunx aqa mutation gate mutation.json --min-score 0.80
+bunx aqa mutation coverage mutation.json mutation-manifest.json \
+  --min-mapped-rate 1 --min-killed-rate 0.80
+bunx aqa mutation regression mutation.json mutation-manifest.json evidence.json \
+  --min-kill-rate 0.80
+```
+
+For a digest-bound holdout plan, pass the generated plan explicitly:
+
+```bash
+bunx aqa mutation regression mutation.json mutation-manifest.json evidence.json \
+  --holdout-split holdout-plan.json --min-kill-rate 1.0
+```
+
+Plan-bound evidence without `--holdout-split` fails closed. The evaluator also
+rejects overlapping train/holdout IDs and a plan from a different manifest.
+
+### Validate disaster-recovery evidence
+
+```bash
+bunx aqa dr inventory backup-inventory.json --public-key trusted-ed25519.pem
+bunx aqa dr restore backup-inventory.json restore-evidence.json \
+  --public-key trusted-ed25519.pem
+```
+
+The release gate binds signed production evidence to the restore drill; a file
+that merely claims a successful restore is not sufficient.
+
+### Build a custom pack
+
+```bash
+bunx aqa pack new payments --sut-type api \
+  --description "Payment and checkout assurance scenarios" \
+  --author "Your Team"
+```
+
+Then edit the generated manifest and scenarios. See
+[`docs/PACK-AUTHORING.md`](docs/PACK-AUTHORING.md) for schemas, trust and
+distribution rules.
+
+### Inspect the machine-readable run contract
+
+```bash
+node -e "const r=require('./.aqa/runs/<run-id>/report.json'); console.log(r.summary)"
+```
+
+Use `report.json` in CI annotations or dashboards; use `report.md` for humans.
+Do not parse log text as an API.
 
 ## The mental model in 7 words
 
@@ -287,7 +682,7 @@ Capability negotiation is runtime: the kit asks the agent target what it support
 |   `- .aqa/  (project state, runs, findings, replay)        |
 +------------------------------------------------------------+
 
-+- Self-hosted (multi-team, post v0.3) ----------------------+
++- Self-hosted (multi-team, repository scope shipped) -------+
 |  Control Plane (HA)                                        |
 |   |- agentic-qa-kit-server (Hono+Bun or Express+Node)      |
 |   |- agentic-qa-kit-admin (React)                          |
@@ -312,7 +707,7 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v0.3.x` | Enterprise table-stakes — repository scope shipped | Postgres backend, SSO/RBAC, pack signing, on-prem LLM, Helm chart, air-gap installer; live KMS/WORM/IdP deployment evidence is a deferred final gate |
 | `v0.4.x` | Admin editing | Scenario Studio, AI-generation with review workflow |
 | `v0.5.x` | Multi-team | Server + runner fleet, findings dedup, bug→fix→verify-fix loop |
-| `v0.6.x` | Methodology rigor | STRIDE/FMEA/OWASP integration, oracle ensemble, judge calibration |
+| `v0.6.x` | **Methodology rigor — repository scope shipped** | STRIDE/FMEA/OWASP integration, oracle calibration, mutation-to-regression evidence, digest-bound holdout plans; producer-scale and independent validation remain final gates |
 | `v1.0` | **Historical roadmap milestone** | SOC2/ISO controls catalog, `aqa-audit-verify` CLI, pen-test scope doc; operational readiness is being revalidated |
 | `v1.1` | **Polish — shipped** | Banner, full Helm chart (runner StatefulSet, Ingress, NetworkPolicy, Postgres subchart), 3 example targets (Bun, Next.js, Laravel) |
 | `v1.2` | **Admin SPA wired — shipped** | Tailwind 4 + TanStack Router + Query + 12 screens, audit-chain verification in-browser via Web Crypto |
@@ -323,13 +718,13 @@ Full diagram: [`docs/architecture/reference.md`](docs/architecture/reference.md)
 | `v1.7` | **Pack authoring + admin CRUD — shipped** | `PACK-AUTHORING.md`, `aqa pack new`, admin Create-pack/Import-manifest wizards, full Profile/Risk/Scenario CRUD (Delete/Edit/Clone), Agents wired to `/api/agents`, Operations + Admin pages wired to `/api/audit` / `/api/cost/summary` / `/api/queue` / `/api/notifications` / `/api/tokens` / `/api/orgs`, scenario YAML editor, schema-conforming mock-id migration, `Agent` schema, `agents:read`/`agents:edit` permissions, atomic `Store.createProfile/createScenario` |
 | `v1.8` | **Live ecosystem e2e — shipped** | Real HTTP probe runner, release-gate finding enforcement, single-command ecosystem stack (`bun run e2e:ecosystem`), Playwright admin-against-live-API smoke, audit-chain canonical reconciliation |
 | `v1.9` | **Junior quick-start truthing — shipped** | `aqa install-agent-files` + `aqa report` + `aqa admin` CLI verbs (previously documented but unwired), `@aqa/pack-author` extracted to break kit↔server build cycle, esbuild bundled `dist/cli.cjs`, GitHub Packages publish workflow on `v*` tags, README quick-start rewritten to match the actually-shipped CLI surface |
-| `v2.0` | **Enterprise truth and safety — in progress** | Fail-closed runner/oracles, canonical outcomes, durable persistence, scoped authorization, SLO/coverage evidence, external-result ingestion, risk discovery, sandbox and secret-redaction hardening; live deployment proofs remain required |
+| `v2.0` | **Enterprise truth and safety — repository scope shipped** | Fail-closed runner/oracles, canonical outcomes, durable persistence, scoped authorization, SLO/coverage evidence, external-result ingestion, risk discovery, sandbox and secret-redaction hardening; live deployment proofs remain required |
 | `v2.1` | **Commerce Assurance pilot — contracts shipped** | Commerce pack, money/order/payment/inventory contracts, provider and merchant adapters, webhook/retry/race journeys, refund reconciliation and safe synthetic fixtures; live provider evidence remains deployment-scoped |
-| `v2.2` | **Stateful agentic QA — repository contracts shipped** | Capability preflight, temporal assertions, multi-actor execution, trace federation and mutation-to-regression evidence are implemented; protected producer scale and production provenance are deferred final gates |
+| `v2.2` | **Stateful agentic QA — repository contracts shipped** | Capability preflight, temporal assertions, multi-actor execution, trace federation, holdout enforcement, shrink/replay evidence, chaos recovery and ecommerce failure journeys; protected producer scale and production provenance are deferred final gates |
 
 ## Status
 
-**Enterprise truth status (2026-09-19).** The repository has moved beyond the
+**Enterprise truth status (2026-09-20).** The repository has moved beyond the
 historical `v1.9` review: the enterprise control-plane, commerce contracts,
 runner fencing, observability and protected provider-evidence handoffs are now
 implemented and covered by hosted technical CI. Provider execution evidence and

@@ -3181,3 +3181,7 @@ caller can see different authorization surfaces depending on deployment mode.
   manifest. Validate disjointness in the library and exact partition equality
   at the CLI boundary, then test the actual command path with the documented
   flag syntax.
+- Product documentation must separate the historical package version from the
+  current repository roadmap. Keep the README's quickstart executable against
+  the actual CLI help, and label provider-backed/independent assurance as
+  deferred instead of marketing repository contracts as production evidence.
