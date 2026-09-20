@@ -31,6 +31,9 @@ auditors and architects expect (Task 21).
 - `createMethodologyArtifactLifecycle()` — applies bounded retention and archive
   deadlines; lifecycle helpers support operator archive, legal hold and expiry
   checks without changing the content-addressed artifact envelope.
+- `shrinkJsonCounterexample()` — deterministically minimizes JSON-shaped
+  counterexamples through a bounded, caller-owned failure predicate. It never
+  executes probes, logs candidate values or claims global minimality.
 
 State graphs reject unknown endpoints, duplicate IDs, unreachable states,
 non-terminal dead ends and transitions out of terminal states. Path evaluation

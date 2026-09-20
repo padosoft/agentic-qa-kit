@@ -83,3 +83,10 @@ export {
   type MethodologyArtifactLifecycle,
   type MethodologyArtifactLifecycleState,
 } from './methodology-retention.js';
+export {
+  shrinkJsonCounterexample,
+  type FailurePredicate,
+  type ShrinkableJson,
+  type ShrinkOptions,
+  type ShrinkResult,
+} from './shrinking.js';

@@ -1,5 +1,21 @@
 # Lessons
 
+# 2026-09-20 — Bounded algorithms must be lazy before the budget check
+
+An attempt limit does not protect a shrinker if candidate generation eagerly
+materializes the whole search frontier first. Use generators and incremental
+depth traversal so wide valid inputs are bounded before the first predicate
+call; source-attributed benchmarks likewise need a clean-tree check before
+recording a revision.
+
+# 2026-09-20 — SQL projections must account for legacy JSONB shapes
+
+Moving an audit filter from application code into SQL can expose historical
+double-encoded JSONB rows that the application decoder already tolerated. Keep
+the predicate before `LIMIT`, but normalize both object and serialized-string
+shapes at the provider boundary; otherwise a hosted database can return zero
+rows while the same in-memory projection passes.
+
 # 2026-09-20 — Validate custom authorizer results at the API boundary
 
 Validating only the built-in JWT authorizer is insufficient: `runnerAuthorize`

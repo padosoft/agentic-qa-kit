@@ -32,6 +32,26 @@
   real complete journey and explicit no-provider evidence boundary, then run
   the hosted matrix before moving to methodology scale closure.
 
+## 2026-09-20 — Sizing baseline and bug shrinking slice
+
+- Added `docs/operations/sizing.md` with reference Small/Medium/Large profiles,
+  storage estimation, capacity dimensions, scaling rules and explicit limits
+  of local evidence. Added `scripts/capacity-benchmark.mjs` plus
+  `benchmark:capacity`, a reproducible provider-neutral queue lifecycle
+  baseline that emits revision-bound JSON without secrets or customer data.
+- Added `shrinkJsonCounterexample()` to `@aqa/methodology`. It performs
+  deterministic bounded delta-style shrinking over JSON values through a
+  caller-owned failure predicate, with depth/size/attempt/reduction limits and
+  no command execution or candidate logging. Methodology suite: **37 passed**.
+- Hosted CI exposed and then verified a legacy double-encoded JSONB audit
+  projection path; the SQL kind filter now handles object and serialized-string
+  shapes before pagination. The final PR rerun passed PostgreSQL, build, unit,
+  CLI, Playwright, telemetry, OCI and S3 gates.
+- Shrinking and benchmark generation are lazy/bounded, and the benchmark
+  rejects dirty source attribution (apart from the environment lock file).
+  Next: connect shrinking to replay/finding evidence, then implement the
+  ecommerce failure-injection journey and mutation holdout governance.
+
 ## 2026-09-20 — Multi-runner audit/trace provenance
 
 - Propagated the host-owned worker identity through the real remote queue and
