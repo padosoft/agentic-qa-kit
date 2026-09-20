@@ -27,6 +27,12 @@ different provider event for the same business effect. Complete journeys need
 one identical replay and one conflicting logical event, plus an explicit
 unknown outcome for transport ambiguity instead of guessing success.
 
+# 2026-09-20 — Promise concurrency needs an explicit barrier
+
+`Promise.all` around synchronous functions does not create overlap. A race
+journey must pause contenders between check and commit, then re-check the
+invariant after the barrier; otherwise it proves only sequential rejection.
+
 # 2026-09-20 — Minimized evidence must be replay-addressable and redacted
 
 Shrinking a counterexample is not enough if the result is detached from the

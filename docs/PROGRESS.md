@@ -58,6 +58,17 @@
   complete hosted matrix for the ecommerce/replay slice and then close the
   remaining repository-side evidence gaps.
 
+## 2026-09-20 — Ecommerce journey concurrency hardening
+
+- Reworked the inventory contention journey after review exposed that promise
+  scheduling around a synchronous reference was only sequential. It now uses a
+  deterministic async check/commit barrier with a post-barrier stock re-check,
+  while separately asserting the real reference merchant's idempotent retry.
+- The ambiguous mutation path now performs an observable local commit before
+  throwing the injected transport timeout; the journey asserts both committed
+  state and `unknown` outcome. Commerce suite remains **66 passed, 2 provider
+  skips, 0 failed**.
+
 ## 2026-09-20 — Holdout digest bound to regression evidence
 
 - Extended mutation regression evidence with an optional `plan_digest` and

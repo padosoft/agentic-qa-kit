@@ -27,32 +27,33 @@ export async function verifyCommerceFailureJourneys(
 ): Promise<CommerceFailureJourneyResult> {
   const evidence: CommerceFailureJourneyEvidence[] = [];
   await runScenario(evidence, 'inventory_idempotency_race', async () => {
-    const product = {
-      sku: 'failure-sku',
-      price: { currency: 'EUR', amount_minor: '1000' },
-      on_hand: 1,
-    } as const;
-    merchant.seedProduct(product);
-    const first: CommerceIdentity = { tenant: 'failure-shop', customer_id: 'customer-a' };
-    const second: CommerceIdentity = { tenant: 'failure-shop', customer_id: 'customer-b' };
-    const firstCart = merchant.addLine(first, merchant.createCart(first).id, product.sku, 1);
-    const secondCart = merchant.addLine(second, merchant.createCart(second).id, product.sku, 1);
-    const outcomes = await Promise.allSettled([
-      Promise.resolve().then(() => merchant.checkout(first, firstCart.id, 'race-a')),
-      Promise.resolve().then(() => merchant.checkout(second, secondCart.id, 'race-b')),
-    ]);
+    const race = new AsyncInventoryRaceModel(1);
+    const outcomes = await Promise.allSettled([race.checkout('race-a'), race.checkout('race-b')]);
     if (outcomes.filter((item) => item.status === 'fulfilled').length !== 1)
       throw new Error('inventory race did not produce exactly one winner');
     if (outcomes.filter((item) => item.status === 'rejected').length !== 1)
       throw new Error('inventory race did not reject the losing checkout');
     const winner = outcomes.find((item) => item.status === 'fulfilled');
     if (!winner || winner.status !== 'fulfilled') throw new Error('race winner missing');
-    const retried = merchant.checkout(first, firstCart.id, 'race-a');
+    const retried = await race.checkout('race-a');
     if (JSON.stringify(retried) !== JSON.stringify(winner.value))
       throw new Error('idempotent retry returned a different checkout result');
-    if (merchant.getInventory(product.sku).committed !== 1)
-      throw new Error('inventory committed more than once');
-    return 'one checkout committed; loser rejected; retry returned the same result';
+    if (race.committed !== 1) throw new Error('inventory committed more than once');
+    // Exercise the real reference idempotency boundary as well as the async
+    // barrier model used to expose the check/commit overlap.
+    const product = {
+      sku: 'failure-idempotency-sku',
+      price: { currency: 'EUR', amount_minor: '1000' },
+      on_hand: 1,
+    } as const;
+    merchant.seedProduct(product);
+    const identity: CommerceIdentity = { tenant: 'failure-shop', customer_id: 'customer-a' };
+    const cart = merchant.addLine(identity, merchant.createCart(identity).id, product.sku, 1);
+    const first = merchant.checkout(identity, cart.id, 'reference-idempotency');
+    const referenceRetry = merchant.checkout(identity, cart.id, 'reference-idempotency');
+    if (JSON.stringify(first) !== JSON.stringify(referenceRetry))
+      throw new Error('reference idempotent retry returned a different result');
+    return 'async barrier produced one winner; loser rejected; reference retry was exactly once';
   });
 
   await runScenario(evidence, 'webhook_replay', async () => {
@@ -123,12 +124,14 @@ export async function verifyCommerceFailureJourneys(
       source: 'human',
       expires_at: new Date(now.getTime() + 60_000).toISOString(),
     };
-    const result = await gate.execute(call, approval, async () => ({
-      status: 'unknown' as const,
-      reason: 'injected transport timeout after provider write boundary',
-    }));
+    let committed = false;
+    const result = await gate.execute(call, approval, async () => {
+      committed = true;
+      throw new Error('injected transport timeout after provider write boundary');
+    });
     if (result.status !== 'unknown') throw new Error('ambiguous mutation did not remain unknown');
-    return 'transport ambiguity remained unknown and requires reconciliation';
+    if (!committed) throw new Error('observable mutation did not occur before timeout');
+    return 'observable mutation occurred; transport ambiguity remained unknown for reconciliation';
   });
 
   return {
@@ -157,4 +160,33 @@ async function runScenario(
 function sign(body: string, secret: string): string {
   const timestamp = 1_700_000_000;
   return `t=${timestamp},v1=${createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')}`;
+}
+
+/** Local async double with a barrier between availability check and commit. */
+class AsyncInventoryRaceModel {
+  committed = 0;
+  private checks = 0;
+  private release!: () => void;
+  private readonly barrier: Promise<void>;
+  private readonly idempotency = new Map<string, { order: string }>();
+
+  constructor(private readonly onHand: number) {
+    this.barrier = new Promise<void>((resolve) => {
+      this.release = resolve;
+    });
+  }
+
+  async checkout(key: string): Promise<{ order: string }> {
+    const previous = this.idempotency.get(key);
+    if (previous) return previous;
+    const hadStock = this.onHand - this.committed > 0;
+    this.checks += 1;
+    if (this.checks === 2) this.release();
+    await this.barrier;
+    if (!hadStock || this.committed >= this.onHand) throw new Error('insufficient inventory');
+    this.committed += 1;
+    const result = { order: `order-${key}` };
+    this.idempotency.set(key, result);
+    return result;
+  }
 }
